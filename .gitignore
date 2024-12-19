@@ -1,0 +1,37 @@
+# .gitignore
+
+# Data files
+data/raw/*
+data/processed/*
+data/simulation_results/*
+!data/*/README.md
+
+# Model files
+*.h5
+*.pkl
+*.pt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+env/
+venv/
+.env
+
+# Notebooks
+.ipynb_checkpoints
+
+# IDE
+.vscode/
+.idea/
+
+# Database
+*.db
+*.sqlite3
+*.json
+
+# Logs
+*.log
+logs/
