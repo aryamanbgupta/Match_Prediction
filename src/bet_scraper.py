@@ -264,7 +264,7 @@ finally:
     driver.quit()
 
 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-filename = f'cricket_betting_data_{timestamp}.json'
+filename = f'data/betting_info/cricket_betting_data_{timestamp}.json'
 
 with open(filename, 'w', encoding='utf-8') as f:
     json.dump(cricket_data, f, indent=2, ensure_ascii=False)

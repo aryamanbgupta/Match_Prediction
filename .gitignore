@@ -5,6 +5,9 @@ data/raw/*
 data/processed/*
 data/simulation_results/*
 !data/*/README.md
+data/
+features/
+*.parquet
 
 # Model files
 *.h5
@@ -18,6 +21,7 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 .env
 
 # Notebooks
