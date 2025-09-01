@@ -1,3 +1,4 @@
+# Initial working parsing file, stores data in parquet
 import json
 import numpy as np
 from pathlib import Path
