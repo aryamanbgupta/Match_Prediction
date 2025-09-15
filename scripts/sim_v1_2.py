@@ -1,3 +1,5 @@
+import warnings
+warnings.filterwarnings("ignore", message="X does not have valid feature names")
 from enum import Enum
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple, Any
@@ -7,6 +9,7 @@ import random
 from multiprocessing import Pool, cpu_count
 import time
 from datetime import datetime
+
 
 class Outcome(Enum):
     DOT = 0
@@ -195,7 +198,7 @@ class MatchState:
         
         for idx in range(11):  # All 11 players
             # Can't bowl consecutive overs
-            if idx == self.last_bowler_idx:
+            if self.last_bowler_idx >= 0 and idx == int(self.last_bowler_idx):
                 continue
             
             # Check over limit (max 24 balls = 4 overs in T20)
@@ -623,6 +626,32 @@ class SimulationEngine:
             winner = "Tie"
             margin = "Tied"
         
+        # In sim_v1_2.py, inside the simulate_match method
+
+        # --- DEBUGGING TRIPWIRE START ---
+        # This block will crash the program if a non-integer is found,
+        # telling us exactly when the data corruption happens.
+        if not all(isinstance(val, int) for val in [team1_score, team1_wickets, team2_score, team2_wickets]):
+            
+            t1s_type = type(team1_score).__name__
+            t1w_type = type(team1_wickets).__name__
+            t2s_type = type(team2_score).__name__
+            t2w_type = type(team2_wickets).__name__
+            
+            error_message = (
+                f"\n\nFATAL: Data type corruption detected in simulation result!\n"
+                f"----------------------------------------------------------\n"
+                f"Match ID: {match_id}\n"
+                f"  Team 1 Score:   {team1_score} (Type: {t1s_type})\n"
+                f"  Team 1 Wickets: {team1_wickets} (Type: {t1w_type})\n"
+                f"  Team 2 Score:   {team2_score} (Type: {t2s_type})\n"
+                f"  Team 2 Wickets: {team2_wickets} (Type: {t2w_type})\n"
+                f"----------------------------------------------------------\n"
+                f"This error was triggered intentionally to pinpoint the source of the bug.\n"
+            )
+            raise TypeError(error_message)
+        # --- DEBUGGING TRIPWIRE END ---
+        
         return MatchResult(
             match_id=match_id,
             team1=state.team1,
@@ -812,25 +841,25 @@ class ResultAggregator:
             # Score statistics
             'score_stats': {
                 team1: {
-                    'mean': np.mean(team1_scores),
-                    'std': np.std(team1_scores),
-                    'min': np.min(team1_scores),
-                    'max': np.max(team1_scores),
+                    'mean': np.mean([int(s) for s in team1_scores]),
+                    'std': np.std([int(s) for s in team1_scores]),
+                    'min': np.min([int(s) for s in team1_scores]),
+                    'max': np.max([int(s) for s in team1_scores]),
                     'percentiles': {
-                        '25': np.percentile(team1_scores, 25),
-                        '50': np.percentile(team1_scores, 50),
-                        '75': np.percentile(team1_scores, 75)
+                        '25': np.percentile([int(s) for s in team1_scores], 25),
+                        '50': np.percentile([int(s) for s in team1_scores], 50),
+                        '75': np.percentile([int(s) for s in team1_scores], 75)
                     }
                 },
                 team2: {
-                    'mean': np.mean(team2_scores),
-                    'std': np.std(team2_scores),
-                    'min': np.min(team2_scores),
-                    'max': np.max(team2_scores),
+                    'mean': np.mean([int(s) for s in team2_scores]),
+                    'std': np.std([int(s) for s in team2_scores]),
+                    'min': np.min([int(s) for s in team2_scores]),
+                    'max': np.max([int(s) for s in team2_scores]),
                     'percentiles': {
-                        '25': np.percentile(team2_scores, 25),
-                        '50': np.percentile(team2_scores, 50),
-                        '75': np.percentile(team2_scores, 75)
+                        '25': np.percentile([int(s) for s in team2_scores], 25),
+                        '50': np.percentile([int(s) for s in team2_scores], 50),
+                        '75': np.percentile([int(s) for s in team2_scores], 75)
                     }
                 }
             },
