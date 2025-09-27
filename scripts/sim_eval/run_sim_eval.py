@@ -16,7 +16,7 @@ warnings.filterwarnings("ignore", message="X does not have valid feature names")
 # Add parent directory to path to import simulation modules
 sys.path.append(str(Path(__file__).parent.parent))
 
-from sim_v1_2 import SimulationEngine, XGBoostModel, T20Rules
+from sim_v1_2 import SimulationEngine, XGBoostModel, T20Rules, XGBoostModelV2
 from sim_eval.loaders import TestMatchLoader, BettingOddsLoader
 from sim_eval.match_evaluator import MatchLevelEvaluator, print_evaluation_summary
 
@@ -107,17 +107,28 @@ def main():
     # Load model and encoders
     print("\nLoading model...")
     try:
-        model = XGBoostModel(
-            model_path=args.model,
-            batter_encoder_path=args.batter_encoder,
-            bowler_encoder_path=args.bowler_encoder
+        model = XGBoostModelV2(
+            model_path='models/xgb/xgboost_model_v2.pkl',
+            batter_encoder_path='models/xgb/batter_encoder_v2.pkl',
+            bowler_encoder_path='models/xgb/bowler_encoder_v2.pkl',
+            feature_columns_path='models/xgb/feature_columns_v2.txt'
         )
+        print("✓ V2 model loaded successfully")
+
+        # model = XGBoostModel(
+        #     model_path=args.model,
+        #     batter_encoder_path=args.batter_encoder,
+        #     bowler_encoder_path=args.bowler_encoder
+        # )
     except Exception as e:
         print(f"Error loading model: {e}")
         print("Using dummy model for demonstration")
         from sim_v1_2 import DummyModel
         model = DummyModel()
-    
+    # print("Using dummy model for demonstration")
+    # from sim_v1_2 import DummyModel
+    # model = DummyModel()
+
     # Create simulation engine
     rules = T20Rules()
     engine = SimulationEngine(model, rules)

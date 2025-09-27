@@ -13,6 +13,7 @@ features/
 *.h5
 *.pkl
 *.pt
+models/
 
 # Python
 __pycache__/

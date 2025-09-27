@@ -9,6 +9,7 @@ import random
 from multiprocessing import Pool, cpu_count
 import time
 from datetime import datetime
+import pandas as pd
 
 
 class Outcome(Enum):
@@ -432,6 +433,199 @@ class PredictionModel(ABC):
     def extract_features(self, state: MatchState) -> np.ndarray:
         """Extract features from match state"""
         pass
+
+class XGBoostModelV2(PredictionModel):
+    def __init__(self, model_path: str, batter_encoder_path: str, bowler_encoder_path: str, feature_columns_path: str):
+        import joblib
+        self.model = joblib.load(model_path)
+        self.batter_encoder = joblib.load(batter_encoder_path)
+        self.bowler_encoder = joblib.load(bowler_encoder_path)
+        
+        # Load feature columns to ensure consistency
+        with open(feature_columns_path, 'r') as f:
+            self.feature_columns = [line.strip() for line in f.readlines()]
+        
+        # Map model output classes to our Outcome enum (same as v1)
+        self.class_to_outcome = {
+            0: 'dot', 1: 'one', 2: 'two', 3: 'four',
+            4: 'four', 5: 'six', 6: 'six', 7: 'wicket'
+        }
+        
+        print(f"Loaded XGBoost v2 model with {len(self.feature_columns)} features")
+
+    def extract_features(self, state: MatchState) -> pd.DataFrame:
+        """Extract comprehensive feature set matching v2 training"""
+        import pandas as pd
+        
+        team_idx = state.current_team_idx
+        striker = state.current_striker
+        bowler = state.current_bowler
+        
+        # Basic state features
+        features = {
+            'inning_idx': state.innings,
+            'score': int(state.runs[team_idx]),
+            'wickets': int(state.wickets[team_idx]),
+            'balls_bowled': state.balls,
+            'run_rate': float(state.runs[team_idx]) / float(state.balls + 1),
+            'wickets_ratio': float(state.wickets[team_idx]) / 10.0,
+            'balls_ratio': float(state.balls) / 120.0,
+            'wickets_in_hand': 10 - int(state.wickets[team_idx]),
+            
+            # Match phase indicators
+            'is_powerplay': state.balls < 36,
+            'is_middle_overs': 36 <= state.balls < 96,
+            'is_death_overs': state.balls >= 96,
+            'balls_in_over': state.balls % 6,
+        }
+        
+        # Player encoding
+        try:
+            features['batter_encoded'] = self.batter_encoder.transform([str(striker.player_id)])[0]
+        except:
+            features['batter_encoded'] = -1
+            
+        try:
+            features['bowler_encoded'] = self.bowler_encoder.transform([str(bowler.player_id)])[0]
+        except:
+            features['bowler_encoded'] = -1
+        
+        # Player stats features (simplified - no historical data in simulation)
+        # These would be 0 in simulation since we don't track career stats
+        features.update({
+            'batsman_avg': 0.0,
+            'batsman_sr': 0.0,
+            'bowler_avg': 0.0,
+            'bowler_econ': 0.0,
+            'h2h_avg': 0.0,
+            'h2h_sr': 0.0,
+        })
+        
+        # Momentum features from match history
+        features.update(self._extract_momentum_features(state))
+        
+        # Pressure indicators
+        features.update(self._extract_pressure_features(state))
+        
+        # Create DataFrame with only features that exist in training
+        df_features = {}
+        for col in self.feature_columns:
+            df_features[col] = features.get(col, 0.0)
+        
+        return pd.DataFrame([df_features])
+    
+    def _extract_momentum_features(self, state: MatchState) -> dict:
+        """Extract momentum features from match history"""
+        # Handle case where no balls have been bowled yet
+        if state.history_idx == 0:
+            return {
+                'last_5_balls_runs': 0,
+                'last_10_balls_runs': 0,
+                'last_30_balls_runs': 0,
+                'balls_since_boundary': 0,
+                'last_10_dots': 0,
+            }
+        
+        # Get last N balls from history for current innings
+        current_innings_history = state.history[:state.history_idx]
+        current_innings_mask = current_innings_history[:, 0] == state.innings
+        
+        if not np.any(current_innings_mask):
+            return {
+                'last_5_balls_runs': 0,
+                'last_10_balls_runs': 0,
+                'last_30_balls_runs': 0,
+                'balls_since_boundary': 0,
+                'last_10_dots': 0,
+            }
+        
+        innings_history = current_innings_history[current_innings_mask]
+        runs_history = innings_history[:, 3]  # runs column
+        
+        # Calculate features
+        last_5 = runs_history[-5:] if len(runs_history) >= 5 else runs_history
+        last_10 = runs_history[-10:] if len(runs_history) >= 10 else runs_history
+        last_30 = runs_history[-30:] if len(runs_history) >= 30 else runs_history
+        
+        # Balls since boundary
+        balls_since_boundary = 0
+        for i in range(len(runs_history) - 1, -1, -1):
+            if runs_history[i] >= 4:
+                break
+            balls_since_boundary += 1
+        
+        # Dot balls in last 10
+        last_10_dots = np.sum(last_10 == 0) if len(last_10) > 0 else 0
+        
+        return {
+            'last_5_balls_runs': int(np.sum(last_5)),
+            'last_10_balls_runs': int(np.sum(last_10)),
+            'last_30_balls_runs': int(np.sum(last_30)),
+            'balls_since_boundary': balls_since_boundary,
+            'last_10_dots': int(last_10_dots),
+        }
+    
+    def _extract_pressure_features(self, state: MatchState) -> dict:
+        """Extract pressure indicator features"""
+        # Handle case where no balls have been bowled yet
+        if state.history_idx == 0:
+            return {
+                'dot_percentage_recent': 0.0,
+                'boundary_percentage_recent': 0.0,
+            }
+        
+        # Get recent balls for current innings
+        current_innings_history = state.history[:state.history_idx]
+        current_innings_mask = current_innings_history[:, 0] == state.innings
+        
+        if not np.any(current_innings_mask):
+            return {
+                'dot_percentage_recent': 0.0,
+                'boundary_percentage_recent': 0.0,
+            }
+        
+        innings_history = current_innings_history[current_innings_mask]
+        runs_history = innings_history[:, 3]
+        
+        # Recent 10 balls for dot percentage
+        recent_10 = runs_history[-10:] if len(runs_history) >= 10 else runs_history
+        dot_pct = np.sum(recent_10 == 0) / len(recent_10) if len(recent_10) > 0 else 0.0
+        
+        # Recent 30 balls for boundary percentage
+        recent_30 = runs_history[-30:] if len(runs_history) >= 30 else runs_history
+        boundary_pct = np.sum(recent_30 >= 4) / len(recent_30) if len(recent_30) > 0 else 0.0
+        
+        return {
+            'dot_percentage_recent': dot_pct,
+            'boundary_percentage_recent': boundary_pct,
+        }
+    
+    def predict_next_ball(self, features: pd.DataFrame) -> Dict[str, float]:
+        """Get probabilities from model"""
+        probs = self.model.predict_proba(features)[0]
+        
+        # Initialize all outcomes with 0 probability
+        outcome_probs = {
+            'dot': 0.0, 'one': 0.0, 'two': 0.0, 'four': 0.0,
+            'six': 0.0, 'wicket': 0.0, 'wide': 0.0, 'no_ball': 0.0
+        }
+        
+        # Map model predictions to our outcomes
+        for class_idx, prob in enumerate(probs):
+            if class_idx in self.class_to_outcome:
+                outcome_name = self.class_to_outcome[class_idx]
+                outcome_probs[outcome_name] = prob
+        
+        # Add small probabilities for extras (not in your model)
+        outcome_probs['wide'] = 0.01
+        outcome_probs['no_ball'] = 0.01
+        
+        # Normalize
+        total = sum(outcome_probs.values())
+        if total > 0:
+            outcome_probs = {k: v/total for k, v in outcome_probs.items()}
+        
+        return outcome_probs
 
 class XGBoostModel(PredictionModel):
     def __init__(self, model_path: str, batter_encoder_path: str, bowler_encoder_path: str):
