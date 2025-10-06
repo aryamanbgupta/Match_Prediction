@@ -5,6 +5,7 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 from sklearn.preprocessing import LabelEncoder
 from sklearn.utils.class_weight import compute_class_weight
 import joblib
+import optuna
 
 # Load split data
 print("Loading split datasets...")
@@ -192,37 +193,129 @@ class_weights = compute_class_weight(
 weight_dict = dict(zip(np.unique(y_train), class_weights))
 print("Class weights:", {k: f"{v:.2f}" for k, v in weight_dict.items()})
 
-# Train model with validation monitoring
-print("\nTraining XGBoost model...")
+# Define the objective function for Optuna
+def objective(trial):
+    """
+    Objective function that Optuna will optimize.
+    This function should return the metric you want to minimize.
+    """
+    
+    # Suggest hyperparameters for this trial
+    params = {
+        'n_estimators': trial.suggest_int('n_estimators', 50, 500),
+        'max_depth': trial.suggest_int('max_depth', 3, 10),
+        'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
+        'subsample': trial.suggest_float('subsample', 0.6, 1.0),
+        'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
+        'reg_alpha': trial.suggest_float('reg_alpha', 0.01, 10.0, log=True),
+        'reg_lambda': trial.suggest_float('reg_lambda', 0.01, 10.0, log=True),
+        'random_state': 29,
+        'eval_metric': 'mlogloss',
+        'early_stopping_rounds': 50,  # Reduced for faster trials
+        'scale_pos_weight': None
+    }
+    
+    # Create and train model with suggested parameters
+    model = XGBClassifier(**params)
+    
+    # Calculate sample weights (same as your original code)
+    sample_weights = np.array([weight_dict[y] for y in y_train])
+    
+    # Fit model with early stopping on validation set
+    model.fit(
+        X_train, y_train,
+        sample_weight=sample_weights,
+        eval_set=[(X_val, y_val)],
+        verbose=0  # Silent training for cleaner output
+    )
+    
+    # Get validation predictions and calculate log loss
+    y_val_proba = model.predict_proba(X_val)
+    val_logloss = log_loss(y_val, y_val_proba)
+    
+    # Return the metric to minimize (log loss)
+    return val_logloss
 
-model = XGBClassifier(
-    n_estimators=200,  # Increased for more complex features
-    max_depth=0,       # Deeper trees for more features
-    learning_rate=0.1,
-    subsample=0.8,
-    colsample_bytree=0.8,  # Feature sampling
-    reg_alpha = 1.0,
-    reg_lambda = 1.0,
-    random_state=29,
-    eval_metric='mlogloss',
-    early_stopping_rounds=100,
-    scale_pos_weight = None
-)
 
+# Create and run the optimization study
+def run_optuna_optimization(n_trials=100):
+    """
+    Run Optuna hyperparameter optimization
+    """
+    print(f"\nStarting Optuna optimization with {n_trials} trials...")
+    
+    # Create study object
+    study = optuna.create_study(
+        direction='minimize',  # We want to minimize log loss
+        study_name='xgboost_cricket_optimization',
+        sampler=optuna.samplers.TPESampler(seed=29)  # Tree-structured Parzen Estimator
+    )
+    
+    # Run optimization
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
+    
+    # Print results
+    print(f"\nOptimization completed!")
+    print(f"Best validation log loss: {study.best_value:.4f}")
+    print(f"Best parameters:")
+    for key, value in study.best_params.items():
+        print(f"  {key}: {value}")
+    
+    return study
+
+# Run the optimization
+study = run_optuna_optimization(n_trials=50)  # Start with 50 trials
+
+# Train final model with best parameters
+print("\n--- TRAINING FINAL MODEL WITH BEST PARAMETERS ---")
+best_params = study.best_params.copy()
+best_params.update({
+    'random_state': 29,
+    'eval_metric': 'mlogloss',
+    'early_stopping_rounds': 100,  # Use longer early stopping for final model
+    'scale_pos_weight': None
+})
+
+final_model = XGBClassifier(**best_params)
 sample_weights = np.array([weight_dict[y] for y in y_train])
 
-# Fit with validation monitoring
-model.fit(
+final_model.fit(
     X_train, y_train,
-    sample_weight= sample_weights,
+    sample_weight=sample_weights,
     eval_set=[(X_train, y_train), (X_val, y_val)],
-    verbose=50  # Print every 50 rounds
+    verbose=50
 )
+
+# Evaluate final model
+print("\n--- FINAL MODEL RESULTS ---")
+y_val_pred = final_model.predict(X_val)
+y_val_proba = final_model.predict_proba(X_val)
+y_test_pred = final_model.predict(X_test)
+y_test_proba = final_model.predict_proba(X_test)
+
+val_accuracy = accuracy_score(y_val, y_val_pred)
+val_logloss = log_loss(y_val, y_val_proba)
+test_accuracy = accuracy_score(y_test, y_test_pred)
+test_logloss = log_loss(y_test, y_test_proba)
+
+print(f"Validation Accuracy: {val_accuracy:.4f}")
+print(f"Validation Log Loss: {val_logloss:.4f}")
+print(f"Test Accuracy: {test_accuracy:.4f}")
+print(f"Test Log Loss: {test_logloss:.4f}")
+
+# Save optimized model
+print("\nSaving optimized model...")
+joblib.dump(final_model, 'models/xgb/xgboost_model_v2_optimized.pkl')
+
+# Save study for analysis
+joblib.dump(study, 'models/xgb/optuna_study_v2.pkl')
+
+print("Optimization complete!")
 
 # Validation evaluation
 print("\n--- VALIDATION RESULTS ---")
-y_val_pred = model.predict(X_val)
-y_val_proba = model.predict_proba(X_val)
+y_val_pred = final_model.predict(X_val)
+y_val_proba = final_model.predict_proba(X_val)
 
 val_accuracy = accuracy_score(y_val, y_val_pred)
 val_logloss = log_loss(y_val, y_val_proba)
@@ -232,8 +325,8 @@ print(f"Validation Log Loss: {val_logloss:.4f}")
 
 # Test evaluation  
 print("\n--- TEST RESULTS ---")
-y_test_pred = model.predict(X_test)
-y_test_proba = model.predict_proba(X_test)
+y_test_pred = final_model.predict(X_test)
+y_test_proba = final_model.predict_proba(X_test)
 
 test_accuracy = accuracy_score(y_test, y_test_pred)
 test_logloss = log_loss(y_test, y_test_proba)
@@ -250,7 +343,7 @@ print(classification_report(y_test, y_test_pred, labels=unique_classes, target_n
 print(f"\nTop 15 Feature Importances:")
 feature_importance = pd.DataFrame({
     'feature': feature_cols,
-    'importance': model.feature_importances_
+    'importance': final_model.feature_importances_
 }).sort_values('importance', ascending=False)
 
 for _, row in feature_importance.head(15).iterrows():
@@ -261,7 +354,7 @@ print("\nSaving model...")
 from pathlib import Path
 Path('models/xgb').mkdir(exist_ok=True)
 
-joblib.dump(model, 'models/xgb/xgboost_model_v2.pkl')
+joblib.dump(final_model, 'models/xgb/xgboost_model_v2.pkl')
 joblib.dump(le_batter, 'models/xgb/batter_encoder_v2.pkl')
 joblib.dump(le_bowler, 'models/xgb/bowler_encoder_v2.pkl')
 
@@ -271,6 +364,6 @@ with open('models/xgb/feature_columns_v2.txt', 'w') as f:
         f.write(f"{feat}\n")
 
 print("Training complete!")
-print(f"Model saved as: models/xgb/gradient_boosting_model_v2.pkl")
+print(f"Model saved as: models/xgb/xgboost_model_v2.pkl")
 print(f"Final validation log loss: {val_logloss:.4f}")
 print(f"Final test log loss: {test_logloss:.4f}")
