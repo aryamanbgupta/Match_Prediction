@@ -432,22 +432,50 @@ def print_evaluation_summary(results: OverallEvaluationResults):
         if count > 0:
             print(f"  Predicted: {pred:.1%}, Market: {market:.1%} (n={count})")
     
-    print(f"\n--- Top Value Bets ---")
-    # Sort by edge
-    sorted_matches = sorted(results.match_results, 
-                          key=lambda x: max(x.edge.values()), 
-                          reverse=True)
-    
-    for match in sorted_matches[:5]:
+    print(f"\n--- Predictions by Signed Edge ---")
+    print("(Positive = correct prediction, Negative = incorrect prediction)")
+
+    def get_signed_edge(match):
+        """Calculate signed edge: positive if correct, negative if wrong"""
         best_team = max(match.edge, key=match.edge.get)
         edge = match.edge[best_team]
-        if edge > 0:
-            print(f"  {match.match_id}")
-            print(f"    Bet on: {best_team}")
-            print(f"    Model: {match.simulated_win_prob[best_team]:.1%}, "
-                  f"Market: {match.market_win_prob.get(best_team, 0):.1%}, "
-                  f"Edge: {edge:.1%}")
-            if match.actual_winner:
-                outcome = "WON" if match.actual_winner == best_team else "LOST"
-                pnl = match.realized_pnl if match.realized_pnl is not None else 0
-                print(f"    Result: {outcome} (Actual winner: {match.actual_winner}, P&L: {pnl:+.2f})")
+
+        if not match.actual_winner:
+            return None  # Skip matches without results
+
+        # Positive edge if we predicted the winner correctly, negative if wrong
+        if match.actual_winner == best_team:
+            return edge  # Correct prediction
+        else:
+            return -edge  # Wrong prediction
+
+    # Filter to matches with actual results and calculate signed edges
+    matches_with_results = [
+        (match, get_signed_edge(match))
+        for match in results.match_results
+        if get_signed_edge(match) is not None
+    ]
+
+    # Sort by signed edge (best correct predictions first)
+    sorted_matches = sorted(matches_with_results,
+                          key=lambda x: x[1],
+                          reverse=True)
+
+    # Show top 10 (or all if fewer)
+    num_to_show = min(10, len(sorted_matches))
+
+    for match, signed_edge in sorted_matches[:num_to_show]:
+        best_team = max(match.edge, key=match.edge.get)
+        edge = match.edge[best_team]
+        is_correct = signed_edge > 0
+
+        print(f"\n  {match.match_id}")
+        print(f"    Bet on: {best_team}")
+        print(f"    Model: {match.simulated_win_prob[best_team]:.1%}, "
+              f"Market: {match.market_win_prob.get(best_team, 0):.1%}")
+        print(f"    Edge: {edge:.1%} | Signed Edge: {signed_edge:+.1%} "
+              f"({'✓ CORRECT' if is_correct else '✗ WRONG'})")
+
+        outcome = "WON" if is_correct else "LOST"
+        pnl = match.realized_pnl if match.realized_pnl is not None else 0
+        print(f"    Result: {outcome} (Actual winner: {match.actual_winner}, P&L: {pnl:+.2f})")
