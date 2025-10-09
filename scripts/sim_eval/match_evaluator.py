@@ -53,7 +53,8 @@ class OverallEvaluationResults:
     calibration_bins: List[Tuple[float, float, int]]  # (predicted, actual, count)
 
     # Edge analysis
-    avg_edge: float  # Average absolute edge
+    avg_edge: float  # Average absolute edge (magnitude of disagreement)
+    avg_signed_edge: float  # Average signed edge (positive = overconfident, negative = underconfident)
     profitable_bets: int  # Count where model has positive edge
 
     # Actual betting performance
@@ -307,6 +308,7 @@ class MatchLevelEvaluator:
                 avg_brier_score=np.nan,
                 calibration_bins=[],
                 avg_edge=0.0,
+                avg_signed_edge=0.0,
                 profitable_bets=0,
                 total_pnl=0.0,
                 roi=0.0,
@@ -327,19 +329,32 @@ class MatchLevelEvaluator:
         calibration_bins = self._calculate_calibration(match_results)
         
         # Edge analysis
-        all_edges = []
-        profitable_bets = 0
-        
+        all_edges = []  # Absolute edges
+        all_signed_edges = []  # Signed edges (correct = positive, wrong = negative)
+        profitable_bets = 0  # Matches with at least one positive edge
+
         # Actual betting performance
         total_pnl = 0.0
         bets_placed = 0
         winning_bets = 0
 
         for result in match_results:
+            # Count matches with ANY positive edge (not sum of teams)
+            has_positive_edge = any(edge > BET_EDGE_THRESHOLD for edge in result.edge.values())
+            if has_positive_edge:
+                profitable_bets += 1
+
+            # Track all edges
             for team, edge in result.edge.items():
-                all_edges.append(abs(edge))
-                if edge > BET_EDGE_THRESHOLD:
-                    profitable_bets += 1
+                all_edges.append(abs(edge))  # Absolute for magnitude
+
+                # Signed edge: positive if correct, negative if wrong
+                if result.actual_winner:
+                    if result.actual_winner == team:
+                        all_signed_edges.append(edge)  # Correct prediction
+                    else:
+                        all_signed_edges.append(-edge)  # Wrong prediction
+
             # Track actual P&L
             if result.realized_pnl is not None:
                 if result.realized_pnl != 0:  # A bet was placed
@@ -349,6 +364,7 @@ class MatchLevelEvaluator:
                         winning_bets += 1
 
         avg_edge = np.mean(all_edges) if all_edges else 0.0
+        avg_signed_edge = np.mean(all_signed_edges) if all_signed_edges else 0.0
         roi = (total_pnl / bets_placed * 100) if bets_placed > 0 else 0.0
         win_rate = (winning_bets / bets_placed) if bets_placed > 0 else 0.0
 
@@ -358,6 +374,7 @@ class MatchLevelEvaluator:
             avg_brier_score=avg_brier_score,
             calibration_bins=calibration_bins,
             avg_edge=avg_edge,
+            avg_signed_edge=avg_signed_edge,
             profitable_bets=profitable_bets,
             total_pnl=total_pnl,
             roi=roi,
@@ -367,40 +384,45 @@ class MatchLevelEvaluator:
             total_simulation_time=total_time
         )
     
-    def _calculate_calibration(self, match_results: List[MatchEvaluationResult], 
+    def _calculate_calibration(self, match_results: List[MatchEvaluationResult],
                               n_bins: int = 10) -> List[Tuple[float, float, int]]:
-        """Calculate calibration statistics
-        
+        """Calculate calibration statistics against actual outcomes
+
         For each probability bin, what fraction actually won?
-        Note: We can't know actual outcomes without match results
-        
-        Design decision: For now, return binned comparison against market
-        In production, would need actual match outcomes
+        This measures true calibration: if model says 70%, do we win 70% of the time?
+
+        Returns list of (predicted_prob, actual_win_rate, count) tuples
         """
         bins = np.linspace(0, 1, n_bins + 1)
         calibration_data = []
-        
-        # Collect all predictions
-        predictions = []
+
+        # Collect all predictions with actual outcomes
+        predictions = []  # List of (predicted_prob, did_win)
         for result in match_results:
+            if not result.actual_winner:
+                continue  # Skip matches without outcomes
+
             for team, sim_prob in result.simulated_win_prob.items():
-                if team in result.market_win_prob:
-                    predictions.append((sim_prob, result.market_win_prob[team]))
-        
+                did_win = 1.0 if result.actual_winner == team else 0.0
+                predictions.append((sim_prob, did_win))
+
+        if not predictions:
+            return []  # No matches with outcomes
+
         # Bin predictions
+        pred_probs = np.array([p[0] for p in predictions])
+        actual_wins = np.array([p[1] for p in predictions])
+
         for i in range(n_bins):
-            bin_mask = (np.array([p[0] for p in predictions]) >= bins[i]) & \
-                      (np.array([p[0] for p in predictions]) < bins[i + 1])
-            
-            bin_predictions = [p for j, p in enumerate(predictions) if bin_mask[j]]
-            
-            if bin_predictions:
-                avg_predicted = np.mean([p[0] for p in bin_predictions])
-                avg_market = np.mean([p[1] for p in bin_predictions])
-                count = len(bin_predictions)
-                
-                calibration_data.append((avg_predicted, avg_market, count))
-        
+            bin_mask = (pred_probs >= bins[i]) & (pred_probs < bins[i + 1])
+
+            if np.sum(bin_mask) > 0:
+                avg_predicted = np.mean(pred_probs[bin_mask])
+                actual_win_rate = np.mean(actual_wins[bin_mask])
+                count = int(np.sum(bin_mask))
+
+                calibration_data.append((avg_predicted, actual_win_rate, count))
+
         return calibration_data
 
 
@@ -417,7 +439,8 @@ def print_evaluation_summary(results: OverallEvaluationResults):
     print(f"\n--- Performance Metrics ---")
     print(f"Average Log Loss: {results.avg_log_loss:.4f}")
     print(f"Average Brier Score: {results.avg_brier_score:.4f}")
-    print(f"Average Edge: {results.avg_edge:.1%}")
+    print(f"Average Edge (magnitude): {results.avg_edge:.1%}")
+    print(f"Average Signed Edge: {results.avg_signed_edge:+.1%} ({'overconfident' if results.avg_signed_edge < 0 else 'underconfident' if results.avg_signed_edge > 0 else 'neutral'})")
     print(f"Profitable opportunities (edge > {BET_EDGE_THRESHOLD:.1%}): {results.profitable_bets}")
     
     print(f"\n--- Actual Betting Performance ---")
@@ -427,10 +450,12 @@ def print_evaluation_summary(results: OverallEvaluationResults):
     print(f"Bets Placed: {results.bets_placed}")
 
     print(f"\n--- Calibration Analysis ---")
-    print("Predicted vs Market probabilities:")
-    for pred, market, count in results.calibration_bins:
+    print("Predicted probability vs Actual win rate:")
+    print("(Perfect calibration: predicted = actual)")
+    for pred, actual, count in results.calibration_bins:
         if count > 0:
-            print(f"  Predicted: {pred:.1%}, Market: {market:.1%} (n={count})")
+            diff = actual - pred
+            print(f"  Predicted: {pred:.1%}, Actual: {actual:.1%}, Diff: {diff:+.1%} (n={count})")
     
     print(f"\n--- Predictions by Signed Edge ---")
     print("(Positive = correct prediction, Negative = incorrect prediction)")
