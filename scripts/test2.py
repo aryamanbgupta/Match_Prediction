@@ -63,7 +63,7 @@ class ModelEvaluator:
             bowler_encoded = -1  # Unknown bowler
         
         # Derived features (same as training)
-        run_rate = score / (balls_bowled + 1)  # +1 to avoid division by zero
+        run_rate = score / max(balls_bowled, 1)  # Avoid division by zero
         wickets_ratio = wickets / 10.0
         balls_ratio = balls_bowled / 120.0
         
@@ -237,10 +237,10 @@ class ModelEvaluator:
                     all_balls.append(ball_record)
                     
                     # Update state
+                    # Always add runs to score (can score runs and get out)
+                    score += runs
                     if is_wicket:
                         wickets += 1
-                    else:
-                        score += runs
                     
                     # Check for extras
                     is_wide_or_noball = False

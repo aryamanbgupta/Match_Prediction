@@ -196,13 +196,13 @@ class BettingOddsLoader:
         implied = {}
         for team, decimal_odd in odds.items():
             # Ensure odds are numeric (handle string inputs from JSON)
-           try:
-               odd_value = float(decimal_odd)
-               if odd_value > 0:
-                   implied[team] = 1.0 / odd_value
-           except (ValueError, TypeError):
-           # Skip invalid odds
-               continue
+            try:
+                odd_value = float(decimal_odd)
+                if odd_value > 0:
+                    implied[team] = 1.0 / odd_value
+            except (ValueError, TypeError):
+                # Skip invalid odds
+                continue
         
         if not implied:
             return {}
@@ -226,10 +226,10 @@ class BettingOddsLoader:
         
         total_implied = 0.0
         for odd in odds.values():
-           try:
-               odd_value = float(odd)
-               if odd_value > 0:
-                   total_implied += 1.0 / odd_value
-           except (ValueError, TypeError):
-               continue
+            try:
+                odd_value = float(odd)
+                if odd_value > 0:
+                    total_implied += 1.0 / odd_value
+            except (ValueError, TypeError):
+                continue
         return (total_implied - 1.0) * 100

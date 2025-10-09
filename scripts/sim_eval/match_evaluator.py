@@ -7,6 +7,9 @@ import time
 from sim_v1_2 import SimulationEngine, SimulationConfig, MatchState, ResultAggregator
 from .loaders import BettingOddsLoader
 
+# Betting configuration
+BET_EDGE_THRESHOLD = 0.0  # Minimum edge required to place bet (0 = any positive edge)
+
 
 @dataclass
 class MatchEvaluationResult:
@@ -41,14 +44,14 @@ class MatchEvaluationResult:
 class OverallEvaluationResults:
     """Aggregated results across all matches"""
     n_matches: int
-    
+
     # Overall metrics
     avg_log_loss: float
     avg_brier_score: float
-    
+
     # Calibration data
     calibration_bins: List[Tuple[float, float, int]]  # (predicted, actual, count)
-    
+
     # Edge analysis
     avg_edge: float  # Average absolute edge
     profitable_bets: int  # Count where model has positive edge
@@ -57,10 +60,11 @@ class OverallEvaluationResults:
     total_pnl: float  # Total profit/loss
     roi: float  # Return on investment
     win_rate: float  # Percentage of winning bets
-    
+    bets_placed: int  # Number of bets actually placed
+
     # Per match results for detailed analysis
     match_results: List[MatchEvaluationResult]
-    
+
     # Summary stats
     total_simulation_time: float
 
@@ -168,9 +172,10 @@ class MatchLevelEvaluator:
         market_odds = odds_data.get('odds', {}).get('winner', {})
         market_win_prob = BettingOddsLoader.get_implied_probabilities(market_odds)
         actual_winner = odds_data.get('actual_winner')
+
         # Calculate metrics
-        log_loss = self._calculate_log_loss(simulated_win_prob, market_win_prob, team1)
-        brier_score = self._calculate_brier_score(simulated_win_prob, market_win_prob, team1)
+        log_loss = self._calculate_log_loss(simulated_win_prob, actual_winner, team1, team2)
+        brier_score = self._calculate_brier_score(simulated_win_prob, actual_winner, team1, team2)
         edge = self._calculate_edge(simulated_win_prob, market_win_prob)
         realized_pnl = self._calculate_realized_pnl(edge, market_odds, actual_winner)
 
@@ -193,39 +198,52 @@ class MatchLevelEvaluator:
             simulation_time=simulation_time
         )
     
-    def _calculate_log_loss(self, sim_prob: Dict[str, float], market_prob: Dict[str, float], 
-                           team1: str) -> float:
-        """Calculate log loss for binary outcome
-        
-        Design decision: Use team1 win as the positive class
+    def _calculate_log_loss(self, sim_prob: Dict[str, float], actual_winner: Optional[str],
+                           team1: str, team2: str) -> float:
+        """Calculate binary log loss against actual match outcome
+
+        Log loss = -log(p) where p is predicted probability of actual outcome
+        Lower is better (0 = perfect prediction)
+
+        Args:
+            sim_prob: Simulated win probabilities {team: probability}
+            actual_winner: Name of team that actually won
+            team1, team2: Team names for validation
         """
-        if team1 not in market_prob:
+        if not actual_winner:
             return np.nan
-        
-        # Get probabilities for team1 winning
-        p_sim = sim_prob.get(team1, 0.5)
-        p_market = market_prob.get(team1, 0.5)
-        
+
+        # Get predicted probability for the team that actually won
+        p_predicted = sim_prob.get(actual_winner, 0.5)
+
         # Clip to avoid log(0)
-        p_market = np.clip(p_market, 1e-15, 1 - 1e-15)
-        
-        # Binary cross entropy
-        # Note: We're comparing our prediction to market "truth"
-        log_loss = -(p_sim * np.log(p_market) + (1 - p_sim) * np.log(1 - p_market))
-        
+        p_predicted = np.clip(p_predicted, 1e-15, 1 - 1e-15)
+
+        # Binary log loss: -log(probability of actual outcome)
+        log_loss = -np.log(p_predicted)
+
         return log_loss
     
-    def _calculate_brier_score(self, sim_prob: Dict[str, float], market_prob: Dict[str, float],
-                              team1: str) -> float:
-        """Calculate Brier score for binary outcome"""
-        if team1 not in market_prob:
+    def _calculate_brier_score(self, sim_prob: Dict[str, float], actual_winner: Optional[str],
+                              team1: str, team2: str) -> float:
+        """Calculate Brier score against actual match outcome
+
+        Brier score = (p - actual)^2 where actual is 0 or 1
+        Lower is better (0 = perfect prediction)
+
+        For team1: if team1 won, actual=1, else actual=0
+        """
+        if not actual_winner:
             return np.nan
-        
-        p_sim = sim_prob.get(team1, 0.5)
-        p_market = market_prob.get(team1, 0.5)
-        
-        # Squared difference
-        return (p_sim - p_market) ** 2
+
+        # Get predicted probability for team1
+        p_team1 = sim_prob.get(team1, 0.5)
+
+        # Actual outcome: 1 if team1 won, 0 if team1 lost
+        actual = 1.0 if actual_winner == team1 else 0.0
+
+        # Brier score: squared difference between prediction and actual
+        return (p_team1 - actual) ** 2
     
     def _calculate_edge(self, sim_prob: Dict[str, float], market_prob: Dict[str, float]) -> Dict[str, float]:
         """Calculate edge over market for each team
@@ -255,14 +273,14 @@ class MatchLevelEvaluator:
         # Find team with highest positive edge
         best_team = None
         best_edge = 0.0
-        
+
         for team, team_edge in edge.items():
             if team_edge > best_edge:
                 best_edge = team_edge
                 best_team = team
-        
-        # If no positive edge, no bet
-        if not best_team or best_edge <= 0:
+
+        # If edge doesn't meet threshold, no bet
+        if not best_team or best_edge <= BET_EDGE_THRESHOLD:
             return 0.0
         
         # Calculate P&L
@@ -290,6 +308,10 @@ class MatchLevelEvaluator:
                 calibration_bins=[],
                 avg_edge=0.0,
                 profitable_bets=0,
+                total_pnl=0.0,
+                roi=0.0,
+                win_rate=0.0,
+                bets_placed=0,
                 match_results=[],
                 total_simulation_time=0.0
             )
@@ -316,7 +338,7 @@ class MatchLevelEvaluator:
         for result in match_results:
             for team, edge in result.edge.items():
                 all_edges.append(abs(edge))
-                if edge > 0.05:  # 5% edge threshold
+                if edge > BET_EDGE_THRESHOLD:
                     profitable_bets += 1
             # Track actual P&L
             if result.realized_pnl is not None:
@@ -340,6 +362,7 @@ class MatchLevelEvaluator:
             total_pnl=total_pnl,
             roi=roi,
             win_rate=win_rate,
+            bets_placed=bets_placed,
             match_results=match_results,
             total_simulation_time=total_time
         )
@@ -395,13 +418,13 @@ def print_evaluation_summary(results: OverallEvaluationResults):
     print(f"Average Log Loss: {results.avg_log_loss:.4f}")
     print(f"Average Brier Score: {results.avg_brier_score:.4f}")
     print(f"Average Edge: {results.avg_edge:.1%}")
-    print(f"Profitable opportunities (>5% edge): {results.profitable_bets}")
+    print(f"Profitable opportunities (edge > {BET_EDGE_THRESHOLD:.1%}): {results.profitable_bets}")
     
     print(f"\n--- Actual Betting Performance ---")
     print(f"Total P&L: {results.total_pnl:+.2f} units")
     print(f"ROI: {results.roi:+.1f}%")
     print(f"Win Rate: {results.win_rate:.1%}")
-    print(f"Bets Placed: {int(results.total_pnl != 0)}")  # Count of matches with bets
+    print(f"Bets Placed: {results.bets_placed}")
 
     print(f"\n--- Calibration Analysis ---")
     print("Predicted vs Market probabilities:")
