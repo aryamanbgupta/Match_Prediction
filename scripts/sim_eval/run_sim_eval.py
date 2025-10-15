@@ -17,6 +17,7 @@ warnings.filterwarnings("ignore", message="X does not have valid feature names")
 sys.path.append(str(Path(__file__).parent.parent))
 
 from sim_v1_2 import SimulationEngine, XGBoostModel, T20Rules, XGBoostModelV2
+from stats_provider import StatsProvider
 from sim_eval.loaders import TestMatchLoader, BettingOddsLoader
 from sim_eval.match_evaluator import MatchLevelEvaluator, print_evaluation_summary
 
@@ -104,6 +105,16 @@ def main():
     print("Cricket Match-Level Evaluation")
     print("=" * 60)
     
+    # Load player stats cache (chunked format)
+    print("\nLoading player stats cache...")
+    try:
+        stats_provider = StatsProvider('models')  # Pass directory, not file
+        print("✓ Stats cache loaded successfully")
+    except Exception as e:
+        print(f"Warning: Could not load stats cache: {e}")
+        print("Continuing without stats cache (will use zeros)")
+        stats_provider = None
+
     # Load model and encoders
     print("\nLoading model...")
     try:
@@ -111,7 +122,8 @@ def main():
             model_path='models/xgb/xgboost_model_v2.pkl',
             batter_encoder_path='models/xgb/batter_encoder_v2.pkl',
             bowler_encoder_path='models/xgb/bowler_encoder_v2.pkl',
-            feature_columns_path='models/xgb/feature_columns_v2.txt'
+            feature_columns_path='models/xgb/feature_columns_v2.txt',
+            stats_provider=stats_provider
         )
         print("✓ V2 model loaded successfully")
 

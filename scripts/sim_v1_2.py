@@ -435,23 +435,25 @@ class PredictionModel(ABC):
         pass
 
 class XGBoostModelV2(PredictionModel):
-    def __init__(self, model_path: str, batter_encoder_path: str, bowler_encoder_path: str, feature_columns_path: str):
+    def __init__(self, model_path: str, batter_encoder_path: str, bowler_encoder_path: str, feature_columns_path: str, stats_provider=None):
         import joblib
         self.model = joblib.load(model_path)
         self.batter_encoder = joblib.load(batter_encoder_path)
         self.bowler_encoder = joblib.load(bowler_encoder_path)
-        
+        self.stats_provider = stats_provider  # NEW: Optional stats provider for simulations
+
         # Load feature columns to ensure consistency
         with open(feature_columns_path, 'r') as f:
             self.feature_columns = [line.strip() for line in f.readlines()]
-        
+
         # Map model output classes to our Outcome enum (same as v1)
         self.class_to_outcome = {
             0: 'dot', 1: 'one', 2: 'two', 3: 'four',
             4: 'four', 5: 'six', 6: 'six', 7: 'wicket'
         }
-        
-        print(f"Loaded XGBoost v2 model with {len(self.feature_columns)} features")
+
+        stats_mode = "with real player stats" if stats_provider else "with zero stats (fallback)"
+        print(f"Loaded XGBoost v2 model with {len(self.feature_columns)} features {stats_mode}")
 
     def extract_features(self, state: MatchState) -> pd.DataFrame:
         """Extract comprehensive feature set matching v2 training"""
@@ -490,16 +492,31 @@ class XGBoostModelV2(PredictionModel):
         except:
             features['bowler_encoded'] = -1
         
-        # Player stats features (simplified - no historical data in simulation)
-        # These would be 0 in simulation since we don't track career stats
-        features.update({
-            'batsman_avg': 0.0,
-            'batsman_sr': 0.0,
-            'bowler_avg': 0.0,
-            'bowler_econ': 0.0,
-            'h2h_avg': 0.0,
-            'h2h_sr': 0.0,
-        })
+        # Player stats features - use real stats if provider available
+        if self.stats_provider:
+            # Get real player stats from historical cache
+            batting_stats = self.stats_provider.get_batting_stats(striker.player_id, state.match_date)
+            bowling_stats = self.stats_provider.get_bowling_stats(bowler.player_id, state.match_date)
+            h2h_stats = self.stats_provider.get_h2h_stats(striker.player_id, bowler.player_id, state.match_date)
+
+            features.update({
+                'batsman_avg': batting_stats['avg'],
+                'batsman_sr': batting_stats['sr'],
+                'bowler_avg': bowling_stats['avg'],
+                'bowler_econ': bowling_stats['econ'],
+                'h2h_avg': h2h_stats['avg'],
+                'h2h_sr': h2h_stats['sr'],
+            })
+        else:
+            # Fallback to zeros if no stats provider
+            features.update({
+                'batsman_avg': 0.0,
+                'batsman_sr': 0.0,
+                'bowler_avg': 0.0,
+                'bowler_econ': 0.0,
+                'h2h_avg': 0.0,
+                'h2h_sr': 0.0,
+            })
         
         # Momentum features from match history
         features.update(self._extract_momentum_features(state))

@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 from collections import defaultdict, deque
 from datetime import datetime
+import pickle
 
 class PlayerStatsTracker:
     """
@@ -79,6 +80,30 @@ class PlayerStatsTracker:
         self.h2h_stats[(batter_id, bowler_id)]['balls'] += 1
         if is_wicket:
             self.h2h_stats[(batter_id, bowler_id)]['dismissals'] += 1
+
+
+def deep_copy_stats(tracker):
+    """
+    Create a deep copy of tracker stats at current state.
+    This represents what we knew at this point in time for simulations.
+
+    DESIGN DECISION: Deep copy to avoid reference issues
+    REASONING: Snapshots must be immutable - changes to tracker shouldn't affect past snapshots
+    """
+    return {
+        'batting': {
+            player_id: dict(stats)
+            for player_id, stats in tracker.batting_stats.items()
+        },
+        'bowling': {
+            player_id: dict(stats)
+            for player_id, stats in tracker.bowling_stats.items()
+        },
+        'h2h': {
+            matchup: dict(stats)
+            for matchup, stats in tracker.h2h_stats.items()
+        }
+    }
 
 
 class InningsFeatureCalculator:
@@ -413,15 +438,22 @@ def process_folder_v2_with_splits(folder_path):
         'betting_test': [],
         'golden_test': []
     }
-    
+
+    # Stats cache: snapshots at each match date
+    # To avoid memory issues, we'll save incrementally
+    stats_snapshots = {}
+    cache_chunks = []  # List of saved chunk files
+    save_interval = 50  # Save every 50 snapshots (smaller to prevent huge chunks)
+
     processed_files = 0
     
     # Sort files chronologically
+    print("Sorting files chronologically...")
     json_files = sorted(
         Path(folder_path).glob('*.json'),
         key=lambda x: json.loads(x.read_text())['info']['dates'][0]
     )
-    
+
     print(f"Processing {len(json_files)} files in chronological order...")
     
     for file_path in json_files:
@@ -449,9 +481,28 @@ def process_folder_v2_with_splits(folder_path):
                 and 't20' in data['info'].get('event', {}).get('name', '').lower()
                 and 'world cup' in data['info'].get('event', {}).get('name', '').lower()
             )
-            
+
+            # CRITICAL: Take snapshot BEFORE processing this match
+            # This represents what we knew at the START of this match (for simulations)
+            # Only save first snapshot per date to avoid overwriting when multiple matches on same day
+            match_date_str = match_date.strftime('%Y-%m-%d')
+            if match_date_str not in stats_snapshots:
+                stats_snapshots[match_date_str] = deep_copy_stats(player_stats_tracker)
+
+                # Periodically save snapshots to avoid memory issues
+                if len(stats_snapshots) >= save_interval:
+                    chunk_dir = Path('models/cache_chunks')
+                    chunk_dir.mkdir(parents=True, exist_ok=True)
+                    chunk_file = chunk_dir / f'cache_chunk_{len(cache_chunks)}.pkl'
+                    with open(chunk_file, 'wb') as f:
+                        pickle.dump(stats_snapshots, f, protocol=pickle.HIGHEST_PROTOCOL)
+                    cache_chunks.append(chunk_file)
+                    print(f"  💾 Saved snapshot chunk {len(cache_chunks)} ({len(stats_snapshots)} dates)")
+                    stats_snapshots = {}  # Clear memory
+
             # Process the match
             match_balls = parse_match_data_v2(json_data, player_stats_tracker)
+            print(f"  Processed match on {match_date_str}: {len(match_balls)} balls")
             
             # Add to appropriate split(s)
             split_data[current_split].extend(match_balls)
@@ -459,11 +510,11 @@ def process_folder_v2_with_splits(folder_path):
                 split_data['betting_test'].extend(match_balls)
             
             processed_files += 1
-            
+
             if processed_files % 100 == 0:
                 total_balls = sum(len(balls) for balls in split_data.values())
-                print(f"Processed {processed_files} matches, {total_balls} total balls")
-                
+                print(f"✓ Processed {processed_files} matches, {total_balls} total balls, {len(stats_snapshots)} snapshots")
+
         except Exception as e:
             print(f"Error processing {file_path.name}: {str(e)}")
     
@@ -474,7 +525,72 @@ def process_folder_v2_with_splits(folder_path):
             output_file = f'data/xgb_data/cricket_data_v2_{split_name}.parquet'
             df.to_parquet(output_file, index=False)
             print(f"Saved {split_name}: {len(balls)} balls to {output_file}")
-    
+
+    # Save player stats cache for simulations (chunked format - no merge!)
+    print(f"\nSaving player stats cache (chunked format)...")
+
+    # Save any remaining snapshots as final chunk
+    if stats_snapshots:
+        chunk_dir = Path('models/cache_chunks')
+        chunk_dir.mkdir(parents=True, exist_ok=True)
+        chunk_file = chunk_dir / f'cache_chunk_{len(cache_chunks)}.pkl'
+        with open(chunk_file, 'wb') as f:
+            pickle.dump(stats_snapshots, f, protocol=pickle.HIGHEST_PROTOCOL)
+        cache_chunks.append(chunk_file)
+        print(f"  💾 Saved final snapshot chunk {len(cache_chunks)} ({len(stats_snapshots)} dates)")
+
+    # Build metadata with date lists for lazy loading
+    print(f"\nBuilding metadata with date indices for lazy loading...")
+    chunks_with_dates = []
+
+    for i, chunk_file in enumerate(cache_chunks):
+        print(f"  Indexing chunk {i+1}/{len(cache_chunks)}...", end=' ')
+
+        # Load chunk to get its dates
+        with open(chunk_file, 'rb') as f:
+            chunk_data = pickle.load(f)
+
+        dates = sorted(chunk_data.keys())
+        print(f"✓ ({len(dates)} dates)")
+
+        chunks_with_dates.append({
+            'file': str(chunk_file.relative_to('models')),
+            'dates': dates,
+            'num_dates': len(dates)
+        })
+
+        del chunk_data  # Free memory
+
+    # Save metadata file with date indices
+    total_dates = sum(c['num_dates'] for c in chunks_with_dates)
+    metadata = {
+        'num_chunks': len(cache_chunks),
+        'num_matches': processed_files,
+        'num_dates': total_dates,
+        'num_players_batting': len(player_stats_tracker.batting_stats),
+        'num_players_bowling': len(player_stats_tracker.bowling_stats),
+        'num_h2h_matchups': len(player_stats_tracker.h2h_stats),
+        'build_timestamp': datetime.now().isoformat(),
+        'chunk_files': [str(f.relative_to('models')) for f in cache_chunks],  # Kept for backwards compat
+        'chunks': chunks_with_dates  # New format with date indices
+    }
+
+    metadata_path = Path('models/player_stats_cache_metadata.pkl')
+    with open(metadata_path, 'wb') as f:
+        pickle.dump(metadata, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    # Calculate total size
+    total_size_mb = sum(f.stat().st_size for f in cache_chunks) / (1024 * 1024)
+
+    print(f"\n✓ Saved player stats cache (chunked format)")
+    print(f"  Total chunks: {len(cache_chunks)}")
+    print(f"  Total size: {total_size_mb:.1f} MB")
+    print(f"  Date snapshots: ~{total_dates:,}")
+    print(f"  Unique batters: {metadata['num_players_batting']:,}")
+    print(f"  Unique bowlers: {metadata['num_players_bowling']:,}")
+    print(f"  H2H matchups: {metadata['num_h2h_matchups']:,}")
+    print(f"  Metadata saved to: {metadata_path}")
+
     return split_data, processed_files
 
 
