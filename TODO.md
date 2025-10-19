@@ -5,5 +5,4 @@ Betting sim: currently the odds json generation ignored 30% of the matches, fix 
 eval functions graph generation
 Add Expected Value (EV) tracking to distinguish +EV bets from lucky/unlucky outcomes
 Add Sharpe Ratio calculation for risk-adjusted returns in betting evaluation
-Add favorite vs underdog performance split to identify where model adds value
 Implement Kelly Criterion for optimal bet sizing based on edge and bankroll

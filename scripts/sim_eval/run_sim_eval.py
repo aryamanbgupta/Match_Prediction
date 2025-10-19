@@ -78,6 +78,10 @@ def main():
                        help='Path to bowler encoder')
     parser.add_argument('--n-sims', type=int, default=1000,
                        help='Number of simulations per match')
+    parser.add_argument('--max-matches', type=int, default=None,
+                       help='Maximum number of matches to evaluate (for testing)')
+    parser.add_argument('--parallel', action='store_true', default=False,
+                       help='Enable parallel processing for simulations')
     parser.add_argument('--create-example', action='store_true',
                        help='Create example betting odds file')
     
@@ -149,11 +153,16 @@ def main():
     print("\nLoading test matches...")
     match_loader = TestMatchLoader()
     matches = match_loader.load_matches(args.test_dir)
-    
+
     if not matches:
         print("No matches loaded!")
         return
-    
+
+    # Limit matches if requested (for testing)
+    if args.max_matches:
+        matches = matches[:args.max_matches]
+        print(f"✓ Limiting to first {args.max_matches} matches for testing")
+
     # Load betting odds
     print("\nLoading betting odds...")
     odds_lookup = BettingOddsLoader.load_odds(args.odds)
@@ -166,7 +175,8 @@ def main():
     evaluator = MatchLevelEvaluator(
         model=model,
         simulation_engine=engine,
-        n_simulations=args.n_sims
+        n_simulations=args.n_sims,
+        parallel=args.parallel
     )
     
     # Run evaluation

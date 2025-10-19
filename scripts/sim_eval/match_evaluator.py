@@ -1,6 +1,6 @@
 import numpy as np
 from typing import List, Dict, Tuple, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from collections import defaultdict
 import time
 
@@ -17,27 +17,34 @@ class MatchEvaluationResult:
     match_id: str
     team1: str
     team2: str
-    
+
     # Simulation results
     simulated_win_prob: Dict[str, float]  # team -> probability
     simulated_scores: Dict[str, Dict[str, float]]  # team -> {mean, std, percentiles}
-    
+
     # Betting comparison
     market_win_prob: Dict[str, float]  # team -> implied probability
     market_odds: Dict[str, float]  # team -> decimal odds
-    
+
     actual_winner: Optional[str]
 
     # Metrics
     log_loss: float  # Single match log loss
     brier_score: float  # Single match brier score
     edge: Dict[str, float]  # team -> edge over market
-    
+
     realized_pnl: Optional[float]
-    
+
+    # Kelly Criterion and EV metrics
+    expected_value: float = 0.0  # Expected value of the bet
+    full_kelly_fraction: float = 0.0  # Full Kelly optimal stake
+    fractional_kelly_fraction: float = 0.0  # 25% Kelly stake
+    full_kelly_pnl: Optional[float] = None  # P&L with Full Kelly
+    fractional_kelly_pnl: Optional[float] = None  # P&L with Fractional Kelly
+
     # Metadata
-    n_simulations: int
-    simulation_time: float
+    n_simulations: int = 0
+    simulation_time: float = 0.0
 
 
 @dataclass
@@ -57,32 +64,54 @@ class OverallEvaluationResults:
     avg_signed_edge: float  # Average signed edge (positive = overconfident, negative = underconfident)
     profitable_bets: int  # Count where model has positive edge
 
-    # Actual betting performance
+    # Actual betting performance (flat staking)
     total_pnl: float  # Total profit/loss
     roi: float  # Return on investment
     win_rate: float  # Percentage of winning bets
     bets_placed: int  # Number of bets actually placed
 
+    # Kelly Criterion performance
+    total_expected_value: float = 0.0  # Sum of all EVs
+    full_kelly_total_pnl: float = 0.0  # Total P&L with Full Kelly
+    full_kelly_roi: float = 0.0  # Full Kelly ROI
+    full_kelly_win_rate: float = 0.0  # Full Kelly win rate
+    full_kelly_bets_placed: int = 0  # Bets placed with Full Kelly
+    fractional_kelly_total_pnl: float = 0.0  # Total P&L with Fractional Kelly
+    fractional_kelly_roi: float = 0.0  # Fractional Kelly ROI
+    fractional_kelly_win_rate: float = 0.0  # Fractional Kelly win rate
+    fractional_kelly_bets_placed: int = 0  # Bets placed with Fractional Kelly
+
+    # Risk-adjusted returns
+    sharpe_ratio_flat: float = 0.0  # Sharpe ratio for flat staking
+    sharpe_ratio_full_kelly: float = 0.0  # Sharpe ratio for Full Kelly
+    sharpe_ratio_fractional_kelly: float = 0.0  # Sharpe ratio for Fractional Kelly
+
+    # Performance by match type
+    favorite_stats: Optional[Dict] = None  # Stats for favorites (odds < 2.0)
+    underdog_stats: Optional[Dict] = None  # Stats for underdogs (odds >= 2.0)
+
     # Per match results for detailed analysis
-    match_results: List[MatchEvaluationResult]
+    match_results: List[MatchEvaluationResult] = field(default_factory=list)
 
     # Summary stats
-    total_simulation_time: float
+    total_simulation_time: float = 0.0
 
 
 class MatchLevelEvaluator:
     """Evaluates match predictions against betting odds"""
     
-    def __init__(self, model, simulation_engine: SimulationEngine, n_simulations: int = 1000):
+    def __init__(self, model, simulation_engine: SimulationEngine, n_simulations: int = 1000, parallel: bool = True):
         """
         Args:
             model: The prediction model (XGBoost, etc.)
             simulation_engine: Engine to run match simulations
             n_simulations: Number of simulations per match
+            parallel: Enable parallel processing for simulations
         """
         self.model = model
         self.engine = simulation_engine
         self.n_simulations = n_simulations
+        self.parallel = parallel
     
     def evaluate_all(self, matches: List[Tuple[str, MatchState]], 
                      odds_lookup: Dict[str, Dict]) -> OverallEvaluationResults:
@@ -144,7 +173,7 @@ class MatchLevelEvaluator:
         # Run simulations
         config = SimulationConfig(
             n_simulations=self.n_simulations,
-            parallel=True,
+            parallel=self.parallel,
             random_seed=42,  # Fixed for reproducibility
             verbose=False
         )
@@ -180,8 +209,38 @@ class MatchLevelEvaluator:
         edge = self._calculate_edge(simulated_win_prob, market_win_prob)
         realized_pnl = self._calculate_realized_pnl(edge, market_odds, actual_winner)
 
+        # Calculate Kelly Criterion and EV metrics
+        best_team = None
+        best_edge = 0.0
+        for team, team_edge in edge.items():
+            if team_edge > best_edge:
+                best_edge = team_edge
+                best_team = team
+
+        # Only calculate Kelly/EV if we have a positive edge bet
+        if best_team and best_edge > BET_EDGE_THRESHOLD and best_team in market_odds:
+            win_prob = simulated_win_prob[best_team]
+            odds = market_odds[best_team]
+
+            # Expected value
+            expected_value = self._calculate_expected_value(win_prob, odds)
+
+            # Full Kelly
+            full_kelly_fraction = self._calculate_kelly_fraction(win_prob, odds)
+            full_kelly_pnl = self._calculate_kelly_pnl(full_kelly_fraction, odds, best_team, actual_winner)
+
+            # Fractional Kelly (25%)
+            fractional_kelly_fraction = full_kelly_fraction * 0.25
+            fractional_kelly_pnl = self._calculate_kelly_pnl(fractional_kelly_fraction, odds, best_team, actual_winner)
+        else:
+            expected_value = 0.0
+            full_kelly_fraction = 0.0
+            fractional_kelly_fraction = 0.0
+            full_kelly_pnl = None
+            fractional_kelly_pnl = None
+
         simulation_time = time.time() - start_time
-        
+
         return MatchEvaluationResult(
             match_id=match_id,
             team1=team1,
@@ -195,6 +254,11 @@ class MatchLevelEvaluator:
             brier_score=brier_score,
             edge=edge,
             realized_pnl=realized_pnl,
+            expected_value=expected_value,
+            full_kelly_fraction=full_kelly_fraction,
+            fractional_kelly_fraction=fractional_kelly_fraction,
+            full_kelly_pnl=full_kelly_pnl,
+            fractional_kelly_pnl=fractional_kelly_pnl,
             n_simulations=self.n_simulations,
             simulation_time=simulation_time
         )
@@ -292,6 +356,189 @@ class MatchLevelEvaluator:
             # Loss: Lose the stake
             return -1.0
 
+    def _calculate_expected_value(self, win_prob: float, odds: float) -> float:
+        """Calculate expected value of a bet
+
+        EV = (win_prob × profit) - (loss_prob × stake)
+           = (p × (odds - 1)) - ((1 - p) × 1)
+           = p × odds - 1
+
+        Args:
+            win_prob: Our estimated win probability
+            odds: Decimal odds for the bet
+
+        Returns:
+            Expected value in units (e.g., 0.15 = 15% expected return)
+        """
+        if odds <= 1.0:
+            return 0.0
+
+        # EV = probability × profit - (1 - probability) × loss
+        profit = odds - 1.0  # Net profit if win (odds - stake)
+        loss = 1.0  # Lose the stake
+
+        ev = (win_prob * profit) - ((1 - win_prob) * loss)
+        return ev
+
+    def _calculate_kelly_fraction(self, win_prob: float, odds: float) -> float:
+        """Calculate Kelly Criterion optimal stake fraction
+
+        Kelly formula: f* = (bp - q) / b
+        where:
+            b = odds - 1 (net odds)
+            p = win probability
+            q = 1 - p (loss probability)
+
+        Args:
+            win_prob: Our estimated win probability
+            odds: Decimal odds for the bet
+
+        Returns:
+            Optimal fraction of bankroll to bet (e.g., 0.15 = 15%)
+            Returns 0 if no edge or negative Kelly
+        """
+        if odds <= 1.0 or win_prob <= 0 or win_prob >= 1:
+            return 0.0
+
+        b = odds - 1.0  # Net odds
+        p = win_prob
+        q = 1.0 - p
+
+        # Kelly fraction
+        kelly = (b * p - q) / b
+
+        # Only bet if Kelly is positive (we have edge)
+        if kelly <= 0:
+            return 0.0
+
+        # Return full Kelly (no cap as requested)
+        return kelly
+
+    def _calculate_kelly_pnl(self, kelly_fraction: float, odds: float,
+                             bet_team: str, actual_winner: Optional[str]) -> Optional[float]:
+        """Calculate P&L for a Kelly-sized bet
+
+        Args:
+            kelly_fraction: Fraction of bankroll to bet
+            odds: Decimal odds
+            bet_team: Team we bet on
+            actual_winner: Team that actually won
+
+        Returns:
+            P&L as fraction of bankroll (e.g., 0.15 = 15% gain, -0.10 = 10% loss)
+        """
+        if kelly_fraction <= 0 or not actual_winner:
+            return None
+
+        # Calculate P&L
+        if bet_team == actual_winner:
+            # Win: profit = stake × (odds - 1)
+            return kelly_fraction * (odds - 1.0)
+        else:
+            # Loss: lose the stake
+            return -kelly_fraction
+
+    def _calculate_sharpe_ratio(self, returns: List[float]) -> float:
+        """Calculate Sharpe ratio for a series of returns
+
+        Sharpe = mean(returns) / std(returns) × sqrt(n)
+
+        Args:
+            returns: List of returns (P&L values)
+
+        Returns:
+            Sharpe ratio (higher is better, >1 is good, >2 is excellent)
+        """
+        if not returns or len(returns) < 2:
+            return 0.0
+
+        returns_array = np.array(returns)
+        mean_return = np.mean(returns_array)
+        std_return = np.std(returns_array, ddof=1)  # Sample std
+
+        if std_return == 0:
+            return 0.0
+
+        # Sharpe ratio (not annualized since we don't have time units)
+        sharpe = mean_return / std_return * np.sqrt(len(returns))
+
+        return sharpe
+
+    def _split_by_favorite_underdog(self, match_results: List[MatchEvaluationResult]
+                                   ) -> Tuple[Dict, Dict]:
+        """Split results into favorites vs underdogs and calculate stats
+
+        Favorite: odds < 2.0 (implied probability > 50%)
+        Underdog: odds >= 2.0 (implied probability <= 50%)
+
+        Args:
+            match_results: List of all match results
+
+        Returns:
+            (favorite_stats, underdog_stats) dictionaries
+        """
+        favorite_results = []
+        underdog_results = []
+
+        # Split matches
+        for result in match_results:
+            if not result.market_odds:
+                continue
+
+            # Get the team we would bet on (highest edge)
+            if not result.edge:
+                continue
+
+            best_team = max(result.edge, key=result.edge.get)
+            best_edge = result.edge[best_team]
+
+            if best_edge <= BET_EDGE_THRESHOLD:
+                continue  # No bet placed
+
+            odds = result.market_odds.get(best_team, 0)
+
+            if odds == 0:
+                continue
+
+            # Categorize
+            if odds < 2.0:
+                favorite_results.append((result, best_team))
+            else:
+                underdog_results.append((result, best_team))
+
+        # Calculate stats for each category
+        def calculate_category_stats(category_results):
+            if not category_results:
+                return None
+
+            total_matches = len(category_results)
+            wins = sum(1 for r, team in category_results if r.actual_winner == team)
+
+            flat_pnl = sum(r.realized_pnl for r, _ in category_results
+                          if r.realized_pnl is not None and r.realized_pnl != 0)
+            flat_bets = sum(1 for r, _ in category_results
+                           if r.realized_pnl is not None and r.realized_pnl != 0)
+
+            full_kelly_pnl = sum(r.full_kelly_pnl for r, _ in category_results
+                                if r.full_kelly_pnl is not None)
+
+            edges = [r.edge[team] for r, team in category_results if r.edge]
+
+            return {
+                'n_matches': total_matches,
+                'win_rate': wins / total_matches if total_matches > 0 else 0,
+                'flat_roi': (flat_pnl / flat_bets * 100) if flat_bets > 0 else 0,
+                'flat_pnl': flat_pnl,
+                'full_kelly_pnl': full_kelly_pnl,
+                'avg_edge': np.mean(edges) if edges else 0,
+                'bets_placed': flat_bets
+            }
+
+        favorite_stats = calculate_category_stats(favorite_results)
+        underdog_stats = calculate_category_stats(underdog_results)
+
+        return favorite_stats, underdog_stats
+
     def _aggregate_results(self, match_results: List[MatchEvaluationResult], 
                           total_time: float) -> OverallEvaluationResults:
         """Aggregate individual match results
@@ -368,6 +615,56 @@ class MatchLevelEvaluator:
         roi = (total_pnl / bets_placed * 100) if bets_placed > 0 else 0.0
         win_rate = (winning_bets / bets_placed) if bets_placed > 0 else 0.0
 
+        # Kelly Criterion and EV aggregation
+        total_ev = 0.0
+        full_kelly_pnl = 0.0
+        full_kelly_wins = 0
+        full_kelly_bets = 0
+        fractional_kelly_pnl = 0.0
+        fractional_kelly_wins = 0
+        fractional_kelly_bets = 0
+        flat_returns = []
+        full_kelly_returns = []
+        fractional_kelly_returns = []
+
+        for result in match_results:
+            # Track EV
+            total_ev += result.expected_value
+
+            # Track Full Kelly metrics
+            if result.full_kelly_pnl is not None:
+                full_kelly_pnl += result.full_kelly_pnl
+                full_kelly_bets += 1
+                full_kelly_returns.append(result.full_kelly_pnl)
+                if result.full_kelly_pnl > 0:
+                    full_kelly_wins += 1
+
+            # Track Fractional Kelly metrics
+            if result.fractional_kelly_pnl is not None:
+                fractional_kelly_pnl += result.fractional_kelly_pnl
+                fractional_kelly_bets += 1
+                fractional_kelly_returns.append(result.fractional_kelly_pnl)
+                if result.fractional_kelly_pnl > 0:
+                    fractional_kelly_wins += 1
+
+            # Track flat returns for Sharpe
+            if result.realized_pnl is not None and result.realized_pnl != 0:
+                flat_returns.append(result.realized_pnl)
+
+        # Calculate Kelly ROIs and win rates
+        full_kelly_roi = (full_kelly_pnl / full_kelly_bets * 100) if full_kelly_bets > 0 else 0.0
+        full_kelly_win_rate = (full_kelly_wins / full_kelly_bets) if full_kelly_bets > 0 else 0.0
+        fractional_kelly_roi = (fractional_kelly_pnl / fractional_kelly_bets * 100) if fractional_kelly_bets > 0 else 0.0
+        fractional_kelly_win_rate = (fractional_kelly_wins / fractional_kelly_bets) if fractional_kelly_bets > 0 else 0.0
+
+        # Calculate Sharpe ratios
+        sharpe_flat = self._calculate_sharpe_ratio(flat_returns)
+        sharpe_full_kelly = self._calculate_sharpe_ratio(full_kelly_returns)
+        sharpe_fractional_kelly = self._calculate_sharpe_ratio(fractional_kelly_returns)
+
+        # Split by favorite/underdog
+        favorite_stats, underdog_stats = self._split_by_favorite_underdog(match_results)
+
         return OverallEvaluationResults(
             n_matches=len(match_results),
             avg_log_loss=avg_log_loss,
@@ -380,6 +677,20 @@ class MatchLevelEvaluator:
             roi=roi,
             win_rate=win_rate,
             bets_placed=bets_placed,
+            total_expected_value=total_ev,
+            full_kelly_total_pnl=full_kelly_pnl,
+            full_kelly_roi=full_kelly_roi,
+            full_kelly_win_rate=full_kelly_win_rate,
+            full_kelly_bets_placed=full_kelly_bets,
+            fractional_kelly_total_pnl=fractional_kelly_pnl,
+            fractional_kelly_roi=fractional_kelly_roi,
+            fractional_kelly_win_rate=fractional_kelly_win_rate,
+            fractional_kelly_bets_placed=fractional_kelly_bets,
+            sharpe_ratio_flat=sharpe_flat,
+            sharpe_ratio_full_kelly=sharpe_full_kelly,
+            sharpe_ratio_fractional_kelly=sharpe_fractional_kelly,
+            favorite_stats=favorite_stats,
+            underdog_stats=underdog_stats,
             match_results=match_results,
             total_simulation_time=total_time
         )
@@ -443,11 +754,57 @@ def print_evaluation_summary(results: OverallEvaluationResults):
     print(f"Average Signed Edge: {results.avg_signed_edge:+.1%} ({'overconfident' if results.avg_signed_edge < 0 else 'underconfident' if results.avg_signed_edge > 0 else 'neutral'})")
     print(f"Profitable opportunities (edge > {BET_EDGE_THRESHOLD:.1%}): {results.profitable_bets}")
     
-    print(f"\n--- Actual Betting Performance ---")
-    print(f"Total P&L: {results.total_pnl:+.2f} units")
-    print(f"ROI: {results.roi:+.1f}%")
-    print(f"Win Rate: {results.win_rate:.1%}")
-    print(f"Bets Placed: {results.bets_placed}")
+    print(f"\n--- Betting Strategy Comparison ---")
+    print(f"\nFlat Staking (1 unit per bet):")
+    print(f"  Total P&L: {results.total_pnl:+.2f} units")
+    print(f"  ROI: {results.roi:+.1f}%")
+    print(f"  Sharpe Ratio: {results.sharpe_ratio_flat:.2f}")
+    print(f"  Win Rate: {results.win_rate:.1%}")
+    print(f"  Bets Placed: {results.bets_placed}")
+
+    print(f"\nFull Kelly Criterion:")
+    print(f"  Total P&L: {results.full_kelly_total_pnl:+.2f} units")
+    print(f"  ROI: {results.full_kelly_roi:+.1f}%")
+    print(f"  Sharpe Ratio: {results.sharpe_ratio_full_kelly:.2f}")
+    print(f"  Win Rate: {results.full_kelly_win_rate:.1%}")
+    print(f"  Bets Placed: {results.full_kelly_bets_placed}")
+
+    print(f"\nFractional Kelly (25%):")
+    print(f"  Total P&L: {results.fractional_kelly_total_pnl:+.2f} units")
+    print(f"  ROI: {results.fractional_kelly_roi:+.1f}%")
+    print(f"  Sharpe Ratio: {results.sharpe_ratio_fractional_kelly:.2f} {'⭐ BEST' if results.sharpe_ratio_fractional_kelly >= max(results.sharpe_ratio_flat, results.sharpe_ratio_full_kelly) else ''}")
+    print(f"  Win Rate: {results.fractional_kelly_win_rate:.1%}")
+    print(f"  Bets Placed: {results.fractional_kelly_bets_placed}")
+
+    print(f"\n--- Expected Value Analysis ---")
+    print(f"Total Expected Value: {results.total_expected_value:+.2f} units")
+    flat_ev_diff = results.total_expected_value - results.total_pnl
+    full_kelly_ev_diff = results.total_expected_value - results.full_kelly_total_pnl
+    frac_kelly_ev_diff = results.total_expected_value - results.fractional_kelly_total_pnl
+    print(f"Flat Staking (EV vs Realized): {flat_ev_diff:+.2f} {'(unlucky)' if flat_ev_diff > 1 else '(lucky)' if flat_ev_diff < -1 else '(neutral)'}")
+    print(f"Full Kelly (EV vs Realized): {full_kelly_ev_diff:+.2f} {'(unlucky)' if full_kelly_ev_diff > 1 else '(lucky)' if full_kelly_ev_diff < -1 else '(neutral)'}")
+    print(f"Fractional Kelly (EV vs Realized): {frac_kelly_ev_diff:+.2f} {'(unlucky)' if frac_kelly_ev_diff > 1 else '(lucky)' if frac_kelly_ev_diff < -1 else '(neutral)'}")
+
+    print(f"\n--- Performance by Match Type ---")
+    if results.favorite_stats:
+        fav = results.favorite_stats
+        print(f"\nFavorites (odds < 2.0):")
+        print(f"  Matches: {fav['n_matches']}")
+        print(f"  Win Rate: {fav['win_rate']:.1%}")
+        print(f"  Flat ROI: {fav['flat_roi']:+.1f}%")
+        print(f"  Full Kelly P&L: {fav['full_kelly_pnl']:+.2f} units")
+        print(f"  Average Edge: {fav['avg_edge']:.1%}")
+        print(f"  Bets Placed: {fav['bets_placed']}")
+
+    if results.underdog_stats:
+        und = results.underdog_stats
+        print(f"\nUnderdogs (odds >= 2.0):")
+        print(f"  Matches: {und['n_matches']}")
+        print(f"  Win Rate: {und['win_rate']:.1%}")
+        print(f"  Flat ROI: {und['flat_roi']:+.1f}%")
+        print(f"  Full Kelly P&L: {und['full_kelly_pnl']:+.2f} units")
+        print(f"  Average Edge: {und['avg_edge']:.1%}")
+        print(f"  Bets Placed: {und['bets_placed']}")
 
     print(f"\n--- Calibration Analysis ---")
     print("Predicted probability vs Actual win rate:")
