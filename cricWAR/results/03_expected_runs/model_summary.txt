@@ -1,0 +1,18 @@
+                 Generalized Linear Model Regression Results                  
+==============================================================================
+Dep. Variable:                   runs   No. Observations:                98859
+Model:                            GLM   Df Residuals:                    98856
+Model Family:        NegativeBinomial   Df Model:                            2
+Link Function:                    Log   Scale:                          1.0000
+Method:                          IRLS   Log-Likelihood:            -1.5662e+05
+Date:                Sun, 16 Nov 2025   Deviance:                       91568.
+Time:                        12:26:28   Pearson chi2:                 8.90e+04
+No. Iterations:                     5   Pseudo R-squ. (CS):            0.01218
+Covariance Type:            nonrobust                                         
+==============================================================================
+                 coef    std err          z      P>|z|      [0.025      0.975]
+------------------------------------------------------------------------------
+Intercept      0.1013      0.008     12.314      0.000       0.085       0.117
+over           0.0396      0.001     34.857      0.000       0.037       0.042
+wickets       -0.0813      0.003    -25.775      0.000      -0.087      -0.075
+==============================================================================

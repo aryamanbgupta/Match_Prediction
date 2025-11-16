@@ -1,0 +1,16 @@
+LEVERAGE INDEX SUMMARY
+======================================================================
+
+Total balls: 102,545
+Mean leverage index: 0.9759
+Std leverage index: 0.1416
+
+Distribution:
+count    102545.000000
+mean          0.975867
+std           0.141592
+min           0.600000
+25%           0.880000
+50%           0.950000
+75%           1.050000
+max           1.540000

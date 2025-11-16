@@ -1,0 +1,66 @@
+                            OLS Regression Results                            
+==============================================================================
+Dep. Variable:     weighted_run_value   R-squared:                       0.003
+Model:                            OLS   Adj. R-squared:                  0.002
+Method:                 Least Squares   F-statistic:                     6.815
+Date:                Sun, 16 Nov 2025   Prob (F-statistic):           2.52e-36
+Time:                        12:49:26   Log-Likelihood:            -1.9642e+05
+No. Observations:              102545   AIC:                         3.929e+05
+Df Residuals:                  102504   BIC:                         3.933e+05
+Df Model:                          40                                         
+Covariance Type:            nonrobust                                         
+=============================================================================================================================
+                                                                coef    std err          t      P>|t|      [0.025      0.975]
+-----------------------------------------------------------------------------------------------------------------------------
+const                                                        -0.0139      0.030     -0.462      0.644      -0.073       0.045
+is_second_innings                                             0.0168      0.010      1.639      0.101      -0.003       0.037
+venue_arun_jaitley_stadium_delhi                              0.0335      0.060      0.562      0.574      -0.083       0.150
+venue_brabourne_stadium                                       0.0706      0.066      1.068      0.286      -0.059       0.200
+venue_brabourne_stadium_mumbai                                0.0646      0.039      1.656      0.098      -0.012       0.141
+venue_dr_dy_patil_sports_academy_mumbai                      -0.0311      0.037     -0.842      0.400      -0.103       0.041
+venue_dr_y_s_rajasekhara_reddy_aca_vdca_cricket_stadium      -0.1417      0.043     -3.280      0.001      -0.226      -0.057
+venue_dubai_international_cricket_stadium                    -0.1206      0.041     -2.952      0.003      -0.201      -0.041
+venue_eden_gardens                                            0.0459      0.034      1.370      0.171      -0.020       0.112
+venue_eden_gardens_kolkata                                    0.0672      0.078      0.858      0.391      -0.086       0.221
+venue_feroz_shah_kotla                                       -0.0115      0.038     -0.305      0.761      -0.085       0.062
+venue_green_park                                              0.0688      0.061      1.124      0.261      -0.051       0.189
+venue_holkar_cricket_stadium                                  0.1322      0.050      2.618      0.009       0.033       0.231
+venue_jsca_international_stadium_complex                     -0.2217      0.108     -2.045      0.041      -0.434      -0.009
+venue_m_chinnaswamy_stadium                                2.555e+10   1.62e+11      0.158      0.875   -2.92e+11    3.43e+11
+venue_m_chinnaswamy_stadium                                3.088e+10   8.43e+10      0.366      0.714   -1.34e+11    1.96e+11
+venue_m_chinnaswamy_stadium                               -2.555e+10   1.62e+11     -0.158      0.875   -3.43e+11    2.92e+11
+venue_m_chinnaswamy_stadium                               -3.088e+10   8.43e+10     -0.366      0.714   -1.96e+11    1.34e+11
+venue_ma_chidambaram_stadium                                 -0.1166      0.046     -2.559      0.011      -0.206      -0.027
+venue_ma_chidambaram_stadium_chepauk                         -0.1273      0.049     -2.613      0.009      -0.223      -0.032
+venue_ma_chidambaram_stadium_chepauk_chennai                 -0.1689      0.044     -3.870      0.000      -0.254      -0.083
+venue_maharashtra_cricket_association_stadium                -0.0372      0.037     -1.015      0.310      -0.109       0.035
+venue_maharashtra_cricket_association_stadium_pune           -0.0264      0.041     -0.645      0.519      -0.107       0.054
+venue_narendra_modi_stadium_ahmedabad                        -0.0516      0.050     -1.043      0.297      -0.149       0.045
+venue_punjab_cricket_association_is_bindra_stadium            0.0014      0.044      0.032      0.974      -0.084       0.087
+venue_punjab_cricket_association_is_bindra_stadium_mohali    -0.0389      0.043     -0.904      0.366      -0.123       0.045
+venue_punjab_cricket_association_stadium_mohali              -0.0897      0.063     -1.416      0.157      -0.214       0.034
+venue_rajiv_gandhi_international_stadium                     -0.0922      0.039     -2.335      0.020      -0.170      -0.015
+venue_rajiv_gandhi_international_stadium_uppal               -0.0697      0.038     -1.845      0.065      -0.144       0.004
+venue_sardar_patel_stadium_motera                            -0.0203      0.060     -0.335      0.737      -0.139       0.098
+venue_saurashtra_cricket_association_stadium                  0.0119      0.044      0.271      0.787      -0.074       0.098
+venue_sawai_mansingh_stadium                                 -0.0660      0.040     -1.637      0.102      -0.145       0.013
+venue_shaheed_veer_narayan_singh_international_stadium       -0.1227      0.060     -2.028      0.043      -0.241      -0.004
+venue_sharjah_cricket_stadium                                -0.2487      0.044     -5.625      0.000      -0.335      -0.162
+venue_wankhede_stadium                                        0.0108      0.033      0.323      0.747      -0.055       0.076
+venue_wankhede_stadium_mumbai                                -0.0030      0.034     -0.088      0.930      -0.070       0.064
+venue_zayed_cricket_stadium_abu_dhabi                        -0.0304      0.047     -0.642      0.521      -0.123       0.062
+platoon_same                                                  0.0197      0.012      1.686      0.092      -0.003       0.043
+platoon_unknown                                               0.0484      0.017      2.781      0.005       0.014       0.083
+bowling_spin                                                 -0.0868      0.013     -6.883      0.000      -0.111      -0.062
+bowling_unknown                                              -0.1002      0.028     -3.571      0.000      -0.155      -0.045
+==============================================================================
+Omnibus:                    26717.989   Durbin-Watson:                   1.945
+Prob(Omnibus):                  0.000   Jarque-Bera (JB):            56080.678
+Skew:                           1.557   Prob(JB):                         0.00
+Kurtosis:                       4.852   Cond. No.                     5.83e+13
+==============================================================================
+
+Notes:
+[1] Standard Errors assume that the covariance matrix of the errors is correctly specified.
+[2] The smallest eigenvalue is 5.15e-23. This might indicate that there are
+strong multicollinearity problems or that the design matrix is singular.
