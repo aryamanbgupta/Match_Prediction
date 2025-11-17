@@ -1,66 +1,91 @@
                             OLS Regression Results                            
 ==============================================================================
-Dep. Variable:     weighted_run_value   R-squared:                       0.003
-Model:                            OLS   Adj. R-squared:                  0.002
-Method:                 Least Squares   F-statistic:                     6.815
-Date:                Sun, 16 Nov 2025   Prob (F-statistic):           2.52e-36
-Time:                        12:49:26   Log-Likelihood:            -1.9642e+05
-No. Observations:              102545   AIC:                         3.929e+05
-Df Residuals:                  102504   BIC:                         3.933e+05
-Df Model:                          40                                         
+Dep. Variable:     weighted_run_value   R-squared:                       0.004
+Model:                            OLS   Adj. R-squared:                  0.004
+Method:                 Least Squares   F-statistic:                     16.47
+Date:                Sun, 16 Nov 2025   Prob (F-statistic):          1.03e-178
+Time:                        17:16:23   Log-Likelihood:            -5.3337e+05
+No. Observations:              279336   AIC:                         1.067e+06
+Df Residuals:                  279271   BIC:                         1.068e+06
+Df Model:                          64                                         
 Covariance Type:            nonrobust                                         
-=============================================================================================================================
-                                                                coef    std err          t      P>|t|      [0.025      0.975]
------------------------------------------------------------------------------------------------------------------------------
-const                                                        -0.0139      0.030     -0.462      0.644      -0.073       0.045
-is_second_innings                                             0.0168      0.010      1.639      0.101      -0.003       0.037
-venue_arun_jaitley_stadium_delhi                              0.0335      0.060      0.562      0.574      -0.083       0.150
-venue_brabourne_stadium                                       0.0706      0.066      1.068      0.286      -0.059       0.200
-venue_brabourne_stadium_mumbai                                0.0646      0.039      1.656      0.098      -0.012       0.141
-venue_dr_dy_patil_sports_academy_mumbai                      -0.0311      0.037     -0.842      0.400      -0.103       0.041
-venue_dr_y_s_rajasekhara_reddy_aca_vdca_cricket_stadium      -0.1417      0.043     -3.280      0.001      -0.226      -0.057
-venue_dubai_international_cricket_stadium                    -0.1206      0.041     -2.952      0.003      -0.201      -0.041
-venue_eden_gardens                                            0.0459      0.034      1.370      0.171      -0.020       0.112
-venue_eden_gardens_kolkata                                    0.0672      0.078      0.858      0.391      -0.086       0.221
-venue_feroz_shah_kotla                                       -0.0115      0.038     -0.305      0.761      -0.085       0.062
-venue_green_park                                              0.0688      0.061      1.124      0.261      -0.051       0.189
-venue_holkar_cricket_stadium                                  0.1322      0.050      2.618      0.009       0.033       0.231
-venue_jsca_international_stadium_complex                     -0.2217      0.108     -2.045      0.041      -0.434      -0.009
-venue_m_chinnaswamy_stadium                                2.555e+10   1.62e+11      0.158      0.875   -2.92e+11    3.43e+11
-venue_m_chinnaswamy_stadium                                3.088e+10   8.43e+10      0.366      0.714   -1.34e+11    1.96e+11
-venue_m_chinnaswamy_stadium                               -2.555e+10   1.62e+11     -0.158      0.875   -3.43e+11    2.92e+11
-venue_m_chinnaswamy_stadium                               -3.088e+10   8.43e+10     -0.366      0.714   -1.96e+11    1.34e+11
-venue_ma_chidambaram_stadium                                 -0.1166      0.046     -2.559      0.011      -0.206      -0.027
-venue_ma_chidambaram_stadium_chepauk                         -0.1273      0.049     -2.613      0.009      -0.223      -0.032
-venue_ma_chidambaram_stadium_chepauk_chennai                 -0.1689      0.044     -3.870      0.000      -0.254      -0.083
-venue_maharashtra_cricket_association_stadium                -0.0372      0.037     -1.015      0.310      -0.109       0.035
-venue_maharashtra_cricket_association_stadium_pune           -0.0264      0.041     -0.645      0.519      -0.107       0.054
-venue_narendra_modi_stadium_ahmedabad                        -0.0516      0.050     -1.043      0.297      -0.149       0.045
-venue_punjab_cricket_association_is_bindra_stadium            0.0014      0.044      0.032      0.974      -0.084       0.087
-venue_punjab_cricket_association_is_bindra_stadium_mohali    -0.0389      0.043     -0.904      0.366      -0.123       0.045
-venue_punjab_cricket_association_stadium_mohali              -0.0897      0.063     -1.416      0.157      -0.214       0.034
-venue_rajiv_gandhi_international_stadium                     -0.0922      0.039     -2.335      0.020      -0.170      -0.015
-venue_rajiv_gandhi_international_stadium_uppal               -0.0697      0.038     -1.845      0.065      -0.144       0.004
-venue_sardar_patel_stadium_motera                            -0.0203      0.060     -0.335      0.737      -0.139       0.098
-venue_saurashtra_cricket_association_stadium                  0.0119      0.044      0.271      0.787      -0.074       0.098
-venue_sawai_mansingh_stadium                                 -0.0660      0.040     -1.637      0.102      -0.145       0.013
-venue_shaheed_veer_narayan_singh_international_stadium       -0.1227      0.060     -2.028      0.043      -0.241      -0.004
-venue_sharjah_cricket_stadium                                -0.2487      0.044     -5.625      0.000      -0.335      -0.162
-venue_wankhede_stadium                                        0.0108      0.033      0.323      0.747      -0.055       0.076
-venue_wankhede_stadium_mumbai                                -0.0030      0.034     -0.088      0.930      -0.070       0.064
-venue_zayed_cricket_stadium_abu_dhabi                        -0.0304      0.047     -0.642      0.521      -0.123       0.062
-platoon_same                                                  0.0197      0.012      1.686      0.092      -0.003       0.043
-platoon_unknown                                               0.0484      0.017      2.781      0.005       0.014       0.083
-bowling_spin                                                 -0.0868      0.013     -6.883      0.000      -0.111      -0.062
-bowling_unknown                                              -0.1002      0.028     -3.571      0.000      -0.155      -0.045
+================================================================================================================================================
+                                                                                   coef    std err          t      P>|t|      [0.025      0.975]
+------------------------------------------------------------------------------------------------------------------------------------------------
+const                                                                            0.0014      0.029      0.048      0.962      -0.055       0.058
+is_second_innings                                                                0.0052      0.006      0.844      0.399      -0.007       0.017
+venue_arun_jaitley_stadium_delhi                                                 0.1601      0.035      4.519      0.000       0.091       0.230
+venue_barabati_stadium                                                          -0.0241      0.049     -0.495      0.620      -0.119       0.071
+venue_barsapara_cricket_stadium_guwahati                                         0.0381      0.055      0.699      0.485      -0.069       0.145
+venue_bharat_ratna_shri_atal_bihari_vajpayee_ekana_cricket_stadium_lucknow       0.0147      0.036      0.407      0.684      -0.056       0.085
+venue_brabourne_stadium                                                         -0.0180      0.043     -0.417      0.677      -0.103       0.067
+venue_brabourne_stadium_mumbai                                                   0.0483      0.038      1.269      0.205      -0.026       0.123
+venue_buffalo_park                                                              -0.2533      0.067     -3.766      0.000      -0.385      -0.121
+venue_de_beers_diamond_oval                                                     -0.0608      0.067     -0.910      0.363      -0.192       0.070
+venue_dr_dy_patil_sports_academy                                                -0.1230      0.038     -3.219      0.001      -0.198      -0.048
+venue_dr_dy_patil_sports_academy_mumbai                                         -0.0345      0.037     -0.944      0.345      -0.106       0.037
+venue_dr_y_s_rajasekhara_reddy_aca_vdca_cricket_stadium                         -0.1296      0.041     -3.173      0.002      -0.210      -0.050
+venue_dr_y_s_rajasekhara_reddy_aca_vdca_cricket_stadium_visakhapatnam            0.2421      0.060      4.057      0.000       0.125       0.359
+venue_dubai_international_cricket_stadium                                       -0.0881      0.032     -2.753      0.006      -0.151      -0.025
+venue_eden_gardens                                                              -0.0603      0.031     -1.968      0.049      -0.120      -0.000
+venue_eden_gardens_kolkata                                                       0.2024      0.036      5.659      0.000       0.132       0.272
+venue_feroz_shah_kotla                                                          -0.0482      0.031     -1.538      0.124      -0.110       0.013
+venue_green_park                                                                 0.0595      0.061      0.979      0.327      -0.060       0.179
+venue_himachal_pradesh_cricket_association_stadium                              -0.0630      0.045     -1.399      0.162      -0.151       0.025
+venue_himachal_pradesh_cricket_association_stadium_dharamsala                    0.2566      0.053      4.842      0.000       0.153       0.360
+venue_holkar_cricket_stadium                                                     0.0966      0.046      2.082      0.037       0.006       0.187
+venue_jsca_international_stadium_complex                                        -0.1609      0.049     -3.291      0.001      -0.257      -0.065
+venue_kingsmead                                                                 -0.1716      0.039     -4.394      0.000      -0.248      -0.095
+venue_m_chinnaswamy_stadium                                                   3.648e+10   6.79e+10      0.537      0.591   -9.66e+10     1.7e+11
+venue_m_chinnaswamy_stadium                                                   2.794e+11   4.67e+11      0.598      0.550   -6.37e+11     1.2e+12
+venue_m_chinnaswamy_stadium_bengaluru                                            0.1621      0.037      4.373      0.000       0.089       0.235
+venue_m_chinnaswamy_stadium                                                  -3.648e+10   6.79e+10     -0.537      0.591    -1.7e+11    9.66e+10
+venue_m_chinnaswamy_stadium                                                  -2.794e+11   4.67e+11     -0.598      0.550    -1.2e+12    6.37e+11
+venue_ma_chidambaram_stadium                                                    -0.1280      0.045     -2.845      0.004      -0.216      -0.040
+venue_ma_chidambaram_stadium_chepauk                                            -0.1023      0.032     -3.204      0.001      -0.165      -0.040
+venue_ma_chidambaram_stadium_chepauk_chennai                                    -0.0659      0.033     -1.976      0.048      -0.131      -0.001
+venue_maharaja_yadavindra_singh_international_cricket_stadium_mullanpur          0.0636      0.044      1.441      0.150      -0.023       0.150
+venue_maharaja_yadavindra_singh_international_cricket_stadium_new_chandigarh     0.2614      0.107      2.432      0.015       0.051       0.472
+venue_maharashtra_cricket_association_stadium                                   -0.0520      0.036     -1.445      0.148      -0.122       0.019
+venue_maharashtra_cricket_association_stadium_pune                              -0.0316      0.041     -0.780      0.435      -0.111       0.048
+venue_narendra_modi_stadium_ahmedabad                                            0.1087      0.034      3.243      0.001       0.043       0.174
+venue_nehru_stadium                                                             -0.1615      0.056     -2.899      0.004      -0.271      -0.052
+venue_new_wanderers_stadium                                                     -0.1733      0.047     -3.724      0.000      -0.265      -0.082
+venue_newlands                                                                  -0.1060      0.050     -2.110      0.035      -0.204      -0.008
+venue_outsurance_oval                                                           -0.2548      0.078     -3.255      0.001      -0.408      -0.101
+venue_punjab_cricket_association_is_bindra_stadium                              -0.0071      0.043     -0.165      0.869      -0.092       0.078
+venue_punjab_cricket_association_is_bindra_stadium_mohali                       -0.0435      0.043     -1.018      0.309      -0.127       0.040
+venue_punjab_cricket_association_is_bindra_stadium_mohali_chandigarh             0.1343      0.054      2.470      0.014       0.028       0.241
+venue_punjab_cricket_association_stadium_mohali                                 -0.0483      0.033     -1.446      0.148      -0.114       0.017
+venue_rajiv_gandhi_international_stadium                                        -0.0970      0.039     -2.479      0.013      -0.174      -0.020
+venue_rajiv_gandhi_international_stadium_uppal                                  -0.0976      0.032     -3.056      0.002      -0.160      -0.035
+venue_rajiv_gandhi_international_stadium_uppal_hyderabad                         0.1823      0.037      4.893      0.000       0.109       0.255
+venue_sardar_patel_stadium_motera                                               -0.0773      0.041     -1.869      0.062      -0.158       0.004
+venue_saurashtra_cricket_association_stadium                                     0.0047      0.044      0.108      0.914      -0.081       0.090
+venue_sawai_mansingh_stadium                                                    -0.1173      0.032     -3.655      0.000      -0.180      -0.054
+venue_sawai_mansingh_stadium_jaipur                                              0.0806      0.038      2.117      0.034       0.006       0.155
+venue_shaheed_veer_narayan_singh_international_stadium                          -0.1399      0.052     -2.715      0.007      -0.241      -0.039
+venue_sharjah_cricket_stadium                                                   -0.0976      0.034     -2.834      0.005      -0.165      -0.030
+venue_sheikh_zayed_stadium                                                      -0.0955      0.034     -2.792      0.005      -0.163      -0.028
+venue_st_george_s_park                                                          -0.1657      0.049     -3.396      0.001      -0.261      -0.070
+venue_subrata_roy_sahara_stadium                                                -0.1787      0.039     -4.630      0.000      -0.254      -0.103
+venue_supersport_park                                                           -0.0841      0.041     -2.028      0.043      -0.165      -0.003
+venue_vidarbha_cricket_association_stadium_jamtha                               -0.1570      0.066     -2.370      0.018      -0.287      -0.027
+venue_wankhede_stadium                                                          -0.0374      0.031     -1.220      0.222      -0.098       0.023
+venue_wankhede_stadium_mumbai                                                    0.0587      0.032      1.856      0.063      -0.003       0.121
+venue_zayed_cricket_stadium_abu_dhabi                                           -0.0330      0.047     -0.701      0.484      -0.125       0.059
+platoon_same                                                                     0.0231      0.007      3.318      0.001       0.009       0.037
+platoon_unknown                                                                  0.0086      0.011      0.802      0.422      -0.012       0.030
+bowling_spin                                                                    -0.0756      0.007    -10.220      0.000      -0.090      -0.061
+bowling_unknown                                                                 -0.0575      0.018     -3.238      0.001      -0.092      -0.023
 ==============================================================================
-Omnibus:                    26717.989   Durbin-Watson:                   1.945
-Prob(Omnibus):                  0.000   Jarque-Bera (JB):            56080.678
-Skew:                           1.557   Prob(JB):                         0.00
-Kurtosis:                       4.852   Cond. No.                     5.83e+13
+Omnibus:                    72549.459   Durbin-Watson:                   1.927
+Prob(Omnibus):                  0.000   Jarque-Bera (JB):           152200.651
+Skew:                           1.552   Prob(JB):                         0.00
+Kurtosis:                       4.855   Cond. No.                     2.79e+14
 ==============================================================================
 
 Notes:
 [1] Standard Errors assume that the covariance matrix of the errors is correctly specified.
-[2] The smallest eigenvalue is 5.15e-23. This might indicate that there are
+[2] The smallest eigenvalue is 6.11e-24. This might indicate that there are
 strong multicollinearity problems or that the design matrix is singular.

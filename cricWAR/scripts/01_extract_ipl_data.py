@@ -179,14 +179,14 @@ def main():
     all_balls = []
     ipl_match_count = 0
 
-    print("\nExtracting IPL matches (2015-2022, excluding 2020)...")
+    print("\nExtracting IPL matches (2025 season only)...")
 
     for json_file in tqdm(json_files, desc="Processing files"):
         try:
             match_data = load_cricsheet_match(json_file)
 
             # Check if it's an IPL match in our range
-            if is_ipl_match(match_data, year_start=2015, year_end=2022, exclude_years=[2020]):
+            if is_ipl_match(match_data, year_start=2025, year_end=2025, exclude_years=[]):
                 balls = extract_ball_data(match_data)
                 all_balls.extend(balls)
                 ipl_match_count += 1
