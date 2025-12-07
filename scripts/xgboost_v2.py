@@ -169,7 +169,7 @@ pressure_features = [
 
 # NEW: Chase features (2nd innings specific)
 chase_features = [
-    'target', 'run_rate_required', 'lead_gap',
+    'chase_target', 'run_rate_required', 'lead_gap',  # chase_target = first innings score + 1
 ]
 
 # NEW: Medium features (venue and partner stats)

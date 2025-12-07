@@ -689,7 +689,7 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None, pla
                     **batting_vs_type_features,
                     **bowling_vs_hand_features,
                     # NEW: Chase features
-                    'target': target,
+                    'chase_target': target,  # Renamed from 'target' to avoid collision with prediction target
                     'run_rate_required': run_rate_required,
                     'lead_gap': lead_gap,
                     'pressure_cooker_index': pressure_cooker_index,

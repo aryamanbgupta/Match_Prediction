@@ -105,6 +105,6 @@ These features are requested to enhance the model's understanding of context, ma
 - [x] **`pressure_cooker_index`**: RRR / Wickets Remaining.
 - [x] **`partnership_runs`**: Current partnership runs.
 - [x] **`non_striker_sr`**: Strike rate of the partner (pressure release).
-- [x] **`target`**: First innings score + 1 (for 2nd innings chase).
+- [x] **`chase_target`**: First innings score + 1 (for 2nd innings chase). *Renamed from `target` to avoid collision with prediction target.*
 - [ ] **`h2h_dismissals`**: Count of times this bowler has dismissed this batter.
 - [ ] **`projected_score_differential`**: Difference vs Par Score (DLS).

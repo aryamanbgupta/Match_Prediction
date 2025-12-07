@@ -542,7 +542,7 @@ class XGBoostModelV2(PredictionModel):
 
         # NEW: Chase features (2nd innings only)
         target = state.target or 0
-        features['target'] = target
+        features['chase_target'] = target  # Renamed from 'target' to avoid collision with prediction target
         if state.innings == 2 and target > 0 and state.balls_remaining > 0:
             runs_needed = target - int(state.runs[team_idx])
             run_rate_required = (runs_needed * 6 / state.balls_remaining)
