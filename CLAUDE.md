@@ -2,8 +2,8 @@
 
 **Agent Guide** - Concise overview for AI agents working on this codebase
 
-**Last Updated**: October 2024
-**Branch**: main
+**Last Updated**: December 2024
+**Branch**: features/cricinfo-features
 **Purpose**: Portfolio project - ML system for T20 cricket match prediction
 
 ---
@@ -18,22 +18,35 @@ A production-scale machine learning system that predicts T20 cricket match outco
 
 **Core Innovation**: Rather than directly predicting match winners (limited data), we predict individual balls (millions of examples) and simulate full matches to generate probabilistic forecasts.
 
-**Pipeline**: Raw JSON → Feature Engineering (29 features) → XGBoost Training → Ball Predictions → Monte Carlo Simulation → Match Probabilities
+**Pipeline**: Raw JSON → Feature Engineering (46+ features) → XGBoost Training → Ball Predictions → Monte Carlo Simulation → Match Probabilities
+
+**Model Versions**:
+- **v2** (legacy): 29 features, basic player stats
+- **v3** (current): 46+ features with player metadata (hand, arm, age, matchup types, type-based stats)
 
 ---
 
 ## Quick Start
 
 ```bash
-# Full training pipeline
-python scripts/parsing_v2.py          # ~10-15 min
-python scripts/xgboost_v2.py          # ~30-60 min
+# Full training pipeline (v3 model with player metadata)
+python scripts/parsing_v2.py          # ~10-15 min (generates v3 data + cache)
+python scripts/xgboost_v2.py          # ~5-10 min (uses saved hyperparameters)
 
-# Run evaluation
+# OR with Optuna hyperparameter tuning
+python scripts/xgboost_v2.py --tune --n-trials 50  # ~30-60 min
+
+# Run evaluation (defaults to v3 model)
 python scripts/sim_eval/run_sim_eval.py \
     --test-dir data/betting_test \
     --odds betting_odds_v3.json \
     --n-sims 1000
+
+# Run evaluation with v2 legacy model
+python scripts/sim_eval/run_sim_eval.py \
+    --model-version v2 \
+    --test-dir data/betting_test \
+    --odds betting_odds_v3.json
 ```
 
 **For detailed operations guide, see [docs/OPERATIONS.md](docs/OPERATIONS.md)**
@@ -51,8 +64,8 @@ python scripts/sim_eval/run_sim_eval.py \
 │       │                                                       │
 │       ▼                                                       │
 │  parsing_v2.py                                              │
-│   - 29 features (basic, player stats, momentum, pressure)  │
-│   - Temporal stats cache (69 chunks, 7.6GB, lazy-loaded)   │
+│   - 46+ features (basic, player stats, momentum, metadata) │
+│   - Temporal stats cache (v3: cache_chunks_v3/, lazy-loaded)│
 │       │                                                       │
 │       ▼                                                       │
 │  Parquet files (train/val/test splits)                     │
@@ -329,10 +342,15 @@ See "Usage" section in Module 4 above. Key points:
 ### Inspect Cache
 
 ```python
-provider = StatsProvider('models')
+# Load v3 cache (with type-based stats)
+provider = StatsProvider('models', version='v3')
 print(f"Dates: {provider.dates[0]} to {provider.dates[-1]}")
 stats = provider.get_batting_stats('253802', '2024-06-15')
 print(f"Avg: {stats['avg']:.1f}, SR: {stats['sr']:.1f}")
+
+# v3 also supports type-based stats
+bat_vs_type = provider.get_batting_vs_type_stats('253802', '2024-06-15')
+print(f"vs Pace: {bat_vs_type['avg_vs_pace']:.1f}, vs Spin: {bat_vs_type['avg_vs_spin']:.1f}")
 ```
 
 ---
@@ -387,15 +405,22 @@ Enable `parallel=True` in SimulationConfig. Reduces simulations for testing.
 
 ## Key Files Reference
 
-**Training**:
+**Training (v3 - current)**:
 - `data/t20s_json/` - Raw matches
-- `data/xgb_data/*.parquet` - Processed training data
-- `models/xgb/xgboost_model_v2.pkl` - Trained model
-- `models/cache_chunks/` - Player stats cache (69 chunks, 7.6GB)
+- `data/xgb_data_v3/*.parquet` - Processed training data (v3 with player metadata)
+- `data/all_players_enriched.csv` - Player metadata (hand, arm, DOB, bowling style)
+- `models/xgb_v3/xgboost_model_v3.pkl` - Trained model (v3)
+- `models/cache_chunks_v3/` - Player stats cache (with type-based stats)
+- `scripts/player_metadata.py` - Player metadata provider
+
+**Training (v2 - legacy)**:
+- `data/xgb_data/*.parquet` - Processed training data (v2)
+- `models/xgb/xgboost_model_v2.pkl` - Trained model (v2)
+- `models/cache_chunks/` - Player stats cache (v2)
 
 **Simulation**:
 - `scripts/sim_v1_2.py` - Simulation engine
-- `scripts/stats_provider.py` - Stats access
+- `scripts/stats_provider.py` - Stats access (supports v2 and v3)
 
 **Evaluation**:
 - `data/betting_test/` - Test matches
@@ -428,20 +453,28 @@ Enable `parallel=True` in SimulationConfig. Reduces simulations for testing.
 
 ## Current Status
 
-**Latest Model**: XGBoost v2 (29 features)
+**Latest Model**: XGBoost v3 (46+ features)
 - Ball-level accuracy: ~55-60%
+- New features: player metadata (hand, arm, age, type-based stats, matchups)
 - Evaluated on T20 World Cup 2024 (44 matches)
-- Log Loss: 0.961, Brier Score: 0.131
+
+**Model Versions**:
+| Version | Features | Data Path | Model Path |
+|---------|----------|-----------|------------|
+| v3 (current) | 46+ | `data/xgb_data_v3/` | `models/xgb_v3/` |
+| v2 (legacy) | 29 | `data/xgb_data/` | `models/xgb/` |
 
 **Recent Updates**:
+- ✅ Player metadata features (Tier 1: hand, arm, pace/spin, age)
+- ✅ Matchup features (Tier 2: matchup_type, spin_advantage, same_arm)
+- ✅ Type-based historical stats (Tier 3: avg/sr vs pace/spin, vs LHB/RHB)
 - ✅ Kelly Criterion betting evaluation
 - ✅ Temporal stats cache with lazy loading
 - ✅ Optuna hyperparameter tuning
-- ✅ Signed edge metrics
 
 **Active Development** (see [TODO.md](TODO.md)):
 - Unknown player encoding
-- Additional features (venue, weather, form trends)
+- Additional features (weather, dew factor)
 - New model architectures (LSTM, Transformer)
 
 ---
@@ -456,7 +489,7 @@ Enable `parallel=True` in SimulationConfig. Reduces simulations for testing.
 
 ---
 
-**Branch**: main
+**Branch**: features/cricinfo-features
 **Python**: 3.11+
 **Dependencies**: See `requirements.txt`
 **System**: 16GB RAM, 10GB disk, 4+ CPU cores recommended

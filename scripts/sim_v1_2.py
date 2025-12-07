@@ -11,6 +11,15 @@ import time
 from datetime import datetime
 import pandas as pd
 
+# Import player metadata provider for Tier 1/2/3 features
+from player_metadata import (
+    PlayerMetadataProvider,
+    encode_batter_hand,
+    encode_bowler_arm,
+    encode_is_pace,
+    encode_bowling_type
+)
+
 
 class Outcome(Enum):
     DOT = 0
@@ -77,6 +86,9 @@ class MatchState:
     # Tracking: (team_idx, player_idx) -> value
     bowler_balls: Dict[Tuple[int, int], int] = field(default_factory=dict)
     batsman_stats: Dict[Tuple[int, int], Tuple[int, int]] = field(default_factory=dict)
+
+    # NEW: Partnership tracking (runs since last wicket)
+    partnership_runs: int = 0
 
     @property
     def current_team_idx(self) -> int:
@@ -239,13 +251,16 @@ class MatchState:
 
         # Update team score
         self.runs[self.current_team_idx] += runs
-        
+
+        # NEW: Update partnership runs
+        self.partnership_runs += runs
+
         # Update batsman stats (fixed: removed non-existent BYE, LEG_BYE)
         if outcome != Outcome.WIDE:
             batsman_key = (self.current_team_idx, self.striker_idx)
             stats = self.batsman_stats.get(batsman_key, (0, 0))
             self.batsman_stats[batsman_key] = (stats[0] + runs, stats[1] + 1)
-        
+
         # Handle wicket
         if outcome == Outcome.WICKET:
             self.wickets[self.current_team_idx] += 1
@@ -253,6 +268,8 @@ class MatchState:
             self.batsmen_out[self.current_team_idx].append(self.striker_idx)
             # Get next batsman
             self.striker_idx = self.get_next_batsman_idx()
+            # NEW: Reset partnership on wicket
+            self.partnership_runs = 0
         
         # Rotate strike
         if runs % 2 == 1:
@@ -285,6 +302,7 @@ class MatchState:
         self.bowler_idx = 0  # Will be selected by strategy
         self.last_bowler_idx = -1
         self.current_over = []
+        self.partnership_runs = 0  # NEW: Reset partnership for new innings
         # Note: We keep bowler_balls and batsman_stats as they track both teams
     
     def copy(self):
@@ -312,7 +330,8 @@ class MatchState:
         new_state.history_idx = self.history_idx
         new_state.bowler_balls = self.bowler_balls.copy()
         new_state.batsman_stats = self.batsman_stats.copy()
-        
+        new_state.partnership_runs = self.partnership_runs  # NEW
+
         return new_state
 
 # Bowler Selection
@@ -435,12 +454,23 @@ class PredictionModel(ABC):
         pass
 
 class XGBoostModelV2(PredictionModel):
-    def __init__(self, model_path: str, batter_encoder_path: str, bowler_encoder_path: str, feature_columns_path: str, stats_provider=None):
+    def __init__(self, model_path: str, batter_encoder_path: str, bowler_encoder_path: str,
+                 feature_columns_path: str, stats_provider=None, player_metadata=None,
+                 matchup_encoder_path: str = None):
         import joblib
         self.model = joblib.load(model_path)
         self.batter_encoder = joblib.load(batter_encoder_path)
         self.bowler_encoder = joblib.load(bowler_encoder_path)
-        self.stats_provider = stats_provider  # NEW: Optional stats provider for simulations
+        self.stats_provider = stats_provider  # Optional stats provider for simulations
+        self.player_metadata = player_metadata  # NEW: Optional player metadata for Tier 1/2/3 features
+
+        # NEW: Load matchup encoder if provided
+        self.matchup_encoder = None
+        if matchup_encoder_path:
+            try:
+                self.matchup_encoder = joblib.load(matchup_encoder_path)
+            except:
+                print(f"  Warning: Could not load matchup encoder from {matchup_encoder_path}")
 
         # Load feature columns to ensure consistency
         with open(feature_columns_path, 'r') as f:
@@ -453,16 +483,18 @@ class XGBoostModelV2(PredictionModel):
         }
 
         stats_mode = "with real player stats" if stats_provider else "with zero stats (fallback)"
-        print(f"Loaded XGBoost v2 model with {len(self.feature_columns)} features {stats_mode}")
+        metadata_mode = "with player metadata" if player_metadata else "without player metadata"
+        print(f"Loaded XGBoost v2 model with {len(self.feature_columns)} features {stats_mode} {metadata_mode}")
 
     def extract_features(self, state: MatchState) -> pd.DataFrame:
         """Extract comprehensive feature set matching v2 training"""
         import pandas as pd
-        
+
         team_idx = state.current_team_idx
         striker = state.current_striker
         bowler = state.current_bowler
-        
+        wickets_in_hand = 10 - int(state.wickets[team_idx])
+
         # Basic state features
         features = {
             'inning_idx': state.innings,
@@ -472,32 +504,78 @@ class XGBoostModelV2(PredictionModel):
             'run_rate': float(state.runs[team_idx]) / float(state.balls + 1),
             'wickets_ratio': float(state.wickets[team_idx]) / 10.0,
             'balls_ratio': float(state.balls) / 120.0,
-            'wickets_in_hand': 10 - int(state.wickets[team_idx]),
-            
+            'wickets_in_hand': wickets_in_hand,
+            'balls_remaining': state.balls_remaining,  # NEW
+
             # Match phase indicators
             'is_powerplay': state.balls < 36,
             'is_middle_overs': 36 <= state.balls < 96,
             'is_death_overs': state.balls >= 96,
             'balls_in_over': state.balls % 6,
         }
-        
+
         # Player encoding
         try:
             features['batter_encoded'] = self.batter_encoder.transform([str(striker.player_id)])[0]
         except:
             features['batter_encoded'] = -1
-            
+
         try:
             features['bowler_encoded'] = self.bowler_encoder.transform([str(bowler.player_id)])[0]
         except:
             features['bowler_encoded'] = -1
-        
+
+        # NEW: Per-innings batter stats (from batsman_stats tracking)
+        batsman_key = (team_idx, state.striker_idx)
+        batter_innings_stats = state.batsman_stats.get(batsman_key, (0, 0))
+        features['batter_runs_scored'] = batter_innings_stats[0]
+        features['batter_balls_faced'] = batter_innings_stats[1]
+
+        # NEW: Per-innings bowler stats (from bowler_balls tracking)
+        bowler_key = (state.bowling_team_idx, state.bowler_idx)
+        bowler_balls_in_innings = state.bowler_balls.get(bowler_key, 0)
+        features['bowler_balls_in_innings'] = bowler_balls_in_innings
+        features['bowler_overs_in_innings'] = bowler_balls_in_innings / 6
+
+        # NEW: Partnership runs
+        features['partnership_runs'] = state.partnership_runs
+
+        # NEW: Chase features (2nd innings only)
+        target = state.target or 0
+        features['target'] = target
+        if state.innings == 2 and target > 0 and state.balls_remaining > 0:
+            runs_needed = target - int(state.runs[team_idx])
+            run_rate_required = (runs_needed * 6 / state.balls_remaining)
+            lead_gap = -runs_needed  # Negative means chasing team is behind
+        else:
+            run_rate_required = 0
+            lead_gap = int(state.runs[team_idx])  # First innings: just the score
+        features['run_rate_required'] = run_rate_required
+        features['lead_gap'] = lead_gap
+
+        # NEW: Pressure cooker index (RRR / wickets_remaining)
+        if state.innings == 2 and wickets_in_hand > 0 and run_rate_required > 0:
+            features['pressure_cooker_index'] = run_rate_required / wickets_in_hand
+        else:
+            features['pressure_cooker_index'] = 0
+
+        # NEW: Non-striker's strike rate (from batsman_stats tracking)
+        non_striker_key = (team_idx, state.non_striker_idx)
+        non_striker_stats = state.batsman_stats.get(non_striker_key, (0, 0))
+        if non_striker_stats[1] > 0:  # balls faced > 0
+            features['non_striker_sr'] = (non_striker_stats[0] / non_striker_stats[1]) * 100
+        else:
+            features['non_striker_sr'] = 0.0
+
         # Player stats features - use real stats if provider available
         if self.stats_provider:
             # Get real player stats from historical cache
             batting_stats = self.stats_provider.get_batting_stats(striker.player_id, state.match_date)
             bowling_stats = self.stats_provider.get_bowling_stats(bowler.player_id, state.match_date)
             h2h_stats = self.stats_provider.get_h2h_stats(striker.player_id, bowler.player_id, state.match_date)
+
+            # NEW: Get venue average score (temporal integrity)
+            venue_avg = self.stats_provider.get_venue_avg_score(state.venue, state.match_date)
 
             features.update({
                 'batsman_avg': batting_stats['avg'],
@@ -506,7 +584,37 @@ class XGBoostModelV2(PredictionModel):
                 'bowler_econ': bowling_stats['econ'],
                 'h2h_avg': h2h_stats['avg'],
                 'h2h_sr': h2h_stats['sr'],
+                'venue_avg_score': venue_avg,  # Historical venue average
             })
+
+            # NEW: Get type-based stats (Tier 3) if available
+            if hasattr(self.stats_provider, 'get_batting_vs_type_stats'):
+                bat_vs_type = self.stats_provider.get_batting_vs_type_stats(striker.player_id, state.match_date)
+                features.update({
+                    'batter_avg_vs_pace': bat_vs_type.get('avg_vs_pace', 0.0),
+                    'batter_sr_vs_pace': bat_vs_type.get('sr_vs_pace', 0.0),
+                    'batter_avg_vs_spin': bat_vs_type.get('avg_vs_spin', 0.0),
+                    'batter_sr_vs_spin': bat_vs_type.get('sr_vs_spin', 0.0),
+                })
+            else:
+                features.update({
+                    'batter_avg_vs_pace': 0.0, 'batter_sr_vs_pace': 0.0,
+                    'batter_avg_vs_spin': 0.0, 'batter_sr_vs_spin': 0.0,
+                })
+
+            if hasattr(self.stats_provider, 'get_bowling_vs_hand_stats'):
+                bowl_vs_hand = self.stats_provider.get_bowling_vs_hand_stats(bowler.player_id, state.match_date)
+                features.update({
+                    'bowler_avg_vs_lhb': bowl_vs_hand.get('avg_vs_lhb', 0.0),
+                    'bowler_econ_vs_lhb': bowl_vs_hand.get('econ_vs_lhb', 0.0),
+                    'bowler_avg_vs_rhb': bowl_vs_hand.get('avg_vs_rhb', 0.0),
+                    'bowler_econ_vs_rhb': bowl_vs_hand.get('econ_vs_rhb', 0.0),
+                })
+            else:
+                features.update({
+                    'bowler_avg_vs_lhb': 0.0, 'bowler_econ_vs_lhb': 0.0,
+                    'bowler_avg_vs_rhb': 0.0, 'bowler_econ_vs_rhb': 0.0,
+                })
         else:
             # Fallback to zeros if no stats provider
             features.update({
@@ -516,11 +624,71 @@ class XGBoostModelV2(PredictionModel):
                 'bowler_econ': 0.0,
                 'h2h_avg': 0.0,
                 'h2h_sr': 0.0,
+                'venue_avg_score': 0.0,
+                # Tier 3 fallbacks
+                'batter_avg_vs_pace': 0.0, 'batter_sr_vs_pace': 0.0,
+                'batter_avg_vs_spin': 0.0, 'batter_sr_vs_spin': 0.0,
+                'bowler_avg_vs_lhb': 0.0, 'bowler_econ_vs_lhb': 0.0,
+                'bowler_avg_vs_rhb': 0.0, 'bowler_econ_vs_rhb': 0.0,
             })
-        
+
+        # NEW: Player metadata features (Tier 1 and 2)
+        if self.player_metadata:
+            batter_meta = self.player_metadata.get_player_metadata(striker.player_id)
+            bowler_meta = self.player_metadata.get_player_metadata(bowler.player_id)
+
+            # Tier 1: Direct features (encoded)
+            batter_hand = batter_meta['batter_hand']
+            bowler_arm = bowler_meta['bowler_arm']
+            is_pace = bowler_meta['is_pace']
+            bowling_type = bowler_meta['bowling_type']
+
+            features.update({
+                'batter_hand': encode_batter_hand(batter_hand),
+                'bowler_arm': encode_bowler_arm(bowler_arm),
+                'is_pace': encode_is_pace(is_pace),
+                'bowling_type': encode_bowling_type(bowling_type),
+            })
+
+            # Ages
+            batter_age = self.player_metadata.get_player_age(striker.player_id, state.match_date)
+            bowler_age = self.player_metadata.get_player_age(bowler.player_id, state.match_date)
+            features['batter_age'] = batter_age if batter_age is not None else 0
+            features['bowler_age'] = bowler_age if bowler_age is not None else 0
+
+            # Tier 2: Matchup features
+            matchup_type = self.player_metadata.get_matchup_type(striker.player_id, bowler.player_id)
+            spin_matchup_advantage = self.player_metadata.get_spin_matchup_advantage(striker.player_id, bowler.player_id)
+            same_arm_matchup = self.player_metadata.get_same_arm_matchup(striker.player_id, bowler.player_id)
+
+            features['spin_matchup_advantage'] = spin_matchup_advantage
+            features['same_arm_matchup'] = 1 if same_arm_matchup else (0 if same_arm_matchup is False else -1)
+
+            # Encode matchup_type if encoder available
+            if self.matchup_encoder:
+                try:
+                    features['matchup_type_encoded'] = self.matchup_encoder.transform([matchup_type])[0]
+                except:
+                    features['matchup_type_encoded'] = -1  # Unknown matchup
+            else:
+                features['matchup_type_encoded'] = 0  # Default if no encoder
+        else:
+            # Fallback if no player metadata
+            features.update({
+                'batter_hand': 2,  # unknown
+                'bowler_arm': 2,   # unknown
+                'is_pace': 2,      # unknown
+                'bowling_type': 8, # unknown
+                'batter_age': 0,
+                'bowler_age': 0,
+                'spin_matchup_advantage': 0,
+                'same_arm_matchup': -1,
+                'matchup_type_encoded': 0,
+            })
+
         # Momentum features from match history
         features.update(self._extract_momentum_features(state))
-        
+
         # Pressure indicators
         features.update(self._extract_pressure_features(state))
         

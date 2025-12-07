@@ -1,3 +1,4 @@
+from pathlib import Path
 from xgboost import XGBClassifier
 import pandas as pd
 import numpy as np
@@ -5,13 +6,32 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 from sklearn.preprocessing import LabelEncoder
 from sklearn.utils.class_weight import compute_class_weight
 import joblib
-import optuna
+import argparse
+
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='Train XGBoost v3 model')
+parser.add_argument('--tune', action='store_true', help='Run Optuna hyperparameter tuning (slow, ~30-60 min)')
+parser.add_argument('--n-trials', type=int, default=50, help='Number of Optuna trials (default: 50)')
+args = parser.parse_args()
+
+# Best hyperparameters from previous Optuna run (v2, trial 42)
+# These will be used if --tune is not specified
+DEFAULT_BEST_PARAMS = {
+    'n_estimators': 444,
+    'max_depth': 10,
+    'learning_rate': 0.24036372383981375,
+    'subsample': 0.8776663421127178,
+    'colsample_bytree': 0.7424085095268674,
+    'reg_alpha': 0.8503122682099661,
+    'reg_lambda': 0.18186045420525845,
+}
 
 # Load split data
-print("Loading split datasets...")
-train_df = pd.read_parquet('data/xgb_data/cricket_data_v2_train.parquet')
-val_df = pd.read_parquet('data/xgb_data/cricket_data_v2_validation.parquet')
-test_df = pd.read_parquet('data/xgb_data/cricket_data_v2_test.parquet')
+# v3: Data with player metadata features (Tier 1/2/3)
+print("Loading split datasets (v3 with player metadata features)...")
+train_df = pd.read_parquet('data/xgb_data_v3/cricket_data_v3_train.parquet')
+val_df = pd.read_parquet('data/xgb_data_v3/cricket_data_v3_validation.parquet')
+test_df = pd.read_parquet('data/xgb_data_v3/cricket_data_v3_test.parquet')
 
 print(f"Train: {len(train_df)} balls")
 print(f"Validation: {len(val_df)} balls") 
@@ -26,8 +46,8 @@ for df in [train_df, val_df, test_df]:
 
 print("Data preprocessing complete")
 
-# Feature engineering for player encoding (fit on train, transform others)
-print("Encoding categorical variables...")
+# NOTE: Chase features (run_rate_required, lead_gap, target) are now computed
+# in parsing_v2.py during feature engineering, so no placeholder needed here.
 
 # Feature engineering for player encoding (optimized for large datasets)
 print("Encoding categorical variables...")
@@ -55,18 +75,48 @@ le_bowler = LabelEncoder()
 le_batter.fit(unique_batters)
 le_bowler.fit(unique_bowlers)
 
+print("  Processing venues...")
+unique_venues = pd.concat([
+    train_df['venue'].astype(str),
+    val_df['venue'].astype(str),
+    test_df['venue'].astype(str)
+]).unique()
+
+le_venue = LabelEncoder()
+le_venue.fit(unique_venues)
+
 # Transform datasets
 print("  Encoding training data...")
 train_df['batter_encoded'] = le_batter.transform(train_df['batter_id'].astype(str))
 train_df['bowler_encoded'] = le_bowler.transform(train_df['bowler_id'].astype(str))
+train_df['venue_encoded'] = le_venue.transform(train_df['venue'].astype(str))
 
 print("  Encoding validation data...")
 val_df['batter_encoded'] = le_batter.transform(val_df['batter_id'].astype(str))
 val_df['bowler_encoded'] = le_bowler.transform(val_df['bowler_id'].astype(str))
+val_df['venue_encoded'] = le_venue.transform(val_df['venue'].astype(str))
 
 print("  Encoding test data...")
 test_df['batter_encoded'] = le_batter.transform(test_df['batter_id'].astype(str))
 test_df['bowler_encoded'] = le_bowler.transform(test_df['bowler_id'].astype(str))
+test_df['venue_encoded'] = le_venue.transform(test_df['venue'].astype(str))
+
+# NEW: Encode matchup_type if it exists
+if 'matchup_type' in train_df.columns:
+    print("  Processing matchup types...")
+    unique_matchups = pd.concat([
+        train_df['matchup_type'].astype(str),
+        val_df['matchup_type'].astype(str),
+        test_df['matchup_type'].astype(str)
+    ]).unique()
+
+    le_matchup = LabelEncoder()
+    le_matchup.fit(unique_matchups)
+
+    train_df['matchup_type_encoded'] = le_matchup.transform(train_df['matchup_type'].astype(str))
+    val_df['matchup_type_encoded'] = le_matchup.transform(val_df['matchup_type'].astype(str))
+    test_df['matchup_type_encoded'] = le_matchup.transform(test_df['matchup_type'].astype(str))
+    print(f"  Found {len(unique_matchups)} unique matchup types")
 
 print("Encoding complete!")
 
@@ -89,27 +139,79 @@ print("Encoding complete!")
 # Select ALL available features (use comprehensive feature set)
 basic_features = [
     'inning_idx', 'score', 'wickets', 'balls_bowled', 'run_rate',
-    'wickets_ratio', 'balls_ratio', 'wickets_in_hand',
-    'is_powerplay', 'is_middle_overs', 'is_death_overs', 'balls_in_over'
+    'wickets_ratio', 'balls_ratio', 'wickets_in_hand', 'balls_remaining',
+    'is_powerplay', 'is_middle_overs', 'is_death_overs', 'balls_in_over',
+    'venue_encoded', 'is_toss_winner', 'is_batting_first',
 ]
 
 player_features = [
-    'batter_encoded', 'bowler_encoded', 'batsman_avg', 'batsman_sr', 
-    'bowler_avg', 'bowler_econ'
+    'batter_encoded', 'bowler_encoded', 'batsman_avg', 'batsman_sr',
+    'bowler_avg', 'bowler_econ',
+    'batsman_recent_avg', 'batsman_recent_sr',
+    'bowler_recent_avg', 'bowler_recent_econ',
+    # NEW: Per-innings batter/bowler stats
+    'batter_balls_faced', 'batter_runs_scored',
+    'bowler_balls_in_innings', 'bowler_overs_in_innings',
 ]
 
 h2h_features = ['h2h_avg', 'h2h_sr']
 
 momentum_features = [
     'last_5_balls_runs', 'last_10_balls_runs', 'last_30_balls_runs',
-    'balls_since_boundary', 'last_10_dots'
+    'balls_since_boundary', 'last_10_dots',
+    'partnership_runs',  # NEW: Current partnership runs
 ]
 
-pressure_features = ['dot_percentage_recent', 'boundary_percentage_recent']
+pressure_features = [
+    'dot_percentage_recent', 'boundary_percentage_recent',
+    'pressure_cooker_index',  # NEW: RRR / wickets_remaining
+]
+
+# NEW: Chase features (2nd innings specific)
+chase_features = [
+    'target', 'run_rate_required', 'lead_gap',
+]
+
+# NEW: Medium features (venue and partner stats)
+medium_features = [
+    'venue_avg_score',  # Historical venue average (temporal integrity)
+    'non_striker_sr',   # Non-striker's strike rate this innings
+]
+
+# NEW: Tier 1 - Player metadata features (hand, arm, type, age)
+player_metadata_features = [
+    'batter_hand',      # Encoded: 0=right, 1=left, 2=unknown
+    'bowler_arm',       # Encoded: 0=right, 1=left, 2=unknown
+    'is_pace',          # Encoded: 0=spin, 1=pace, 2=unknown
+    'bowling_type',     # Encoded: 0-8 for different types
+    'batter_age',       # Age in years (0 if unknown)
+    'bowler_age',       # Age in years (0 if unknown)
+]
+
+# NEW: Tier 2 - Matchup features
+matchup_features = [
+    'spin_matchup_advantage',  # -1, 0, or 1
+    'same_arm_matchup',        # -1 (unknown), 0 (different), 1 (same)
+    'matchup_type_encoded',    # Encoded matchup type (e.g., RHB_vs_offspin)
+]
+
+# NEW: Tier 3 - Type-based historical stats
+type_based_features = [
+    'batter_avg_vs_pace',   # Batter's avg against pace bowlers
+    'batter_sr_vs_pace',    # Batter's SR against pace bowlers
+    'batter_avg_vs_spin',   # Batter's avg against spin bowlers
+    'batter_sr_vs_spin',    # Batter's SR against spin bowlers
+    'bowler_avg_vs_lhb',    # Bowler's avg against left-hand batters
+    'bowler_econ_vs_lhb',   # Bowler's economy against left-hand batters
+    'bowler_avg_vs_rhb',    # Bowler's avg against right-hand batters
+    'bowler_econ_vs_rhb',   # Bowler's economy against right-hand batters
+]
 
 # Combine all features that exist in the data
-all_potential_features = (basic_features + player_features + 
-                         h2h_features + momentum_features + pressure_features)
+all_potential_features = (basic_features + player_features +
+                         h2h_features + momentum_features + pressure_features +
+                         chase_features + medium_features +
+                         player_metadata_features + matchup_features + type_based_features)
 
 # Only use features that actually exist in the dataframes
 feature_cols = [col for col in all_potential_features if col in train_df.columns]
@@ -193,82 +295,98 @@ class_weights = compute_class_weight(
 weight_dict = dict(zip(np.unique(y_train), class_weights))
 print("Class weights:", {k: f"{v:.2f}" for k, v in weight_dict.items()})
 
-# Define the objective function for Optuna
-def objective(trial):
-    """
-    Objective function that Optuna will optimize.
-    This function should return the metric you want to minimize.
-    """
-    
-    # Suggest hyperparameters for this trial
-    params = {
-        'n_estimators': trial.suggest_int('n_estimators', 50, 500),
-        'max_depth': trial.suggest_int('max_depth', 3, 10),
-        'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-        'subsample': trial.suggest_float('subsample', 0.6, 1.0),
-        'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
-        'reg_alpha': trial.suggest_float('reg_alpha', 0.01, 10.0, log=True),
-        'reg_lambda': trial.suggest_float('reg_lambda', 0.01, 10.0, log=True),
-        'random_state': 29,
-        'eval_metric': 'mlogloss',
-        'early_stopping_rounds': 50,  # Reduced for faster trials
-        'scale_pos_weight': None
-    }
-    
-    # Create and train model with suggested parameters
-    model = XGBClassifier(**params)
-    
-    # Calculate sample weights (same as your original code)
-    sample_weights = np.array([weight_dict[y] for y in y_train])
-    
-    # Fit model with early stopping on validation set
-    model.fit(
-        X_train, y_train,
-        sample_weight=sample_weights,
-        eval_set=[(X_val, y_val)],
-        verbose=0  # Silent training for cleaner output
-    )
-    
-    # Get validation predictions and calculate log loss
-    y_val_proba = model.predict_proba(X_val)
-    val_logloss = log_loss(y_val, y_val_proba)
-    
-    # Return the metric to minimize (log loss)
-    return val_logloss
+# Optuna hyperparameter tuning (only if --tune flag is set)
+if args.tune:
+    import optuna
+
+    # Define the objective function for Optuna
+    def objective(trial):
+        """
+        Objective function that Optuna will optimize.
+        This function should return the metric you want to minimize.
+        """
+
+        # Suggest hyperparameters for this trial
+        params = {
+            'n_estimators': trial.suggest_int('n_estimators', 50, 500),
+            'max_depth': trial.suggest_int('max_depth', 3, 10),
+            'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
+            'subsample': trial.suggest_float('subsample', 0.6, 1.0),
+            'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
+            'reg_alpha': trial.suggest_float('reg_alpha', 0.01, 10.0, log=True),
+            'reg_lambda': trial.suggest_float('reg_lambda', 0.01, 10.0, log=True),
+            'random_state': 29,
+            'eval_metric': 'mlogloss',
+            'early_stopping_rounds': 50,  # Reduced for faster trials
+            'scale_pos_weight': None
+        }
+
+        # Create and train model with suggested parameters
+        model = XGBClassifier(**params)
+
+        # Calculate sample weights (same as your original code)
+        sample_weights = np.array([weight_dict[y] for y in y_train])
+
+        # Fit model with early stopping on validation set
+        model.fit(
+            X_train, y_train,
+            sample_weight=sample_weights,
+            eval_set=[(X_val, y_val)],
+            verbose=0  # Silent training for cleaner output
+        )
+
+        # Get validation predictions and calculate log loss
+        y_val_proba = model.predict_proba(X_val)
+        val_logloss = log_loss(y_val, y_val_proba)
+
+        # Return the metric to minimize (log loss)
+        return val_logloss
 
 
-# Create and run the optimization study
-def run_optuna_optimization(n_trials=100):
-    """
-    Run Optuna hyperparameter optimization
-    """
-    print(f"\nStarting Optuna optimization with {n_trials} trials...")
-    
-    # Create study object
-    study = optuna.create_study(
-        direction='minimize',  # We want to minimize log loss
-        study_name='xgboost_cricket_optimization',
-        sampler=optuna.samplers.TPESampler(seed=29)  # Tree-structured Parzen Estimator
-    )
-    
-    # Run optimization
-    study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
-    
-    # Print results
-    print(f"\nOptimization completed!")
-    print(f"Best validation log loss: {study.best_value:.4f}")
-    print(f"Best parameters:")
-    for key, value in study.best_params.items():
+    # Create and run the optimization study
+    def run_optuna_optimization(n_trials=100):
+        """
+        Run Optuna hyperparameter optimization
+        """
+        print(f"\nStarting Optuna optimization with {n_trials} trials...")
+
+        # Create study object
+        study = optuna.create_study(
+            direction='minimize',  # We want to minimize log loss
+            study_name='xgboost_cricket_optimization',
+            sampler=optuna.samplers.TPESampler(seed=29)  # Tree-structured Parzen Estimator
+        )
+
+        # Run optimization
+        study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
+
+        # Print results
+        print(f"\nOptimization completed!")
+        print(f"Best validation log loss: {study.best_value:.4f}")
+        print(f"Best parameters:")
+        for key, value in study.best_params.items():
+            print(f"  {key}: {value}")
+
+        return study
+
+    # Run the optimization
+    study = run_optuna_optimization(n_trials=args.n_trials)
+    best_params = study.best_params.copy()
+
+    # Save study for analysis
+    Path('models/xgb_v3').mkdir(exist_ok=True)
+    joblib.dump(study, 'models/xgb_v3/optuna_study_v3.pkl')
+    print(f"Saved Optuna study to models/xgb_v3/optuna_study_v3.pkl")
+else:
+    # Use default best params from previous run
+    print("\n--- USING SAVED HYPERPARAMETERS (use --tune to re-optimize) ---")
+    print("Best hyperparameters (from v2 Optuna, trial 42):")
+    for key, value in DEFAULT_BEST_PARAMS.items():
         print(f"  {key}: {value}")
-    
-    return study
-
-# Run the optimization
-study = run_optuna_optimization(n_trials=50)  # Start with 50 trials
+    best_params = DEFAULT_BEST_PARAMS.copy()
 
 # Train final model with best parameters
 print("\n--- TRAINING FINAL MODEL WITH BEST PARAMETERS ---")
-best_params = study.best_params.copy()
 best_params.update({
     'random_state': 29,
     'eval_metric': 'mlogloss',
@@ -303,40 +421,17 @@ print(f"Validation Log Loss: {val_logloss:.4f}")
 print(f"Test Accuracy: {test_accuracy:.4f}")
 print(f"Test Log Loss: {test_logloss:.4f}")
 
-# Save optimized model
-print("\nSaving optimized model...")
-joblib.dump(final_model, 'models/xgb/xgboost_model_v2_optimized.pkl')
-
-# Save study for analysis
-joblib.dump(study, 'models/xgb/optuna_study_v2.pkl')
-
-print("Optimization complete!")
-
-# Validation evaluation
-print("\n--- VALIDATION RESULTS ---")
-y_val_pred = final_model.predict(X_val)
-y_val_proba = final_model.predict_proba(X_val)
-
-val_accuracy = accuracy_score(y_val, y_val_pred)
-val_logloss = log_loss(y_val, y_val_proba)
-
-print(f"Validation Accuracy: {val_accuracy:.4f}")
-print(f"Validation Log Loss: {val_logloss:.4f}")
-
-# Test evaluation  
-print("\n--- TEST RESULTS ---")
-y_test_pred = final_model.predict(X_test)
-y_test_proba = final_model.predict_proba(X_test)
-
-test_accuracy = accuracy_score(y_test, y_test_pred)
-test_logloss = log_loss(y_test, y_test_proba)
-
-print(f"Test Accuracy: {test_accuracy:.4f}")
-print(f"Test Log Loss: {test_logloss:.4f}")
-
+# Classification report with correct target names after remapping
+# reverse_mapping: {0: 0 (dot), 1: 1, 2: 2, 3: 4, 4: 6, 5: wicket}
 print("\nClassification Report (Test):")
 unique_classes = sorted(y_test.unique())
-target_names = [f'{i}_runs' if i < 7 else 'wicket' for i in unique_classes]
+target_names = []
+for cls in unique_classes:
+    original = reverse_mapping.get(cls, cls)
+    if original == 7:
+        target_names.append('wicket')
+    else:
+        target_names.append(f'{original}_runs')
 print(classification_report(y_test, y_test_pred, labels=unique_classes, target_names=target_names))
 
 # Feature importance
@@ -350,20 +445,25 @@ for _, row in feature_importance.head(15).iterrows():
     print(f"  {row['feature']:25s}: {row['importance']:.4f}")
 
 # Save model and encoders
-print("\nSaving model...")
-from pathlib import Path
-Path('models/xgb').mkdir(exist_ok=True)
+# v3: Model with player metadata features (Tier 1/2/3)
+print("\nSaving model (v3)...")
+Path('models/xgb_v3').mkdir(exist_ok=True)
 
-joblib.dump(final_model, 'models/xgb/xgboost_model_v2.pkl')
-joblib.dump(le_batter, 'models/xgb/batter_encoder_v2.pkl')
-joblib.dump(le_bowler, 'models/xgb/bowler_encoder_v2.pkl')
+joblib.dump(final_model, 'models/xgb_v3/xgboost_model_v3.pkl')
+joblib.dump(le_batter, 'models/xgb_v3/batter_encoder_v3.pkl')
+joblib.dump(le_bowler, 'models/xgb_v3/bowler_encoder_v3.pkl')
+
+# Save matchup encoder if it was created
+if 'le_matchup' in dir():
+    joblib.dump(le_matchup, 'models/xgb_v3/matchup_encoder_v3.pkl')
+    print("  Saved matchup_encoder_v3.pkl")
 
 # Save feature list for consistency
-with open('models/xgb/feature_columns_v2.txt', 'w') as f:
+with open('models/xgb_v3/feature_columns_v3.txt', 'w') as f:
     for feat in feature_cols:
         f.write(f"{feat}\n")
 
 print("Training complete!")
-print(f"Model saved as: models/xgb/xgboost_model_v2.pkl")
+print(f"Model saved as: models/xgb_v3/xgboost_model_v3.pkl")
 print(f"Final validation log loss: {val_logloss:.4f}")
 print(f"Final test log loss: {test_logloss:.4f}")

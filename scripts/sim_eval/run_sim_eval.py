@@ -70,12 +70,14 @@ def main():
                        help='Directory containing test match JSON files')
     parser.add_argument('--odds', type=str, default='data/betting_odds.json',
                        help='JSON file containing betting odds')
-    parser.add_argument('--model', type=str, default='models/gradient_boosting_model.pkl',
-                       help='Path to trained model')
-    parser.add_argument('--batter-encoder', type=str, default='models/batter_encoder.pkl',
-                       help='Path to batter encoder')
-    parser.add_argument('--bowler-encoder', type=str, default='models/bowler_encoder.pkl',
-                       help='Path to bowler encoder')
+    parser.add_argument('--model-version', type=str, default='v3', choices=['v2', 'v3'],
+                       help='Model version to use (v2=legacy 29 features, v3=46+ features with player metadata)')
+    parser.add_argument('--model', type=str, default=None,
+                       help='Path to trained model (overrides --model-version)')
+    parser.add_argument('--batter-encoder', type=str, default=None,
+                       help='Path to batter encoder (overrides --model-version)')
+    parser.add_argument('--bowler-encoder', type=str, default=None,
+                       help='Path to bowler encoder (overrides --model-version)')
     parser.add_argument('--n-sims', type=int, default=1000,
                        help='Number of simulations per match')
     parser.add_argument('--max-matches', type=int, default=None,
@@ -84,8 +86,27 @@ def main():
                        help='Enable parallel processing for simulations')
     parser.add_argument('--create-example', action='store_true',
                        help='Create example betting odds file')
-    
+
     args = parser.parse_args()
+
+    # Set model paths based on version (can be overridden by explicit args)
+    if args.model_version == 'v3':
+        default_model = 'models/xgb_v3/xgboost_model_v3.pkl'
+        default_batter_encoder = 'models/xgb_v3/batter_encoder_v3.pkl'
+        default_bowler_encoder = 'models/xgb_v3/bowler_encoder_v3.pkl'
+        default_feature_columns = 'models/xgb_v3/feature_columns_v3.txt'
+        stats_version = 'v3'
+    else:
+        default_model = 'models/xgb/xgboost_model_v2.pkl'
+        default_batter_encoder = 'models/xgb/batter_encoder_v2.pkl'
+        default_bowler_encoder = 'models/xgb/bowler_encoder_v2.pkl'
+        default_feature_columns = 'models/xgb/feature_columns_v2.txt'
+        stats_version = 'v2'
+
+    model_path = args.model or default_model
+    batter_encoder_path = args.batter_encoder or default_batter_encoder
+    bowler_encoder_path = args.bowler_encoder or default_bowler_encoder
+    feature_columns_path = default_feature_columns
     
     # Create example file if requested
     if args.create_example:
@@ -96,54 +117,47 @@ def main():
     if not Path(args.test_dir).exists():
         print(f"Error: Test directory not found: {args.test_dir}")
         return
-    
+
     if not Path(args.odds).exists():
         print(f"Error: Odds file not found: {args.odds}")
         print("Run with --create-example to create an example odds file")
         return
-    
-    if not Path(args.model).exists():
-        print(f"Error: Model file not found: {args.model}")
+
+    if not Path(model_path).exists():
+        print(f"Error: Model file not found: {model_path}")
+        print(f"  (Using --model-version={args.model_version})")
         return
-    
+
     print("Cricket Match-Level Evaluation")
     print("=" * 60)
-    
+    print(f"Model version: {args.model_version}")
+
     # Load player stats cache (chunked format)
     print("\nLoading player stats cache...")
     try:
-        stats_provider = StatsProvider('models')  # Pass directory, not file
-        print("✓ Stats cache loaded successfully")
+        stats_provider = StatsProvider('models', version=stats_version)
+        print(f"✓ Stats cache loaded successfully (version: {stats_version})")
     except Exception as e:
         print(f"Warning: Could not load stats cache: {e}")
         print("Continuing without stats cache (will use zeros)")
         stats_provider = None
 
     # Load model and encoders
-    print("\nLoading model...")
+    print(f"\nLoading model from {model_path}...")
     try:
         model = XGBoostModelV2(
-            model_path='models/xgb/xgboost_model_v2.pkl',
-            batter_encoder_path='models/xgb/batter_encoder_v2.pkl',
-            bowler_encoder_path='models/xgb/bowler_encoder_v2.pkl',
-            feature_columns_path='models/xgb/feature_columns_v2.txt',
+            model_path=model_path,
+            batter_encoder_path=batter_encoder_path,
+            bowler_encoder_path=bowler_encoder_path,
+            feature_columns_path=feature_columns_path,
             stats_provider=stats_provider
         )
-        print("✓ V2 model loaded successfully")
-
-        # model = XGBoostModel(
-        #     model_path=args.model,
-        #     batter_encoder_path=args.batter_encoder,
-        #     bowler_encoder_path=args.bowler_encoder
-        # )
+        print(f"✓ Model loaded successfully ({args.model_version})")
     except Exception as e:
         print(f"Error loading model: {e}")
         print("Using dummy model for demonstration")
         from sim_v1_2 import DummyModel
         model = DummyModel()
-    # print("Using dummy model for demonstration")
-    # from sim_v1_2 import DummyModel
-    # model = DummyModel()
 
     # Create simulation engine
     rules = T20Rules()

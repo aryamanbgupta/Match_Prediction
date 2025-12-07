@@ -39,21 +39,28 @@ class StatsProvider:
                LRU cache keeps frequently-used chunks in memory.
     """
 
-    def __init__(self, cache_dir: str = 'models', max_cached_chunks: int = 5):
+    def __init__(self, cache_dir: str = 'models', max_cached_chunks: int = 5, version: str = 'v3'):
         """
         Load the player stats cache from chunked format with lazy loading.
 
         Args:
             cache_dir: Directory containing cache chunk files
             max_cached_chunks: Maximum number of chunks to keep in memory (LRU cache)
+            version: Cache version to load ('v2' or 'v3'). v3 includes type-based stats.
         """
         from pathlib import Path
         from collections import OrderedDict
 
         self.cache_dir = Path(cache_dir)
-        metadata_path = self.cache_dir / 'player_stats_cache_metadata.pkl'
+        self.version = version
 
-        print(f"Loading player stats cache from {cache_dir}...")
+        # Select metadata file based on version
+        if version == 'v3':
+            metadata_path = self.cache_dir / 'player_stats_cache_v3_metadata.pkl'
+        else:
+            metadata_path = self.cache_dir / 'player_stats_cache_metadata.pkl'
+
+        print(f"Loading player stats cache ({version}) from {cache_dir}...")
 
         # Load metadata
         with open(metadata_path, 'rb') as f:
@@ -255,6 +262,146 @@ class StatsProvider:
         sr = (h2h_stats['runs'] / h2h_stats['balls']) * 100
 
         return {'avg': avg, 'sr': sr}
+
+    def get_venue_avg_score(self, venue: str, as_of_date: str) -> float:
+        """
+        Get historical average score at venue as of a specific date.
+
+        Args:
+            venue: Venue name
+            as_of_date: Date in 'YYYY-MM-DD' format or datetime object
+
+        Returns:
+            Average score at venue, or 0 if no history
+        """
+        # Handle datetime objects
+        if isinstance(as_of_date, datetime):
+            as_of_date = as_of_date.strftime('%Y-%m-%d')
+
+        snapshot = self._get_snapshot_for_date(as_of_date)
+
+        if snapshot is None:
+            return 0.0
+
+        # Check if venue stats exist in snapshot
+        venue_stats = snapshot.get('venue', {}).get(venue, {
+            'total_runs': 0, 'innings_count': 0
+        })
+
+        if venue_stats['innings_count'] == 0:
+            return 0.0
+
+        return venue_stats['total_runs'] / venue_stats['innings_count']
+
+    def get_batting_vs_type_stats(self, batter_id: str, as_of_date: str) -> Dict[str, float]:
+        """
+        Get batter's stats against pace and spin bowlers as of a specific date.
+
+        NEW: Type-based batting stats for Tier 3 features.
+
+        Args:
+            batter_id: Batter player identifier
+            as_of_date: Date in 'YYYY-MM-DD' format or datetime object
+
+        Returns:
+            Dict with keys: 'avg_vs_pace', 'sr_vs_pace', 'avg_vs_spin', 'sr_vs_spin'
+            Returns zeros if no history exists
+        """
+        # Handle datetime objects
+        if isinstance(as_of_date, datetime):
+            as_of_date = as_of_date.strftime('%Y-%m-%d')
+
+        snapshot = self._get_snapshot_for_date(as_of_date)
+
+        if snapshot is None:
+            return {
+                'avg_vs_pace': 0.0, 'sr_vs_pace': 0.0,
+                'avg_vs_spin': 0.0, 'sr_vs_spin': 0.0,
+            }
+
+        # Check if type-based stats exist in snapshot
+        batting_vs_type = snapshot.get('batting_vs_type', {}).get(batter_id, {
+            'pace': {'runs': 0, 'balls': 0, 'dismissals': 0},
+            'spin': {'runs': 0, 'balls': 0, 'dismissals': 0},
+        })
+
+        # vs Pace
+        pace_stats = batting_vs_type.get('pace', {'runs': 0, 'balls': 0, 'dismissals': 0})
+        if pace_stats['balls'] == 0:
+            avg_vs_pace, sr_vs_pace = 0.0, 0.0
+        else:
+            avg_vs_pace = pace_stats['runs'] / max(pace_stats['dismissals'], 1)
+            sr_vs_pace = (pace_stats['runs'] / pace_stats['balls']) * 100
+
+        # vs Spin
+        spin_stats = batting_vs_type.get('spin', {'runs': 0, 'balls': 0, 'dismissals': 0})
+        if spin_stats['balls'] == 0:
+            avg_vs_spin, sr_vs_spin = 0.0, 0.0
+        else:
+            avg_vs_spin = spin_stats['runs'] / max(spin_stats['dismissals'], 1)
+            sr_vs_spin = (spin_stats['runs'] / spin_stats['balls']) * 100
+
+        return {
+            'avg_vs_pace': avg_vs_pace,
+            'sr_vs_pace': sr_vs_pace,
+            'avg_vs_spin': avg_vs_spin,
+            'sr_vs_spin': sr_vs_spin,
+        }
+
+    def get_bowling_vs_hand_stats(self, bowler_id: str, as_of_date: str) -> Dict[str, float]:
+        """
+        Get bowler's stats against left and right hand batters as of a specific date.
+
+        NEW: Hand-based bowling stats for Tier 3 features.
+
+        Args:
+            bowler_id: Bowler player identifier
+            as_of_date: Date in 'YYYY-MM-DD' format or datetime object
+
+        Returns:
+            Dict with keys: 'avg_vs_lhb', 'econ_vs_lhb', 'avg_vs_rhb', 'econ_vs_rhb'
+            Returns zeros if no history exists
+        """
+        # Handle datetime objects
+        if isinstance(as_of_date, datetime):
+            as_of_date = as_of_date.strftime('%Y-%m-%d')
+
+        snapshot = self._get_snapshot_for_date(as_of_date)
+
+        if snapshot is None:
+            return {
+                'avg_vs_lhb': 0.0, 'econ_vs_lhb': 0.0,
+                'avg_vs_rhb': 0.0, 'econ_vs_rhb': 0.0,
+            }
+
+        # Check if hand-based stats exist in snapshot
+        bowling_vs_hand = snapshot.get('bowling_vs_hand', {}).get(bowler_id, {
+            'left': {'runs_given': 0, 'balls_bowled': 0, 'wickets': 0},
+            'right': {'runs_given': 0, 'balls_bowled': 0, 'wickets': 0},
+        })
+
+        # vs LHB
+        lhb_stats = bowling_vs_hand.get('left', {'runs_given': 0, 'balls_bowled': 0, 'wickets': 0})
+        if lhb_stats['balls_bowled'] == 0:
+            avg_vs_lhb, econ_vs_lhb = 0.0, 0.0
+        else:
+            avg_vs_lhb = lhb_stats['runs_given'] / max(lhb_stats['wickets'], 1)
+            econ_vs_lhb = (lhb_stats['runs_given'] / lhb_stats['balls_bowled']) * 6
+
+        # vs RHB
+        rhb_stats = bowling_vs_hand.get('right', {'runs_given': 0, 'balls_bowled': 0, 'wickets': 0})
+        if rhb_stats['balls_bowled'] == 0:
+            avg_vs_rhb, econ_vs_rhb = 0.0, 0.0
+        else:
+            avg_vs_rhb = rhb_stats['runs_given'] / max(rhb_stats['wickets'], 1)
+            econ_vs_rhb = (rhb_stats['runs_given'] / rhb_stats['balls_bowled']) * 6
+
+        return {
+            'avg_vs_lhb': avg_vs_lhb,
+            'econ_vs_lhb': econ_vs_lhb,
+            'avg_vs_rhb': avg_vs_rhb,
+            'econ_vs_rhb': econ_vs_rhb,
+        }
 
     def get_all_stats(self, batter_id: str, bowler_id: str, as_of_date: str) -> Dict[str, float]:
         """
