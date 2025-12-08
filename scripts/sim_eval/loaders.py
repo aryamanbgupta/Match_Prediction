@@ -119,13 +119,18 @@ class TestMatchLoader:
         
     def _extract_team_players(self, data: dict, team_name: str, player_registry: dict) -> List[Player]:
         """Extract players for a team in batting order
-        
+
         Design decision: Use order of appearance in innings as batting order
+
+        BUG FIX: Previously was adding bowlers from opposing team's innings.
+        Now correctly extracts:
+        - Batters from innings where team_name is batting
+        - Bowlers from innings where team_name is BOWLING (i.e., opposing team's batting innings)
         """
         players = []
         seen_players = set()
-        
-        # Look through innings to find batting order
+
+        # First pass: Get batters from innings where this team batted
         for innings in data.get('innings', []):
             if innings.get('team') == team_name:
                 for over in innings.get('overs', []):
@@ -139,15 +144,21 @@ class TestMatchLoader:
                                     player_id = str(player_id)
                                     players.append(Player(player_id, player_name, team_name))
                                     seen_players.add(player_name)
-                        
-                        # Also add bowlers (they might bat later)
+
+        # Second pass: Get bowlers from innings where OPPOSING team batted
+        # (because our bowlers bowl in the other team's batting innings)
+        for innings in data.get('innings', []):
+            if innings.get('team') != team_name:  # Opposing team's batting innings
+                for over in innings.get('overs', []):
+                    for delivery in over.get('deliveries', []):
                         if 'bowler' in delivery:
                             player_name = delivery['bowler']
                             if player_name not in seen_players:
                                 player_id = player_registry.get(player_name, player_name.lower().replace(' ', '_'))
+                                player_id = str(player_id)
                                 players.append(Player(player_id, player_name, team_name))
                                 seen_players.add(player_name)
-        
+
         return players
     
 class BettingOddsLoader:
