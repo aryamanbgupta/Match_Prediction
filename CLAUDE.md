@@ -12,13 +12,17 @@
 
 A production-scale machine learning system that predicts T20 cricket match outcomes by:
 
-1. **Predicting individual ball outcomes** (dot, 1, 2, 4, 6, wicket) using XGBoost
+1. **Predicting individual ball outcomes** (dot, 1, 2, 4, 6, wicket) using XGBoost or LSTM
 2. **Simulating complete matches** via Monte Carlo methods (1000+ iterations)
 3. **Evaluating against betting markets** to measure prediction quality
 
 **Core Innovation**: Rather than directly predicting match winners (limited data), we predict individual balls (millions of examples) and simulate full matches to generate probabilistic forecasts.
 
-**Pipeline**: Raw JSON → Feature Engineering (46+ features) → XGBoost Training → Ball Predictions → Monte Carlo Simulation → Match Probabilities
+**Pipeline**: Raw JSON → Feature Engineering (46+ features) → Model Training (XGBoost/LSTM) → Ball Predictions → Monte Carlo Simulation → Match Probabilities
+
+**Model Types**:
+- **XGBoost** (default): Gradient boosted trees, fast inference, ~55-60% accuracy
+- **LSTM** (v1): PyTorch recurrent model with 10-ball sliding window sequence context
 
 **Model Versions**:
 - **v2** (legacy): 29 features, basic player stats
@@ -36,7 +40,7 @@ python scripts/xgboost_v2.py          # ~5-10 min (uses saved hyperparameters)
 # OR with Optuna hyperparameter tuning
 python scripts/xgboost_v2.py --tune --n-trials 50  # ~30-60 min
 
-# Run evaluation (defaults to v3 model)
+# Run evaluation (defaults to XGBoost v3 model)
 python scripts/sim_eval/run_sim_eval.py \
     --test-dir data/betting_test \
     --odds betting_odds_v3.json \
@@ -47,6 +51,17 @@ python scripts/sim_eval/run_sim_eval.py \
     --model-version v2 \
     --test-dir data/betting_test \
     --odds betting_odds_v3.json
+
+# --- LSTM Model ---
+# Train LSTM model
+python scripts/lstm_v1.py --epochs 50 --batch-size 512
+
+# Run evaluation with LSTM model
+python scripts/sim_eval/run_sim_eval.py \
+    --model-type lstm \
+    --test-dir data/betting_test \
+    --odds betting_odds_v3.json \
+    --n-sims 1000
 ```
 
 **For detailed operations guide, see [docs/OPERATIONS.md](docs/OPERATIONS.md)**
@@ -129,14 +144,19 @@ Match_Prediction/
 │   └── betting_test/           # T20 World Cup 2024 test matches
 │
 ├── models/
-│   ├── xgb/                    # Trained XGBoost model + encoders
-│   └── cache_chunks/           # Player stats cache (69 files, 7.6GB)
+│   ├── xgb/                    # Trained XGBoost model + encoders (v2)
+│   ├── xgb_v3/                 # Trained XGBoost model + encoders (v3)
+│   ├── lstm_v1/                # Trained LSTM model + encoders
+│   ├── cache_chunks/           # Player stats cache v2 (69 files)
+│   └── cache_chunks_v3/        # Player stats cache v3 (69 files, 7.6GB)
 │
 ├── scripts/
 │   ├── parsing_v2.py           # Feature engineering pipeline
-│   ├── xgboost_v2.py           # Model training with Optuna
+│   ├── xgboost_v2.py           # XGBoost training with Optuna
+│   ├── lstm_v1.py              # LSTM training script (PyTorch)
 │   ├── sim_v1_2.py             # Monte Carlo simulation engine
 │   ├── stats_provider.py       # Lazy-loading stats access
+│   ├── player_metadata.py      # Player metadata provider
 │   └── sim_eval/               # Evaluation framework
 │       ├── run_sim_eval.py     # Main evaluation script
 │       ├── match_evaluator.py  # Metrics calculation
@@ -172,13 +192,13 @@ Match_Prediction/
 
 ---
 
-### 2. `scripts/xgboost_v2.py` - Model Training
+### 2. `scripts/xgboost_v2.py` - XGBoost Training
 
 **Purpose**: Train XGBoost classifier with hyperparameter tuning
 
 **Model**:
 - 6-class classifier (dot, 1, 2, 4, 6, wicket)
-- 29 input features
+- 46+ input features (v3)
 - Optuna tuning (50 trials)
 - Balanced class weights
 - ~55-60% accuracy
@@ -187,7 +207,35 @@ Match_Prediction/
 
 ---
 
-### 3. `scripts/stats_provider.py` - Temporal Stats Access
+### 3. `scripts/lstm_v1.py` - LSTM Training
+
+**Purpose**: Train PyTorch LSTM model with sequence context
+
+**Model**:
+- 6-class classifier (dot, 1, 2, 4, 6, wicket)
+- 63 input features (same as XGBoost v3)
+- Sliding window of 10 balls for sequence context
+- 2-layer LSTM (hidden=256) with embeddings for categorical features
+- Embeddings: batter (64d), bowler (64d), venue (32d), matchup (16d)
+
+**Usage**:
+```bash
+# Full training
+python scripts/lstm_v1.py --epochs 50 --batch-size 512
+
+# Quick test (5% data, 2 epochs)
+python scripts/lstm_v1.py --quick
+```
+
+**Artifacts** (saved to `models/lstm_v1/`):
+- `lstm_model_v1.pt` - Model weights
+- `lstm_config_v1.json` - Architecture config
+- `feature_scaler_v1.pkl` - StandardScaler for continuous features
+- `*_encoder_v1.pkl` - Label encoders for categorical features
+
+---
+
+### 4. `scripts/stats_provider.py` - Temporal Stats Access
 
 **Purpose**: Provide player statistics as of specific dates (prevents data leakage)
 
@@ -206,13 +254,14 @@ stats = provider.get_batting_stats('player_id', '2024-06-15')
 
 ---
 
-### 4. `scripts/sim_v1_2.py` - Monte Carlo Simulation
+### 5. `scripts/sim_v1_2.py` - Monte Carlo Simulation
 
 **Purpose**: Simulate complete T20 matches ball-by-ball
 
 **Key Classes**:
 - `MatchState`: Complete match state (teams, scores, players, history)
-- `XGBoostModelV2`: Ball prediction model (uses StatsProvider for temporal stats)
+- `XGBoostModelV2`: XGBoost ball prediction model
+- `LSTMModelV1`: LSTM ball prediction model with sequence context
 - `SimulationEngine`: Orchestrates ball-by-ball simulation
 - `T20Rules`: Enforces cricket rules
 - `ResultAggregator`: Aggregates 1000+ simulations
@@ -254,7 +303,7 @@ print(f"India: {summary['win_probability']['India']:.1%}")
 
 ---
 
-### 5. `scripts/sim_eval/` - Evaluation Framework
+### 6. `scripts/sim_eval/` - Evaluation Framework
 
 **Purpose**: Evaluate model predictions against betting market odds
 
@@ -405,7 +454,7 @@ Enable `parallel=True` in SimulationConfig. Reduces simulations for testing.
 
 ## Key Files Reference
 
-**Training (v3 - current)**:
+**Training (XGBoost v3 - current)**:
 - `data/t20s_json/` - Raw matches
 - `data/xgb_data_v3/*.parquet` - Processed training data (v3 with player metadata)
 - `data/all_players_enriched.csv` - Player metadata (hand, arm, DOB, bowling style)
@@ -413,19 +462,26 @@ Enable `parallel=True` in SimulationConfig. Reduces simulations for testing.
 - `models/cache_chunks_v3/` - Player stats cache (with type-based stats)
 - `scripts/player_metadata.py` - Player metadata provider
 
-**Training (v2 - legacy)**:
+**Training (LSTM v1)**:
+- `scripts/lstm_v1.py` - LSTM training script
+- `models/lstm_v1/lstm_model_v1.pt` - Trained LSTM model
+- `models/lstm_v1/lstm_config_v1.json` - Model architecture config
+- `models/lstm_v1/feature_scaler_v1.pkl` - Feature scaler
+- `models/lstm_v1/*_encoder_v1.pkl` - Label encoders
+
+**Training (XGBoost v2 - legacy)**:
 - `data/xgb_data/*.parquet` - Processed training data (v2)
 - `models/xgb/xgboost_model_v2.pkl` - Trained model (v2)
 - `models/cache_chunks/` - Player stats cache (v2)
 
 **Simulation**:
-- `scripts/sim_v1_2.py` - Simulation engine
+- `scripts/sim_v1_2.py` - Simulation engine (XGBoostModelV2, LSTMModelV1)
 - `scripts/stats_provider.py` - Stats access (supports v2 and v3)
 
 **Evaluation**:
 - `data/betting_test/` - Test matches
 - `betting_odds_v3.json` - Market odds
-- `scripts/sim_eval/run_sim_eval.py` - Evaluation script
+- `scripts/sim_eval/run_sim_eval.py` - Evaluation script (`--model-type xgboost|lstm`)
 
 ---
 
@@ -434,7 +490,8 @@ Enable `parallel=True` in SimulationConfig. Reduces simulations for testing.
 | Module | Purpose | Key Output | Documentation |
 |--------|---------|------------|---------------|
 | `parsing_v2.py` | Feature engineering | Parquet files + cache chunks | [CLAUDE_REFERENCE.md](CLAUDE_REFERENCE.md#1-scriptsparsing_v2py---feature-engineering-pipeline) |
-| `xgboost_v2.py` | Model training | Trained XGBoost model | [CLAUDE_REFERENCE.md](CLAUDE_REFERENCE.md#2-scriptsxgboost_v2py---model-training) |
+| `xgboost_v2.py` | XGBoost training | Trained XGBoost model | [CLAUDE_REFERENCE.md](CLAUDE_REFERENCE.md#2-scriptsxgboost_v2py---model-training) |
+| `lstm_v1.py` | LSTM training | Trained LSTM model | See section 3 above |
 | `stats_provider.py` | Temporal stats access | Player statistics | [CLAUDE_REFERENCE.md](CLAUDE_REFERENCE.md#3-scriptsstats_providerpy---temporal-stats-access-with-lazy-loading) |
 | `sim_v1_2.py` | Match simulation | Win probabilities | [CLAUDE_REFERENCE.md](CLAUDE_REFERENCE.md#4-scriptssim_v1_2py---monte-carlo-simulation-engine) |
 | `sim_eval/` | Evaluation | Performance metrics | [CLAUDE_REFERENCE.md](CLAUDE_REFERENCE.md#5-scriptssim_eval---evaluation-framework) |
@@ -453,16 +510,16 @@ Enable `parallel=True` in SimulationConfig. Reduces simulations for testing.
 
 ## Current Status
 
-**Latest Model**: XGBoost v3 (46+ features)
-- Ball-level accuracy: ~55-60%
-- New features: player metadata (hand, arm, age, type-based stats, matchups)
-- Evaluated on T20 World Cup 2024 (44 matches)
+**Latest Models**:
+- **XGBoost v3** (default): 46+ features, ~55-60% ball-level accuracy
+- **LSTM v1**: PyTorch LSTM with 10-ball sequence context, same features as XGBoost v3
 
 **Model Versions**:
-| Version | Features | Data Path | Model Path |
-|---------|----------|-----------|------------|
-| v3 (current) | 46+ | `data/xgb_data_v3/` | `models/xgb_v3/` |
-| v2 (legacy) | 29 | `data/xgb_data/` | `models/xgb/` |
+| Model Type | Version | Features | Model Path |
+|------------|---------|----------|------------|
+| XGBoost | v3 (current) | 46+ | `models/xgb_v3/` |
+| XGBoost | v2 (legacy) | 29 | `models/xgb/` |
+| LSTM | v1 | 63 | `models/lstm_v1/` |
 
 **Recent Updates**:
 - ✅ Player metadata features (Tier 1: hand, arm, pace/spin, age)
@@ -471,11 +528,13 @@ Enable `parallel=True` in SimulationConfig. Reduces simulations for testing.
 - ✅ Kelly Criterion betting evaluation
 - ✅ Temporal stats cache with lazy loading
 - ✅ Optuna hyperparameter tuning
+- ✅ LSTM model with sequence context (PyTorch)
 
 **Active Development** (see [TODO.md](TODO.md)):
 - Unknown player encoding
 - Additional features (weather, dew factor)
-- New model architectures (LSTM, Transformer)
+- Full LSTM training and hyperparameter tuning
+- Transformer architecture exploration
 
 ---
 

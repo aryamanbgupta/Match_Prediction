@@ -16,8 +16,9 @@ warnings.filterwarnings("ignore", message="X does not have valid feature names")
 # Add parent directory to path to import simulation modules
 sys.path.append(str(Path(__file__).parent.parent))
 
-from sim_v1_2 import SimulationEngine, XGBoostModel, T20Rules, XGBoostModelV2
+from sim_v1_2 import SimulationEngine, XGBoostModel, T20Rules, XGBoostModelV2, LSTMModelV1
 from stats_provider import StatsProvider
+from player_metadata import PlayerMetadataProvider
 from sim_eval.loaders import TestMatchLoader, BettingOddsLoader
 from sim_eval.match_evaluator import MatchLevelEvaluator, print_evaluation_summary
 
@@ -70,6 +71,8 @@ def main():
                        help='Directory containing test match JSON files')
     parser.add_argument('--odds', type=str, default='data/betting_odds.json',
                        help='JSON file containing betting odds')
+    parser.add_argument('--model-type', type=str, default='xgboost', choices=['xgboost', 'lstm'],
+                       help='Model type to use (xgboost or lstm)')
     parser.add_argument('--model-version', type=str, default='v3', choices=['v2', 'v3'],
                        help='Model version to use (v2=legacy 29 features, v3=46+ features with player metadata)')
     parser.add_argument('--model', type=str, default=None,
@@ -130,6 +133,7 @@ def main():
 
     print("Cricket Match-Level Evaluation")
     print("=" * 60)
+    print(f"Model type: {args.model_type}")
     print(f"Model version: {args.model_version}")
 
     # Load player stats cache (chunked format)
@@ -142,22 +146,57 @@ def main():
         print("Continuing without stats cache (will use zeros)")
         stats_provider = None
 
+    # Load player metadata (needed for LSTM and v3 features)
+    player_metadata = None
+    if args.model_type == 'lstm' or args.model_version == 'v3':
+        print("\nLoading player metadata...")
+        try:
+            player_metadata = PlayerMetadataProvider('data/all_players_enriched.csv')
+            print("✓ Player metadata loaded successfully")
+        except Exception as e:
+            print(f"Warning: Could not load player metadata: {e}")
+
     # Load model and encoders
-    print(f"\nLoading model from {model_path}...")
-    try:
-        model = XGBoostModelV2(
-            model_path=model_path,
-            batter_encoder_path=batter_encoder_path,
-            bowler_encoder_path=bowler_encoder_path,
-            feature_columns_path=feature_columns_path,
-            stats_provider=stats_provider
-        )
-        print(f"✓ Model loaded successfully ({args.model_version})")
-    except Exception as e:
-        print(f"Error loading model: {e}")
-        print("Using dummy model for demonstration")
-        from sim_v1_2 import DummyModel
-        model = DummyModel()
+    if args.model_type == 'lstm':
+        print(f"\nLoading LSTM model...")
+        try:
+            model = LSTMModelV1(
+                model_path='models/lstm_v1/lstm_model_v1.pt',
+                batter_encoder_path='models/lstm_v1/batter_encoder_v1.pkl',
+                bowler_encoder_path='models/lstm_v1/bowler_encoder_v1.pkl',
+                feature_columns_path='models/lstm_v1/feature_columns_v1.txt',
+                scaler_path='models/lstm_v1/feature_scaler_v1.pkl',
+                config_path='models/lstm_v1/lstm_config_v1.json',
+                stats_provider=stats_provider,
+                player_metadata=player_metadata,
+                matchup_encoder_path='models/lstm_v1/matchup_encoder_v1.pkl',
+                venue_encoder_path='models/lstm_v1/venue_encoder_v1.pkl',
+                window_size=10,
+                device='cpu'
+            )
+            print("✓ LSTM model loaded successfully")
+        except Exception as e:
+            print(f"Error loading LSTM model: {e}")
+            print("Using dummy model for demonstration")
+            from sim_v1_2 import DummyModel
+            model = DummyModel()
+    else:
+        print(f"\nLoading XGBoost model from {model_path}...")
+        try:
+            model = XGBoostModelV2(
+                model_path=model_path,
+                batter_encoder_path=batter_encoder_path,
+                bowler_encoder_path=bowler_encoder_path,
+                feature_columns_path=feature_columns_path,
+                stats_provider=stats_provider,
+                player_metadata=player_metadata
+            )
+            print(f"✓ XGBoost model loaded successfully ({args.model_version})")
+        except Exception as e:
+            print(f"Error loading model: {e}")
+            print("Using dummy model for demonstration")
+            from sim_v1_2 import DummyModel
+            model = DummyModel()
 
     # Create simulation engine
     rules = T20Rules()

@@ -6,7 +6,7 @@ Complete guide for running all pipelines and common operations in the CricML Mat
 
 ## Quick Start
 
-### Training Pipeline (Full)
+### Training Pipeline (XGBoost - Default)
 ```bash
 # Step 1: Feature engineering (~10-15 min)
 python scripts/parsing_v2.py
@@ -16,6 +16,25 @@ python scripts/xgboost_v2.py
 
 # Step 3: Evaluation (~5-10 min for 45 matches)
 python scripts/sim_eval/run_sim_eval.py \
+    --test-dir data/betting_test \
+    --odds betting_odds_v3.json \
+    --n-sims 1000
+```
+
+### Training Pipeline (LSTM)
+```bash
+# Step 1: Feature engineering (same as XGBoost)
+python scripts/parsing_v2.py
+
+# Step 2: LSTM training (~30-60 min for full training)
+python scripts/lstm_v1.py --epochs 50 --batch-size 512
+
+# Quick test mode (5% data, 2 epochs, ~2 min)
+python scripts/lstm_v1.py --quick
+
+# Step 3: Evaluation with LSTM model
+python scripts/sim_eval/run_sim_eval.py \
+    --model-type lstm \
     --test-dir data/betting_test \
     --odds betting_odds_v3.json \
     --n-sims 1000
@@ -130,6 +149,72 @@ python scripts/xgboost_v2.py
 
 ---
 
+### 3. LSTM Training (`lstm_v1.py`)
+
+**Purpose**: Train PyTorch LSTM model with sequence context.
+
+**Input**:
+- `data/xgb_data_v3/cricket_data_v3_*.parquet` (same data as XGBoost)
+
+**Output** (saved to `models/lstm_v1/`):
+- `lstm_model_v1.pt` - Model weights
+- `lstm_config_v1.json` - Architecture configuration
+- `feature_scaler_v1.pkl` - StandardScaler for continuous features
+- `batter_encoder_v1.pkl`, `bowler_encoder_v1.pkl`, `venue_encoder_v1.pkl`, `matchup_encoder_v1.pkl` - Label encoders
+- `feature_columns_v1.txt`, `continuous_columns_v1.txt` - Feature lists
+- `training_history_v1.json` - Training metrics
+
+**Command**:
+```bash
+# Full training
+python scripts/lstm_v1.py --epochs 50 --batch-size 512
+
+# Quick test (5% data, 2 epochs)
+python scripts/lstm_v1.py --quick
+
+# Custom configuration
+python scripts/lstm_v1.py \
+    --epochs 30 \
+    --batch-size 256 \
+    --window-size 10 \
+    --hidden-size 256 \
+    --num-layers 2 \
+    --learning-rate 0.001
+```
+
+**Performance**:
+- Full training: ~30-60 minutes (CPU)
+- Quick mode: ~2 minutes
+- Memory: ~4-8 GB
+
+**What It Does**:
+1. Loads parquet files from v3 data
+2. Creates sliding window sequences (default: 10 balls)
+3. Fits StandardScaler on continuous features
+4. Fits LabelEncoders on categorical features (batter, bowler, venue, matchup)
+5. Creates PyTorch Dataset with sequence padding
+6. Trains 2-layer LSTM with embeddings
+7. Evaluates on test set
+8. Saves all artifacts
+
+**Model Architecture**:
+```
+Input per timestep:
+├── Continuous features: 59 (normalized)
+├── batter_encoded → Embedding(n_batters, 64)
+├── bowler_encoded → Embedding(n_bowlers, 64)
+├── venue_encoded → Embedding(n_venues, 32)
+└── matchup_type_encoded → Embedding(n_matchups, 16)
+
+LSTM:
+├── Layer 1: LSTM(input_dim, 256), dropout=0.2
+└── Layer 2: LSTM(256, 128), dropout=0.2
+
+Output: Linear(128, 6) → Softmax (6 classes)
+```
+
+---
+
 ## Simulation
 
 ### Evaluation Pipeline (`run_sim_eval.py`)
@@ -138,18 +223,28 @@ python scripts/xgboost_v2.py
 
 **Command**:
 ```bash
+# Evaluate with XGBoost (default)
 python scripts/sim_eval/run_sim_eval.py \
+    --test-dir data/betting_test \
+    --odds betting_odds_v3.json \
+    --n-sims 1000
+
+# Evaluate with LSTM model
+python scripts/sim_eval/run_sim_eval.py \
+    --model-type lstm \
     --test-dir data/betting_test \
     --odds betting_odds_v3.json \
     --n-sims 1000
 ```
 
 **Options**:
+- `--model-type`: Model type to use (`xgboost` or `lstm`, default: `xgboost`)
+- `--model-version`: XGBoost version (`v2` or `v3`, default: `v3`)
 - `--test-dir`: Directory with test match JSONs
 - `--odds`: Path to betting odds JSON file
 - `--n-sims`: Number of simulations per match (default: 1000)
 - `--parallel`: Enable parallel simulation (default: True)
-- `--n-workers`: Number of CPU workers (default: auto)
+- `--max-matches`: Limit number of matches (for testing)
 
 **Performance**:
 - ~10-30 seconds per match (1000 simulations)
@@ -437,10 +532,13 @@ except Exception as e:
 | Operation | Duration | Memory | Notes |
 |-----------|----------|--------|-------|
 | Feature Engineering | 10-15 min | 4-8 GB | Full dataset (15K matches) |
-| Model Training | 30-60 min | 8-16 GB | With Optuna (50 trials) |
+| XGBoost Training | 30-60 min | 8-16 GB | With Optuna (50 trials) |
+| LSTM Training | 30-60 min | 4-8 GB | Full dataset, 50 epochs |
+| LSTM Training (quick) | ~2 min | 2-4 GB | 5% data, 2 epochs |
 | Stats Cache Load | 1-2 sec | 300-550 MB | Lazy loading (5 chunks max) |
-| Single Match Simulation | 0.01-0.1 sec | ~2 GB | 1000 simulations, parallel |
-| Full Evaluation (45 matches) | 5-10 min | ~2-3 GB | 1000 sims/match, parallel |
+| Single Match Sim (XGBoost) | 0.01-0.1 sec | ~2 GB | 1000 simulations, parallel |
+| Single Match Sim (LSTM) | ~35 sec | ~2 GB | 100 simulations, sequential |
+| Full Evaluation (45 matches) | 5-10 min | ~2-3 GB | XGBoost, 1000 sims/match |
 
 **Optimization Tips**:
 - Use `parallel=True` for simulations (4x speedup on 4 cores)
@@ -545,6 +643,8 @@ numpy>=1.24.0
 scikit-learn>=1.3.0
 optuna>=3.0.0
 joblib>=1.3.0
+torch>=2.0.0          # For LSTM model
+pyarrow>=12.0.0       # For parquet files
 ```
 
 ### Installation
