@@ -196,19 +196,21 @@ models/{model_name}_v1/
 
 ## 7. Testing
 
+> **Note**: Use `uv run` to execute all scripts. This ensures the correct virtual environment and dependencies are used.
+
 ```bash
 # Train model
-python scripts/{model_name}_v1.py
+uv run python scripts/{model_name}_v1.py
 
 # Quick test (5 matches, 100 sims)
-python scripts/sim_eval/run_sim_eval.py \
+uv run python scripts/sim_eval/run_sim_eval.py \
     --model-type yourmodel \
     --test-dir data/betting_test \
     --odds betting_odds_v3.json \
     --max-matches 5 --n-sims 100
 
 # Full evaluation
-python scripts/sim_eval/run_sim_eval.py \
+uv run python scripts/sim_eval/run_sim_eval.py \
     --model-type yourmodel \
     --test-dir data/betting_test \
     --odds betting_odds_v3.json \
@@ -221,3 +223,5 @@ python scripts/sim_eval/run_sim_eval.py \
 
 - **XGBoost**: `scripts/xgboost_v2.py`, `sim_v1_2.py::XGBoostModelV2`
 - **LSTM**: `scripts/lstm_v1.py`, `sim_v1_2.py::LSTMModelV1`
+- **MLP**: `scripts/mlp_v1.py`, `sim_v1_2.py::MLPModelV1`
+

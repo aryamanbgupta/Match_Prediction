@@ -1,0 +1,235 @@
+Cricket Match-Level Evaluation
+============================================================
+Model type: mlp
+Model version: v3
+
+Loading player stats cache...
+Loading player stats cache (v3) from models...
+Warning: Could not load stats cache: [Errno 2] No such file or directory: 'models/player_stats_cache_v3_metadata.pkl'
+Continuing without stats cache (will use zeros)
+
+Loading player metadata...
+Loading player metadata from data/all_players_enriched.csv...
+Warning: Could not load player metadata: [Errno 2] No such file or directory: 'data/all_players_enriched.csv'
+
+Loading MLP model...
+Error loading MLP model: [Errno 2] No such file or directory: 'models/mlp_v1/mlp_config_v1.json'
+Using dummy model for demonstration
+
+Loading test matches...
+Loading 68 test matches...
+    Warning: Incomplete team lineups for 2024-06-01_Canada_United_States_of_America_Grand_Prairie_Stadium,_Dallas
+  Loaded: 2024-06-01_Canada_United_States_of_America_Grand_Prairie_Stadium,_Dallas
+  Loaded: 2024-06-02_Papua_New_Guinea_West_Indies_Providence_Stadium,_Guyana
+  Loaded: 2024-06-02_Oman_Namibia_Kensington_Oval,_Bridgetown,_Barbados
+  Loaded: 2024-06-03_Sri_Lanka_South_Africa_Nassau_County_International_Cricket_Stadium,_New_York
+    Warning: Incomplete team lineups for 2024-06-04_Scotland_England_Kensington_Oval,_Bridgetown,_Barbados
+  Loaded: 2024-06-04_Scotland_England_Kensington_Oval,_Bridgetown,_Barbados
+    Warning: Incomplete team lineups for 2024-06-04_Nepal_Netherlands_Grand_Prairie_Stadium,_Dallas
+  Loaded: 2024-06-04_Nepal_Netherlands_Grand_Prairie_Stadium,_Dallas
+  Loaded: 2024-06-05_Ireland_India_Nassau_County_International_Cricket_Stadium,_New_York
+  Loaded: 2024-06-05_Papua_New_Guinea_Uganda_Providence_Stadium,_Guyana
+    Warning: Incomplete team lineups for 2024-06-05_Australia_Oman_Kensington_Oval,_Bridgetown,_Barbados
+  Loaded: 2024-06-05_Australia_Oman_Kensington_Oval,_Bridgetown,_Barbados
+  Loaded: 2024-06-06_Pakistan_United_States_of_America_Grand_Prairie_Stadium,_Dallas
+  Loaded: 2024-06-06_Namibia_Scotland_Kensington_Oval,_Bridgetown,_Barbados
+  Loaded: 2024-06-07_Canada_Ireland_Nassau_County_International_Cricket_Stadium,_New_York
+  Loaded: 2024-06-07_Sri_Lanka_Bangladesh_Grand_Prairie_Stadium,_Dallas
+  Loaded: 2024-06-08_Netherlands_South_Africa_Nassau_County_International_Cricket_Stadium,_New_York
+  Loaded: 2024-06-08_Australia_England_Kensington_Oval,_Bridgetown,_Barbados
+    Warning: Incomplete team lineups for 2024-06-08_West_Indies_Uganda_Providence_Stadium,_Guyana
+  Loaded: 2024-06-08_West_Indies_Uganda_Providence_Stadium,_Guyana
+  Loaded: 2024-06-09_India_Pakistan_Nassau_County_International_Cricket_Stadium,_New_York
+  Loaded: 2024-06-09_Oman_Scotland_Sir_Vivian_Richards_Stadium,_North_Sound,_Antigua
+  Loaded: 2024-06-10_South_Africa_Bangladesh_Nassau_County_International_Cricket_Stadium,_New_York
+    Warning: Incomplete team lineups for 2024-06-11_Canada_Pakistan_Nassau_County_International_Cricket_Stadium,_New_York
+  Loaded: 2024-06-11_Canada_Pakistan_Nassau_County_International_Cricket_Stadium,_New_York
+    Warning: Incomplete team lineups for 2024-06-11_Namibia_Australia_Sir_Vivian_Richards_Stadium,_North_Sound,_Antigua
+  Loaded: 2024-06-11_Namibia_Australia_Sir_Vivian_Richards_Stadium,_North_Sound,_Antigua
+    Warning: Incomplete team lineups for 2024-06-12_United_States_of_America_India_Nassau_County_International_Cricket_Stadium,_New_York
+  Loaded: 2024-06-12_United_States_of_America_India_Nassau_County_International_Cricket_Stadium,_New_York
+  Loaded: 2024-06-12_West_Indies_New_Zealand_Brian_Lara_Stadium,_Tarouba,_Trinidad
+  Loaded: 2024-06-13_Bangladesh_Netherlands_Arnos_Vale_Ground,_Kingstown,_St_Vincent
+    Warning: Incomplete team lineups for 2024-06-13_Oman_England_Sir_Vivian_Richards_Stadium,_North_Sound,_Antigua
+  Loaded: 2024-06-13_Oman_England_Sir_Vivian_Richards_Stadium,_North_Sound,_Antigua
+  Loaded: 2024-06-14_South_Africa_Nepal_Arnos_Vale_Ground,_Kingstown,_St_Vincent
+    Warning: Incomplete team lineups for 2024-06-14_Uganda_New_Zealand_Brian_Lara_Stadium,_Tarouba,_Trinidad
+  Loaded: 2024-06-14_Uganda_New_Zealand_Brian_Lara_Stadium,_Tarouba,_Trinidad
+    Warning: Incomplete team lineups for 2024-06-15_England_Namibia_Sir_Vivian_Richards_Stadium,_North_Sound,_Antigua
+  Loaded: 2024-06-15_England_Namibia_Sir_Vivian_Richards_Stadium,_North_Sound,_Antigua
+  Loaded: 2024-06-15_Scotland_Australia_Daren_Sammy_National_Cricket_Stadium,_Gros_Islet,_St_Lucia
+  Loaded: 2024-06-16_Ireland_Pakistan_Central_Broward_Regional_Park_Stadium_Turf_Ground,_Lauderhill
+  Loaded: 2024-06-16_Bangladesh_Nepal_Arnos_Vale_Ground,_Kingstown,_St_Vincent
+  Loaded: 2024-06-16_Sri_Lanka_Netherlands_Daren_Sammy_National_Cricket_Stadium,_Gros_Islet,_St_Lucia
+    Warning: Incomplete team lineups for 2024-06-17_Papua_New_Guinea_New_Zealand_Brian_Lara_Stadium,_Tarouba,_Trinidad
+  Loaded: 2024-06-17_Papua_New_Guinea_New_Zealand_Brian_Lara_Stadium,_Tarouba,_Trinidad
+  Loaded: 2024-06-19_South_Africa_United_States_of_America_Sir_Vivian_Richards_Stadium,_North_Sound,_Antigua
+    Warning: Incomplete team lineups for 2024-06-19_West_Indies_England_Daren_Sammy_National_Cricket_Stadium,_Gros_Islet,_St_Lucia
+  Loaded: 2024-06-19_West_Indies_England_Daren_Sammy_National_Cricket_Stadium,_Gros_Islet,_St_Lucia
+    Warning: Incomplete team lineups for 2024-06-20_Bangladesh_Australia_Sir_Vivian_Richards_Stadium,_North_Sound,_Antigua
+  Loaded: 2024-06-20_Bangladesh_Australia_Sir_Vivian_Richards_Stadium,_North_Sound,_Antigua
+  Loaded: 2024-06-21_South_Africa_England_Daren_Sammy_National_Cricket_Stadium,_Gros_Islet,_St_Lucia
+    Warning: Incomplete team lineups for 2024-06-21_United_States_of_America_West_Indies_Kensington_Oval,_Bridgetown,_Barbados
+  Loaded: 2024-06-21_United_States_of_America_West_Indies_Kensington_Oval,_Bridgetown,_Barbados
+  Loaded: 2024-06-22_India_Bangladesh_Sir_Vivian_Richards_Stadium,_North_Sound,_Antigua
+    Warning: Incomplete team lineups for 2024-06-23_United_States_of_America_England_Kensington_Oval,_Bridgetown,_Barbados
+  Loaded: 2024-06-23_United_States_of_America_England_Kensington_Oval,_Bridgetown,_Barbados
+  Loaded: 2024-06-23_West_Indies_South_Africa_Sir_Vivian_Richards_Stadium,_North_Sound,_Antigua
+  Loaded: 2024-06-24_India_Australia_Daren_Sammy_National_Cricket_Stadium,_Gros_Islet,_St_Lucia
+  Loaded: 2024-06-27_India_England_Providence_Stadium,_Guyana
+  Loaded: 2024-06-29_India_South_Africa_Kensington_Oval,_Bridgetown,_Barbados
+  Loaded: 2024-06-09_Italy_Luxembourg_Roma_Cricket_Ground
+    Warning: Incomplete team lineups for 2024-06-09_Portugal_Hungary_Simar_Cricket_Ground,_Rome
+  Loaded: 2024-06-09_Portugal_Hungary_Simar_Cricket_Ground,_Rome
+  Loaded: 2024-06-09_France_Isle_of_Man_Roma_Cricket_Ground
+    Warning: Incomplete team lineups for 2024-06-09_Austria_Romania_Simar_Cricket_Ground,_Rome
+  Loaded: 2024-06-09_Austria_Romania_Simar_Cricket_Ground,_Rome
+    Warning: Incomplete team lineups for 2024-06-10_Israel_Austria_Roma_Cricket_Ground
+  Loaded: 2024-06-10_Israel_Austria_Roma_Cricket_Ground
+  Loaded: 2024-06-10_Isle_of_Man_Turkey_Simar_Cricket_Ground,_Rome
+    Warning: Incomplete team lineups for 2024-06-10_Portugal_Romania_Roma_Cricket_Ground
+  Loaded: 2024-06-10_Portugal_Romania_Roma_Cricket_Ground
+  Loaded: 2024-06-10_France_Italy_Simar_Cricket_Ground,_Rome
+    Warning: Incomplete team lineups for 2024-06-12_Isle_of_Man_Italy_Roma_Cricket_Ground
+  Loaded: 2024-06-12_Isle_of_Man_Italy_Roma_Cricket_Ground
+    Warning: Incomplete team lineups for 2024-06-12_Portugal_Austria_Simar_Cricket_Ground,_Rome
+  Loaded: 2024-06-12_Portugal_Austria_Simar_Cricket_Ground,_Rome
+  Loaded: 2024-06-12_Luxembourg_Turkey_Roma_Cricket_Ground
+  Loaded: 2024-06-12_Israel_Hungary_Simar_Cricket_Ground,_Rome
+    Warning: Incomplete team lineups for 2024-06-13_Hungary_Romania_Roma_Cricket_Ground
+  Loaded: 2024-06-13_Hungary_Romania_Roma_Cricket_Ground
+  Loaded: 2024-06-13_France_Luxembourg_Simar_Cricket_Ground,_Rome
+  Loaded: 2024-06-13_Portugal_Israel_Roma_Cricket_Ground
+    Warning: Incomplete team lineups for 2024-06-13_Turkey_Italy_Simar_Cricket_Ground,_Rome
+  Loaded: 2024-06-13_Turkey_Italy_Simar_Cricket_Ground,_Rome
+  Loaded: 2024-06-15_Isle_of_Man_Luxembourg_Roma_Cricket_Ground
+    Warning: Incomplete team lineups for 2024-06-15_Austria_Hungary_Simar_Cricket_Ground,_Rome
+  Loaded: 2024-06-15_Austria_Hungary_Simar_Cricket_Ground,_Rome
+    Warning: Incomplete team lineups for 2024-06-15_France_Turkey_Roma_Cricket_Ground
+  Loaded: 2024-06-15_France_Turkey_Roma_Cricket_Ground
+    Warning: Incomplete team lineups for 2024-06-15_Romania_Israel_Simar_Cricket_Ground,_Rome
+  Loaded: 2024-06-15_Romania_Israel_Simar_Cricket_Ground,_Rome
+  Loaded: 2024-06-16_Luxembourg_Israel_Roma_Cricket_Ground
+    Warning: Incomplete team lineups for 2024-06-16_France_Austria_Simar_Cricket_Ground,_Rome
+  Loaded: 2024-06-16_France_Austria_Simar_Cricket_Ground,_Rome
+    Warning: Incomplete team lineups for 2024-06-16_Portugal_Isle_of_Man_Roma_Cricket_Ground
+  Loaded: 2024-06-16_Portugal_Isle_of_Man_Roma_Cricket_Ground
+    Warning: Incomplete team lineups for 2024-06-16_Italy_Romania_Simar_Cricket_Ground,_Rome
+  Loaded: 2024-06-16_Italy_Romania_Simar_Cricket_Ground,_Rome
+Successfully loaded 68 matches
+✓ Limiting to first 5 matches for testing
+
+Loading betting odds...
+Loaded odds for 44 matches
+
+Evaluating 5 matches with 100 simulations each...
+
+[1/5] Evaluating 2024-06-01_Canada_United_States_of_America_Grand_Prairie_Stadium,_Dallas
+  Simulated: Canada 58.0% vs United States of America 39.0%
+  Market:    Canada 27.7% vs United States of America 72.3%
+  Actual Winner: United States of America
+  Log Loss: 0.942, Edge: 30.3%
+
+[2/5] Evaluating 2024-06-02_Papua_New_Guinea_West_Indies_Providence_Stadium,_Guyana
+  Simulated: Papua New Guinea 58.0% vs West Indies 39.0%
+  Market:    Papua New Guinea 3.9% vs West Indies 96.1%
+  Actual Winner: West Indies
+  Log Loss: 0.942, Edge: 54.1%
+
+[3/5] Evaluating 2024-06-02_Oman_Namibia_Kensington_Oval,_Bridgetown,_Barbados
+  Simulated: Oman 58.0% vs Namibia 39.0%
+  Market:    Oman 33.6% vs Namibia 66.4%
+  Log Loss: nan, Edge: 24.4%
+
+[4/5] Evaluating 2024-06-03_Sri_Lanka_South_Africa_Nassau_County_International_Cricket_Stadium,_New_York
+  Simulated: Sri Lanka 58.0% vs South Africa 39.0%
+  Market:    Sri Lanka 32.9% vs South Africa 67.1%
+  Actual Winner: South Africa
+  Log Loss: 0.942, Edge: 25.1%
+
+[5/5] Evaluating 2024-06-04_Scotland_England_Kensington_Oval,_Bridgetown,_Barbados
+  Simulated: Scotland 58.0% vs England 39.0%
+  Market:    Scotland 7.7% vs England 92.3%
+  Log Loss: nan, Edge: 50.3%
+
+============================================================
+               MATCH LEVEL EVALUATION SUMMARY               
+============================================================
+
+Matches evaluated: 5
+Total simulation time: 1.1s
+Average time per match: 0.2s
+
+--- Performance Metrics ---
+Average Log Loss: 0.9416
+Average Brier Score: 0.3364
+Average Edge (magnitude): 38.3%
+Average Signed Edge: -38.0% (overconfident)
+Profitable opportunities (edge > 0.0%): 5
+
+--- Betting Strategy Comparison ---
+
+Flat Staking (1 unit per bet):
+  Total P&L: -3.00 units
+  ROI: -100.0%
+  Sharpe Ratio: 0.00
+  Win Rate: 0.0%
+  Bets Placed: 3
+
+Full Kelly Criterion:
+  Total P&L: -1.33 units
+  ROI: -44.2%
+  Sharpe Ratio: -7.15
+  Win Rate: 0.0%
+  Bets Placed: 3
+
+Fractional Kelly (25%):
+  Total P&L: -0.33 units
+  ROI: -11.1%
+  Sharpe Ratio: -7.15 
+  Win Rate: 0.0%
+  Bets Placed: 3
+
+--- Expected Value Analysis ---
+Total Expected Value: +22.03 units
+Flat Staking (EV vs Realized): +25.03 (unlucky)
+Full Kelly (EV vs Realized): +23.36 (unlucky)
+Fractional Kelly (EV vs Realized): +22.37 (unlucky)
+
+--- Performance by Match Type ---
+
+Underdogs (odds >= 2.0):
+  Matches: 5
+  Win Rate: 0.0%
+  Flat ROI: -100.0%
+  Full Kelly P&L: -1.33 units
+  Average Edge: 36.8%
+  Bets Placed: 3
+
+--- Calibration Analysis ---
+Predicted probability vs Actual win rate:
+(Perfect calibration: predicted = actual)
+  Predicted: 39.0%, Actual: 100.0%, Diff: +61.0% (n=3)
+  Predicted: 58.0%, Actual: 0.0%, Diff: -58.0% (n=3)
+
+--- Predictions by Signed Edge ---
+(Positive = correct prediction, Negative = incorrect prediction)
+
+  2024-06-03_Sri_Lanka_South_Africa_Nassau_County_International_Cricket_Stadium,_New_York
+    Bet on: Sri Lanka
+    Model: 58.0%, Market: 32.9%
+    Edge: 25.1% | Signed Edge: -25.1% (✗ WRONG)
+    Result: LOST (Actual winner: South Africa, P&L: -1.00)
+
+  2024-06-01_Canada_United_States_of_America_Grand_Prairie_Stadium,_Dallas
+    Bet on: Canada
+    Model: 58.0%, Market: 27.7%
+    Edge: 30.3% | Signed Edge: -30.3% (✗ WRONG)
+    Result: LOST (Actual winner: United States of America, P&L: -1.00)
+
+  2024-06-02_Papua_New_Guinea_West_Indies_Providence_Stadium,_Guyana
+    Bet on: Papua New Guinea
+    Model: 58.0%, Market: 3.9%
+    Edge: 54.1% | Signed Edge: -54.1% (✗ WRONG)
+    Result: LOST (Actual winner: West Indies, P&L: -1.00)
+Results saved to ../results/mlp_v1_results.json

@@ -1342,6 +1342,732 @@ class LSTMModelV1(PredictionModel):
         return outcome_probs
 
 
+class MLPModelV1(PredictionModel):
+    """Simple MLP-based ball outcome predictor.
+    
+    Uses same features as XGBoost v3 but with a neural network architecture.
+    Faster inference than LSTM (no sequence state), good baseline NN model.
+    """
+
+    def __init__(self,
+                 model_path: str,
+                 batter_encoder_path: str,
+                 bowler_encoder_path: str,
+                 feature_columns_path: str,
+                 scaler_path: str,
+                 config_path: str,
+                 stats_provider=None,
+                 player_metadata=None,
+                 matchup_encoder_path: str = None,
+                 device: str = 'cpu'):
+        import torch
+        import torch.nn as nn
+        import joblib
+        import json
+
+        self.device = torch.device(device)
+        self.stats_provider = stats_provider
+        self.player_metadata = player_metadata
+
+        # Load model config
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+
+        # Create model architecture
+        self.model = self._create_model(
+            n_features=config['n_features'],
+            hidden_sizes=config['hidden_sizes'],
+            dropout=config['dropout'],
+            n_classes=config['n_classes']
+        )
+
+        # Load trained weights
+        self.model.load_state_dict(torch.load(model_path, map_location=self.device, weights_only=True))
+        self.model.to(self.device)
+        self.model.eval()
+
+        # Load encoders and scaler
+        self.batter_encoder = joblib.load(batter_encoder_path)
+        self.bowler_encoder = joblib.load(bowler_encoder_path)
+        self.scaler = joblib.load(scaler_path)
+
+        if matchup_encoder_path:
+            try:
+                self.matchup_encoder = joblib.load(matchup_encoder_path)
+            except:
+                self.matchup_encoder = None
+        else:
+            self.matchup_encoder = None
+
+        # Load feature columns
+        with open(feature_columns_path, 'r') as f:
+            self.feature_columns = [line.strip() for line in f.readlines()]
+
+        # Class mapping (6 classes)
+        self.class_to_outcome = {
+            0: 'dot', 1: 'one', 2: 'two', 3: 'four', 4: 'six', 5: 'wicket'
+        }
+
+        print(f"Loaded MLP v1 model with {len(self.feature_columns)} features")
+
+    def _create_model(self, n_features: int, hidden_sizes: list, dropout: float, n_classes: int):
+        """Create MLP architecture matching training."""
+        import torch.nn as nn
+
+        layers = []
+        in_size = n_features
+
+        for i, hidden_size in enumerate(hidden_sizes):
+            layers.append(nn.Linear(in_size, hidden_size))
+            layers.append(nn.BatchNorm1d(hidden_size))
+            layers.append(nn.ReLU())
+            drop_rate = dropout if i < len(hidden_sizes) - 1 else dropout * 0.67
+            layers.append(nn.Dropout(drop_rate))
+            in_size = hidden_size
+
+        feature_layers = nn.Sequential(*layers)
+        classifier = nn.Linear(hidden_sizes[-1], n_classes)
+
+        class MLPModel(nn.Module):
+            def __init__(self, feature_layers, classifier):
+                super().__init__()
+                self.feature_layers = feature_layers
+                self.classifier = classifier
+
+            def forward(self, x):
+                features = self.feature_layers(x)
+                return self.classifier(features)
+
+        return MLPModel(feature_layers, classifier)
+
+    def extract_features(self, state: MatchState) -> Dict:
+        """
+        Extract features from match state.
+        Same feature extraction as XGBoostModelV2 for consistency.
+        """
+        team_idx = state.current_team_idx
+        striker = state.current_striker
+        bowler = state.current_bowler
+        wickets_in_hand = 10 - int(state.wickets[team_idx])
+
+        # Basic state features
+        features = {
+            'inning_idx': state.innings,
+            'score': int(state.runs[team_idx]),
+            'wickets': int(state.wickets[team_idx]),
+            'balls_bowled': state.balls,
+            'run_rate': float(state.runs[team_idx]) / max(float(state.balls), 1) * 6,
+            'wickets_ratio': float(state.wickets[team_idx]) / 10.0,
+            'balls_ratio': float(state.balls) / 120.0,
+            'wickets_in_hand': wickets_in_hand,
+            'balls_remaining': state.balls_remaining,
+            'is_powerplay': 1 if state.balls < 36 else 0,
+            'is_middle_overs': 1 if 36 <= state.balls < 96 else 0,
+            'is_death_overs': 1 if state.balls >= 96 else 0,
+            'balls_in_over': state.balls % 6,
+        }
+
+        # Player encoding
+        try:
+            features['batter_encoded'] = self.batter_encoder.transform([str(striker.player_id)])[0]
+        except:
+            features['batter_encoded'] = -1
+
+        try:
+            features['bowler_encoded'] = self.bowler_encoder.transform([str(bowler.player_id)])[0]
+        except:
+            features['bowler_encoded'] = -1
+
+        # Per-innings stats
+        batsman_key = (team_idx, state.striker_idx)
+        batter_innings_stats = state.batsman_stats.get(batsman_key, (0, 0))
+        features['batter_runs_scored'] = batter_innings_stats[0]
+        features['batter_balls_faced'] = batter_innings_stats[1]
+
+        bowler_key = (state.bowling_team_idx, state.bowler_idx)
+        bowler_balls_in_innings = state.bowler_balls.get(bowler_key, 0)
+        features['bowler_balls_in_innings'] = bowler_balls_in_innings
+        features['bowler_overs_in_innings'] = bowler_balls_in_innings / 6
+
+        # Non-striker strike rate
+        non_striker_key = (team_idx, state.non_striker_idx)
+        non_striker_stats = state.batsman_stats.get(non_striker_key, (0, 0))
+        if non_striker_stats[1] > 0:
+            features['non_striker_sr'] = (non_striker_stats[0] / non_striker_stats[1]) * 100
+        else:
+            features['non_striker_sr'] = 0.0
+
+        # Partnership
+        features['partnership_runs'] = state.partnership_runs
+
+        # Player stats from stats provider
+        if self.stats_provider and hasattr(state, 'match_date'):
+            match_date = state.match_date
+            bat_stats = self.stats_provider.get_batting_stats(str(striker.player_id), match_date)
+            bowl_stats = self.stats_provider.get_bowling_stats(str(bowler.player_id), match_date)
+            h2h_stats = self.stats_provider.get_h2h_stats(str(striker.player_id), str(bowler.player_id), match_date)
+
+            features['batsman_avg'] = bat_stats.get('avg', 25.0)
+            features['batsman_sr'] = bat_stats.get('sr', 125.0)
+            features['bowler_avg'] = bowl_stats.get('avg', 30.0)
+            features['bowler_econ'] = bowl_stats.get('econ', 8.0)
+            features['h2h_avg'] = h2h_stats.get('avg', 25.0)
+            features['h2h_sr'] = h2h_stats.get('sr', 125.0)
+            features['venue_avg_score'] = self.stats_provider.get_venue_avg_score(state.venue, match_date)
+
+            # Type-based stats
+            if hasattr(self.stats_provider, 'get_batting_vs_type_stats'):
+                bat_vs_type = self.stats_provider.get_batting_vs_type_stats(str(striker.player_id), match_date)
+                features['batter_avg_vs_pace'] = bat_vs_type.get('avg_vs_pace', 0.0)
+                features['batter_sr_vs_pace'] = bat_vs_type.get('sr_vs_pace', 0.0)
+                features['batter_avg_vs_spin'] = bat_vs_type.get('avg_vs_spin', 0.0)
+                features['batter_sr_vs_spin'] = bat_vs_type.get('sr_vs_spin', 0.0)
+            else:
+                features['batter_avg_vs_pace'] = features['batter_sr_vs_pace'] = 0.0
+                features['batter_avg_vs_spin'] = features['batter_sr_vs_spin'] = 0.0
+
+            if hasattr(self.stats_provider, 'get_bowling_vs_hand_stats'):
+                bowl_vs_hand = self.stats_provider.get_bowling_vs_hand_stats(str(bowler.player_id), match_date)
+                features['bowler_avg_vs_lhb'] = bowl_vs_hand.get('avg_vs_lhb', 0.0)
+                features['bowler_econ_vs_lhb'] = bowl_vs_hand.get('econ_vs_lhb', 0.0)
+                features['bowler_avg_vs_rhb'] = bowl_vs_hand.get('avg_vs_rhb', 0.0)
+                features['bowler_econ_vs_rhb'] = bowl_vs_hand.get('econ_vs_rhb', 0.0)
+            else:
+                features['bowler_avg_vs_lhb'] = features['bowler_econ_vs_lhb'] = 0.0
+                features['bowler_avg_vs_rhb'] = features['bowler_econ_vs_rhb'] = 0.0
+        else:
+            features['batsman_avg'] = 25.0
+            features['batsman_sr'] = 125.0
+            features['bowler_avg'] = 30.0
+            features['bowler_econ'] = 8.0
+            features['h2h_avg'] = 25.0
+            features['h2h_sr'] = 125.0
+            features['venue_avg_score'] = 160.0
+            features['batter_avg_vs_pace'] = features['batter_sr_vs_pace'] = 0.0
+            features['batter_avg_vs_spin'] = features['batter_sr_vs_spin'] = 0.0
+            features['bowler_avg_vs_lhb'] = features['bowler_econ_vs_lhb'] = 0.0
+            features['bowler_avg_vs_rhb'] = features['bowler_econ_vs_rhb'] = 0.0
+
+        # Player metadata features
+        if self.player_metadata:
+            batter_meta = self.player_metadata.get_player_metadata(str(striker.player_id))
+            bowler_meta = self.player_metadata.get_player_metadata(str(bowler.player_id))
+
+            features['batter_hand'] = encode_batter_hand(batter_meta['batter_hand'])
+            features['bowler_arm'] = encode_bowler_arm(bowler_meta['bowler_arm'])
+            features['is_pace'] = encode_is_pace(bowler_meta['is_pace'])
+            features['bowling_type'] = encode_bowling_type(bowler_meta['bowling_type'])
+
+            batter_age = self.player_metadata.get_player_age(str(striker.player_id), state.match_date)
+            bowler_age = self.player_metadata.get_player_age(str(bowler.player_id), state.match_date)
+            features['batter_age'] = batter_age if batter_age is not None else 0
+            features['bowler_age'] = bowler_age if bowler_age is not None else 0
+
+            spin_matchup = self.player_metadata.get_spin_matchup_advantage(str(striker.player_id), str(bowler.player_id))
+            same_arm = self.player_metadata.get_same_arm_matchup(str(striker.player_id), str(bowler.player_id))
+            features['spin_matchup_advantage'] = spin_matchup
+            features['same_arm_matchup'] = 1 if same_arm else (0 if same_arm is False else -1)
+
+            if self.matchup_encoder:
+                try:
+                    matchup_type = self.player_metadata.get_matchup_type(str(striker.player_id), str(bowler.player_id))
+                    features['matchup_type_encoded'] = self.matchup_encoder.transform([matchup_type])[0]
+                except:
+                    features['matchup_type_encoded'] = 0
+            else:
+                features['matchup_type_encoded'] = 0
+        else:
+            features['batter_hand'] = 2
+            features['bowler_arm'] = 2
+            features['is_pace'] = 2
+            features['bowling_type'] = 8
+            features['batter_age'] = 0
+            features['bowler_age'] = 0
+            features['spin_matchup_advantage'] = 0
+            features['same_arm_matchup'] = -1
+            features['matchup_type_encoded'] = 0
+
+        # Momentum features
+        features.update(self._extract_momentum_features(state))
+
+        # Chase features
+        if state.innings == 2 and state.target:
+            runs_needed = state.target - int(state.runs[team_idx])
+            features['chase_target'] = state.target
+            features['run_rate_required'] = (runs_needed * 6 / max(state.balls_remaining, 1))
+            features['lead_gap'] = -runs_needed
+            features['pressure_cooker_index'] = features['run_rate_required'] / max(wickets_in_hand, 1)
+        else:
+            features['chase_target'] = 0
+            features['run_rate_required'] = 0
+            features['lead_gap'] = int(state.runs[team_idx])
+            features['pressure_cooker_index'] = 0
+
+        return features
+
+    def _extract_momentum_features(self, state: MatchState) -> dict:
+        """Extract momentum features from match history."""
+        if state.history_idx == 0:
+            return {
+                'last_5_balls_runs': 0, 'last_10_balls_runs': 0, 'last_30_balls_runs': 0,
+                'balls_since_boundary': 0, 'last_10_dots': 0,
+                'dot_percentage_recent': 0.5, 'boundary_percentage_recent': 0.15,
+            }
+
+        current_innings_history = state.history[:state.history_idx]
+        current_innings_mask = current_innings_history[:, 0] == state.innings
+        innings_history = current_innings_history[current_innings_mask]
+
+        if len(innings_history) == 0:
+            return {
+                'last_5_balls_runs': 0, 'last_10_balls_runs': 0, 'last_30_balls_runs': 0,
+                'balls_since_boundary': 0, 'last_10_dots': 0,
+                'dot_percentage_recent': 0.5, 'boundary_percentage_recent': 0.15,
+            }
+
+        runs_history = innings_history[:, 3]
+        last_5 = runs_history[-5:] if len(runs_history) >= 5 else runs_history
+        last_10 = runs_history[-10:] if len(runs_history) >= 10 else runs_history
+        last_30 = runs_history[-30:] if len(runs_history) >= 30 else runs_history
+
+        balls_since_boundary = 0
+        for i in range(len(runs_history) - 1, -1, -1):
+            if runs_history[i] >= 4:
+                break
+            balls_since_boundary += 1
+
+        last_10_dots = int(np.sum(last_10 == 0)) if len(last_10) > 0 else 0
+        dot_pct = np.sum(last_10 == 0) / max(len(last_10), 1)
+        boundary_pct = np.sum(last_30 >= 4) / max(len(last_30), 1)
+
+        return {
+            'last_5_balls_runs': int(np.sum(last_5)),
+            'last_10_balls_runs': int(np.sum(last_10)),
+            'last_30_balls_runs': int(np.sum(last_30)),
+            'balls_since_boundary': balls_since_boundary,
+            'last_10_dots': last_10_dots,
+            'dot_percentage_recent': float(dot_pct),
+            'boundary_percentage_recent': float(boundary_pct),
+        }
+
+    def predict_next_ball(self, features: Dict) -> Dict[str, float]:
+        """Predict outcome probabilities using MLP."""
+        import torch
+
+        # Build feature vector in correct order
+        feature_vector = []
+        for col in self.feature_columns:
+            feature_vector.append(features.get(col, 0.0))
+
+        # Convert to tensor and scale
+        X = np.array([feature_vector], dtype=np.float32)
+        X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+        X = self.scaler.transform(X)
+        X_tensor = torch.FloatTensor(X).to(self.device)
+
+        # Forward pass
+        with torch.no_grad():
+            logits = self.model(X_tensor)
+            probs = torch.softmax(logits, dim=-1).cpu().numpy()[0]
+
+        # Convert to outcome dict
+        outcome_probs = {
+            'dot': 0.0, 'one': 0.0, 'two': 0.0, 'four': 0.0,
+            'six': 0.0, 'wicket': 0.0, 'wide': 0.01, 'no_ball': 0.01
+        }
+
+        for class_idx, prob in enumerate(probs):
+            outcome_name = self.class_to_outcome.get(class_idx)
+            if outcome_name:
+                outcome_probs[outcome_name] = float(prob)
+
+        # Normalize
+        total = sum(outcome_probs.values())
+        if total > 0:
+            outcome_probs = {k: v/total for k, v in outcome_probs.items()}
+
+        return outcome_probs
+
+
+class MLPModelV2(PredictionModel):
+    """MLP with embedding layers for player/venue/matchup.
+    
+    Uses same features as XGBoost v3 plus learnable embeddings for:
+    - Batter ID
+    - Bowler ID
+    - Venue
+    - Matchup type
+    """
+
+    def __init__(self,
+                 model_path: str,
+                 batter_encoder_path: str,
+                 bowler_encoder_path: str,
+                 continuous_columns_path: str,
+                 categorical_columns_path: str,
+                 scaler_path: str,
+                 config_path: str,
+                 stats_provider=None,
+                 player_metadata=None,
+                 matchup_encoder_path: str = None,
+                 venue_encoder_path: str = None,
+                 device: str = 'cpu'):
+        import torch
+        import torch.nn as nn
+        import joblib
+        import json
+
+        self.device = torch.device(device)
+        self.stats_provider = stats_provider
+        self.player_metadata = player_metadata
+
+        # Load config
+        with open(config_path, 'r') as f:
+            self.config = json.load(f)
+
+        # Create model architecture
+        self.model = self._create_model()
+        self.model.load_state_dict(torch.load(model_path, map_location=self.device, weights_only=True))
+        self.model.to(self.device)
+        self.model.eval()
+
+        # Load encoders and scaler
+        self.batter_encoder = joblib.load(batter_encoder_path)
+        self.bowler_encoder = joblib.load(bowler_encoder_path)
+        self.scaler = joblib.load(scaler_path)
+
+        if venue_encoder_path:
+            try:
+                self.venue_encoder = joblib.load(venue_encoder_path)
+            except:
+                self.venue_encoder = None
+        else:
+            self.venue_encoder = None
+
+        if matchup_encoder_path:
+            try:
+                self.matchup_encoder = joblib.load(matchup_encoder_path)
+            except:
+                self.matchup_encoder = None
+        else:
+            self.matchup_encoder = None
+
+        # Load feature columns
+        with open(continuous_columns_path, 'r') as f:
+            self.continuous_columns = [line.strip() for line in f.readlines()]
+
+        with open(categorical_columns_path, 'r') as f:
+            self.categorical_columns = json.load(f)
+
+        self.class_to_outcome = {
+            0: 'dot', 1: 'one', 2: 'two', 3: 'four', 4: 'six', 5: 'wicket'
+        }
+
+        print(f"Loaded MLP v2 model with {len(self.continuous_columns)} continuous features + embeddings")
+
+    def _create_model(self):
+        """Create MLP architecture matching training."""
+        import torch.nn as nn
+
+        n_continuous = self.config['n_continuous']
+        n_batters = self.config['n_batters']
+        n_bowlers = self.config['n_bowlers']
+        n_venues = self.config['n_venues']
+        n_matchups = self.config['n_matchups']
+        embed_dim_player = self.config['embed_dim_player']
+        embed_dim_venue = self.config['embed_dim_venue']
+        embed_dim_matchup = self.config['embed_dim_matchup']
+        hidden_sizes = self.config['hidden_sizes']
+        dropout = self.config['dropout']
+        n_classes = self.config['n_classes']
+
+        class MLPModelV2Inner(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.batter_embed = nn.Embedding(n_batters, embed_dim_player)
+                self.bowler_embed = nn.Embedding(n_bowlers, embed_dim_player)
+                self.venue_embed = nn.Embedding(n_venues, embed_dim_venue)
+                self.matchup_embed = nn.Embedding(n_matchups, embed_dim_matchup)
+
+                total_embed_dim = 2 * embed_dim_player + embed_dim_venue + embed_dim_matchup
+                input_size = n_continuous + total_embed_dim
+
+                layers = []
+                in_size = input_size
+
+                for i, hidden_size in enumerate(hidden_sizes):
+                    layers.append(nn.Linear(in_size, hidden_size))
+                    layers.append(nn.LayerNorm(hidden_size))
+                    layers.append(nn.GELU())
+                    drop_rate = dropout if i < len(hidden_sizes) - 1 else dropout * 0.5
+                    layers.append(nn.Dropout(drop_rate))
+                    in_size = hidden_size
+
+                self.feature_layers = nn.Sequential(*layers)
+                self.classifier = nn.Linear(hidden_sizes[-1], n_classes)
+
+            def forward(self, continuous, categorical):
+                batter_emb = self.batter_embed(categorical['batter_encoded'])
+                bowler_emb = self.bowler_embed(categorical['bowler_encoded'])
+                venue_emb = self.venue_embed(categorical['venue_encoded'])
+                matchup_emb = self.matchup_embed(categorical['matchup_type_encoded'])
+
+                x = torch.cat([continuous, batter_emb, bowler_emb, venue_emb, matchup_emb], dim=-1)
+                features = self.feature_layers(x)
+                return self.classifier(features)
+
+        return MLPModelV2Inner()
+
+    def extract_features(self, state: MatchState) -> Dict:
+        """Extract features matching XGBoost v3 feature set."""
+        team_idx = state.current_team_idx
+        striker = state.current_striker
+        bowler = state.current_bowler
+        wickets_in_hand = 10 - int(state.wickets[team_idx])
+
+        features = {
+            'inning_idx': state.innings,
+            'score': int(state.runs[team_idx]),
+            'wickets': int(state.wickets[team_idx]),
+            'balls_bowled': state.balls,
+            'run_rate': float(state.runs[team_idx]) / max(float(state.balls), 1) * 6,
+            'wickets_ratio': float(state.wickets[team_idx]) / 10.0,
+            'balls_ratio': float(state.balls) / 120.0,
+            'wickets_in_hand': wickets_in_hand,
+            'balls_remaining': state.balls_remaining,
+            'is_powerplay': 1 if state.balls < 36 else 0,
+            'is_middle_overs': 1 if 36 <= state.balls < 96 else 0,
+            'is_death_overs': 1 if state.balls >= 96 else 0,
+            'balls_in_over': state.balls % 6,
+        }
+
+        # Player encoding for embeddings
+        try:
+            features['batter_encoded'] = self.batter_encoder.transform([str(striker.player_id)])[0]
+        except:
+            features['batter_encoded'] = 0
+
+        try:
+            features['bowler_encoded'] = self.bowler_encoder.transform([str(bowler.player_id)])[0]
+        except:
+            features['bowler_encoded'] = 0
+
+        # Venue encoding
+        if self.venue_encoder and hasattr(state, 'venue'):
+            try:
+                features['venue_encoded'] = self.venue_encoder.transform([str(state.venue)])[0]
+            except:
+                features['venue_encoded'] = 0
+        else:
+            features['venue_encoded'] = 0
+
+        # In-innings stats
+        batsman_key = (team_idx, state.striker_idx)
+        batter_innings_stats = state.batsman_stats.get(batsman_key, (0, 0))
+        features['batter_runs_scored'] = batter_innings_stats[0]
+        features['batter_balls_faced'] = batter_innings_stats[1]
+
+        bowler_key = (state.bowling_team_idx, state.bowler_idx)
+        bowler_balls_in_innings = state.bowler_balls.get(bowler_key, 0)
+        features['bowler_balls_in_innings'] = bowler_balls_in_innings
+        features['bowler_overs_in_innings'] = bowler_balls_in_innings / 6
+
+        non_striker_key = (team_idx, state.non_striker_idx)
+        non_striker_stats = state.batsman_stats.get(non_striker_key, (0, 0))
+        features['non_striker_sr'] = (non_striker_stats[0] / non_striker_stats[1]) * 100 if non_striker_stats[1] > 0 else 0.0
+        features['partnership_runs'] = state.partnership_runs
+
+        # Player stats from StatsProvider (same as XGBoost)
+        if self.stats_provider and hasattr(state, 'match_date'):
+            match_date = state.match_date
+            bat_stats = self.stats_provider.get_batting_stats(str(striker.player_id), match_date)
+            bowl_stats = self.stats_provider.get_bowling_stats(str(bowler.player_id), match_date)
+            h2h_stats = self.stats_provider.get_h2h_stats(str(striker.player_id), str(bowler.player_id), match_date)
+
+            features['batsman_avg'] = bat_stats.get('avg', 25.0)
+            features['batsman_sr'] = bat_stats.get('sr', 125.0)
+            features['bowler_avg'] = bowl_stats.get('avg', 30.0)
+            features['bowler_econ'] = bowl_stats.get('econ', 8.0)
+            features['h2h_avg'] = h2h_stats.get('avg', 25.0)
+            features['h2h_sr'] = h2h_stats.get('sr', 125.0)
+            features['venue_avg_score'] = self.stats_provider.get_venue_avg_score(state.venue, match_date)
+
+            if hasattr(self.stats_provider, 'get_batting_vs_type_stats'):
+                bat_vs_type = self.stats_provider.get_batting_vs_type_stats(str(striker.player_id), match_date)
+                features['batter_avg_vs_pace'] = bat_vs_type.get('avg_vs_pace', 0.0)
+                features['batter_sr_vs_pace'] = bat_vs_type.get('sr_vs_pace', 0.0)
+                features['batter_avg_vs_spin'] = bat_vs_type.get('avg_vs_spin', 0.0)
+                features['batter_sr_vs_spin'] = bat_vs_type.get('sr_vs_spin', 0.0)
+            else:
+                features['batter_avg_vs_pace'] = features['batter_sr_vs_pace'] = 0.0
+                features['batter_avg_vs_spin'] = features['batter_sr_vs_spin'] = 0.0
+
+            if hasattr(self.stats_provider, 'get_bowling_vs_hand_stats'):
+                bowl_vs_hand = self.stats_provider.get_bowling_vs_hand_stats(str(bowler.player_id), match_date)
+                features['bowler_avg_vs_lhb'] = bowl_vs_hand.get('avg_vs_lhb', 0.0)
+                features['bowler_econ_vs_lhb'] = bowl_vs_hand.get('econ_vs_lhb', 0.0)
+                features['bowler_avg_vs_rhb'] = bowl_vs_hand.get('avg_vs_rhb', 0.0)
+                features['bowler_econ_vs_rhb'] = bowl_vs_hand.get('econ_vs_rhb', 0.0)
+            else:
+                features['bowler_avg_vs_lhb'] = features['bowler_econ_vs_lhb'] = 0.0
+                features['bowler_avg_vs_rhb'] = features['bowler_econ_vs_rhb'] = 0.0
+        else:
+            features['batsman_avg'] = 25.0
+            features['batsman_sr'] = 125.0
+            features['bowler_avg'] = 30.0
+            features['bowler_econ'] = 8.0
+            features['h2h_avg'] = 25.0
+            features['h2h_sr'] = 125.0
+            features['venue_avg_score'] = 160.0
+            features['batter_avg_vs_pace'] = features['batter_sr_vs_pace'] = 0.0
+            features['batter_avg_vs_spin'] = features['batter_sr_vs_spin'] = 0.0
+            features['bowler_avg_vs_lhb'] = features['bowler_econ_vs_lhb'] = 0.0
+            features['bowler_avg_vs_rhb'] = features['bowler_econ_vs_rhb'] = 0.0
+
+        # Player metadata
+        if self.player_metadata:
+            batter_meta = self.player_metadata.get_player_metadata(str(striker.player_id))
+            bowler_meta = self.player_metadata.get_player_metadata(str(bowler.player_id))
+
+            features['batter_hand'] = encode_batter_hand(batter_meta['batter_hand'])
+            features['bowler_arm'] = encode_bowler_arm(bowler_meta['bowler_arm'])
+            features['is_pace'] = encode_is_pace(bowler_meta['is_pace'])
+            features['bowling_type'] = encode_bowling_type(bowler_meta['bowling_type'])
+
+            batter_age = self.player_metadata.get_player_age(str(striker.player_id), state.match_date)
+            bowler_age = self.player_metadata.get_player_age(str(bowler.player_id), state.match_date)
+            features['batter_age'] = batter_age if batter_age is not None else 0
+            features['bowler_age'] = bowler_age if bowler_age is not None else 0
+
+            spin_matchup = self.player_metadata.get_spin_matchup_advantage(str(striker.player_id), str(bowler.player_id))
+            same_arm = self.player_metadata.get_same_arm_matchup(str(striker.player_id), str(bowler.player_id))
+            features['spin_matchup_advantage'] = spin_matchup
+            features['same_arm_matchup'] = 1 if same_arm else (0 if same_arm is False else -1)
+
+            if self.matchup_encoder:
+                try:
+                    matchup_type = self.player_metadata.get_matchup_type(str(striker.player_id), str(bowler.player_id))
+                    features['matchup_type_encoded'] = self.matchup_encoder.transform([matchup_type])[0]
+                except:
+                    features['matchup_type_encoded'] = 0
+            else:
+                features['matchup_type_encoded'] = 0
+        else:
+            features['batter_hand'] = 2
+            features['bowler_arm'] = 2
+            features['is_pace'] = 2
+            features['bowling_type'] = 8
+            features['batter_age'] = 0
+            features['bowler_age'] = 0
+            features['spin_matchup_advantage'] = 0
+            features['same_arm_matchup'] = -1
+            features['matchup_type_encoded'] = 0
+
+        # Momentum features
+        features.update(self._extract_momentum_features(state))
+
+        # Chase features
+        if state.innings == 2 and state.target:
+            runs_needed = state.target - int(state.runs[team_idx])
+            features['chase_target'] = state.target
+            features['run_rate_required'] = (runs_needed * 6 / max(state.balls_remaining, 1))
+            features['lead_gap'] = -runs_needed
+            features['pressure_cooker_index'] = features['run_rate_required'] / max(wickets_in_hand, 1)
+        else:
+            features['chase_target'] = 0
+            features['run_rate_required'] = 0
+            features['lead_gap'] = int(state.runs[team_idx])
+            features['pressure_cooker_index'] = 0
+
+        return features
+
+    def _extract_momentum_features(self, state: MatchState) -> dict:
+        if state.history_idx == 0:
+            return {
+                'last_5_balls_runs': 0, 'last_10_balls_runs': 0, 'last_30_balls_runs': 0,
+                'balls_since_boundary': 0, 'last_10_dots': 0,
+                'dot_percentage_recent': 0.5, 'boundary_percentage_recent': 0.15,
+            }
+
+        current_innings_history = state.history[:state.history_idx]
+        current_innings_mask = current_innings_history[:, 0] == state.innings
+        innings_history = current_innings_history[current_innings_mask]
+
+        if len(innings_history) == 0:
+            return {
+                'last_5_balls_runs': 0, 'last_10_balls_runs': 0, 'last_30_balls_runs': 0,
+                'balls_since_boundary': 0, 'last_10_dots': 0,
+                'dot_percentage_recent': 0.5, 'boundary_percentage_recent': 0.15,
+            }
+
+        runs_history = innings_history[:, 3]
+        last_5 = runs_history[-5:] if len(runs_history) >= 5 else runs_history
+        last_10 = runs_history[-10:] if len(runs_history) >= 10 else runs_history
+        last_30 = runs_history[-30:] if len(runs_history) >= 30 else runs_history
+
+        balls_since_boundary = 0
+        for i in range(len(runs_history) - 1, -1, -1):
+            if runs_history[i] >= 4:
+                break
+            balls_since_boundary += 1
+
+        last_10_dots = int(np.sum(last_10 == 0)) if len(last_10) > 0 else 0
+        dot_pct = np.sum(last_10 == 0) / max(len(last_10), 1)
+        boundary_pct = np.sum(last_30 >= 4) / max(len(last_30), 1)
+
+        return {
+            'last_5_balls_runs': int(np.sum(last_5)),
+            'last_10_balls_runs': int(np.sum(last_10)),
+            'last_30_balls_runs': int(np.sum(last_30)),
+            'balls_since_boundary': balls_since_boundary,
+            'last_10_dots': last_10_dots,
+            'dot_percentage_recent': float(dot_pct),
+            'boundary_percentage_recent': float(boundary_pct),
+        }
+
+    def predict_next_ball(self, features: Dict) -> Dict[str, float]:
+        import torch
+
+        # Build continuous feature vector
+        continuous_vector = []
+        for col in self.continuous_columns:
+            continuous_vector.append(features.get(col, 0.0))
+
+        X_cont = np.array([continuous_vector], dtype=np.float32)
+        X_cont = np.nan_to_num(X_cont, nan=0.0, posinf=0.0, neginf=0.0)
+        X_cont = self.scaler.transform(X_cont)
+        X_cont_tensor = torch.FloatTensor(X_cont).to(self.device)
+
+        # Build categorical features
+        categorical = {
+            'batter_encoded': torch.LongTensor([min(features.get('batter_encoded', 0), self.config['n_batters']-1)]).to(self.device),
+            'bowler_encoded': torch.LongTensor([min(features.get('bowler_encoded', 0), self.config['n_bowlers']-1)]).to(self.device),
+            'venue_encoded': torch.LongTensor([min(features.get('venue_encoded', 0), self.config['n_venues']-1)]).to(self.device),
+            'matchup_type_encoded': torch.LongTensor([min(features.get('matchup_type_encoded', 0), self.config['n_matchups']-1)]).to(self.device),
+        }
+
+        # Forward pass
+        with torch.no_grad():
+            logits = self.model(X_cont_tensor, categorical)
+            probs = torch.softmax(logits, dim=-1).cpu().numpy()[0]
+
+        outcome_probs = {
+            'dot': 0.0, 'one': 0.0, 'two': 0.0, 'four': 0.0,
+            'six': 0.0, 'wicket': 0.0, 'wide': 0.01, 'no_ball': 0.01
+        }
+
+        for class_idx, prob in enumerate(probs):
+            outcome_name = self.class_to_outcome.get(class_idx)
+            if outcome_name:
+                outcome_probs[outcome_name] = float(prob)
+
+        total = sum(outcome_probs.values())
+        if total > 0:
+            outcome_probs = {k: v/total for k, v in outcome_probs.items()}
+
+        return outcome_probs
+
+
 # Simulation Engine
 @dataclass
 class SimulationConfig:

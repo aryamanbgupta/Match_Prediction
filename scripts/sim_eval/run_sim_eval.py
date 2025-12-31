@@ -16,7 +16,7 @@ warnings.filterwarnings("ignore", message="X does not have valid feature names")
 # Add parent directory to path to import simulation modules
 sys.path.append(str(Path(__file__).parent.parent))
 
-from sim_v1_2 import SimulationEngine, XGBoostModel, T20Rules, XGBoostModelV2, LSTMModelV1
+from sim_v1_2 import SimulationEngine, XGBoostModel, T20Rules, XGBoostModelV2, LSTMModelV1, MLPModelV1, MLPModelV2
 from stats_provider import StatsProvider
 from player_metadata import PlayerMetadataProvider
 from sim_eval.loaders import TestMatchLoader, BettingOddsLoader
@@ -71,8 +71,8 @@ def main():
                        help='Directory containing test match JSON files')
     parser.add_argument('--odds', type=str, default='data/betting_odds.json',
                        help='JSON file containing betting odds')
-    parser.add_argument('--model-type', type=str, default='xgboost', choices=['xgboost', 'lstm'],
-                       help='Model type to use (xgboost or lstm)')
+    parser.add_argument('--model-type', type=str, default='xgboost', choices=['xgboost', 'lstm', 'mlp', 'mlp_v2'],
+                       help='Model type to use (xgboost, lstm, mlp, or mlp_v2)')
     parser.add_argument('--model-version', type=str, default='v3', choices=['v2', 'v3'],
                        help='Model version to use (v2=legacy 29 features, v3=46+ features with player metadata)')
     parser.add_argument('--model', type=str, default=None,
@@ -89,6 +89,8 @@ def main():
                        help='Enable parallel processing for simulations')
     parser.add_argument('--create-example', action='store_true',
                        help='Create example betting odds file')
+    parser.add_argument('--output-dir', type=str, default=None,
+                       help='Directory to save detailed results JSON (auto-saves if provided)')
 
     args = parser.parse_args()
 
@@ -126,7 +128,8 @@ def main():
         print("Run with --create-example to create an example odds file")
         return
 
-    if not Path(model_path).exists():
+    # Only check XGBoost model path if using XGBoost model type
+    if args.model_type == 'xgboost' and not Path(model_path).exists():
         print(f"Error: Model file not found: {model_path}")
         print(f"  (Using --model-version={args.model_version})")
         return
@@ -177,6 +180,47 @@ def main():
             print("✓ LSTM model loaded successfully")
         except Exception as e:
             print(f"Error loading LSTM model: {e}")
+            print("Using dummy model for demonstration")
+            from sim_v1_2 import DummyModel
+            model = DummyModel()
+    elif args.model_type == 'mlp':
+        print(f"\nLoading MLP model...")
+        try:
+            model = MLPModelV1(
+                model_path='models/mlp_v1/mlp_model_v1.pt',
+                batter_encoder_path='models/mlp_v1/batter_encoder_v1.pkl',
+                bowler_encoder_path='models/mlp_v1/bowler_encoder_v1.pkl',
+                feature_columns_path='models/mlp_v1/feature_columns_v1.txt',
+                scaler_path='models/mlp_v1/feature_scaler_v1.pkl',
+                config_path='models/mlp_v1/mlp_config_v1.json',
+                stats_provider=stats_provider,
+                player_metadata=player_metadata,
+                device='cpu'
+            )
+            print("✓ MLP model loaded successfully")
+        except Exception as e:
+            print(f"Error loading MLP model: {e}")
+            print("Using dummy model for demonstration")
+            from sim_v1_2 import DummyModel
+            model = DummyModel()
+    elif args.model_type == 'mlp_v2':
+        print(f"\nLoading MLP v2 model with embeddings...")
+        try:
+            model = MLPModelV2(
+                model_path='models/mlp_v2/mlp_model_v2.pt',
+                batter_encoder_path='models/mlp_v2/batter_encoder_v2.pkl',
+                bowler_encoder_path='models/mlp_v2/bowler_encoder_v2.pkl',
+                continuous_columns_path='models/mlp_v2/continuous_columns_v2.txt',
+                categorical_columns_path='models/mlp_v2/categorical_columns_v2.json',
+                scaler_path='models/mlp_v2/feature_scaler_v2.pkl',
+                config_path='models/mlp_v2/mlp_config_v2.json',
+                stats_provider=stats_provider,
+                player_metadata=player_metadata,
+                device='cpu'
+            )
+            print("✓ MLP v2 model loaded successfully")
+        except Exception as e:
+            print(f"Error loading MLP v2 model: {e}")
             print("Using dummy model for demonstration")
             from sim_v1_2 import DummyModel
             model = DummyModel()
@@ -238,14 +282,28 @@ def main():
     # Print summary
     print_evaluation_summary(results)
     
-    # Optional: Save detailed results
-    print("\n\nWould you like to save detailed results? (y/n): ", end='')
-    if input().lower() == 'y':
+    # Save detailed results
+    save_results = False
+    output_path = 'match_evaluation_results.json'
+    
+    if args.output_dir:
+        # Auto-save to specified directory
+        Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+        output_path = f"{args.output_dir}/{args.model_type}_v1_results.json"
+        save_results = True
+    else:
+        # Interactive prompt
+        print("\n\nWould you like to save detailed results? (y/n): ", end='')
+        if input().lower() == 'y':
+            save_results = True
+    
+    if save_results:
         import json
         
         # Convert results to JSON-serializable format
         results_dict = {
             'summary': {
+                'model_type': args.model_type,
                 'n_matches': results.n_matches,
                 'avg_log_loss': results.avg_log_loss,
                 'avg_brier_score': results.avg_brier_score,
@@ -267,10 +325,10 @@ def main():
                 'brier_score': match.brier_score
             })
         
-        with open('match_evaluation_results.json', 'w') as f:
+        with open(output_path, 'w') as f:
             json.dump(results_dict, f, indent=2)
         
-        print("Results saved to match_evaluation_results.json")
+        print(f"Results saved to {output_path}")
 
 
 if __name__ == "__main__":

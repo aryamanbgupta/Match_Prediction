@@ -32,33 +32,46 @@ A production-scale machine learning system that predicts T20 cricket match outco
 
 ## Quick Start
 
+> **Important**: Use `uv run` to execute all scripts. This ensures the correct virtual environment and dependencies are used.
+
 ```bash
 # Full training pipeline (v3 model with player metadata)
-python scripts/parsing_v2.py          # ~10-15 min (generates v3 data + cache)
-python scripts/xgboost_v2.py          # ~5-10 min (uses saved hyperparameters)
+uv run python scripts/parsing_v2.py          # ~10-15 min (generates v3 data + cache)
+uv run python scripts/xgboost_v2.py          # ~5-10 min (uses saved hyperparameters)
 
 # OR with Optuna hyperparameter tuning
-python scripts/xgboost_v2.py --tune --n-trials 50  # ~30-60 min
+uv run python scripts/xgboost_v2.py --tune --n-trials 50  # ~30-60 min
 
 # Run evaluation (defaults to XGBoost v3 model)
-python scripts/sim_eval/run_sim_eval.py \
+uv run python scripts/sim_eval/run_sim_eval.py \
     --test-dir data/betting_test \
     --odds betting_odds_v3.json \
     --n-sims 1000
 
 # Run evaluation with v2 legacy model
-python scripts/sim_eval/run_sim_eval.py \
+uv run python scripts/sim_eval/run_sim_eval.py \
     --model-version v2 \
     --test-dir data/betting_test \
     --odds betting_odds_v3.json
 
 # --- LSTM Model ---
 # Train LSTM model
-python scripts/lstm_v1.py --epochs 50 --batch-size 512
+uv run python scripts/lstm_v1.py --epochs 50 --batch-size 512
 
 # Run evaluation with LSTM model
-python scripts/sim_eval/run_sim_eval.py \
+uv run python scripts/sim_eval/run_sim_eval.py \
     --model-type lstm \
+    --test-dir data/betting_test \
+    --odds betting_odds_v3.json \
+    --n-sims 1000
+
+# --- MLP Model ---
+# Train MLP model (simple neural network baseline)
+uv run python scripts/mlp_v1.py --epochs 30 --device cpu
+
+# Run evaluation with MLP model
+uv run python scripts/sim_eval/run_sim_eval.py \
+    --model-type mlp \
     --test-dir data/betting_test \
     --odds betting_odds_v3.json \
     --n-sims 1000
