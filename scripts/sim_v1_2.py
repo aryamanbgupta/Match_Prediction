@@ -1767,6 +1767,7 @@ class MLPModelV2(PredictionModel):
 
     def _create_model(self):
         """Create MLP architecture matching training."""
+        import torch
         import torch.nn as nn
 
         n_continuous = self.config['n_continuous']
@@ -1835,10 +1836,15 @@ class MLPModelV2(PredictionModel):
             'balls_ratio': float(state.balls) / 120.0,
             'wickets_in_hand': wickets_in_hand,
             'balls_remaining': state.balls_remaining,
+            'over_idx': state.balls // 6,
+            'ball_idx': state.balls,
+            'balls_in_over': state.balls % 6,
             'is_powerplay': 1 if state.balls < 36 else 0,
             'is_middle_overs': 1 if 36 <= state.balls < 96 else 0,
             'is_death_overs': 1 if state.balls >= 96 else 0,
-            'balls_in_over': state.balls % 6,
+            # Batting order and toss
+            'is_batting_first': 1 if state.innings == 1 else 0,
+            'is_toss_winner': getattr(state, 'is_toss_winner', 0),
         }
 
         # Player encoding for embeddings
@@ -1884,10 +1890,19 @@ class MLPModelV2(PredictionModel):
             bowl_stats = self.stats_provider.get_bowling_stats(str(bowler.player_id), match_date)
             h2h_stats = self.stats_provider.get_h2h_stats(str(striker.player_id), str(bowler.player_id), match_date)
 
+            # Historical stats
             features['batsman_avg'] = bat_stats.get('avg', 25.0)
             features['batsman_sr'] = bat_stats.get('sr', 125.0)
             features['bowler_avg'] = bowl_stats.get('avg', 30.0)
             features['bowler_econ'] = bowl_stats.get('econ', 8.0)
+            
+            # Recent form stats (CRITICAL for player differentiation)
+            features['batsman_recent_avg'] = bat_stats.get('recent_avg', bat_stats.get('avg', 25.0))
+            features['batsman_recent_sr'] = bat_stats.get('recent_sr', bat_stats.get('sr', 125.0))
+            features['bowler_recent_avg'] = bowl_stats.get('recent_avg', bowl_stats.get('avg', 30.0))
+            features['bowler_recent_econ'] = bowl_stats.get('recent_econ', bowl_stats.get('econ', 8.0))
+            
+            # H2H stats
             features['h2h_avg'] = h2h_stats.get('avg', 25.0)
             features['h2h_sr'] = h2h_stats.get('sr', 125.0)
             features['venue_avg_score'] = self.stats_provider.get_venue_avg_score(state.venue, match_date)
@@ -1914,8 +1929,12 @@ class MLPModelV2(PredictionModel):
         else:
             features['batsman_avg'] = 25.0
             features['batsman_sr'] = 125.0
+            features['batsman_recent_avg'] = 25.0
+            features['batsman_recent_sr'] = 125.0
             features['bowler_avg'] = 30.0
             features['bowler_econ'] = 8.0
+            features['bowler_recent_avg'] = 30.0
+            features['bowler_recent_econ'] = 8.0
             features['h2h_avg'] = 25.0
             features['h2h_sr'] = 125.0
             features['venue_avg_score'] = 160.0
@@ -2046,10 +2065,12 @@ class MLPModelV2(PredictionModel):
             'matchup_type_encoded': torch.LongTensor([min(features.get('matchup_type_encoded', 0), self.config['n_matchups']-1)]).to(self.device),
         }
 
-        # Forward pass
+        # Forward pass with temperature scaling
         with torch.no_grad():
             logits = self.model(X_cont_tensor, categorical)
-            probs = torch.softmax(logits, dim=-1).cpu().numpy()[0]
+            # Temperature scaling: <1 sharpens predictions, >1 smooths
+            temperature = self.config.get('temperature', 1.0)
+            probs = torch.softmax(logits / temperature, dim=-1).cpu().numpy()[0]
 
         outcome_probs = {
             'dot': 0.0, 'one': 0.0, 'two': 0.0, 'four': 0.0,

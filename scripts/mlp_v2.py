@@ -139,19 +139,21 @@ class MLPBallPredictorV2(nn.Module):
                  n_bowlers: int = 6000,
                  n_venues: int = 500,
                  n_matchups: int = 50,
-                 embed_dim_player: int = 16,  # Reduced from 32 to prevent overfitting
-                 embed_dim_venue: int = 8,    # Reduced from 16
-                 embed_dim_matchup: int = 4,  # Reduced from 8
-                 hidden_sizes: list = [256, 128, 64],  # Reduced from [512, 256, 128]
-                 dropout: float = 0.4,        # Increased from 0.3
-                 embed_dropout: float = 0.3,  # New: dropout on embeddings
+                 embed_dim_player: int = 32,  # Increased back for more expressiveness
+                 embed_dim_venue: int = 16,
+                 embed_dim_matchup: int = 8,
+                 hidden_sizes: list = [512, 256, 128],  # Larger network
+                 dropout: float = 0.2,        # Reduced from 0.4 to allow more variance
+                 embed_dropout: float = 0.1,  # Reduced from 0.3
+                 temperature: float = 0.5,    # NEW: <1 sharpens predictions
                  n_classes: int = 6):
         super().__init__()
         
         self.n_continuous = n_continuous
         self.embed_dropout = nn.Dropout(embed_dropout)
+        self.temperature = temperature
         
-        # Embedding layers with smaller dimensions
+        # Embedding layers with larger dimensions for expressiveness
         self.batter_embed = nn.Embedding(n_batters, embed_dim_player)
         self.bowler_embed = nn.Embedding(n_bowlers, embed_dim_player)
         self.venue_embed = nn.Embedding(n_venues, embed_dim_venue)
@@ -189,6 +191,7 @@ class MLPBallPredictorV2(nn.Module):
             'hidden_sizes': hidden_sizes,
             'dropout': dropout,
             'embed_dropout': embed_dropout,
+            'temperature': temperature,
             'n_classes': n_classes,
         }
         
@@ -346,41 +349,60 @@ def main():
     
     print(f"Class distribution:\n{train_df['target'].value_counts().sort_index()}")
     
-    # Define feature columns (same as XGBoost v3, but separate continuous and categorical)
+    # Define feature columns - COMPLETE feature set matching XGBoost v3
     print("\n--- Preparing Features ---")
     
-    # Continuous features (will be scaled)
+    # ALL continuous features from training data (same as XGBoost)
     continuous_features = [
-        # Basic state
+        # Match/Innings state
         'inning_idx', 'score', 'wickets', 'balls_bowled', 'run_rate',
         'wickets_ratio', 'balls_ratio', 'wickets_in_hand', 'balls_remaining',
-        'is_powerplay', 'is_middle_overs', 'is_death_overs', 'balls_in_over',
-        # Player stats from StatsProvider (same as XGBoost)
-        'batsman_avg', 'batsman_sr', 'bowler_avg', 'bowler_econ',
+        'over_idx', 'ball_idx', 'balls_in_over',
+        
+        # Phase indicators
+        'is_powerplay', 'is_middle_overs', 'is_death_overs',
+        
+        # Toss and batting order
+        'is_batting_first', 'is_toss_winner',
+        
+        # Batter stats (FULL - historical + recent form)
+        'batsman_avg', 'batsman_sr',
+        'batsman_recent_avg', 'batsman_recent_sr',  # Recent form - critical!
         'batter_runs_scored', 'batter_balls_faced',
+        
+        # Bowler stats (FULL - historical + recent form)
+        'bowler_avg', 'bowler_econ',
+        'bowler_recent_avg', 'bowler_recent_econ',  # Recent form - critical!
         'bowler_balls_in_innings', 'bowler_overs_in_innings',
-        # H2H stats
+        
+        # Head-to-head matchup stats
         'h2h_avg', 'h2h_sr',
-        # Momentum
+        
+        # Momentum/recent performance
         'last_5_balls_runs', 'last_10_balls_runs', 'last_30_balls_runs',
         'balls_since_boundary', 'last_10_dots',
-        # Pressure
         'dot_percentage_recent', 'boundary_percentage_recent',
-        # Chase
+        
+        # Chase situation
         'chase_target', 'run_rate_required', 'lead_gap',
-        # Medium
+        
+        # Venue and partnership
         'venue_avg_score', 'non_striker_sr', 'partnership_runs',
-        # Player metadata
+        
+        # Player metadata (encoded as numeric)
         'batter_hand', 'bowler_arm', 'is_pace', 'bowling_type',
         'batter_age', 'bowler_age',
-        # Matchup features
+        
+        # Matchup type features
         'spin_matchup_advantage', 'same_arm_matchup',
-        # Type-based stats
+        
+        # Type-based stats (batter vs pace/spin, bowler vs lhb/rhb)
         'batter_avg_vs_pace', 'batter_sr_vs_pace',
         'batter_avg_vs_spin', 'batter_sr_vs_spin',
         'bowler_avg_vs_lhb', 'bowler_econ_vs_lhb',
         'bowler_avg_vs_rhb', 'bowler_econ_vs_rhb',
-        # Advanced
+        
+        # Pressure metrics
         'pressure_cooker_index',
     ]
     
@@ -482,7 +504,7 @@ def main():
     class_weights = torch.FloatTensor(class_weights).to(device)
     print(f"Class weights: {class_weights.cpu().numpy().round(2)}")
     
-    # Create model with regularization to prevent overfitting
+    # Create model with REDUCED regularization for more variance
     print("\n--- Creating Model ---")
     model = MLPBallPredictorV2(
         n_continuous=len(continuous_cols),
@@ -490,18 +512,19 @@ def main():
         n_bowlers=int(n_bowlers),
         n_venues=int(n_venues),
         n_matchups=int(n_matchups),
-        embed_dim_player=16,      # Smaller embeddings
-        embed_dim_venue=8,
-        embed_dim_matchup=4,
-        hidden_sizes=[256, 128, 64],  # Smaller network
-        dropout=0.4,
-        embed_dropout=0.3,        # Dropout on embeddings
+        embed_dim_player=32,      # Larger embeddings for expressiveness
+        embed_dim_venue=16,
+        embed_dim_matchup=8,
+        hidden_sizes=[512, 256, 128],  # Larger network
+        dropout=0.2,              # Reduced to allow more variance
+        embed_dropout=0.1,        # Reduced
+        temperature=0.5,          # <1 sharpens predictions
         n_classes=6
     ).to(device)
     
-    # Loss and optimizer with stronger weight decay
-    criterion = FocalLoss(alpha=class_weights, gamma=2.0, label_smoothing=0.1)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr * 0.1, weight_decay=1e-3)  # Start with lower LR
+    # Loss and optimizer with REDUCED weight decay
+    criterion = FocalLoss(alpha=class_weights, gamma=2.0, label_smoothing=0.05)  # Also reduce label smoothing
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr * 0.1, weight_decay=1e-4)  # Reduced 10x
     
     # Use ReduceLROnPlateau - reduce LR when val loss plateaus
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
