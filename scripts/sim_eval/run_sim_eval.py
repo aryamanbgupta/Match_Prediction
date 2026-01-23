@@ -16,7 +16,7 @@ warnings.filterwarnings("ignore", message="X does not have valid feature names")
 # Add parent directory to path to import simulation modules
 sys.path.append(str(Path(__file__).parent.parent))
 
-from sim_v1_2 import SimulationEngine, XGBoostModel, T20Rules, XGBoostModelV2, LSTMModelV1, MLPModelV1, MLPModelV2
+from sim_v1_2 import SimulationEngine, XGBoostModel, T20Rules, XGBoostModelV2, LSTMModelV1, MLPModelV1, MLPModelV2, LLMModelV1
 from stats_provider import StatsProvider
 from player_metadata import PlayerMetadataProvider
 from sim_eval.loaders import TestMatchLoader, BettingOddsLoader
@@ -71,8 +71,8 @@ def main():
                        help='Directory containing test match JSON files')
     parser.add_argument('--odds', type=str, default='data/betting_odds.json',
                        help='JSON file containing betting odds')
-    parser.add_argument('--model-type', type=str, default='xgboost', choices=['xgboost', 'lstm', 'mlp', 'mlp_v2'],
-                       help='Model type to use (xgboost, lstm, mlp, or mlp_v2)')
+    parser.add_argument('--model-type', type=str, default='xgboost', choices=['xgboost', 'lstm', 'mlp', 'mlp_v2', 'llm'],
+                       help='Model type to use (xgboost, lstm, mlp, mlp_v2, or llm)')
     parser.add_argument('--model-version', type=str, default='v3', choices=['v2', 'v3'],
                        help='Model version to use (v2=legacy 29 features, v3=46+ features with player metadata)')
     parser.add_argument('--model', type=str, default=None,
@@ -224,6 +224,32 @@ def main():
             print("Using dummy model for demonstration")
             from sim_v1_2 import DummyModel
             model = DummyModel()
+    elif args.model_type == 'llm':
+        print(f"\nLoading LLM model (Qwen 1.5-1.8B with LoRA)...")
+        print("NOTE: LLM model requires GPU for reasonable inference speed.")
+
+        # Check for GPU
+        import torch
+        if not torch.cuda.is_available():
+            print("\n" + "="*60)
+            print("ERROR: LLM model requires CUDA GPU but none is available.")
+            print("Please run on a machine with CUDA GPU (e.g., cloud GPU instance).")
+            print("="*60 + "\n")
+            return
+
+        try:
+            model = LLMModelV1(
+                checkpoint_path='models/llm_v1',
+                device='cuda'
+            )
+            print("✓ LLM model loaded successfully on GPU")
+        except Exception as e:
+            print(f"Error loading LLM model: {e}")
+            print("Check that:")
+            print("  1. models/llm_v1/ directory exists with checkpoint files")
+            print("  2. transformers and peft packages are installed")
+            print("  3. GPU has sufficient memory (~4GB)")
+            return
     else:
         print(f"\nLoading XGBoost model from {model_path}...")
         try:

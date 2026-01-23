@@ -2089,6 +2089,279 @@ class MLPModelV2(PredictionModel):
         return outcome_probs
 
 
+class LLMModelV1(PredictionModel):
+    """Fine-tuned Qwen 1.5-1.8B LLM for cricket outcome prediction.
+
+    Uses structured text prompts to predict ball-by-ball outcomes.
+    Requires GPU for reasonable inference speed.
+
+    The model was trained on ~1.9M ball examples from CricSheet data
+    using LoRA fine-tuning on the Qwen 1.5-1.8B base model.
+    """
+
+    # Token mappings (matching llm-finetune training)
+    OUTCOMES = ["0", "1", "2", "3", "4", "6", "WICKET"]
+    EXTRA_BASE = 40
+    # Explicit dict to avoid Python scoping issues with class-level comprehensions
+    OUTCOME2TOK = {
+        "0": "<|extra_40|>",
+        "1": "<|extra_41|>",
+        "2": "<|extra_42|>",
+        "3": "<|extra_43|>",
+        "4": "<|extra_44|>",
+        "6": "<|extra_45|>",
+        "WICKET": "<|extra_46|>"
+    }
+
+    def __init__(self, checkpoint_path: str, device: str = 'cuda'):
+        """Initialize the LLM model.
+
+        Args:
+            checkpoint_path: Path to the LoRA checkpoint directory
+            device: 'cuda' for GPU (required for reasonable speed) or 'cpu'
+        """
+        import torch
+        from transformers import AutoTokenizer, AutoModelForCausalLM
+        from peft import PeftModel
+
+        # Check GPU availability
+        if device == 'cuda' and not torch.cuda.is_available():
+            raise RuntimeError("LLM model requires GPU but CUDA not available. "
+                             "Please run on a machine with CUDA GPU.")
+
+        self.device = device
+        self.torch = torch
+
+        print(f"Loading LLM base model (Qwen/Qwen1.5-1.8B)...")
+
+        # Load base model with appropriate settings
+        if device == 'cuda':
+            self.base_model = AutoModelForCausalLM.from_pretrained(
+                "Qwen/Qwen1.5-1.8B",
+                torch_dtype=torch.bfloat16,
+                device_map="auto",
+                trust_remote_code=True
+            )
+        else:
+            self.base_model = AutoModelForCausalLM.from_pretrained(
+                "Qwen/Qwen1.5-1.8B",
+                torch_dtype=torch.float32,
+                trust_remote_code=True
+            )
+            self.base_model = self.base_model.to(device)
+
+        # Load tokenizer - try checkpoint first, fall back to base model
+        print(f"Loading tokenizer...")
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(checkpoint_path, trust_remote_code=True)
+            print(f"  Loaded tokenizer from checkpoint")
+        except Exception:
+            # Tokenizer not saved in checkpoint, load from base model
+            self.tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-1.8B", trust_remote_code=True)
+            print(f"  Loaded tokenizer from base model")
+
+        # Ensure special tokens are set up (outcome tokens for prediction)
+        special_tokens = list(self.OUTCOME2TOK.values())
+        if not all(tok in self.tokenizer.get_vocab() for tok in special_tokens):
+            self.tokenizer.add_special_tokens({'additional_special_tokens': special_tokens})
+            print(f"  Added {len(special_tokens)} special outcome tokens")
+
+        self.base_model.resize_token_embeddings(len(self.tokenizer))
+
+        # Load LoRA adapter
+        print(f"Loading LoRA adapter from {checkpoint_path}...")
+        self.model = PeftModel.from_pretrained(self.base_model, checkpoint_path)
+        self.model.eval()
+
+        # Get outcome token IDs
+        self.outcome_token_ids = self.tokenizer.convert_tokens_to_ids(
+            list(self.OUTCOME2TOK.values())
+        )
+
+        # State for prompt generation (tracks ball history within a match)
+        self.recent_balls = []  # Track last 5 ball outcomes
+        self.partnership_runs = 0
+        self.partnership_balls = 0
+        self.bowler_runs_conceded = {}  # Track runs conceded by each bowler
+
+        print(f"✓ LLM model loaded successfully on {device}")
+
+    def reset_match_state(self):
+        """Reset tracking state for a new match simulation."""
+        self.recent_balls = []
+        self.partnership_runs = 0
+        self.partnership_balls = 0
+        self.bowler_runs_conceded = {}
+
+    def update_after_ball(self, outcome: str, runs: int, bowler_idx: int):
+        """Update internal tracking after a ball is bowled.
+
+        Args:
+            outcome: The outcome string ('dot', 'one', 'wicket', etc.)
+            runs: Runs scored on this ball
+            bowler_idx: Index of the current bowler
+        """
+        # Update recent balls
+        if outcome == 'wicket':
+            self.recent_balls.append("W")
+            self.partnership_runs = 0
+            self.partnership_balls = 0
+        else:
+            self.recent_balls.append(str(runs))
+            self.partnership_runs += runs
+
+        self.partnership_balls += 1
+
+        # Keep only last 5 balls
+        if len(self.recent_balls) > 5:
+            self.recent_balls.pop(0)
+
+        # Track bowler runs
+        if bowler_idx not in self.bowler_runs_conceded:
+            self.bowler_runs_conceded[bowler_idx] = 0
+        self.bowler_runs_conceded[bowler_idx] += runs
+
+    def extract_features(self, state: MatchState) -> str:
+        """Generate structured prompt from MatchState.
+
+        Format matches the training data:
+        "Over.Ball: Score/Wickets [Need X@RRR] | Recent: B1-B2-B3-B4-B5 | P:Runs@Ballsb(RR) | Bowler(EconX.X) vs Batter(status) | Phase | Teams, Venue"
+        """
+        team_idx = state.current_team_idx
+
+        # 1. SITUATION - Over.Ball: Score/Wickets [Need X@RRR for 2nd innings]
+        next_ball = (state.balls % 6) + 1
+        current_over = state.balls // 6
+        over_ball = f"{current_over}.{next_ball}"
+
+        if state.innings == 2:
+            # Second innings - include target info
+            target = int(state.runs[1 - team_idx]) + 1
+            runs_needed = target - int(state.runs[team_idx])
+            balls_remaining = 120 - state.balls
+            if balls_remaining > 0:
+                rrr = round(runs_needed / (balls_remaining / 6), 1)
+            else:
+                rrr = 0.0
+            situation = f"{over_ball}: {int(state.runs[team_idx])}/{int(state.wickets[team_idx])} Need{runs_needed}@{rrr}"
+        else:
+            situation = f"{over_ball}: {int(state.runs[team_idx])}/{int(state.wickets[team_idx])}"
+
+        # 2. RECENT - Last 5 balls (padded with "-" at start)
+        if len(self.recent_balls) >= 5:
+            recent = self.recent_balls[-5:]
+        else:
+            recent = ["-"] * (5 - len(self.recent_balls)) + self.recent_balls
+        recent_str = f"Recent: {'-'.join(recent)}"
+
+        # 3. PARTNERSHIP
+        if self.partnership_balls > 0:
+            p_rate = round((self.partnership_runs / self.partnership_balls) * 6, 1)
+            partnership_str = f"P:{self.partnership_runs}@{self.partnership_balls}b({p_rate}rr)"
+        else:
+            partnership_str = "P:0@0b(0.0rr)"
+
+        # 4. PLAYERS
+        bowler = state.current_bowler
+        striker = state.current_striker
+
+        # Get last names
+        bowler_name = bowler.name.split()[-1] if " " in bowler.name else bowler.name
+        striker_name = striker.name.split()[-1] if " " in striker.name else striker.name
+
+        # Get batter stats from state.batsman_stats
+        batsman_key = (team_idx, state.striker_idx)
+        batter_stats = state.batsman_stats.get(batsman_key, (0, 0))
+        batter_runs, batter_balls = batter_stats[0], batter_stats[1]
+        sr = int((batter_runs / batter_balls * 100)) if batter_balls > 0 else 0
+
+        if batter_balls == 0:
+            batsman_str = f"{striker_name}(new,0 Runs @ 0 SR)"
+        elif batter_balls < 10:
+            batsman_str = f"{striker_name}(new,{batter_runs} Runs @ {sr} SR)"
+        else:
+            batsman_str = f"{striker_name}(set,{batter_runs} Runs @ {sr} SR)"
+
+        # Bowler economy
+        bowler_key = (state.bowling_team_idx, state.bowler_idx)
+        bowler_balls = state.bowler_balls.get(bowler_key, 0)
+        bowler_runs = self.bowler_runs_conceded.get(state.bowler_idx, 0)
+        if bowler_balls > 0:
+            economy = round((bowler_runs / bowler_balls) * 6, 1)
+            bowler_str = f"{bowler_name}(Econ{economy})"
+        else:
+            bowler_str = f"{bowler_name}(Econ0.0)"
+
+        players_str = f"{bowler_str} vs {batsman_str}"
+
+        # 5. CONTEXT - Phase + Teams + Venue
+        if current_over < 6:
+            phase_str = f"PP {over_ball}"
+        elif current_over >= 16:
+            phase_str = f"Death {over_ball}"
+        else:
+            phase_str = None
+
+        # Venue abbreviation
+        venue = state.venue if hasattr(state, 'venue') else "Unknown"
+        venue_words = venue.replace(" Stadium", "").replace(" Cricket Ground", "").replace(" International", "").split()
+        if len(venue_words) >= 3:
+            venue_short = ''.join([w[0].upper() for w in venue_words[:3]])
+        elif len(venue_words) == 2:
+            venue_short = venue_words[0][:2].upper() + venue_words[1][0].upper()
+        else:
+            venue_short = venue[:3].upper()
+
+        teams = f"{state.batting_team} vs {state.bowling_team}"
+
+        if phase_str:
+            context = f"{phase_str} | {teams}, {venue_short}"
+        else:
+            context = f"{teams}, {venue_short}"
+
+        return f"{situation} | {recent_str} | {partnership_str} | {players_str} | {context}"
+
+    def predict_next_ball(self, features) -> Dict[str, float]:
+        """Predict outcome distribution from prompt.
+
+        Args:
+            features: The prompt string from extract_features()
+
+        Returns:
+            Dict mapping outcome names to probabilities
+        """
+        prompt = features  # features is the prompt string
+
+        # Tokenize with trailing space (matches training format)
+        prompt_with_space = prompt.rstrip() + " "
+        inputs = self.tokenizer(prompt_with_space, return_tensors="pt")
+        inputs = {k: v.to(self.device) for k, v in inputs.items()}
+
+        with self.torch.no_grad():
+            outputs = self.model(**inputs)
+            logits = outputs.logits[0, -1, :]
+            probs = self.torch.softmax(logits, dim=-1)
+            outcome_probs = probs[self.outcome_token_ids].cpu().tolist()
+
+        # Map 7 LLM outcomes → 8 match_prediction outcomes
+        llm_probs = dict(zip(self.OUTCOMES, outcome_probs))
+
+        result = {
+            'dot': llm_probs["0"],
+            'one': llm_probs["1"],
+            'two': llm_probs["2"] + llm_probs["3"],  # Merge "3" into "two"
+            'four': llm_probs["4"],
+            'six': llm_probs["6"],
+            'wicket': llm_probs["WICKET"],
+            'wide': 0.015,      # Fixed small probability
+            'no_ball': 0.005,   # Fixed small probability
+        }
+
+        # Renormalize to sum to 1.0
+        total = sum(result.values())
+        return {k: v/total for k, v in result.items()}
+
+
 # Simulation Engine
 @dataclass
 class SimulationConfig:
