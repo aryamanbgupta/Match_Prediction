@@ -186,10 +186,32 @@ class MatchLevelEvaluator:
         # Extract win probabilities
         team1 = match_state.team1
         team2 = match_state.team2
-        
+
+        # Get raw probabilities from simulation
+        team1_prob_raw = aggregated['win_probability'][team1]
+        team2_prob_raw = aggregated['win_probability'][team2]
+
+        # Step 1: Normalize to exclude ties (so probabilities sum to 1.0)
+        total = team1_prob_raw + team2_prob_raw
+        if total > 0:
+            team1_prob_norm = team1_prob_raw / total
+            team2_prob_norm = team2_prob_raw / total
+        else:
+            # Fallback for edge case (all ties)
+            team1_prob_norm = 0.5
+            team2_prob_norm = 0.5
+
+        # Step 2: Clip to avoid extreme predictions (5%-95%)
+        PROB_FLOOR = 0.05
+        PROB_CEILING = 0.95
+        team1_prob = max(PROB_FLOOR, min(PROB_CEILING, team1_prob_norm))
+        team2_prob = max(PROB_FLOOR, min(PROB_CEILING, team2_prob_norm))
+
+        # Re-normalize after clipping to ensure they sum to 1.0
+        clip_total = team1_prob + team2_prob
         simulated_win_prob = {
-            team1: aggregated['win_probability'][team1],
-            team2: aggregated['win_probability'][team2]
+            team1: team1_prob / clip_total,
+            team2: team2_prob / clip_total
         }
         
         # Extract score statistics

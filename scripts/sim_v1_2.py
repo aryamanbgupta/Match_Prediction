@@ -2636,7 +2636,7 @@ class SimulationEngine:
 
 class ResultAggregator:
     """Aggregates results from multiple simulations"""
-    
+
     @staticmethod
     def aggregate(results: List[MatchResult]) -> Dict[str, Any]:
         """Create summary statistics from simulation results"""
