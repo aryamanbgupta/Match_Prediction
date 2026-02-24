@@ -23,6 +23,7 @@ A production-scale machine learning system that predicts T20 cricket match outco
 **Model Types**:
 - **XGBoost** (default): Gradient boosted trees, fast inference, ~55-60% accuracy
 - **LSTM** (v1): PyTorch recurrent model with 10-ball sliding window sequence context
+- **Transformer** (v1): PyTorch transformer with full 120-ball innings context
 
 **Model Versions**:
 - **v2** (legacy): 29 features, basic player stats
@@ -72,6 +73,17 @@ uv run python scripts/mlp_v1.py --epochs 30 --device cpu
 # Run evaluation with MLP model
 uv run python scripts/sim_eval/run_sim_eval.py \
     --model-type mlp \
+    --test-dir data/betting_test \
+    --odds betting_odds_v3.json \
+    --n-sims 1000
+
+# --- Transformer Model (Full 120-ball context) ---
+# Train Transformer model (reduced batch size due to longer sequences)
+uv run python scripts/transformer_v1.py --epochs 50 --batch-size 64
+
+# Run evaluation with Transformer model
+uv run python scripts/sim_eval/run_sim_eval.py \
+    --model-type transformer \
     --test-dir data/betting_test \
     --odds betting_odds_v3.json \
     --n-sims 1000
@@ -533,6 +545,7 @@ Enable `parallel=True` in SimulationConfig. Reduces simulations for testing.
 | XGBoost | v3 (current) | 46+ | `models/xgb_v3/` |
 | XGBoost | v2 (legacy) | 29 | `models/xgb/` |
 | LSTM | v1 | 63 | `models/lstm_v1/` |
+| Transformer | v1 | 63 | `models/transformer_v1/` |
 
 **Recent Updates**:
 - ✅ Player metadata features (Tier 1: hand, arm, pace/spin, age)
