@@ -87,6 +87,21 @@ uv run python scripts/sim_eval/run_sim_eval.py \
     --test-dir data/betting_test \
     --odds betting_odds_v3.json \
     --n-sims 1000
+
+# --- MLX Optimization (Apple Silicon M1/M2/M3/M4 only) ---
+# Train Transformer with MLX backend (faster on Apple Silicon)
+uv run python scripts/transformer_v1.py --mlx --epochs 50 --batch-size 128
+
+# Run evaluation with MLX backend (unified memory, Metal GPU)
+uv run python scripts/sim_eval/run_sim_eval.py \
+    --model-type transformer \
+    --mlx \
+    --test-dir data/betting_test \
+    --odds betting_odds_v3.json \
+    --n-sims 1000
+
+# Convert weights between PyTorch and MLX formats
+uv run python scripts/convert_weights.py --input models/transformer_v1/transformer_model_v1.pt --to-mlx
 ```
 
 **For detailed operations guide, see [docs/OPERATIONS.md](docs/OPERATIONS.md)**

@@ -2094,6 +2094,10 @@ class TransformerModelV1(PredictionModel):
 
     Key difference from LSTM: Uses full innings history instead of 10-ball sliding window.
     This allows the model to attend to patterns from anywhere in the innings.
+
+    Supports both PyTorch and MLX backends:
+    - PyTorch (default): Universal compatibility (CUDA, MPS, CPU)
+    - MLX (--mlx flag): Optimized for Apple Silicon (unified memory, Metal GPU)
     """
 
     def __init__(self,
@@ -2108,51 +2112,21 @@ class TransformerModelV1(PredictionModel):
                  matchup_encoder_path: str = None,
                  venue_encoder_path: str = None,
                  max_seq_len: int = 120,
-                 device: str = 'cpu'):
-        import torch
-        import torch.nn as nn
+                 device: str = 'cpu',
+                 use_mlx: bool = False):
         import joblib
         import json
 
-        self.device = torch.device(device)
         self.max_seq_len = max_seq_len
         self.stats_provider = stats_provider
         self.player_metadata = player_metadata
+        self.use_mlx = use_mlx
 
         # Load model config
         with open(config_path, 'r') as f:
-            config = json.load(f)
+            self.config = json.load(f)
 
-        # Import and create model architecture
-        try:
-            from transformer_v1 import TransformerBallPredictor
-        except ImportError:
-            from scripts.transformer_v1 import TransformerBallPredictor
-
-        self.model = TransformerBallPredictor(
-            n_continuous=config['n_continuous'],
-            n_batters=config['n_batters'],
-            n_bowlers=config['n_bowlers'],
-            n_venues=config['n_venues'],
-            n_matchups=config['n_matchups'],
-            embed_dim_player=config['embed_dim_player'],
-            embed_dim_venue=config['embed_dim_venue'],
-            embed_dim_matchup=config['embed_dim_matchup'],
-            hidden_size=config['hidden_size'],
-            num_layers=config['num_layers'],
-            nhead=config['nhead'],
-            dim_feedforward=config['dim_feedforward'],
-            dropout=config['dropout'],
-            max_seq_len=config.get('max_seq_len', 120),
-            n_classes=config['n_classes']
-        )
-
-        # Load trained weights
-        self.model.load_state_dict(torch.load(model_path, map_location=self.device, weights_only=True))
-        self.model.to(self.device)
-        self.model.eval()
-
-        # Load encoders
+        # Load encoders (shared between backends)
         self.batter_encoder = joblib.load(batter_encoder_path)
         self.bowler_encoder = joblib.load(bowler_encoder_path)
         self.scaler = joblib.load(scaler_path)
@@ -2183,7 +2157,105 @@ class TransformerModelV1(PredictionModel):
         # Full innings history buffer (not sliding window)
         self.history_buffer = []
 
-        print(f"Loaded Transformer v1 model with {len(self.feature_columns)} features, max_seq_len={max_seq_len}")
+        # Initialize backend
+        if use_mlx:
+            self._init_mlx(model_path)
+        else:
+            self._init_pytorch(model_path, device)
+
+    def _init_pytorch(self, model_path: str, device: str):
+        """Initialize PyTorch backend (universal compatibility)."""
+        import torch
+
+        self.device = torch.device(device)
+
+        # Import and create model architecture
+        try:
+            from transformer_v1 import TransformerBallPredictor
+        except ImportError:
+            from scripts.transformer_v1 import TransformerBallPredictor
+
+        self.model = TransformerBallPredictor(
+            n_continuous=self.config['n_continuous'],
+            n_batters=self.config['n_batters'],
+            n_bowlers=self.config['n_bowlers'],
+            n_venues=self.config['n_venues'],
+            n_matchups=self.config['n_matchups'],
+            embed_dim_player=self.config['embed_dim_player'],
+            embed_dim_venue=self.config['embed_dim_venue'],
+            embed_dim_matchup=self.config['embed_dim_matchup'],
+            hidden_size=self.config['hidden_size'],
+            num_layers=self.config['num_layers'],
+            nhead=self.config['nhead'],
+            dim_feedforward=self.config['dim_feedforward'],
+            dropout=self.config['dropout'],
+            max_seq_len=self.config.get('max_seq_len', 120),
+            n_classes=self.config['n_classes']
+        )
+
+        # Load trained weights
+        self.model.load_state_dict(torch.load(model_path, map_location=self.device, weights_only=True))
+        self.model.to(self.device)
+        self.model.eval()
+
+        print(f"Loaded Transformer v1 (PyTorch) with {len(self.feature_columns)} features, max_seq_len={self.max_seq_len}")
+
+    def _init_mlx(self, model_path: str):
+        """Initialize MLX backend (Apple Silicon optimized)."""
+        import platform
+        from pathlib import Path
+
+        # Verify Apple Silicon
+        if platform.system() != 'Darwin' or platform.machine() != 'arm64':
+            raise RuntimeError("MLX backend requires Apple Silicon Mac (M1/M2/M3/M4)")
+
+        try:
+            import mlx.core as mx
+            from transformer_mlx import (
+                TransformerBallPredictorMLX,
+                load_mlx_weights,
+                convert_pytorch_to_mlx
+            )
+        except ImportError as e:
+            raise ImportError(f"MLX not available. Install with: pip install mlx safetensors\nError: {e}")
+
+        # Create MLX model
+        self.model = TransformerBallPredictorMLX(
+            n_continuous=self.config['n_continuous'],
+            n_batters=self.config['n_batters'],
+            n_bowlers=self.config['n_bowlers'],
+            n_venues=self.config['n_venues'],
+            n_matchups=self.config['n_matchups'],
+            embed_dim_player=self.config['embed_dim_player'],
+            embed_dim_venue=self.config['embed_dim_venue'],
+            embed_dim_matchup=self.config['embed_dim_matchup'],
+            hidden_size=self.config['hidden_size'],
+            num_layers=self.config['num_layers'],
+            nhead=self.config['nhead'],
+            dim_feedforward=self.config['dim_feedforward'],
+            dropout=0.0,  # No dropout at inference
+            max_seq_len=self.config.get('max_seq_len', 120),
+            n_classes=self.config['n_classes']
+        )
+
+        # Try to load MLX weights first, fall back to converting PyTorch weights
+        mlx_path = model_path.replace('.pt', '_mlx.safetensors')
+        mlx_npz_path = model_path.replace('.pt', '_mlx.npz')
+
+        if Path(mlx_path).exists():
+            load_mlx_weights(self.model, mlx_path)
+        elif Path(mlx_npz_path).exists():
+            load_mlx_weights(self.model, mlx_npz_path)
+        elif Path(model_path).exists():
+            # Convert PyTorch weights on-the-fly
+            print("Converting PyTorch weights to MLX format...")
+            import torch
+            pt_state_dict = torch.load(model_path, map_location='cpu', weights_only=True)
+            convert_pytorch_to_mlx(pt_state_dict, self.model)
+        else:
+            raise FileNotFoundError(f"No model weights found at {model_path} or MLX variants")
+
+        print(f"Loaded Transformer v1 (MLX, unified memory) with {len(self.feature_columns)} features")
 
     def reset_sequence(self):
         """Reset sequence buffer (call at start of new innings)"""
@@ -2454,15 +2526,25 @@ class TransformerModelV1(PredictionModel):
 
         Key difference from LSTM: No sliding window - keeps ALL previous balls
         in the innings (up to max_seq_len=120).
-        """
-        import torch
 
+        Dispatches to PyTorch or MLX backend based on use_mlx flag.
+        """
         # Add current features to history buffer - NO TRUNCATION to sliding window
         self.history_buffer.append(features)
 
         # Only cap at max_seq_len if innings exceeds this (shouldn't happen in T20)
         if len(self.history_buffer) > self.max_seq_len:
             self.history_buffer = self.history_buffer[-self.max_seq_len:]
+
+        # Dispatch to appropriate backend
+        if self.use_mlx:
+            return self._predict_mlx()
+        else:
+            return self._predict_pytorch()
+
+    def _predict_pytorch(self) -> Dict[str, float]:
+        """PyTorch prediction backend."""
+        import torch
 
         # Prepare sequence tensors from FULL history
         continuous_seq = []
@@ -2471,7 +2553,6 @@ class TransformerModelV1(PredictionModel):
         venue_seq = []
         matchup_seq = []
 
-        # Add features from entire buffer (no padding needed at inference)
         for feat in self.history_buffer:
             cont_features = [feat.get(col, 0.0) for col in self.continuous_cols]
             continuous_seq.append(cont_features)
@@ -2496,7 +2577,51 @@ class TransformerModelV1(PredictionModel):
             logits = self.model(continuous_tensor, batter_tensor, bowler_tensor, venue_tensor, matchup_tensor)
             probs = torch.softmax(logits, dim=-1).cpu().numpy()[0]
 
-        # Convert to outcome dict
+        return self._build_outcome_dict(probs)
+
+    def _predict_mlx(self) -> Dict[str, float]:
+        """MLX prediction backend (Apple Silicon optimized)."""
+        import mlx.core as mx
+
+        # Prepare sequence arrays from FULL history
+        continuous_seq = []
+        batter_seq = []
+        bowler_seq = []
+        venue_seq = []
+        matchup_seq = []
+
+        for feat in self.history_buffer:
+            cont_features = [feat.get(col, 0.0) for col in self.continuous_cols]
+            continuous_seq.append(cont_features)
+            batter_seq.append(int(feat.get('batter_encoded', 0)))
+            bowler_seq.append(int(feat.get('bowler_encoded', 0)))
+            venue_seq.append(int(feat.get('venue_encoded', 0)))
+            matchup_seq.append(int(feat.get('matchup_type_encoded', 0)))
+
+        # Convert to numpy then MLX arrays (unified memory - instant)
+        continuous = np.array(continuous_seq, dtype=np.float32)
+        continuous = np.nan_to_num(continuous, nan=0.0, posinf=0.0, neginf=0.0)
+        continuous = self.scaler.transform(continuous)
+
+        # Convert to MLX arrays (add batch dimension)
+        continuous_mx = mx.array(continuous[np.newaxis, :, :])
+        batter_mx = mx.array(np.array(batter_seq, dtype=np.int32)[np.newaxis, :])
+        bowler_mx = mx.array(np.array(bowler_seq, dtype=np.int32)[np.newaxis, :])
+        venue_mx = mx.array(np.array(venue_seq, dtype=np.int32)[np.newaxis, :])
+        matchup_mx = mx.array(np.array(matchup_seq, dtype=np.int32)[np.newaxis, :])
+
+        # Forward pass
+        logits = self.model(continuous_mx, batter_mx, bowler_mx, venue_mx, matchup_mx)
+        probs = mx.softmax(logits, axis=-1)
+
+        # Force computation and convert to numpy
+        mx.eval(probs)
+        probs_np = np.array(probs)[0]
+
+        return self._build_outcome_dict(probs_np)
+
+    def _build_outcome_dict(self, probs: np.ndarray) -> Dict[str, float]:
+        """Convert model probabilities to outcome dictionary."""
         outcome_probs = {
             'dot': 0.0, 'one': 0.0, 'two': 0.0, 'four': 0.0,
             'six': 0.0, 'wicket': 0.0, 'wide': 0.0, 'no_ball': 0.0

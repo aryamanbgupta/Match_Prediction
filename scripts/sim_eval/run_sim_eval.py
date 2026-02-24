@@ -91,6 +91,8 @@ def main():
                        help='Create example betting odds file')
     parser.add_argument('--output-dir', type=str, default=None,
                        help='Directory to save detailed results JSON (auto-saves if provided)')
+    parser.add_argument('--mlx', action='store_true',
+                       help='Use MLX backend for transformer model (Apple Silicon only, faster on Mac)')
 
     args = parser.parse_args()
 
@@ -225,7 +227,8 @@ def main():
             from sim_v1_2 import DummyModel
             model = DummyModel()
     elif args.model_type == 'transformer':
-        print(f"\nLoading Transformer model (full innings context)...")
+        backend = "MLX (unified memory)" if args.mlx else "PyTorch"
+        print(f"\nLoading Transformer model ({backend})...")
         try:
             model = TransformerModelV1(
                 model_path='models/transformer_v1/transformer_model_v1.pt',
@@ -239,9 +242,10 @@ def main():
                 matchup_encoder_path='models/transformer_v1/matchup_encoder_v1.pkl',
                 venue_encoder_path='models/transformer_v1/venue_encoder_v1.pkl',
                 max_seq_len=120,
-                device='cpu'
+                device='cpu',
+                use_mlx=args.mlx
             )
-            print("✓ Transformer model loaded successfully (120-ball context)")
+            print(f"✓ Transformer model loaded successfully ({backend}, 120-ball context)")
         except Exception as e:
             print(f"Error loading Transformer model: {e}")
             print("Using dummy model for demonstration")

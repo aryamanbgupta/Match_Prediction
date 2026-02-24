@@ -307,16 +307,6 @@ class TransformerBallPredictor(nn.Module):
             elif 'bias' in name:
                 nn.init.zeros_(param)
 
-    def _generate_causal_mask(self, seq_len, device):
-        """
-        Generate causal mask for transformer.
-
-        Mask is True for positions that should be masked (not attended to).
-        Upper triangular = future positions.
-        """
-        mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1).bool()
-        return mask
-
     def forward(self, continuous, batter_ids, bowler_ids, venue_ids, matchup_ids):
         """
         Forward pass with full innings context.
@@ -358,11 +348,11 @@ class TransformerBallPredictor(nn.Module):
         positions = torch.arange(seq_len, device=x.device).unsqueeze(0)
         x = x + self.pos_embed(positions)
 
-        # Generate causal mask (dynamic size based on actual sequence length)
-        causal_mask = self._generate_causal_mask(seq_len, x.device)
-
-        # Transformer forward with causal masking
-        x = self.transformer(x, mask=causal_mask)
+        # No causal mask is required here because each sample is already a
+        # prefix sequence (innings start -> current ball). There are no future
+        # tokens in the input to leak. This also avoids MPS instability seen
+        # with attention mask kernels on older PyTorch builds.
+        x = self.transformer(x)
 
         # Apply final layer norm
         x = self.final_ln(x)
@@ -456,7 +446,350 @@ def evaluate(model, loader, criterion, device):
 
 
 # ============================================================================
-# MAIN
+# MLX BACKEND TRAINING
+# ============================================================================
+
+def train_with_mlx(args):
+    """
+    Train Transformer model using MLX backend (Apple Silicon optimized).
+
+    Leverages unified memory architecture for faster training.
+    """
+    import platform
+
+    # Check if running on Apple Silicon
+    if platform.system() != 'Darwin' or platform.machine() != 'arm64':
+        print("=" * 60)
+        print("ERROR: --mlx flag requires Apple Silicon Mac (M1/M2/M3/M4)")
+        print("Remove --mlx flag to use PyTorch backend")
+        print("=" * 60)
+        return
+
+    try:
+        import mlx.core as mx
+        import mlx.optimizers as mlx_optim
+        from transformer_mlx import (
+            TransformerBallPredictorMLX,
+            CricketDatasetMLX,
+            WarmupCosineSchedulerMLX,
+            train_epoch_mlx,
+            evaluate_mlx,
+            save_mlx_weights,
+            count_parameters
+        )
+    except ImportError as e:
+        print("=" * 60)
+        print("ERROR: MLX not installed.")
+        print("Install with: pip install mlx safetensors")
+        print(f"Details: {e}")
+        print("=" * 60)
+        return
+
+    print("=" * 60)
+    print("TRANSFORMER TRAINING - MLX BACKEND (Apple Silicon)")
+    print("=" * 60)
+    print(f"MLX version: {mx.__version__}")
+    print("Using unified memory (CPU + GPU shared)")
+    print(f"Epochs: {args.epochs}, Batch size: {args.batch_size}")
+    print(f"Max sequence length: {args.max_seq_len} balls (full innings)")
+    print(f"Learning rate: {args.lr}, Weight decay: {args.weight_decay}")
+    print(f"Hidden size: {args.hidden_size}, Layers: {args.num_layers}")
+    print(f"Attention heads: {args.nhead}, FFN dim: {args.dim_feedforward}")
+    print("=" * 60)
+
+    # Load data
+    print("\n--- LOADING DATA ---")
+    print("Loading v3 parquet files...")
+    train_df = pd.read_parquet('data/xgb_data_v3/cricket_data_v3_train.parquet')
+    val_df = pd.read_parquet('data/xgb_data_v3/cricket_data_v3_validation.parquet')
+    test_df = pd.read_parquet('data/xgb_data_v3/cricket_data_v3_test.parquet')
+
+    print(f"Train: {len(train_df)} balls")
+    print(f"Val: {len(val_df)} balls")
+    print(f"Test: {len(test_df)} balls")
+
+    # Quick mode - use subset
+    if args.quick:
+        print("\n[QUICK MODE] Using 5% of data for fast testing...")
+        train_df = train_df.sample(frac=0.05, random_state=42)
+        val_df = val_df.sample(frac=0.05, random_state=42)
+        test_df = test_df.sample(frac=0.05, random_state=42)
+        args.epochs = min(args.epochs, 3)
+
+    # Encode categorical variables (same as PyTorch version)
+    print("\n--- ENCODING CATEGORICAL VARIABLES ---")
+
+    print("  Encoding batters...")
+    unique_batters = pd.concat([
+        train_df['batter_id'].astype(str),
+        val_df['batter_id'].astype(str),
+        test_df['batter_id'].astype(str)
+    ]).unique()
+    le_batter = LabelEncoder()
+    le_batter.fit(unique_batters)
+    n_batters = len(unique_batters)
+
+    print("  Encoding bowlers...")
+    unique_bowlers = pd.concat([
+        train_df['bowler_id'].astype(str),
+        val_df['bowler_id'].astype(str),
+        test_df['bowler_id'].astype(str)
+    ]).unique()
+    le_bowler = LabelEncoder()
+    le_bowler.fit(unique_bowlers)
+    n_bowlers = len(unique_bowlers)
+
+    print("  Encoding venues...")
+    unique_venues = pd.concat([
+        train_df['venue'].astype(str),
+        val_df['venue'].astype(str),
+        test_df['venue'].astype(str)
+    ]).unique()
+    le_venue = LabelEncoder()
+    le_venue.fit(unique_venues)
+    n_venues = len(unique_venues)
+
+    print("  Encoding matchup types...")
+    unique_matchups = pd.concat([
+        train_df['matchup_type'].astype(str),
+        val_df['matchup_type'].astype(str),
+        test_df['matchup_type'].astype(str)
+    ]).unique()
+    le_matchup = LabelEncoder()
+    le_matchup.fit(unique_matchups)
+    n_matchups = len(unique_matchups)
+
+    print(f"  Batters: {n_batters}, Bowlers: {n_bowlers}, Venues: {n_venues}, Matchups: {n_matchups}")
+
+    # Apply encoding (+1 to leave 0 for padding)
+    for df in [train_df, val_df, test_df]:
+        df['batter_encoded'] = le_batter.transform(df['batter_id'].astype(str)) + 1
+        df['bowler_encoded'] = le_bowler.transform(df['bowler_id'].astype(str)) + 1
+        df['venue_encoded'] = le_venue.transform(df['venue'].astype(str)) + 1
+        df['matchup_type_encoded'] = le_matchup.transform(df['matchup_type'].astype(str)) + 1
+
+    # Define feature columns (same as PyTorch version)
+    feature_cols = [
+        'inning_idx', 'score', 'wickets', 'balls_bowled', 'run_rate',
+        'wickets_ratio', 'balls_ratio', 'wickets_in_hand', 'balls_remaining',
+        'is_powerplay', 'is_middle_overs', 'is_death_overs', 'balls_in_over',
+        'is_toss_winner', 'is_batting_first',
+        'batsman_avg', 'batsman_sr', 'bowler_avg', 'bowler_econ',
+        'batsman_recent_avg', 'batsman_recent_sr', 'bowler_recent_avg', 'bowler_recent_econ',
+        'batter_balls_faced', 'batter_runs_scored', 'bowler_balls_in_innings', 'bowler_overs_in_innings',
+        'h2h_avg', 'h2h_sr',
+        'last_5_balls_runs', 'last_10_balls_runs', 'last_30_balls_runs',
+        'balls_since_boundary', 'last_10_dots', 'partnership_runs',
+        'dot_percentage_recent', 'boundary_percentage_recent', 'pressure_cooker_index',
+        'chase_target', 'run_rate_required', 'lead_gap',
+        'venue_avg_score', 'non_striker_sr',
+        'batter_hand', 'bowler_arm', 'is_pace', 'bowling_type', 'batter_age', 'bowler_age',
+        'spin_matchup_advantage', 'same_arm_matchup',
+        'batter_avg_vs_pace', 'batter_sr_vs_pace', 'batter_avg_vs_spin', 'batter_sr_vs_spin',
+        'bowler_avg_vs_lhb', 'bowler_econ_vs_lhb', 'bowler_avg_vs_rhb', 'bowler_econ_vs_rhb',
+        'batter_encoded', 'bowler_encoded', 'venue_encoded', 'matchup_type_encoded',
+    ]
+    feature_cols = [c for c in feature_cols if c in train_df.columns]
+
+    categorical_cols = {
+        'batter_encoded': n_batters + 1,
+        'bowler_encoded': n_bowlers + 1,
+        'venue_encoded': n_venues + 1,
+        'matchup_type_encoded': n_matchups + 1,
+    }
+
+    continuous_cols = [c for c in feature_cols if c not in categorical_cols]
+    n_continuous = len(continuous_cols)
+
+    print(f"\nFeatures: {len(feature_cols)} total ({n_continuous} continuous, {len(categorical_cols)} categorical)")
+
+    # Create MLX datasets
+    print("\n--- CREATING MLX DATASETS (Full Innings Context) ---")
+    train_dataset = CricketDatasetMLX(
+        train_df, feature_cols, categorical_cols,
+        max_seq_len=args.max_seq_len, fit_scaler=True
+    )
+    scaler = train_dataset.scaler
+
+    val_dataset = CricketDatasetMLX(
+        val_df, feature_cols, categorical_cols,
+        scaler=scaler, max_seq_len=args.max_seq_len
+    )
+
+    test_dataset = CricketDatasetMLX(
+        test_df, feature_cols, categorical_cols,
+        scaler=scaler, max_seq_len=args.max_seq_len
+    )
+
+    # Calculate class weights
+    print("\n--- CALCULATING CLASS WEIGHTS ---")
+    train_targets = train_dataset.targets
+    classes = np.unique(train_targets)
+    class_counts = np.bincount(train_targets)
+    print(f"Class distribution: {dict(zip(classes, class_counts))}")
+
+    total = len(train_targets)
+    class_weights_np = np.array([
+        np.sqrt(total / (len(classes) * class_counts[c])) for c in classes
+    ])
+    class_weights_np = class_weights_np / class_weights_np.mean()
+    class_weights = mx.array(class_weights_np.astype(np.float32))
+    print(f"Class weights: {class_weights_np.round(3)}")
+
+    # Create MLX model
+    print("\n--- CREATING MLX TRANSFORMER MODEL ---")
+    model = TransformerBallPredictorMLX(
+        n_continuous=n_continuous,
+        n_batters=n_batters + 1,
+        n_bowlers=n_bowlers + 1,
+        n_venues=n_venues + 1,
+        n_matchups=n_matchups + 1,
+        hidden_size=args.hidden_size,
+        num_layers=args.num_layers,
+        nhead=args.nhead,
+        dim_feedforward=args.dim_feedforward,
+        dropout=args.dropout,
+        max_seq_len=args.max_seq_len,
+        n_classes=6
+    )
+
+    total_params = count_parameters(model)
+    print(f"Model parameters: {total_params:,}")
+
+    # MLX optimizer
+    print("\n--- MLX OPTIMIZER ---")
+    scheduler = WarmupCosineSchedulerMLX(
+        base_lr=args.lr,
+        warmup_epochs=args.warmup_epochs,
+        total_epochs=args.epochs,
+        min_lr=1e-6
+    )
+
+    optimizer = mlx_optim.AdamW(
+        learning_rate=scheduler.get_lr(0),
+        weight_decay=args.weight_decay
+    )
+    print(f"Using AdamW with warmup cosine schedule")
+
+    # Training loop
+    print("\n--- TRAINING (MLX) ---")
+    best_val_loss = float('inf')
+    best_epoch = 0
+    patience_counter = 0
+    history = {'train_loss': [], 'train_acc': [], 'val_loss': [], 'val_acc': [], 'val_logloss': [], 'lr': []}
+
+    Path('models/transformer_v1').mkdir(parents=True, exist_ok=True)
+
+    for epoch in range(args.epochs):
+        # Update learning rate
+        current_lr = scheduler.get_lr(epoch)
+        optimizer.learning_rate = current_lr
+
+        print(f"\nEpoch {epoch + 1}/{args.epochs} (LR: {current_lr:.6f})")
+
+        # Train
+        train_loss, train_acc = train_epoch_mlx(
+            model, train_dataset, optimizer, class_weights,
+            args.batch_size, args.focal_gamma, args.label_smoothing
+        )
+
+        # Validate
+        val_loss, val_acc, val_logloss, _, _ = evaluate_mlx(
+            model, val_dataset, class_weights,
+            args.batch_size, args.focal_gamma, args.label_smoothing
+        )
+
+        # Track history
+        history['train_loss'].append(train_loss)
+        history['train_acc'].append(train_acc)
+        history['val_loss'].append(val_loss)
+        history['val_acc'].append(val_acc)
+        history['val_logloss'].append(val_logloss)
+        history['lr'].append(current_lr)
+
+        print(f"  Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
+        print(f"  Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, Val LogLoss: {val_logloss:.4f}")
+
+        # Early stopping check
+        if val_logloss < best_val_loss:
+            best_val_loss = val_logloss
+            best_epoch = epoch
+            patience_counter = 0
+
+            # Save best model (MLX format)
+            save_mlx_weights(model, 'models/transformer_v1/transformer_model_v1_mlx_best.safetensors')
+            print(f"  * New best model (val_logloss={val_logloss:.4f})")
+        else:
+            patience_counter += 1
+            print(f"  No improvement ({patience_counter}/{args.patience})")
+            if patience_counter >= args.patience:
+                print(f"\n[EARLY STOPPING] at epoch {epoch + 1} (best was epoch {best_epoch + 1})")
+                break
+
+    # Final evaluation
+    print("\n--- FINAL EVALUATION ---")
+    from transformer_mlx import load_mlx_weights
+    load_mlx_weights(model, 'models/transformer_v1/transformer_model_v1_mlx_best.safetensors')
+
+    test_loss, test_acc, test_logloss, test_preds, test_targets = evaluate_mlx(
+        model, test_dataset, class_weights,
+        args.batch_size, args.focal_gamma, args.label_smoothing
+    )
+
+    print(f"\nTest Results:")
+    print(f"  Accuracy: {test_acc:.4f}")
+    print(f"  Log Loss: {test_logloss:.4f}")
+
+    # Save artifacts
+    print("\n--- SAVING ARTIFACTS ---")
+
+    # Save MLX model weights
+    save_mlx_weights(model, 'models/transformer_v1/transformer_model_v1_mlx.safetensors')
+
+    # Save config
+    config = model.config.copy()
+    config['continuous_cols'] = continuous_cols
+    with open('models/transformer_v1/transformer_config_v1.json', 'w') as f:
+        json.dump(config, f, indent=2)
+
+    # Save scaler
+    joblib.dump(scaler, 'models/transformer_v1/feature_scaler_v1.pkl')
+
+    # Save encoders
+    joblib.dump(le_batter, 'models/transformer_v1/batter_encoder_v1.pkl')
+    joblib.dump(le_bowler, 'models/transformer_v1/bowler_encoder_v1.pkl')
+    joblib.dump(le_venue, 'models/transformer_v1/venue_encoder_v1.pkl')
+    joblib.dump(le_matchup, 'models/transformer_v1/matchup_encoder_v1.pkl')
+
+    # Save feature columns
+    with open('models/transformer_v1/feature_columns_v1.txt', 'w') as f:
+        for col in feature_cols:
+            f.write(f"{col}\n")
+
+    with open('models/transformer_v1/continuous_columns_v1.txt', 'w') as f:
+        for col in continuous_cols:
+            f.write(f"{col}\n")
+
+    # Save training history
+    with open('models/transformer_v1/training_history_v1.json', 'w') as f:
+        json.dump(history, f, indent=2)
+
+    print("\nArtifacts saved to models/transformer_v1/:")
+    print("  - transformer_model_v1_mlx.safetensors (MLX weights)")
+    print("  - transformer_config_v1.json")
+    print("  - feature_scaler_v1.pkl")
+    print("  - *_encoder_v1.pkl")
+    print("  - feature_columns_v1.txt")
+    print("  - training_history_v1.json")
+
+    print(f"\n--- MLX TRAINING COMPLETE ---")
+    print(f"Best validation loss: {best_val_loss:.4f} (epoch {best_epoch + 1})")
+    print(f"Test accuracy: {test_acc:.4f}")
+    print(f"Test log loss: {test_logloss:.4f}")
+
+
+# ============================================================================
+# MAIN (PyTorch Backend)
 # ============================================================================
 
 def main():
@@ -486,7 +819,14 @@ def main():
     parser.add_argument('--patience', type=int, default=15, help='Early stopping patience')
     parser.add_argument('--quick', action='store_true', help='Quick test with subset of data')
     parser.add_argument('--device', type=str, default=None, help='Device to use (cuda, mps, cpu)')
+    parser.add_argument('--mlx', action='store_true',
+                       help='Use MLX backend (Apple Silicon only, faster on Mac)')
     args = parser.parse_args()
+
+    # MLX backend selection
+    if args.mlx:
+        train_with_mlx(args)
+        return
 
     print("=" * 60)
     print("TRANSFORMER TRAINING CONFIGURATION (Full Innings Context)")
@@ -512,6 +852,15 @@ def main():
     else:
         device = torch.device('cpu')
     print(f"Using device: {device}")
+
+    # MPS stability guidance for older PyTorch builds.
+    if device.type == 'mps':
+        os.environ.setdefault('PYTORCH_ENABLE_MPS_FALLBACK', '1')
+        torch_version = tuple(int(p) for p in torch.__version__.split('+')[0].split('.')[:2])
+        if torch_version <= (2, 0):
+            print("\n[WARNING] PyTorch 2.0.x on MPS is known to be unstable for some Transformer workloads.")
+            print("Recommended: use --mlx backend on Apple Silicon for this model.")
+            print("Fallback path enabled: PYTORCH_ENABLE_MPS_FALLBACK=1")
 
     # Load data
     print("\n--- LOADING DATA ---")
