@@ -357,6 +357,349 @@ print(f"{'='*60}\n")
 
 ---
 
+## Experiment Infrastructure
+
+The project includes a lightweight experiment system for running reproducible experiments, tracking results, and comparing runs. **This is the recommended way to test changes.**
+
+### Core Components
+
+| File | Purpose |
+|------|---------|
+| `scripts/feature_registry.py` | Central source of truth for all 63 features across 10 groups |
+| `scripts/run_experiment.py` | Runs full pipeline (parse → train → eval) from a YAML config |
+| `scripts/experiment_tracker.py` | Saves config + git state + metrics per experiment |
+| `scripts/compare_experiments.py` | Lists and compares experiment results |
+| `experiments/configs/*.yaml` | Declarative experiment definitions |
+| `experiments/results/` | Auto-generated experiment result directories |
+
+### Running an Experiment
+
+```bash
+# Full pipeline from config
+uv run python scripts/run_experiment.py experiments/configs/xgb_v3_baseline.yaml
+
+# Skip parsing (data hasn't changed)
+uv run python scripts/run_experiment.py experiments/configs/xgb_v3_baseline.yaml --skip-parsing
+
+# Only evaluation (model already trained)
+uv run python scripts/run_experiment.py experiments/configs/xgb_v3_baseline.yaml --only-eval
+
+# Preview commands without running
+uv run python scripts/run_experiment.py experiments/configs/xgb_v3_baseline.yaml --dry-run
+```
+
+### Experiment Config Format
+
+```yaml
+experiment:
+  name: "xgb_v3_baseline"
+  description: "XGBoost v3 with all features"
+  tags: ["xgboost", "v3", "baseline"]
+
+data:
+  version: "v3"
+  test_dir: "data/betting_test"
+  odds_file: "betting_odds_v3.json"
+
+features:
+  groups: [basic, player_stats, h2h, momentum, pressure, chase, medium,
+           player_metadata, matchup, type_based]
+  exclude: []           # Individual features to drop
+  include_extra: []     # Extra features to add
+
+model:
+  type: "xgboost"       # xgboost | lstm | transformer | mlp
+  hyperparameters:      # Model-specific params
+    n_estimators: 444
+    max_depth: 10
+    learning_rate: 0.24
+  tune: false
+  tune_trials: 50
+
+evaluation:
+  n_sims: 1000
+  parallel: false
+
+pipeline:
+  skip_parsing: false
+  skip_training: false
+  skip_evaluation: false
+```
+
+### Comparing Results
+
+```bash
+# List all experiments
+uv run python scripts/compare_experiments.py --list
+
+# Filter by tag
+uv run python scripts/compare_experiments.py --list --tag xgboost
+
+# Show single experiment details
+uv run python scripts/compare_experiments.py --show <exp_id>
+
+# Compare two experiments side by side
+uv run python scripts/compare_experiments.py <exp_id_1> <exp_id_2>
+```
+
+### What Gets Tracked
+
+Each experiment creates `experiments/results/{name}_{timestamp}_{git_hash}/` containing:
+- `config.yaml` — exact config used
+- `metadata.json` — git hash, branch, dirty flag, platform, step durations
+- `metrics.json` — evaluation results (log loss, brier score, ROI)
+- `training_metrics.json` — training accuracy/loss
+- `console_output.log` — captured stdout/stderr
+
+### Feature Registry
+
+All features are defined in `scripts/feature_registry.py` in 10 groups:
+
+| Group | Count | Examples |
+|-------|-------|---------|
+| `basic` | 16 | `score`, `wickets`, `run_rate`, `is_powerplay` |
+| `player_stats` | 14 | `batsman_avg`, `bowler_econ`, `batter_encoded` |
+| `h2h` | 2 | `h2h_avg`, `h2h_sr` |
+| `momentum` | 6 | `last_5_balls_runs`, `balls_since_boundary` |
+| `pressure` | 3 | `dot_percentage_recent`, `pressure_cooker_index` |
+| `chase` | 3 | `chase_target`, `run_rate_required`, `lead_gap` |
+| `medium` | 2 | `venue_avg_score`, `non_striker_sr` |
+| `player_metadata` | 6 | `batter_hand`, `bowler_arm`, `is_pace`, `batter_age` |
+| `matchup` | 3 | `spin_matchup_advantage`, `same_arm_matchup` |
+| `type_based` | 8 | `batter_avg_vs_pace`, `bowler_econ_vs_lhb` |
+
+```python
+from feature_registry import resolve_feature_list, get_feature_hash, V3_GROUPS
+
+# All v3 features (63)
+features = resolve_feature_list(V3_GROUPS)
+
+# Ablation: drop a group
+features = resolve_feature_list([g for g in V3_GROUPS if g != 'player_metadata'])
+
+# Drop individual features
+features = resolve_feature_list(V3_GROUPS, exclude=['batter_age', 'bowler_age'])
+
+# Get deterministic hash (for smart caching)
+hash_val = get_feature_hash(features)
+```
+
+---
+
+## Development Workflows
+
+### How to Add a New Feature
+
+**Step 1: Add the feature to `scripts/parsing_v2.py`**
+
+This is where raw JSON is transformed into ML features. Find the ball-processing loop and add your feature computation. Respect temporal integrity — the feature must only use data available before the ball is bowled.
+
+**Step 2: Register the feature in `scripts/feature_registry.py`**
+
+Add it to the appropriate group in `FEATURE_GROUPS`, or create a new group:
+
+```python
+# Add to existing group
+FEATURE_GROUPS['momentum'].append('new_momentum_feature')
+
+# Or create a new group
+FEATURE_GROUPS['team_strength'] = [
+    'team_batting_avg', 'team_batting_sr',
+    'opp_bowling_avg', 'opp_bowling_econ',
+]
+```
+
+**Step 3: Re-run parsing and test**
+
+```bash
+# Re-parse data (generates new parquet files with the feature)
+uv run python scripts/parsing_v2.py
+
+# Create an experiment config that includes your new feature group
+# Copy an existing config and add your group to features.groups
+
+# Run experiment
+uv run python scripts/run_experiment.py experiments/configs/your_config.yaml --skip-training
+
+# Or test manually
+uv run python scripts/xgboost_v2.py
+```
+
+**Step 4: Verify with ablation**
+
+Create two configs — one with and one without your feature — and compare:
+
+```bash
+uv run python scripts/run_experiment.py experiments/configs/with_feature.yaml --skip-parsing
+uv run python scripts/run_experiment.py experiments/configs/without_feature.yaml --skip-parsing
+uv run python scripts/compare_experiments.py <with_id> <without_id>
+```
+
+**Important**: Training scripts automatically filter to features that exist in the parquet data (`feature_cols = [c for c in features if c in df.columns]`), so adding a feature to the registry before it exists in the data won't crash — it just gets ignored.
+
+---
+
+### How to Add a New Model
+
+**Step 1: Create the training script**
+
+Create `scripts/your_model_v1.py`. Follow the pattern of existing scripts:
+- Accept `--config-json` CLI arg for experiment runner integration
+- Load data from `data/xgb_data_v3/*.parquet`
+- Use the same 6-class target mapping: `{0: dot, 1: one, 2: two, 3: four, 4: six, 5: wicket}`
+- Save model artifacts to `models/your_model_v1/`
+
+```python
+# Config integration pattern (add to argparse)
+parser.add_argument('--config-json', type=str, default=None,
+                    help='JSON config from experiment runner')
+
+# After parsing args:
+if args.config_json:
+    import json as _json
+    _config = _json.loads(args.config_json)
+    from feature_registry import resolve_feature_list
+    feature_cols = resolve_feature_list(
+        _config['features']['groups'],
+        _config['features'].get('exclude'),
+        _config['features'].get('include_extra'),
+    )
+else:
+    # Hardcoded default features (backward compatible)
+    feature_cols = [...]
+```
+
+**Step 2: Add a model wrapper to `scripts/sim_v1_2.py`**
+
+Create a class that implements the `PredictionModel` interface:
+
+```python
+class YourModelV1(PredictionModel):
+    def __init__(self, model_path, ...):
+        # Load model
+        # CRITICAL: use 6-class mapping
+        self.class_to_outcome = {
+            0: 'dot', 1: 'one', 2: 'two', 3: 'four', 4: 'six', 5: 'wicket'
+        }
+
+    def extract_features(self, state: MatchState) -> ...:
+        # Build feature vector from current match state
+
+    def predict_probabilities(self, features) -> np.ndarray:
+        # Return 6-class probability distribution
+```
+
+**Step 3: Register in `scripts/sim_eval/run_sim_eval.py`**
+
+Add your model type to the `--model-type` choices and the model loading logic.
+
+**Step 4: Add to experiment runner**
+
+In `scripts/run_experiment.py`, add your script to `build_training_cmd()`:
+
+```python
+script_map = {
+    "xgboost": "scripts/xgboost_v2.py",
+    "lstm": "scripts/lstm_v1.py",
+    "transformer": "scripts/transformer_v1.py",
+    "mlp": "scripts/mlp_v1.py",
+    "your_model": "scripts/your_model_v1.py",  # Add this
+}
+```
+
+**Step 5: Create experiment config and test**
+
+```bash
+# Create config
+cp experiments/configs/xgb_v3_baseline.yaml experiments/configs/your_model_baseline.yaml
+# Edit: change model.type to "your_model"
+
+# Run
+uv run python scripts/run_experiment.py experiments/configs/your_model_baseline.yaml --skip-parsing
+```
+
+---
+
+### How to Add New Match Data
+
+```bash
+# 1. Add match JSON files
+cp new_matches/*.json data/t20s_json/
+
+# 2. Re-run parsing (rebuilds cache + parquet)
+uv run python scripts/parsing_v2.py
+
+# 3. Retrain and evaluate
+uv run python scripts/run_experiment.py experiments/configs/xgb_v3_baseline.yaml
+```
+
+**For test/evaluation matches**: Add JSON files to `data/betting_test/` and update `betting_odds_v3.json` with corresponding odds.
+
+---
+
+### How to Run a Feature Ablation
+
+No code changes needed. Just create a config with the feature group removed:
+
+```bash
+# Copy baseline config
+cp experiments/configs/xgb_v3_baseline.yaml experiments/configs/xgb_v3_no_matchup.yaml
+
+# Edit: remove 'matchup' from features.groups
+# Edit: set pipeline.skip_parsing to true (data already exists)
+
+# Run
+uv run python scripts/run_experiment.py experiments/configs/xgb_v3_no_matchup.yaml
+
+# Compare
+uv run python scripts/compare_experiments.py <baseline_id> <ablation_id>
+```
+
+---
+
+### How to Tune Hyperparameters
+
+**XGBoost** (Optuna):
+```bash
+# Via experiment config: set model.tune: true and model.tune_trials: 50
+# Or directly:
+uv run python scripts/xgboost_v2.py --tune --n-trials 50
+```
+
+**Neural models** (LSTM/Transformer/MLP): Adjust hyperparameters in the experiment config under `model.hyperparameters`, or pass CLI args directly to the training script.
+
+---
+
+### Testing Checklist
+
+When making changes, verify:
+
+1. **Standalone scripts still work** (backward compatibility):
+   ```bash
+   uv run python scripts/xgboost_v2.py  # No --config-json
+   ```
+
+2. **Experiment runner works**:
+   ```bash
+   uv run python scripts/run_experiment.py experiments/configs/xgb_v3_baseline.yaml --dry-run
+   ```
+
+3. **Feature registry is consistent** (features resolve correctly):
+   ```bash
+   uv run python -c "from scripts.feature_registry import resolve_feature_list, V3_GROUPS; print(len(resolve_feature_list(V3_GROUPS)))"
+   ```
+
+4. **Simulated scores are realistic** (avg ~155-165 for T20s after bug fix):
+   ```bash
+   uv run python scripts/sim_eval/run_sim_eval.py --model-type xgboost --test-dir data/betting_test --odds betting_odds_v3.json --n-sims 10 --max-matches 3
+   ```
+
+5. **Class mapping is correct** (6 classes: dot, one, two, four, six, wicket):
+   - In `sim_v1_2.py`, every `class_to_outcome` dict must have exactly 6 entries
+   - Class 4 = 'six', Class 5 = 'wicket' (NOT the other way around)
+
+---
+
 ## Common Operations
 
 ### Operation 1: Retrain Model with New Data

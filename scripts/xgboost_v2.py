@@ -12,6 +12,8 @@ import argparse
 parser = argparse.ArgumentParser(description='Train XGBoost v3 model')
 parser.add_argument('--tune', action='store_true', help='Run Optuna hyperparameter tuning (slow, ~30-60 min)')
 parser.add_argument('--n-trials', type=int, default=50, help='Number of Optuna trials (default: 50)')
+parser.add_argument('--config-json', type=str, default=None,
+                    help='JSON config from experiment runner (overrides feature list and hyperparameters)')
 args = parser.parse_args()
 
 # Best hyperparameters from previous Optuna run (v2, trial 42)
@@ -136,82 +138,81 @@ print("Encoding complete!")
 # test_df['batter_encoded'] = safe_transform(le_batter, test_df['batter_id'])  
 # test_df['bowler_encoded'] = safe_transform(le_bowler, test_df['bowler_id'])
 
-# Select ALL available features (use comprehensive feature set)
-basic_features = [
-    'inning_idx', 'score', 'wickets', 'balls_bowled', 'run_rate',
-    'wickets_ratio', 'balls_ratio', 'wickets_in_hand', 'balls_remaining',
-    'is_powerplay', 'is_middle_overs', 'is_death_overs', 'balls_in_over',
-    'venue_encoded', 'is_toss_winner', 'is_batting_first',
-]
+# Resolve feature list: from config-json or hardcoded defaults
+if args.config_json:
+    import json as _json
+    _config = _json.loads(args.config_json)
+    from feature_registry import resolve_feature_list
+    all_potential_features = resolve_feature_list(
+        _config['features']['groups'],
+        _config['features'].get('exclude'),
+        _config['features'].get('include_extra'),
+    )
+    # Override hyperparameters if provided
+    _hp = _config.get('model', {}).get('hyperparameters', {})
+    if _hp:
+        DEFAULT_BEST_PARAMS.update(_hp)
+    print(f"[config-json] Using {len(all_potential_features)} features from experiment config")
+else:
+    # Original hardcoded feature list (default behavior)
+    basic_features = [
+        'inning_idx', 'score', 'wickets', 'balls_bowled', 'run_rate',
+        'wickets_ratio', 'balls_ratio', 'wickets_in_hand', 'balls_remaining',
+        'is_powerplay', 'is_middle_overs', 'is_death_overs', 'balls_in_over',
+        'venue_encoded', 'is_toss_winner', 'is_batting_first',
+    ]
 
-player_features = [
-    'batter_encoded', 'bowler_encoded', 'batsman_avg', 'batsman_sr',
-    'bowler_avg', 'bowler_econ',
-    'batsman_recent_avg', 'batsman_recent_sr',
-    'bowler_recent_avg', 'bowler_recent_econ',
-    # NEW: Per-innings batter/bowler stats
-    'batter_balls_faced', 'batter_runs_scored',
-    'bowler_balls_in_innings', 'bowler_overs_in_innings',
-]
+    player_features = [
+        'batter_encoded', 'bowler_encoded', 'batsman_avg', 'batsman_sr',
+        'bowler_avg', 'bowler_econ',
+        'batsman_recent_avg', 'batsman_recent_sr',
+        'bowler_recent_avg', 'bowler_recent_econ',
+        'batter_balls_faced', 'batter_runs_scored',
+        'bowler_balls_in_innings', 'bowler_overs_in_innings',
+    ]
 
-h2h_features = ['h2h_avg', 'h2h_sr']
+    h2h_features = ['h2h_avg', 'h2h_sr']
 
-momentum_features = [
-    'last_5_balls_runs', 'last_10_balls_runs', 'last_30_balls_runs',
-    'balls_since_boundary', 'last_10_dots',
-    'partnership_runs',  # NEW: Current partnership runs
-]
+    momentum_features = [
+        'last_5_balls_runs', 'last_10_balls_runs', 'last_30_balls_runs',
+        'balls_since_boundary', 'last_10_dots',
+        'partnership_runs',
+    ]
 
-pressure_features = [
-    'dot_percentage_recent', 'boundary_percentage_recent',
-    'pressure_cooker_index',  # NEW: RRR / wickets_remaining
-]
+    pressure_features = [
+        'dot_percentage_recent', 'boundary_percentage_recent',
+        'pressure_cooker_index',
+    ]
 
-# NEW: Chase features (2nd innings specific)
-chase_features = [
-    'chase_target', 'run_rate_required', 'lead_gap',  # chase_target = first innings score + 1
-]
+    chase_features = [
+        'chase_target', 'run_rate_required', 'lead_gap',
+    ]
 
-# NEW: Medium features (venue and partner stats)
-medium_features = [
-    'venue_avg_score',  # Historical venue average (temporal integrity)
-    'non_striker_sr',   # Non-striker's strike rate this innings
-]
+    medium_features = [
+        'venue_avg_score',
+        'non_striker_sr',
+    ]
 
-# NEW: Tier 1 - Player metadata features (hand, arm, type, age)
-player_metadata_features = [
-    'batter_hand',      # Encoded: 0=right, 1=left, 2=unknown
-    'bowler_arm',       # Encoded: 0=right, 1=left, 2=unknown
-    'is_pace',          # Encoded: 0=spin, 1=pace, 2=unknown
-    'bowling_type',     # Encoded: 0-8 for different types
-    'batter_age',       # Age in years (0 if unknown)
-    'bowler_age',       # Age in years (0 if unknown)
-]
+    player_metadata_features = [
+        'batter_hand', 'bowler_arm', 'is_pace', 'bowling_type',
+        'batter_age', 'bowler_age',
+    ]
 
-# NEW: Tier 2 - Matchup features
-matchup_features = [
-    'spin_matchup_advantage',  # -1, 0, or 1
-    'same_arm_matchup',        # -1 (unknown), 0 (different), 1 (same)
-    'matchup_type_encoded',    # Encoded matchup type (e.g., RHB_vs_offspin)
-]
+    matchup_features = [
+        'spin_matchup_advantage', 'same_arm_matchup', 'matchup_type_encoded',
+    ]
 
-# NEW: Tier 3 - Type-based historical stats
-type_based_features = [
-    'batter_avg_vs_pace',   # Batter's avg against pace bowlers
-    'batter_sr_vs_pace',    # Batter's SR against pace bowlers
-    'batter_avg_vs_spin',   # Batter's avg against spin bowlers
-    'batter_sr_vs_spin',    # Batter's SR against spin bowlers
-    'bowler_avg_vs_lhb',    # Bowler's avg against left-hand batters
-    'bowler_econ_vs_lhb',   # Bowler's economy against left-hand batters
-    'bowler_avg_vs_rhb',    # Bowler's avg against right-hand batters
-    'bowler_econ_vs_rhb',   # Bowler's economy against right-hand batters
-]
+    type_based_features = [
+        'batter_avg_vs_pace', 'batter_sr_vs_pace',
+        'batter_avg_vs_spin', 'batter_sr_vs_spin',
+        'bowler_avg_vs_lhb', 'bowler_econ_vs_lhb',
+        'bowler_avg_vs_rhb', 'bowler_econ_vs_rhb',
+    ]
 
-# Combine all features that exist in the data
-all_potential_features = (basic_features + player_features +
-                         h2h_features + momentum_features + pressure_features +
-                         chase_features + medium_features +
-                         player_metadata_features + matchup_features + type_based_features)
+    all_potential_features = (basic_features + player_features +
+                             h2h_features + momentum_features + pressure_features +
+                             chase_features + medium_features +
+                             player_metadata_features + matchup_features + type_based_features)
 
 # Only use features that actually exist in the dataframes
 feature_cols = [col for col in all_potential_features if col in train_df.columns]

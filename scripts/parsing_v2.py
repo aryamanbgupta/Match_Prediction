@@ -1020,6 +1020,18 @@ def process_folder_v2_with_splits(folder_path):
     print(f"  H2H matchups: {metadata['num_h2h_matchups']:,}")
     print(f"  Metadata saved to: {metadata_path}")
 
+    # Write feature hash for smart caching by experiment runner
+    try:
+        from feature_registry import get_feature_hash, resolve_feature_list, V3_GROUPS
+        _feature_list = resolve_feature_list(V3_GROUPS)
+        _hash_data = {"hash": get_feature_hash(_feature_list), "version": "v3", "n_features": len(_feature_list)}
+        import json as _json
+        with open(output_dir / '.feature_hash', 'w') as f:
+            _json.dump(_hash_data, f)
+        print(f"  Feature hash saved: {_hash_data['hash']}")
+    except ImportError:
+        pass  # feature_registry not available, skip
+
     return split_data, processed_files
 
 

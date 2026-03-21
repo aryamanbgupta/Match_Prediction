@@ -72,6 +72,7 @@ dependencies = [
     "typing-extensions==4.12.2",
     "wcwidth==0.2.13",
     "xgboost>=2.1.4",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]

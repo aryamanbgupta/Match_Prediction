@@ -774,7 +774,7 @@ def print_evaluation_summary(results: OverallEvaluationResults):
     print(f"Average Brier Score: {results.avg_brier_score:.4f}")
     print(f"Average Edge (magnitude): {results.avg_edge:.1%}")
     print(f"Average Signed Edge: {results.avg_signed_edge:+.1%} ({'overconfident' if results.avg_signed_edge < 0 else 'underconfident' if results.avg_signed_edge > 0 else 'neutral'})")
-    print(f"Profitable opportunities (edge > {BET_EDGE_THRESHOLD:.1%}): {results.profitable_bets}")
+    print(f"Matches with model-market disagreement: {results.profitable_bets}/{results.n_matches}")
     
     print(f"\n--- Betting Strategy Comparison ---")
     print(f"\nFlat Staking (1 unit per bet):")

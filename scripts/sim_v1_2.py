@@ -476,10 +476,11 @@ class XGBoostModelV2(PredictionModel):
         with open(feature_columns_path, 'r') as f:
             self.feature_columns = [line.strip() for line in f.readlines()]
 
-        # Map model output classes to our Outcome enum (same as v1)
+        # Map model output classes to our Outcome enum
+        # XGBoost trains with 6-class remapping: {0:dot, 1:one, 2:two, 4:four, 6:six, 7:wicket}
+        # → remapped to classes {0,1,2,3,4,5}
         self.class_to_outcome = {
-            0: 'dot', 1: 'one', 2: 'two', 3: 'four',
-            4: 'four', 5: 'six', 6: 'six', 7: 'wicket'
+            0: 'dot', 1: 'one', 2: 'two', 3: 'four', 4: 'six', 5: 'wicket'
         }
 
         stats_mode = "with real player stats" if stats_provider else "with zero stats (fallback)"
@@ -820,9 +821,10 @@ class XGBoostModel(PredictionModel):
         self.bowler_encoder = joblib.load(bowler_encoder_path)
         
         # Map model output classes to our Outcome enum
+        # XGBoost trains with 6-class remapping: {0:dot, 1:one, 2:two, 4:four, 6:six, 7:wicket}
+        # → remapped to classes {0,1,2,3,4,5}
         self.class_to_outcome = {
-            0: 'dot', 1: 'one', 2: 'two', 3: 'four',
-            4: 'four', 5: 'six', 6: 'six', 7: 'wicket'
+            0: 'dot', 1: 'one', 2: 'two', 3: 'four', 4: 'six', 5: 'wicket'
         }
 
     def extract_features(self, state: MatchState) -> np.ndarray:

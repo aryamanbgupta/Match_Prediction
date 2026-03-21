@@ -2,8 +2,8 @@
 
 **Agent Guide** - Concise overview for AI agents working on this codebase
 
-**Last Updated**: December 2024
-**Branch**: features/cricinfo-features
+**Last Updated**: March 2025
+**Branch**: features/transformer-model
 **Purpose**: Portfolio project - ML system for T20 cricket match prediction
 
 ---
@@ -106,6 +106,33 @@ uv run python scripts/convert_weights.py --input models/transformer_v1/transform
 
 **For detailed operations guide, see [docs/OPERATIONS.md](docs/OPERATIONS.md)**
 
+### Experiment-Based Workflow (Recommended)
+
+```bash
+# Run a full experiment (parse → train → evaluate) with one command
+uv run python scripts/run_experiment.py experiments/configs/xgb_v3_baseline.yaml
+
+# Skip parsing if data hasn't changed
+uv run python scripts/run_experiment.py experiments/configs/xgb_v3_baseline.yaml --skip-parsing
+
+# Only re-run evaluation (e.g. after a bug fix)
+uv run python scripts/run_experiment.py experiments/configs/xgb_v3_baseline.yaml --only-eval
+
+# Preview what will run without executing
+uv run python scripts/run_experiment.py experiments/configs/xgb_v3_baseline.yaml --dry-run
+
+# Run a feature ablation (no code changes needed)
+uv run python scripts/run_experiment.py experiments/configs/xgb_v3_no_metadata.yaml --skip-parsing
+
+# List all past experiments
+uv run python scripts/compare_experiments.py --list
+
+# Compare two experiments side by side
+uv run python scripts/compare_experiments.py <exp_id_1> <exp_id_2>
+```
+
+**For how to add new features, models, or data, see [docs/OPERATIONS.md#development-workflows](docs/OPERATIONS.md#development-workflows)**
+
 ---
 
 ## Architecture
@@ -187,6 +214,7 @@ Match_Prediction/
 │   ├── xgb/                    # Trained XGBoost model + encoders (v2)
 │   ├── xgb_v3/                 # Trained XGBoost model + encoders (v3)
 │   ├── lstm_v1/                # Trained LSTM model + encoders
+│   ├── transformer_v1/         # Trained Transformer model + encoders
 │   ├── cache_chunks/           # Player stats cache v2 (69 files)
 │   └── cache_chunks_v3/        # Player stats cache v3 (69 files, 7.6GB)
 │
@@ -194,21 +222,37 @@ Match_Prediction/
 │   ├── parsing_v2.py           # Feature engineering pipeline
 │   ├── xgboost_v2.py           # XGBoost training with Optuna
 │   ├── lstm_v1.py              # LSTM training script (PyTorch)
+│   ├── transformer_v1.py       # Transformer training script (PyTorch/MLX)
+│   ├── mlp_v1.py               # MLP baseline training script
 │   ├── sim_v1_2.py             # Monte Carlo simulation engine
 │   ├── stats_provider.py       # Lazy-loading stats access
 │   ├── player_metadata.py      # Player metadata provider
+│   ├── feature_registry.py     # Central feature definitions (single source of truth)
+│   ├── experiment_tracker.py   # Structured experiment result storage
+│   ├── run_experiment.py       # Pipeline runner (parse → train → eval)
+│   ├── compare_experiments.py  # Compare experiment results CLI
 │   └── sim_eval/               # Evaluation framework
 │       ├── run_sim_eval.py     # Main evaluation script
 │       ├── match_evaluator.py  # Metrics calculation
 │       └── loaders.py          # Data and odds loaders
 │
+├── experiments/
+│   ├── configs/                # YAML experiment configs
+│   │   ├── xgb_v3_baseline.yaml
+│   │   ├── xgb_v3_no_metadata.yaml
+│   │   ├── xgb_v3_no_type_based.yaml
+│   │   ├── lstm_v1_baseline.yaml
+│   │   └── transformer_v1_baseline.yaml
+│   └── results/                # Auto-generated experiment results
+│
 ├── docs/
-│   ├── OPERATIONS.md           # How to run pipelines
+│   ├── OPERATIONS.md           # How to run pipelines + development workflows
 │   ├── DATA_FORMATS.md         # Data specifications
 │   └── DESIGN_DECISIONS.md     # Architectural rationale
 │
 ├── CLAUDE.md                   # This file (concise overview)
 ├── CLAUDE_REFERENCE.md         # Complete technical reference
+├── IMPROVEMENTS.md             # Research findings + improvement roadmap
 ├── README.md                   # Public portfolio description
 └── TODO.md                     # Task list
 ```
@@ -359,6 +403,57 @@ print(f"India: {summary['win_probability']['India']:.1%}")
 - **Betting Performance**: ROI, win rate, total P&L
 
 **Usage**: `python scripts/sim_eval/run_sim_eval.py --test-dir data/betting_test --odds betting_odds_v3.json`
+
+---
+
+### 7. `scripts/feature_registry.py` - Feature Registry
+
+**Purpose**: Central source of truth for all features. Eliminates duplicate feature lists across training scripts.
+
+**Key Contents**:
+- `FEATURE_GROUPS`: Dict mapping group names → feature column lists (10 groups, 63 total features)
+- `resolve_feature_list(groups, exclude, include_extra)`: Build feature list from group names
+- `get_feature_hash(feature_list)`: Deterministic hash for smart caching
+- `V3_GROUPS` / `V2_GROUPS`: Convenience constants
+
+**Usage**:
+```python
+from feature_registry import resolve_feature_list, V3_GROUPS
+features = resolve_feature_list(V3_GROUPS)                          # All 63 features
+features = resolve_feature_list(V3_GROUPS, exclude=['batter_age'])  # Ablation
+```
+
+**When to modify**: When adding new features to the system. Add them to an existing group or create a new group.
+
+---
+
+### 8. `scripts/run_experiment.py` - Pipeline Runner
+
+**Purpose**: Run a complete experiment (parse → train → evaluate) from a single YAML config.
+
+**Usage**:
+```bash
+uv run python scripts/run_experiment.py experiments/configs/xgb_v3_baseline.yaml
+uv run python scripts/run_experiment.py experiments/configs/xgb_v3_baseline.yaml --skip-parsing
+uv run python scripts/run_experiment.py experiments/configs/xgb_v3_baseline.yaml --only-eval
+uv run python scripts/run_experiment.py experiments/configs/xgb_v3_baseline.yaml --dry-run
+```
+
+**Features**: Smart caching (skips parsing if feature hash unchanged), experiment tracking (saves config + git state + metrics), console output capture.
+
+---
+
+### 9. `scripts/compare_experiments.py` - Experiment Comparison
+
+**Purpose**: List and compare experiment results.
+
+**Usage**:
+```bash
+uv run python scripts/compare_experiments.py --list              # List all
+uv run python scripts/compare_experiments.py --list --tag xgboost # Filter by tag
+uv run python scripts/compare_experiments.py --show <exp_id>     # Show details
+uv run python scripts/compare_experiments.py <id_1> <id_2>       # Side-by-side comparison
+```
 
 ---
 
@@ -532,9 +627,14 @@ Enable `parallel=True` in SimulationConfig. Reduces simulations for testing.
 | `parsing_v2.py` | Feature engineering | Parquet files + cache chunks | [CLAUDE_REFERENCE.md](CLAUDE_REFERENCE.md#1-scriptsparsing_v2py---feature-engineering-pipeline) |
 | `xgboost_v2.py` | XGBoost training | Trained XGBoost model | [CLAUDE_REFERENCE.md](CLAUDE_REFERENCE.md#2-scriptsxgboost_v2py---model-training) |
 | `lstm_v1.py` | LSTM training | Trained LSTM model | See section 3 above |
+| `transformer_v1.py` | Transformer training | Trained Transformer model | See section above |
+| `mlp_v1.py` | MLP baseline training | Trained MLP model | — |
 | `stats_provider.py` | Temporal stats access | Player statistics | [CLAUDE_REFERENCE.md](CLAUDE_REFERENCE.md#3-scriptsstats_providerpy---temporal-stats-access-with-lazy-loading) |
 | `sim_v1_2.py` | Match simulation | Win probabilities | [CLAUDE_REFERENCE.md](CLAUDE_REFERENCE.md#4-scriptssim_v1_2py---monte-carlo-simulation-engine) |
 | `sim_eval/` | Evaluation | Performance metrics | [CLAUDE_REFERENCE.md](CLAUDE_REFERENCE.md#5-scriptssim_eval---evaluation-framework) |
+| `feature_registry.py` | Central feature defs | Feature lists + hashes | See section 7 above |
+| `run_experiment.py` | Pipeline runner | Experiment results | See section 8 above |
+| `compare_experiments.py` | Experiment comparison | Terminal tables | See section 9 above |
 
 ---
 
@@ -563,19 +663,22 @@ Enable `parallel=True` in SimulationConfig. Reduces simulations for testing.
 | Transformer | v1 | 63 | `models/transformer_v1/` |
 
 **Recent Updates**:
-- ✅ Player metadata features (Tier 1: hand, arm, pace/spin, age)
-- ✅ Matchup features (Tier 2: matchup_type, spin_advantage, same_arm)
-- ✅ Type-based historical stats (Tier 3: avg/sr vs pace/spin, vs LHB/RHB)
+- ✅ Fixed XGBoost class_to_outcome bug (was 8-class, now correct 6-class)
+- ✅ Fixed evaluation JSON output — now saves full betting metrics (P&L, ROI, win rate, Kelly) with timestamped filenames
+- ✅ Re-evaluated all 4 models post-bug-fix — all lose money (best: XGBoost -43.9% flat ROI). Root cause: no team-level signal.
+- ✅ Feature registry (`feature_registry.py`) — central feature definitions
+- ✅ Experiment infrastructure (config → runner → tracker → comparison)
+- ✅ Transformer model with MLX support (Apple Silicon)
+- ✅ Player metadata features (Tier 1/2/3)
 - ✅ Kelly Criterion betting evaluation
 - ✅ Temporal stats cache with lazy loading
 - ✅ Optuna hyperparameter tuning
 - ✅ LSTM model with sequence context (PyTorch)
 
 **Active Development** (see [TODO.md](TODO.md)):
-- Unknown player encoding
-- Additional features (weather, dew factor)
-- Full LSTM training and hyperparameter tuning
-- Transformer architecture exploration
+- Team-level features (team_batting_avg, relative_strength, etc.) — #1 priority
+- Calibration layer (isotonic regression, target ECE < 0.015)
+- Expand test set to 200+ matches
 
 ---
 
@@ -583,13 +686,15 @@ Enable `parallel=True` in SimulationConfig. Reduces simulations for testing.
 
 **For implementation details**: [CLAUDE_REFERENCE.md](CLAUDE_REFERENCE.md)
 **For operations guide**: [docs/OPERATIONS.md](docs/OPERATIONS.md)
+**For adding features/models/data**: [docs/OPERATIONS.md#development-workflows](docs/OPERATIONS.md#development-workflows)
 **For data specifications**: [docs/DATA_FORMATS.md](docs/DATA_FORMATS.md)
 **For design rationale**: [docs/DESIGN_DECISIONS.md](docs/DESIGN_DECISIONS.md)
+**For research & improvements**: [IMPROVEMENTS.md](IMPROVEMENTS.md)
 **For task list**: [TODO.md](TODO.md)
 
 ---
 
-**Branch**: features/cricinfo-features
+**Branch**: features/transformer-model
 **Python**: 3.11+
 **Dependencies**: See `requirements.txt`
 **System**: 16GB RAM, 10GB disk, 4+ CPU cores recommended

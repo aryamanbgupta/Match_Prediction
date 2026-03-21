@@ -1,0 +1,52 @@
+experiment:
+  name: "lstm_v1_baseline"
+  description: "LSTM v1 baseline with all features"
+  tags: ["lstm", "v1", "baseline"]
+
+data:
+  version: "v3"
+  test_dir: "data/betting_test"
+  odds_file: "betting_odds_v3.json"
+
+features:
+  groups:
+    - basic
+    - player_stats
+    - h2h
+    - momentum
+    - pressure
+    - chase
+    - medium
+    - player_metadata
+    - matchup
+    - type_based
+  exclude:
+    - venue_encoded
+    - is_toss_winner
+    - is_batting_first
+  include_extra: []
+
+model:
+  type: "lstm"
+  hyperparameters:
+    epochs: 50
+    batch_size: 512
+    hidden_size: 256
+    num_layers: 2
+    dropout: 0.3
+    lr: 0.0003
+    weight_decay: 0.01
+    warmup_epochs: 5
+    window_size: 10
+    focal_gamma: 2.0
+    label_smoothing: 0.1
+  tune: false
+
+evaluation:
+  n_sims: 1000
+  parallel: false
+
+pipeline:
+  skip_parsing: true
+  skip_training: false
+  skip_evaluation: false

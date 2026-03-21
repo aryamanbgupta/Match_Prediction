@@ -213,6 +213,8 @@ def main():
     parser.add_argument('--lr', type=float, default=1e-3, help='Learning rate')
     parser.add_argument('--quick', action='store_true', help='Quick test with 5% data')
     parser.add_argument('--device', type=str, default='auto', help='Device (cpu/cuda/mps/auto)')
+    parser.add_argument('--config-json', type=str, default=None,
+                        help='JSON config from experiment runner (overrides feature list)')
     args = parser.parse_args()
     
     # Device selection
@@ -264,53 +266,65 @@ def main():
     
     print(f"Class distribution:\n{train_df['target'].value_counts().sort_index()}")
     
-    # Define feature columns (same as XGBoost v3)
+    # Define feature columns
     print("\n--- Preparing Features ---")
-    basic_features = [
-        'inning_idx', 'score', 'wickets', 'balls_bowled', 'run_rate',
-        'wickets_ratio', 'balls_ratio', 'wickets_in_hand', 'balls_remaining',
-        'is_powerplay', 'is_middle_overs', 'is_death_overs', 'balls_in_over',
-    ]
-    
-    player_features = [
-        'batter_encoded', 'bowler_encoded',
-        'batsman_avg', 'batsman_sr', 'bowler_avg', 'bowler_econ',
-        'batter_runs_scored', 'batter_balls_faced',
-        'bowler_balls_in_innings', 'bowler_overs_in_innings',
-    ]
-    
-    h2h_features = ['h2h_avg', 'h2h_sr']
-    
-    momentum_features = [
-        'last_5_balls_runs', 'last_10_balls_runs', 'last_30_balls_runs',
-        'balls_since_boundary', 'last_10_dots',
-    ]
-    
-    pressure_features = ['dot_percentage_recent', 'boundary_percentage_recent']
-    chase_features = ['chase_target', 'run_rate_required', 'lead_gap']
-    medium_features = ['venue_avg_score', 'non_striker_sr', 'partnership_runs']
-    
-    player_metadata_features = [
-        'batter_hand', 'bowler_arm', 'is_pace', 'bowling_type',
-        'batter_age', 'bowler_age',
-    ]
-    
-    matchup_features = ['matchup_type_encoded', 'spin_matchup_advantage', 'same_arm_matchup']
-    
-    type_based_features = [
-        'batter_avg_vs_pace', 'batter_sr_vs_pace',
-        'batter_avg_vs_spin', 'batter_sr_vs_spin',
-        'bowler_avg_vs_lhb', 'bowler_econ_vs_lhb',
-        'bowler_avg_vs_rhb', 'bowler_econ_vs_rhb',
-    ]
-    
-    advanced_features = ['pressure_cooker_index']
-    
-    all_features = (basic_features + player_features + h2h_features + 
-                   momentum_features + pressure_features + chase_features +
-                   medium_features + player_metadata_features + matchup_features +
-                   type_based_features + advanced_features)
-    
+    if args.config_json:
+        import json as _json
+        _config = _json.loads(args.config_json)
+        from feature_registry import resolve_feature_list
+        all_features = resolve_feature_list(
+            _config['features']['groups'],
+            _config['features'].get('exclude'),
+            _config['features'].get('include_extra'),
+        )
+        print(f"[config-json] Using {len(all_features)} features from experiment config")
+    else:
+        # Original hardcoded feature list (default behavior)
+        basic_features = [
+            'inning_idx', 'score', 'wickets', 'balls_bowled', 'run_rate',
+            'wickets_ratio', 'balls_ratio', 'wickets_in_hand', 'balls_remaining',
+            'is_powerplay', 'is_middle_overs', 'is_death_overs', 'balls_in_over',
+        ]
+
+        player_features = [
+            'batter_encoded', 'bowler_encoded',
+            'batsman_avg', 'batsman_sr', 'bowler_avg', 'bowler_econ',
+            'batter_runs_scored', 'batter_balls_faced',
+            'bowler_balls_in_innings', 'bowler_overs_in_innings',
+        ]
+
+        h2h_features = ['h2h_avg', 'h2h_sr']
+
+        momentum_features = [
+            'last_5_balls_runs', 'last_10_balls_runs', 'last_30_balls_runs',
+            'balls_since_boundary', 'last_10_dots',
+        ]
+
+        pressure_features = ['dot_percentage_recent', 'boundary_percentage_recent']
+        chase_features = ['chase_target', 'run_rate_required', 'lead_gap']
+        medium_features = ['venue_avg_score', 'non_striker_sr', 'partnership_runs']
+
+        player_metadata_features = [
+            'batter_hand', 'bowler_arm', 'is_pace', 'bowling_type',
+            'batter_age', 'bowler_age',
+        ]
+
+        matchup_features = ['matchup_type_encoded', 'spin_matchup_advantage', 'same_arm_matchup']
+
+        type_based_features = [
+            'batter_avg_vs_pace', 'batter_sr_vs_pace',
+            'batter_avg_vs_spin', 'batter_sr_vs_spin',
+            'bowler_avg_vs_lhb', 'bowler_econ_vs_lhb',
+            'bowler_avg_vs_rhb', 'bowler_econ_vs_rhb',
+        ]
+
+        advanced_features = ['pressure_cooker_index']
+
+        all_features = (basic_features + player_features + h2h_features +
+                       momentum_features + pressure_features + chase_features +
+                       medium_features + player_metadata_features + matchup_features +
+                       type_based_features + advanced_features)
+
     # Filter to features that exist in data
     feature_cols = [f for f in all_features if f in train_df.columns]
     print(f"Using {len(feature_cols)} features")

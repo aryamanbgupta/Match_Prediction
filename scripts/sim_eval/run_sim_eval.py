@@ -336,19 +336,17 @@ def main():
     print_evaluation_summary(results)
     
     # Save detailed results
-    save_results = False
-    output_path = 'match_evaluation_results.json'
-    
+    save_results = True
+    from datetime import datetime as _dt
+    _timestamp = _dt.now().strftime('%Y%m%d_%H%M%S')
+
     if args.output_dir:
-        # Auto-save to specified directory
+        # Auto-save to specified directory with timestamp
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-        output_path = f"{args.output_dir}/{args.model_type}_v1_results.json"
-        save_results = True
+        output_path = f"{args.output_dir}/{args.model_type}_{_timestamp}.json"
     else:
-        # Interactive prompt
-        print("\n\nWould you like to save detailed results? (y/n): ", end='')
-        if input().lower() == 'y':
-            save_results = True
+        # Auto-save to default path with timestamp
+        output_path = f"match_evaluation_results_{args.model_type}_{_timestamp}.json"
     
     if save_results:
         import json
@@ -361,21 +359,49 @@ def main():
                 'avg_log_loss': results.avg_log_loss,
                 'avg_brier_score': results.avg_brier_score,
                 'avg_edge': results.avg_edge,
-                'profitable_bets': results.profitable_bets,
+                'avg_signed_edge': results.avg_signed_edge,
+                # Flat staking
+                'flat_betting_total_pnl': results.total_pnl,
+                'flat_betting_roi_pct': results.roi,
+                'flat_betting_win_rate': results.win_rate,
+                'flat_betting_bets_placed': results.bets_placed,
+                'flat_betting_sharpe': results.sharpe_ratio_flat,
+                # Full Kelly
+                'full_kelly_total_pnl': results.full_kelly_total_pnl,
+                'full_kelly_roi_pct': results.full_kelly_roi,
+                'full_kelly_win_rate': results.full_kelly_win_rate,
+                'full_kelly_bets_placed': results.full_kelly_bets_placed,
+                'full_kelly_sharpe': results.sharpe_ratio_full_kelly,
+                # Fractional Kelly
+                'frac_kelly_total_pnl': results.fractional_kelly_total_pnl,
+                'frac_kelly_roi_pct': results.fractional_kelly_roi,
+                'frac_kelly_win_rate': results.fractional_kelly_win_rate,
+                'frac_kelly_bets_placed': results.fractional_kelly_bets_placed,
+                'frac_kelly_sharpe': results.sharpe_ratio_fractional_kelly,
+                # Expected value
+                'total_expected_value': results.total_expected_value,
+                # Metadata
                 'total_time': results.total_simulation_time
             },
             'matches': []
         }
-        
+
         for match in results.match_results:
             results_dict['matches'].append({
                 'match_id': match.match_id,
                 'teams': [match.team1, match.team2],
+                'actual_winner': match.actual_winner,
                 'simulated_prob': match.simulated_win_prob,
                 'market_prob': match.market_win_prob,
+                'market_odds': match.market_odds,
                 'edge': match.edge,
                 'log_loss': match.log_loss,
-                'brier_score': match.brier_score
+                'brier_score': match.brier_score,
+                'realized_pnl': match.realized_pnl,
+                'expected_value': match.expected_value,
+                'full_kelly_fraction': match.full_kelly_fraction,
+                'full_kelly_pnl': match.full_kelly_pnl,
+                'fractional_kelly_pnl': match.fractional_kelly_pnl,
             })
         
         with open(output_path, 'w') as f:

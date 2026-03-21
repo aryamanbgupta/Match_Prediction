@@ -568,27 +568,39 @@ def train_with_mlx(args):
         df['venue_encoded'] = le_venue.transform(df['venue'].astype(str)) + 1
         df['matchup_type_encoded'] = le_matchup.transform(df['matchup_type'].astype(str)) + 1
 
-    # Define feature columns (same as PyTorch version)
-    feature_cols = [
-        'inning_idx', 'score', 'wickets', 'balls_bowled', 'run_rate',
-        'wickets_ratio', 'balls_ratio', 'wickets_in_hand', 'balls_remaining',
-        'is_powerplay', 'is_middle_overs', 'is_death_overs', 'balls_in_over',
-        'is_toss_winner', 'is_batting_first',
-        'batsman_avg', 'batsman_sr', 'bowler_avg', 'bowler_econ',
-        'batsman_recent_avg', 'batsman_recent_sr', 'bowler_recent_avg', 'bowler_recent_econ',
-        'batter_balls_faced', 'batter_runs_scored', 'bowler_balls_in_innings', 'bowler_overs_in_innings',
-        'h2h_avg', 'h2h_sr',
-        'last_5_balls_runs', 'last_10_balls_runs', 'last_30_balls_runs',
-        'balls_since_boundary', 'last_10_dots', 'partnership_runs',
-        'dot_percentage_recent', 'boundary_percentage_recent', 'pressure_cooker_index',
-        'chase_target', 'run_rate_required', 'lead_gap',
-        'venue_avg_score', 'non_striker_sr',
-        'batter_hand', 'bowler_arm', 'is_pace', 'bowling_type', 'batter_age', 'bowler_age',
-        'spin_matchup_advantage', 'same_arm_matchup',
-        'batter_avg_vs_pace', 'batter_sr_vs_pace', 'batter_avg_vs_spin', 'batter_sr_vs_spin',
-        'bowler_avg_vs_lhb', 'bowler_econ_vs_lhb', 'bowler_avg_vs_rhb', 'bowler_econ_vs_rhb',
-        'batter_encoded', 'bowler_encoded', 'venue_encoded', 'matchup_type_encoded',
-    ]
+    # Define feature columns
+    if args.config_json:
+        import json as _json
+        _config = _json.loads(args.config_json)
+        from feature_registry import resolve_feature_list
+        feature_cols = resolve_feature_list(
+            _config['features']['groups'],
+            _config['features'].get('exclude'),
+            _config['features'].get('include_extra'),
+        )
+        print(f"[config-json] Using {len(feature_cols)} features from experiment config")
+    else:
+        # Original hardcoded feature list (default behavior)
+        feature_cols = [
+            'inning_idx', 'score', 'wickets', 'balls_bowled', 'run_rate',
+            'wickets_ratio', 'balls_ratio', 'wickets_in_hand', 'balls_remaining',
+            'is_powerplay', 'is_middle_overs', 'is_death_overs', 'balls_in_over',
+            'is_toss_winner', 'is_batting_first',
+            'batsman_avg', 'batsman_sr', 'bowler_avg', 'bowler_econ',
+            'batsman_recent_avg', 'batsman_recent_sr', 'bowler_recent_avg', 'bowler_recent_econ',
+            'batter_balls_faced', 'batter_runs_scored', 'bowler_balls_in_innings', 'bowler_overs_in_innings',
+            'h2h_avg', 'h2h_sr',
+            'last_5_balls_runs', 'last_10_balls_runs', 'last_30_balls_runs',
+            'balls_since_boundary', 'last_10_dots', 'partnership_runs',
+            'dot_percentage_recent', 'boundary_percentage_recent', 'pressure_cooker_index',
+            'chase_target', 'run_rate_required', 'lead_gap',
+            'venue_avg_score', 'non_striker_sr',
+            'batter_hand', 'bowler_arm', 'is_pace', 'bowling_type', 'batter_age', 'bowler_age',
+            'spin_matchup_advantage', 'same_arm_matchup',
+            'batter_avg_vs_pace', 'batter_sr_vs_pace', 'batter_avg_vs_spin', 'batter_sr_vs_spin',
+            'bowler_avg_vs_lhb', 'bowler_econ_vs_lhb', 'bowler_avg_vs_rhb', 'bowler_econ_vs_rhb',
+            'batter_encoded', 'bowler_encoded', 'venue_encoded', 'matchup_type_encoded',
+        ]
     feature_cols = [c for c in feature_cols if c in train_df.columns]
 
     categorical_cols = {
@@ -821,6 +833,8 @@ def main():
     parser.add_argument('--device', type=str, default=None, help='Device to use (cuda, mps, cpu)')
     parser.add_argument('--mlx', action='store_true',
                        help='Use MLX backend (Apple Silicon only, faster on Mac)')
+    parser.add_argument('--config-json', type=str, default=None,
+                        help='JSON config from experiment runner (overrides feature list)')
     args = parser.parse_args()
 
     # MLX backend selection
