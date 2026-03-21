@@ -616,6 +616,24 @@ class XGBoostModelV2(PredictionModel):
                     'bowler_avg_vs_lhb': 0.0, 'bowler_econ_vs_lhb': 0.0,
                     'bowler_avg_vs_rhb': 0.0, 'bowler_econ_vs_rhb': 0.0,
                 })
+
+            # Team strength features (ELO + aggregated stats)
+            bat_player_ids = [p.player_id for p in state.batting_lineup.players]
+            bowl_player_ids = [p.player_id for p in state.bowling_lineup.players]
+
+            features['striker_elo'] = self.stats_provider.get_batting_elo(striker.player_id, state.match_date)
+            features['bowler_elo_rating'] = self.stats_provider.get_bowling_elo(bowler.player_id, state.match_date)
+
+            batting_team_elo = self.stats_provider.get_team_batting_elo(bat_player_ids, state.match_date)
+            bowling_team_elo = self.stats_provider.get_team_bowling_elo(bowl_player_ids, state.match_date)
+            features['batting_team_elo'] = batting_team_elo
+            features['bowling_team_elo'] = bowling_team_elo
+            features['elo_diff'] = batting_team_elo - bowling_team_elo
+
+            bat_strength = self.stats_provider.get_team_batting_strength(bat_player_ids, state.match_date)
+            bowl_strength = self.stats_provider.get_team_bowling_strength(bowl_player_ids, state.match_date)
+            features.update(bat_strength)
+            features.update(bowl_strength)
         else:
             # Fallback to zeros if no stats provider
             features.update({
@@ -631,6 +649,11 @@ class XGBoostModelV2(PredictionModel):
                 'batter_avg_vs_spin': 0.0, 'batter_sr_vs_spin': 0.0,
                 'bowler_avg_vs_lhb': 0.0, 'bowler_econ_vs_lhb': 0.0,
                 'bowler_avg_vs_rhb': 0.0, 'bowler_econ_vs_rhb': 0.0,
+                # Team strength fallbacks
+                'striker_elo': 1500.0, 'bowler_elo_rating': 1500.0,
+                'batting_team_elo': 16500.0, 'bowling_team_elo': 16500.0, 'elo_diff': 0.0,
+                'team_batting_avg': 0.0, 'team_batting_sr': 0.0,
+                'team_bowling_avg': 0.0, 'team_bowling_econ': 0.0,
             })
 
         # NEW: Player metadata features (Tier 1 and 2)
@@ -1537,6 +1560,19 @@ class MLPModelV1(PredictionModel):
             else:
                 features['bowler_avg_vs_lhb'] = features['bowler_econ_vs_lhb'] = 0.0
                 features['bowler_avg_vs_rhb'] = features['bowler_econ_vs_rhb'] = 0.0
+
+            # Team strength features (ELO + aggregated stats)
+            bat_player_ids = [p.player_id for p in state.batting_lineup.players]
+            bowl_player_ids = [p.player_id for p in state.bowling_lineup.players]
+            features['striker_elo'] = self.stats_provider.get_batting_elo(str(striker.player_id), match_date)
+            features['bowler_elo_rating'] = self.stats_provider.get_bowling_elo(str(bowler.player_id), match_date)
+            batting_team_elo = self.stats_provider.get_team_batting_elo(bat_player_ids, match_date)
+            bowling_team_elo = self.stats_provider.get_team_bowling_elo(bowl_player_ids, match_date)
+            features['batting_team_elo'] = batting_team_elo
+            features['bowling_team_elo'] = bowling_team_elo
+            features['elo_diff'] = batting_team_elo - bowling_team_elo
+            features.update(self.stats_provider.get_team_batting_strength(bat_player_ids, match_date))
+            features.update(self.stats_provider.get_team_bowling_strength(bowl_player_ids, match_date))
         else:
             features['batsman_avg'] = 25.0
             features['batsman_sr'] = 125.0
@@ -1549,6 +1585,15 @@ class MLPModelV1(PredictionModel):
             features['batter_avg_vs_spin'] = features['batter_sr_vs_spin'] = 0.0
             features['bowler_avg_vs_lhb'] = features['bowler_econ_vs_lhb'] = 0.0
             features['bowler_avg_vs_rhb'] = features['bowler_econ_vs_rhb'] = 0.0
+            features['striker_elo'] = 1500.0
+            features['bowler_elo_rating'] = 1500.0
+            features['batting_team_elo'] = 16500.0
+            features['bowling_team_elo'] = 16500.0
+            features['elo_diff'] = 0.0
+            features['team_batting_avg'] = 0.0
+            features['team_batting_sr'] = 0.0
+            features['team_bowling_avg'] = 0.0
+            features['team_bowling_econ'] = 0.0
 
         # Player metadata features
         if self.player_metadata:
@@ -1928,6 +1973,19 @@ class MLPModelV2(PredictionModel):
             else:
                 features['bowler_avg_vs_lhb'] = features['bowler_econ_vs_lhb'] = 0.0
                 features['bowler_avg_vs_rhb'] = features['bowler_econ_vs_rhb'] = 0.0
+
+            # Team strength features (ELO + aggregated stats)
+            bat_player_ids = [p.player_id for p in state.batting_lineup.players]
+            bowl_player_ids = [p.player_id for p in state.bowling_lineup.players]
+            features['striker_elo'] = self.stats_provider.get_batting_elo(str(striker.player_id), match_date)
+            features['bowler_elo_rating'] = self.stats_provider.get_bowling_elo(str(bowler.player_id), match_date)
+            batting_team_elo = self.stats_provider.get_team_batting_elo(bat_player_ids, match_date)
+            bowling_team_elo = self.stats_provider.get_team_bowling_elo(bowl_player_ids, match_date)
+            features['batting_team_elo'] = batting_team_elo
+            features['bowling_team_elo'] = bowling_team_elo
+            features['elo_diff'] = batting_team_elo - bowling_team_elo
+            features.update(self.stats_provider.get_team_batting_strength(bat_player_ids, match_date))
+            features.update(self.stats_provider.get_team_bowling_strength(bowl_player_ids, match_date))
         else:
             features['batsman_avg'] = 25.0
             features['batsman_sr'] = 125.0
@@ -1944,6 +2002,15 @@ class MLPModelV2(PredictionModel):
             features['batter_avg_vs_spin'] = features['batter_sr_vs_spin'] = 0.0
             features['bowler_avg_vs_lhb'] = features['bowler_econ_vs_lhb'] = 0.0
             features['bowler_avg_vs_rhb'] = features['bowler_econ_vs_rhb'] = 0.0
+            features['striker_elo'] = 1500.0
+            features['bowler_elo_rating'] = 1500.0
+            features['batting_team_elo'] = 16500.0
+            features['bowling_team_elo'] = 16500.0
+            features['elo_diff'] = 0.0
+            features['team_batting_avg'] = 0.0
+            features['team_batting_sr'] = 0.0
+            features['team_bowling_avg'] = 0.0
+            features['team_bowling_econ'] = 0.0
 
         # Player metadata
         if self.player_metadata:

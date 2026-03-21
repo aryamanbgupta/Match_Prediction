@@ -16,6 +16,103 @@ from player_metadata import (
     encode_bowling_type
 )
 
+ICC_FULL_MEMBERS = {
+    'India', 'Australia', 'England', 'South Africa', 'New Zealand',
+    'Pakistan', 'Sri Lanka', 'West Indies', 'Bangladesh',
+    'Zimbabwe', 'Afghanistan', 'Ireland'
+}
+
+PREMIUM_LEAGUES = {
+    'Indian Premier League', 'Big Bash League', 'Caribbean Premier League',
+    'SA20', 'International League T20', 'Major League Cricket',
+    'Pakistan Super League'
+}
+
+STANDARD_LEAGUES = {
+    'Vitality Blast', 'NatWest T20 Blast', 'CSA T20 Challenge',
+    'Ram Slam T20 Challenge', 'Super Smash', 'Bangladesh Premier League'
+}
+
+def classify_match_k_factor(event_name, team_type, teams):
+    """Return K-factor based on match importance."""
+    event_lower = event_name.lower()
+
+    # ICC events (World Cup, World Twenty20)
+    if 'world cup' in event_lower or 'world twenty20' in event_lower:
+        return 4.0
+
+    # Premium franchise leagues
+    if event_name in PREMIUM_LEAGUES:
+        return 4.0
+
+    # Standard leagues
+    if event_name in STANDARD_LEAGUES:
+        return 2.0
+
+    # International matches
+    if team_type == 'international':
+        full_member_count = sum(1 for t in teams if t in ICC_FULL_MEMBERS)
+        if full_member_count >= 2:
+            return 4.0  # Both full members
+        elif full_member_count == 1:
+            return 2.0  # One full member vs associate
+        else:
+            return 1.0  # Both associates
+
+    # Default for unknown leagues/domestic
+    return 1.0
+
+
+class PlayerEloTracker:
+    """Ball-by-ball ELO for batters and bowlers.
+
+    Each delivery is a mini-match: batter vs bowler.
+    Scoring above expected = batter "wins", below = bowler "wins".
+    ELO follows the player across all leagues (implicit cross-league calibration).
+    """
+    DEFAULT_ELO = 1500.0
+    DEFAULT_K_FACTOR = 4.0
+
+    def __init__(self):
+        self.batting_elo = {}   # player_id -> float
+        self.bowling_elo = {}   # player_id -> float
+
+    def get_batting_elo(self, player_id):
+        return self.batting_elo.get(player_id, self.DEFAULT_ELO)
+
+    def get_bowling_elo(self, player_id):
+        return self.bowling_elo.get(player_id, self.DEFAULT_ELO)
+
+    def update(self, batter_id, bowler_id, runs, is_wicket, k_factor=None):
+        """Update ELO after a ball."""
+        k = k_factor if k_factor is not None else self.DEFAULT_K_FACTOR
+        bat_elo = self.get_batting_elo(batter_id)
+        bowl_elo = self.get_bowling_elo(bowler_id)
+
+        # Expected outcome (from batter's perspective)
+        expected_batter = 1.0 / (1.0 + 10 ** ((bowl_elo - bat_elo) / 400.0))
+
+        # Actual outcome: linear mapping to [0, 1] scale
+        # wicket=0.0, dot=0.4, 1=0.5, 2=0.6, 3=0.7, 4=0.8, 6=1.0
+        # E[actual] ≈ 0.50 across typical T20 ball distribution
+        if is_wicket:
+            actual_batter = 0.0
+        else:
+            actual_batter = min(0.4 + runs * 0.1, 1.0)
+
+        # ELO update
+        self.batting_elo[batter_id] = bat_elo + k * (actual_batter - expected_batter)
+        self.bowling_elo[bowler_id] = bowl_elo + k * ((1 - actual_batter) - (1 - expected_batter))
+
+    def get_team_batting_elo(self, player_ids):
+        """Sum of batting ELOs for a list of player IDs."""
+        return sum(self.get_batting_elo(pid) for pid in player_ids)
+
+    def get_team_bowling_elo(self, player_ids):
+        """Sum of bowling ELOs for a list of player IDs."""
+        return sum(self.get_bowling_elo(pid) for pid in player_ids)
+
+
 class PlayerStatsTracker:
     """
     DESIGN DECISION: Separate class for player stats to maintain state across matches.
@@ -280,7 +377,7 @@ class VenueStatsTracker:
         return {venue: dict(stats) for venue, stats in self.venue_stats.items()}
 
 
-def deep_copy_stats(tracker, venue_tracker=None):
+def deep_copy_stats(tracker, venue_tracker=None, elo_tracker=None):
     """
     Create a deep copy of tracker stats at current state.
     This represents what we knew at this point in time for simulations.
@@ -315,6 +412,11 @@ def deep_copy_stats(tracker, venue_tracker=None):
     # Include venue stats if tracker provided
     if venue_tracker is not None:
         snapshot['venue'] = venue_tracker.get_all_venue_stats()
+
+    # Include ELO ratings if tracker provided
+    if elo_tracker is not None:
+        snapshot['batting_elo'] = dict(elo_tracker.batting_elo)
+        snapshot['bowling_elo'] = dict(elo_tracker.bowling_elo)
 
     return snapshot
 
@@ -525,7 +627,7 @@ def calculate_pressure_features(state, innings_calc):
     return features
 
 
-def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None, player_metadata=None):
+def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None, player_metadata=None, elo_tracker=None, match_k_factor=None):
     """
     DESIGN DECISION: Pass tracker as parameter rather than global.
     REASONING: Makes dependencies explicit, easier to test, allows multiple trackers
@@ -569,6 +671,45 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None, pla
 
     player_stats_tracker.start_match()
 
+    # Compute team-level features BEFORE the match (constant for all balls)
+    # Resolve lineup player IDs for both teams
+    team_features_by_team = {}  # team_name -> {features}
+    teams = match_info['teams']
+    for team_name in teams:
+        lineup_names = data['info'].get('players', {}).get(team_name, [])
+        lineup_ids = [player_registry.get(name, name) for name in lineup_names]
+
+        # Team ELO (sum of individual ELOs)
+        if elo_tracker is not None:
+            t_bat_elo = elo_tracker.get_team_batting_elo(lineup_ids)
+            t_bowl_elo = elo_tracker.get_team_bowling_elo(lineup_ids)
+        else:
+            t_bat_elo = PlayerEloTracker.DEFAULT_ELO * len(lineup_ids)
+            t_bowl_elo = PlayerEloTracker.DEFAULT_ELO * len(lineup_ids)
+
+        # Aggregated player stats (from historical cache)
+        bat_avgs, bat_srs = [], []
+        bowl_avgs, bowl_econs = [], []
+        for pid in lineup_ids:
+            bstats = player_stats_tracker.get_batting_features(pid)
+            if bstats['batsman_avg'] > 0:
+                bat_avgs.append(bstats['batsman_avg'])
+                bat_srs.append(bstats['batsman_sr'])
+            bwstats = player_stats_tracker.get_bowling_features(pid)
+            if bwstats['bowler_avg'] > 0:
+                bowl_avgs.append(bwstats['bowler_avg'])
+                bowl_econs.append(bwstats['bowler_econ'])
+
+        team_features_by_team[team_name] = {
+            'team_batting_elo': t_bat_elo,
+            'team_bowling_elo': t_bowl_elo,
+            'lineup_ids': lineup_ids,
+            'team_batting_avg': sum(bat_avgs) / len(bat_avgs) if bat_avgs else 0.0,
+            'team_batting_sr': sum(bat_srs) / len(bat_srs) if bat_srs else 0.0,
+            'team_bowling_avg': sum(bowl_avgs) / len(bowl_avgs) if bowl_avgs else 0.0,
+            'team_bowling_econ': sum(bowl_econs) / len(bowl_econs) if bowl_econs else 0.0,
+        }
+
     all_balls = []
     innings_totals = []  # Track innings totals for venue stats update
 
@@ -582,6 +723,21 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None, pla
 
         # NEW: Calculate target for 2nd innings
         target = first_innings_score + 1 if inning_idx == 2 else 0
+
+        # Resolve batting/bowling team for this innings
+        batting_team_name = inning.get('team', teams[inning_idx - 1] if inning_idx <= len(teams) else 'unknown')
+        bowling_team_name = [t for t in teams if t != batting_team_name][0] if len(teams) == 2 else 'unknown'
+
+        # Get team-level features for this innings
+        bat_team_feats = team_features_by_team.get(batting_team_name, {})
+        bowl_team_feats = team_features_by_team.get(bowling_team_name, {})
+        batting_team_elo = bat_team_feats.get('team_batting_elo', PlayerEloTracker.DEFAULT_ELO * 11)
+        bowling_team_elo = bowl_team_feats.get('team_bowling_elo', PlayerEloTracker.DEFAULT_ELO * 11)
+        elo_diff = batting_team_elo - bowling_team_elo
+        team_batting_avg = bat_team_feats.get('team_batting_avg', 0.0)
+        team_batting_sr = bat_team_feats.get('team_batting_sr', 0.0)
+        team_bowling_avg = bowl_team_feats.get('team_bowling_avg', 0.0)
+        team_bowling_econ = bowl_team_feats.get('team_bowling_econ', 0.0)
 
         # DESIGN DECISION: Reset innings calculator per innings
         # REASONING: Momentum features should not carry over between innings
@@ -707,6 +863,16 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None, pla
                     'matchup_type': matchup_type,  # Will be encoded later
                     'spin_matchup_advantage': spin_matchup_advantage,
                     'same_arm_matchup': 1 if same_arm_matchup else (0 if same_arm_matchup is False else -1),
+                    # Team strength features (ELO + aggregated stats)
+                    'striker_elo': elo_tracker.get_batting_elo(state['batter_id']) if elo_tracker else PlayerEloTracker.DEFAULT_ELO,
+                    'bowler_elo_rating': elo_tracker.get_bowling_elo(state['bowler_id']) if elo_tracker else PlayerEloTracker.DEFAULT_ELO,
+                    'batting_team_elo': batting_team_elo,
+                    'bowling_team_elo': bowling_team_elo,
+                    'elo_diff': elo_diff,
+                    'team_batting_avg': team_batting_avg,
+                    'team_batting_sr': team_batting_sr,
+                    'team_bowling_avg': team_bowling_avg,
+                    'team_bowling_econ': team_bowling_econ,
                     # Target
                     'ball_outcome': normalize_ball_outcome(state['runs'], state['is_wicket']),
 
@@ -729,6 +895,16 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None, pla
                     batter_hand=batter_hand if batter_hand != 'unknown' else None,
                     is_pace=is_pace
                 )
+
+                # Update ELO ratings AFTER recording the ball
+                if elo_tracker is not None:
+                    elo_tracker.update(
+                        state['batter_id'],
+                        state['bowler_id'],
+                        state['runs'],
+                        state['is_wicket'],
+                        k_factor=match_k_factor
+                    )
 
                 # NEW: Pass batter/bowler IDs and wicket status for tracking
                 innings_calc.update_ball_history(
@@ -841,6 +1017,7 @@ def process_folder_v2_with_splits(folder_path):
     # Initialize trackers that will accumulate across all matches
     player_stats_tracker = PlayerStatsTracker()
     venue_tracker = VenueStatsTracker()  # NEW: Track venue statistics
+    elo_tracker = PlayerEloTracker()  # Track player-level ELO ratings
 
     # NEW: Initialize player metadata provider for hand/arm/type/age features
     player_metadata = PlayerMetadataProvider('data/all_players_enriched.csv')
@@ -897,13 +1074,25 @@ def process_folder_v2_with_splits(folder_path):
                 and 'world cup' in data['info'].get('event', {}).get('name', '').lower()
             )
 
+            # Gender filter: only update ELO for men's matches
+            # Women's ball data is still used for training (ball outcomes are valid),
+            # but ELO is gender-separated since players never cross that boundary.
+            gender = data['info'].get('gender', 'male')
+            event_info = data['info'].get('event', {})
+            event_name = event_info.get('name', '') if isinstance(event_info, dict) else ''
+            team_type = data['info'].get('team_type', 'unknown')
+            teams = data['info'].get('teams', [])
+
+            match_k_factor = classify_match_k_factor(event_name, team_type, teams)
+            use_elo = elo_tracker if gender == 'male' else None
+
             # CRITICAL: Take snapshot BEFORE processing this match
             # This represents what we knew at the START of this match (for simulations)
             # Only save first snapshot per date to avoid overwriting when multiple matches on same day
             match_date_str = match_date.strftime('%Y-%m-%d')
             if match_date_str not in stats_snapshots:
-                # Include venue stats in snapshot for temporal integrity
-                stats_snapshots[match_date_str] = deep_copy_stats(player_stats_tracker, venue_tracker)
+                # Include venue stats and ELO in snapshot for temporal integrity
+                stats_snapshots[match_date_str] = deep_copy_stats(player_stats_tracker, venue_tracker, elo_tracker)
 
                 # Periodically save snapshots to avoid memory issues
                 if len(stats_snapshots) >= save_interval:
@@ -916,9 +1105,10 @@ def process_folder_v2_with_splits(folder_path):
                     print(f"  💾 Saved snapshot chunk {len(cache_chunks)} ({len(stats_snapshots)} dates)")
                     stats_snapshots = {}  # Clear memory
 
-            # Process the match (pass player_metadata for Tier 1/2/3 features)
+            # Process the match (pass gender-filtered ELO tracker and K-factor)
             match_balls, innings_totals, venue = parse_match_data_v2(
-                json_data, player_stats_tracker, venue_tracker, player_metadata
+                json_data, player_stats_tracker, venue_tracker, player_metadata,
+                elo_tracker=use_elo, match_k_factor=match_k_factor
             )
             print(f"  Processed match on {match_date_str}: {len(match_balls)} balls")
 
@@ -1001,7 +1191,7 @@ def process_folder_v2_with_splits(folder_path):
         'build_timestamp': datetime.now().isoformat(),
         'chunk_files': [str(f.relative_to('models')) for f in cache_chunks],  # Kept for backwards compat
         'chunks': chunks_with_dates,  # New format with date indices
-        'features': ['batting_vs_type', 'bowling_vs_hand', 'venue'],  # Type-based features included
+        'features': ['batting_vs_type', 'bowling_vs_hand', 'venue', 'batting_elo', 'bowling_elo'],
     }
 
     metadata_path = Path('models/player_stats_cache_v3_metadata.pkl')

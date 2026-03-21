@@ -403,6 +403,58 @@ class StatsProvider:
             'econ_vs_rhb': econ_vs_rhb,
         }
 
+    def get_batting_elo(self, player_id: str, as_of_date) -> float:
+        """Get a player's batting ELO as of a specific date."""
+        if isinstance(as_of_date, datetime):
+            as_of_date = as_of_date.strftime('%Y-%m-%d')
+        snapshot = self._get_snapshot_for_date(as_of_date)
+        if snapshot is None:
+            return 1500.0
+        return snapshot.get('batting_elo', {}).get(player_id, 1500.0)
+
+    def get_bowling_elo(self, player_id: str, as_of_date) -> float:
+        """Get a player's bowling ELO as of a specific date."""
+        if isinstance(as_of_date, datetime):
+            as_of_date = as_of_date.strftime('%Y-%m-%d')
+        snapshot = self._get_snapshot_for_date(as_of_date)
+        if snapshot is None:
+            return 1500.0
+        return snapshot.get('bowling_elo', {}).get(player_id, 1500.0)
+
+    def get_team_batting_elo(self, player_ids: list, as_of_date) -> float:
+        """Sum of batting ELOs for a team lineup."""
+        return sum(self.get_batting_elo(pid, as_of_date) for pid in player_ids)
+
+    def get_team_bowling_elo(self, player_ids: list, as_of_date) -> float:
+        """Sum of bowling ELOs for a team lineup."""
+        return sum(self.get_bowling_elo(pid, as_of_date) for pid in player_ids)
+
+    def get_team_batting_strength(self, player_ids: list, as_of_date) -> Dict[str, float]:
+        """Aggregated batting stats for a team lineup."""
+        avgs, srs = [], []
+        for pid in player_ids:
+            stats = self.get_batting_stats(pid, as_of_date)
+            if stats['avg'] > 0:
+                avgs.append(stats['avg'])
+                srs.append(stats['sr'])
+        return {
+            'team_batting_avg': sum(avgs) / len(avgs) if avgs else 0.0,
+            'team_batting_sr': sum(srs) / len(srs) if srs else 0.0,
+        }
+
+    def get_team_bowling_strength(self, player_ids: list, as_of_date) -> Dict[str, float]:
+        """Aggregated bowling stats for a team lineup."""
+        avgs, econs = [], []
+        for pid in player_ids:
+            stats = self.get_bowling_stats(pid, as_of_date)
+            if stats['avg'] > 0:
+                avgs.append(stats['avg'])
+                econs.append(stats['econ'])
+        return {
+            'team_bowling_avg': sum(avgs) / len(avgs) if avgs else 0.0,
+            'team_bowling_econ': sum(econs) / len(econs) if econs else 0.0,
+        }
+
     def get_all_stats(self, batter_id: str, bowler_id: str, as_of_date: str) -> Dict[str, float]:
         """
         Convenience method to get all stats at once.

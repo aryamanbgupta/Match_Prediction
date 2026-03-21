@@ -209,10 +209,18 @@ else:
         'bowler_avg_vs_rhb', 'bowler_econ_vs_rhb',
     ]
 
+    team_strength_features = [
+        'striker_elo', 'bowler_elo_rating',
+        'batting_team_elo', 'bowling_team_elo', 'elo_diff',
+        'team_batting_avg', 'team_batting_sr',
+        'team_bowling_avg', 'team_bowling_econ',
+    ]
+
     all_potential_features = (basic_features + player_features +
                              h2h_features + momentum_features + pressure_features +
                              chase_features + medium_features +
-                             player_metadata_features + matchup_features + type_based_features)
+                             player_metadata_features + matchup_features + type_based_features +
+                             team_strength_features)
 
 # Only use features that actually exist in the dataframes
 feature_cols = [col for col in all_potential_features if col in train_df.columns]

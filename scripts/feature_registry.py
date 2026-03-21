@@ -79,6 +79,13 @@ FEATURE_GROUPS: Dict[str, List[str]] = {
         'bowler_avg_vs_lhb', 'bowler_econ_vs_lhb',
         'bowler_avg_vs_rhb', 'bowler_econ_vs_rhb',
     ],
+
+    'team_strength': [
+        'striker_elo', 'bowler_elo_rating',
+        'batting_team_elo', 'bowling_team_elo', 'elo_diff',
+        'team_batting_avg', 'team_batting_sr',
+        'team_bowling_avg', 'team_bowling_econ',
+    ],
 }
 
 
