@@ -154,73 +154,9 @@ if args.config_json:
         DEFAULT_BEST_PARAMS.update(_hp)
     print(f"[config-json] Using {len(all_potential_features)} features from experiment config")
 else:
-    # Original hardcoded feature list (default behavior)
-    basic_features = [
-        'inning_idx', 'score', 'wickets', 'balls_bowled', 'run_rate',
-        'wickets_ratio', 'balls_ratio', 'wickets_in_hand', 'balls_remaining',
-        'is_powerplay', 'is_middle_overs', 'is_death_overs', 'balls_in_over',
-        'venue_encoded', 'is_toss_winner', 'is_batting_first',
-    ]
-
-    player_features = [
-        'batter_encoded', 'bowler_encoded', 'batsman_avg', 'batsman_sr',
-        'bowler_avg', 'bowler_econ',
-        'batsman_recent_avg', 'batsman_recent_sr',
-        'bowler_recent_avg', 'bowler_recent_econ',
-        'batter_balls_faced', 'batter_runs_scored',
-        'bowler_balls_in_innings', 'bowler_overs_in_innings',
-    ]
-
-    h2h_features = ['h2h_avg', 'h2h_sr']
-
-    momentum_features = [
-        'last_5_balls_runs', 'last_10_balls_runs', 'last_30_balls_runs',
-        'balls_since_boundary', 'last_10_dots',
-        'partnership_runs',
-    ]
-
-    pressure_features = [
-        'dot_percentage_recent', 'boundary_percentage_recent',
-        'pressure_cooker_index',
-    ]
-
-    chase_features = [
-        'chase_target', 'run_rate_required', 'lead_gap',
-    ]
-
-    medium_features = [
-        'venue_avg_score',
-        'non_striker_sr',
-    ]
-
-    player_metadata_features = [
-        'batter_hand', 'bowler_arm', 'is_pace', 'bowling_type',
-        'batter_age', 'bowler_age',
-    ]
-
-    matchup_features = [
-        'spin_matchup_advantage', 'same_arm_matchup', 'matchup_type_encoded',
-    ]
-
-    type_based_features = [
-        'batter_avg_vs_pace', 'batter_sr_vs_pace',
-        'batter_avg_vs_spin', 'batter_sr_vs_spin',
-        'bowler_avg_vs_lhb', 'bowler_econ_vs_lhb',
-        'bowler_avg_vs_rhb', 'bowler_econ_vs_rhb',
-    ]
-
-    team_strength_features = [
-        'striker_elo', 'bowler_elo_rating',
-        'batting_team_elo', 'bowling_team_elo', 'elo_diff',
-        'team_batting_avg', 'team_batting_sr',
-        'team_bowling_avg', 'team_bowling_econ',
-    ]
-
-    all_potential_features = (basic_features + player_features +
-                             h2h_features + momentum_features + pressure_features +
-                             chase_features + medium_features +
-                             player_metadata_features + matchup_features + type_based_features +
-                             team_strength_features)
+    from feature_registry import resolve_feature_list, V3_GROUPS
+    all_potential_features = resolve_feature_list(V3_GROUPS)
+    print(f"Using {len(all_potential_features)} features from feature registry (V3_GROUPS)")
 
 # Only use features that actually exist in the dataframes
 feature_cols = [col for col in all_potential_features if col in train_df.columns]

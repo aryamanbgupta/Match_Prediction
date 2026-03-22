@@ -599,38 +599,9 @@ def main():
         )
         print(f"[config-json] Using {len(feature_cols)} features from experiment config")
     else:
-        # Original hardcoded feature list (default behavior)
-        feature_cols = [
-            # Basic state
-            'inning_idx', 'score', 'wickets', 'balls_bowled', 'run_rate',
-            'wickets_ratio', 'balls_ratio', 'wickets_in_hand', 'balls_remaining',
-            'is_powerplay', 'is_middle_overs', 'is_death_overs', 'balls_in_over',
-            'is_toss_winner', 'is_batting_first',
-            # Player stats
-            'batsman_avg', 'batsman_sr', 'bowler_avg', 'bowler_econ',
-            'batsman_recent_avg', 'batsman_recent_sr', 'bowler_recent_avg', 'bowler_recent_econ',
-            'batter_balls_faced', 'batter_runs_scored', 'bowler_balls_in_innings', 'bowler_overs_in_innings',
-            # H2H
-            'h2h_avg', 'h2h_sr',
-            # Momentum
-            'last_5_balls_runs', 'last_10_balls_runs', 'last_30_balls_runs',
-            'balls_since_boundary', 'last_10_dots', 'partnership_runs',
-            # Pressure
-            'dot_percentage_recent', 'boundary_percentage_recent', 'pressure_cooker_index',
-            # Chase
-            'chase_target', 'run_rate_required', 'lead_gap',
-            # Medium
-            'venue_avg_score', 'non_striker_sr',
-            # Player metadata
-            'batter_hand', 'bowler_arm', 'is_pace', 'bowling_type', 'batter_age', 'bowler_age',
-            # Matchup
-            'spin_matchup_advantage', 'same_arm_matchup',
-            # Type-based stats
-            'batter_avg_vs_pace', 'batter_sr_vs_pace', 'batter_avg_vs_spin', 'batter_sr_vs_spin',
-            'bowler_avg_vs_lhb', 'bowler_econ_vs_lhb', 'bowler_avg_vs_rhb', 'bowler_econ_vs_rhb',
-            # Categorical (encoded)
-            'batter_encoded', 'bowler_encoded', 'venue_encoded', 'matchup_type_encoded',
-        ]
+        from feature_registry import resolve_feature_list, V3_GROUPS
+        feature_cols = resolve_feature_list(V3_GROUPS)
+        print(f"Using {len(feature_cols)} features from feature registry (V3_GROUPS)")
 
     # Filter to available columns
     feature_cols = [c for c in feature_cols if c in train_df.columns]
