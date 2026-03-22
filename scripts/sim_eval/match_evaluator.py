@@ -2,6 +2,7 @@ import numpy as np
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass, field
 from collections import defaultdict
+from pathlib import Path
 import time
 
 from sim_v1_2 import SimulationEngine, SimulationConfig, MatchState, ResultAggregator
@@ -96,6 +97,15 @@ class OverallEvaluationResults:
     # Summary stats
     total_simulation_time: float = 0.0
 
+    # Calibration comparison (populated when --calibrate is used)
+    calibration_method: Optional[str] = None
+    pre_calibration_ece: Optional[float] = None
+    post_calibration_ece: Optional[float] = None
+    pre_calibration_log_loss: Optional[float] = None
+    post_calibration_log_loss: Optional[float] = None
+    pre_calibration_brier: Optional[float] = None
+    post_calibration_brier: Optional[float] = None
+
 
 class MatchLevelEvaluator:
     """Evaluates match predictions against betting odds"""
@@ -156,10 +166,246 @@ class MatchLevelEvaluator:
         
         # Aggregate results
         overall_results = self._aggregate_results(match_results, total_time)
-        
+
         return overall_results
-    
-    def _evaluate_single_match(self, match_id: str, match_state: MatchState, 
+
+    def evaluate_all_with_calibration(self, matches: List[Tuple[str, MatchState]],
+                                       odds_lookup: Dict[str, Dict],
+                                       calibration_method: str = 'platt') -> OverallEvaluationResults:
+        """Two-pass evaluation: simulate all, then calibrate, then compute metrics.
+
+        Pass 1: Run all simulations and collect raw win probabilities.
+        Pass 2: Fit LOOCV calibration, recompute metrics with calibrated probs.
+        """
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        from calibration import PlattCalibrator, IsotonicCalibrator, compute_ece
+
+        print(f"\nEvaluating {len(matches)} matches with {self.n_simulations} sims each "
+              f"(+ {calibration_method} calibration)...")
+
+        # ── Pass 1: run all simulations, collect raw probabilities ──
+        raw_data = []  # list of dicts with match info + raw probs
+        total_time = 0
+
+        for i, (match_id, match_state) in enumerate(matches):
+            print(f"\n[{i+1}/{len(matches)}] Simulating {match_id}")
+
+            if match_id not in odds_lookup:
+                print(f"  Warning: No odds found for {match_id}, skipping...")
+                continue
+
+            try:
+                start_time = time.time()
+                config = SimulationConfig(
+                    n_simulations=self.n_simulations,
+                    parallel=self.parallel,
+                    random_seed=42,
+                    verbose=False
+                )
+                sim_results = self.engine.simulate_multiple(match_state, config)
+                aggregated = ResultAggregator.aggregate(sim_results)
+                sim_time = time.time() - start_time
+                total_time += sim_time
+
+                team1 = match_state.team1
+                team2 = match_state.team2
+
+                # Normalize to exclude ties
+                t1_raw = aggregated['win_probability'][team1]
+                t2_raw = aggregated['win_probability'][team2]
+                total_prob = t1_raw + t2_raw
+                if total_prob > 0:
+                    t1_norm = t1_raw / total_prob
+                else:
+                    t1_norm = 0.5
+
+                odds_data = odds_lookup[match_id]
+                market_odds = odds_data.get('odds', {}).get('winner', {})
+                market_win_prob = BettingOddsLoader.get_implied_probabilities(market_odds)
+                actual_winner = odds_data.get('actual_winner')
+
+                print(f"  Raw sim: {team1} {t1_norm:.1%} vs {team2} {1-t1_norm:.1%}")
+                if actual_winner:
+                    print(f"  Actual: {actual_winner}")
+
+                raw_data.append({
+                    'match_id': match_id,
+                    'match_state': match_state,
+                    'team1': team1,
+                    'team2': team2,
+                    't1_prob_raw': t1_norm,
+                    'odds_data': odds_data,
+                    'market_odds': market_odds,
+                    'market_win_prob': market_win_prob,
+                    'actual_winner': actual_winner,
+                    'aggregated': aggregated,
+                    'sim_time': sim_time,
+                })
+            except Exception as e:
+                print(f"  Error simulating match: {e}")
+                continue
+
+        if not raw_data:
+            print("No matches with odds to evaluate!")
+            return self._aggregate_results([], total_time)
+
+        # ── Calibration ──
+        # Build arrays: raw team1 probability + binary outcome
+        raw_probs = np.array([d['t1_prob_raw'] for d in raw_data])
+        has_outcome = np.array([d['actual_winner'] is not None for d in raw_data])
+        actual_outcomes = np.array([
+            1.0 if d['actual_winner'] == d['team1'] else 0.0
+            for d in raw_data
+        ])
+
+        # Only calibrate on matches with known outcomes
+        cal_mask = has_outcome
+        cal_probs = raw_probs[cal_mask]
+        cal_outcomes = actual_outcomes[cal_mask]
+
+        print(f"\n--- Calibration ({calibration_method}) ---")
+        print(f"  Matches with outcomes: {cal_mask.sum()}")
+        print(f"  Raw prob range: [{raw_probs.min():.3f}, {raw_probs.max():.3f}]")
+        print(f"  Raw prob std: {raw_probs.std():.4f}")
+
+        if raw_probs.std() < 0.02:
+            print(f"  WARNING: Probability spread too low for calibration to be effective.")
+
+        # Compute pre-calibration ECE
+        pre_ece = compute_ece(cal_probs, cal_outcomes, n_bins=7, strategy='quantile')
+        pre_log_loss = float(-np.mean(
+            cal_outcomes * np.log(np.clip(cal_probs, 1e-15, 1)) +
+            (1 - cal_outcomes) * np.log(np.clip(1 - cal_probs, 1e-15, 1))
+        ))
+        pre_brier = float(np.mean((cal_probs - cal_outcomes) ** 2))
+        print(f"  Pre-calibration ECE: {pre_ece:.4f}")
+        print(f"  Pre-calibration Log Loss: {pre_log_loss:.4f}")
+        print(f"  Pre-calibration Brier: {pre_brier:.4f}")
+
+        # Fit LOOCV calibration on matches with outcomes
+        if calibration_method == 'isotonic':
+            calibrator = IsotonicCalibrator()
+        else:
+            calibrator = PlattCalibrator()
+
+        calibrated_cal = calibrator.fit_loocv(cal_probs, cal_outcomes)
+
+        # Build calibrated array for ALL matches:
+        # - Matches with outcomes: use LOOCV predictions (unbiased)
+        # - Matches without outcomes: use full-data calibrator
+        calibrated_all = calibrator.predict(raw_probs)
+        # Overwrite outcome-matches with their LOOCV predictions
+        cal_indices = np.where(cal_mask)[0]
+        for j, idx in enumerate(cal_indices):
+            calibrated_all[idx] = calibrated_cal[j]
+
+        post_ece = compute_ece(calibrated_cal, cal_outcomes, n_bins=7, strategy='quantile')
+        post_log_loss = float(-np.mean(
+            cal_outcomes * np.log(np.clip(calibrated_cal, 1e-15, 1)) +
+            (1 - cal_outcomes) * np.log(np.clip(1 - calibrated_cal, 1e-15, 1))
+        ))
+        post_brier = float(np.mean((calibrated_cal - cal_outcomes) ** 2))
+        print(f"  Post-calibration ECE: {post_ece:.4f}")
+        print(f"  Post-calibration Log Loss: {post_log_loss:.4f}")
+        print(f"  Post-calibration Brier: {post_brier:.4f}")
+
+        if isinstance(calibrator, PlattCalibrator):
+            print(f"  Platt params: a={calibrator.a:.4f}, b={calibrator.b:.4f}")
+        print(f"  ECE improvement: {pre_ece - post_ece:+.4f}")
+
+        # ── Pass 2: build MatchEvaluationResults with calibrated probs ──
+        match_results = []
+        cal_idx = 0  # index into calibrated_cal for matches with outcomes
+
+        for i, d in enumerate(raw_data):
+            # Get calibrated team1 probability
+            t1_cal = float(calibrated_all[i])
+            t2_cal = 1.0 - t1_cal
+
+            # Clip to [5%, 95%]
+            PROB_FLOOR = 0.05
+            PROB_CEILING = 0.95
+            t1_cal = max(PROB_FLOOR, min(PROB_CEILING, t1_cal))
+            t2_cal = max(PROB_FLOOR, min(PROB_CEILING, t2_cal))
+            clip_total = t1_cal + t2_cal
+            t1_cal /= clip_total
+            t2_cal /= clip_total
+
+            simulated_win_prob = {d['team1']: t1_cal, d['team2']: t2_cal}
+
+            simulated_scores = {
+                d['team1']: d['aggregated']['score_stats'][d['team1']],
+                d['team2']: d['aggregated']['score_stats'][d['team2']],
+            }
+
+            log_loss = self._calculate_log_loss(simulated_win_prob, d['actual_winner'],
+                                                 d['team1'], d['team2'])
+            brier_score = self._calculate_brier_score(simulated_win_prob, d['actual_winner'],
+                                                       d['team1'], d['team2'])
+            edge = self._calculate_edge(simulated_win_prob, d['market_win_prob'])
+            realized_pnl = self._calculate_realized_pnl(edge, d['market_odds'], d['actual_winner'])
+
+            # Kelly and EV
+            best_team = None
+            best_edge = 0.0
+            for team, team_edge in edge.items():
+                if team_edge > best_edge:
+                    best_edge = team_edge
+                    best_team = team
+
+            if best_team and best_edge > BET_EDGE_THRESHOLD and best_team in d['market_odds']:
+                win_prob = simulated_win_prob[best_team]
+                odds = d['market_odds'][best_team]
+                expected_value = self._calculate_expected_value(win_prob, odds)
+                full_kelly_fraction = self._calculate_kelly_fraction(win_prob, odds)
+                full_kelly_pnl = self._calculate_kelly_pnl(full_kelly_fraction, odds, best_team, d['actual_winner'])
+                fractional_kelly_fraction = full_kelly_fraction * 0.25
+                fractional_kelly_pnl = self._calculate_kelly_pnl(fractional_kelly_fraction, odds, best_team, d['actual_winner'])
+            else:
+                expected_value = 0.0
+                full_kelly_fraction = 0.0
+                fractional_kelly_fraction = 0.0
+                full_kelly_pnl = None
+                fractional_kelly_pnl = None
+
+            result = MatchEvaluationResult(
+                match_id=d['match_id'],
+                team1=d['team1'],
+                team2=d['team2'],
+                simulated_win_prob=simulated_win_prob,
+                simulated_scores=simulated_scores,
+                market_win_prob=d['market_win_prob'],
+                market_odds=d['market_odds'],
+                actual_winner=d['actual_winner'],
+                log_loss=log_loss,
+                brier_score=brier_score,
+                edge=edge,
+                realized_pnl=realized_pnl,
+                expected_value=expected_value,
+                full_kelly_fraction=full_kelly_fraction,
+                fractional_kelly_fraction=fractional_kelly_fraction,
+                full_kelly_pnl=full_kelly_pnl,
+                fractional_kelly_pnl=fractional_kelly_pnl,
+                n_simulations=self.n_simulations,
+                simulation_time=d['sim_time'],
+            )
+            match_results.append(result)
+
+        overall = self._aggregate_results(match_results, total_time)
+
+        # Attach calibration comparison data
+        overall.calibration_method = calibration_method
+        overall.pre_calibration_ece = pre_ece
+        overall.post_calibration_ece = post_ece
+        overall.pre_calibration_log_loss = pre_log_loss
+        overall.post_calibration_log_loss = post_log_loss
+        overall.pre_calibration_brier = pre_brier
+        overall.post_calibration_brier = post_brier
+
+        return overall
+
+    def _evaluate_single_match(self, match_id: str, match_state: MatchState,
                               odds_data: Dict) -> MatchEvaluationResult:
         """Evaluate a single match
         
@@ -835,7 +1081,18 @@ def print_evaluation_summary(results: OverallEvaluationResults):
         if count > 0:
             diff = actual - pred
             print(f"  Predicted: {pred:.1%}, Actual: {actual:.1%}, Diff: {diff:+.1%} (n={count})")
-    
+
+    # Show calibration comparison if calibration was applied
+    if results.calibration_method is not None:
+        print(f"\n--- Calibration Comparison ({results.calibration_method}) ---")
+        print(f"                   Before    After    Change")
+        print(f"  ECE:           {results.pre_calibration_ece:>7.4f}  {results.post_calibration_ece:>7.4f}  "
+              f"{results.post_calibration_ece - results.pre_calibration_ece:>+7.4f}")
+        print(f"  Log Loss:      {results.pre_calibration_log_loss:>7.4f}  {results.post_calibration_log_loss:>7.4f}  "
+              f"{results.post_calibration_log_loss - results.pre_calibration_log_loss:>+7.4f}")
+        print(f"  Brier Score:   {results.pre_calibration_brier:>7.4f}  {results.post_calibration_brier:>7.4f}  "
+              f"{results.post_calibration_brier - results.pre_calibration_brier:>+7.4f}")
+
     print(f"\n--- Predictions by Signed Edge ---")
     print("(Positive = correct prediction, Negative = incorrect prediction)")
 

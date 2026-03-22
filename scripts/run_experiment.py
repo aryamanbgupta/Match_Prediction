@@ -196,6 +196,23 @@ def build_eval_cmd(config: dict) -> list:
     if parallel:
         cmd.append("--parallel")
 
+    # Calibration flags
+    eval_config = config.get("evaluation", {})
+    if eval_config.get("calibrate"):
+        cmd.append("--calibrate")
+    if eval_config.get("calibration_method"):
+        cmd.extend(["--calibration-method", eval_config["calibration_method"]])
+    if eval_config.get("ball_calibrate"):
+        cmd.append("--ball-calibrate")
+    if eval_config.get("ball_calibrate_data"):
+        cmd.extend(["--ball-calibrate-data", eval_config["ball_calibrate_data"]])
+    if eval_config.get("ball_diagnostics"):
+        cmd.append("--ball-diagnostics")
+    if eval_config.get("save_calibrator"):
+        cmd.extend(["--save-calibrator", eval_config["save_calibrator"]])
+    if eval_config.get("load_calibrator"):
+        cmd.extend(["--load-calibrator", eval_config["load_calibrator"]])
+
     return cmd
 
 

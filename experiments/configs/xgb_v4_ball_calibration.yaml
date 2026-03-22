@@ -1,0 +1,48 @@
+experiment:
+  name: "xgb_v4_ball_calibration"
+  description: "XGBoost v4 with ELO — ball-level isotonic calibration only"
+  tags: ["xgboost", "v4", "team_strength", "elo", "calibration_test", "ball_calibration"]
+
+data:
+  version: "v3"
+  test_dir: "data/betting_test"
+  odds_file: "betting_odds_v3.json"
+
+features:
+  groups:
+    - basic
+    - player_stats
+    - h2h
+    - momentum
+    - pressure
+    - chase
+    - medium
+    - player_metadata
+    - matchup
+    - type_based
+    - team_strength
+  exclude: []
+  include_extra: []
+
+model:
+  type: "xgboost"
+  hyperparameters:
+    n_estimators: 444
+    max_depth: 10
+    learning_rate: 0.24036372383981375
+    subsample: 0.8776663421127178
+    colsample_bytree: 0.7424085095268674
+    reg_alpha: 0.8503122682099661
+    reg_lambda: 0.18186045420525845
+  tune: false
+
+evaluation:
+  n_sims: 100
+  parallel: false
+  ball_calibrate: true
+  ball_diagnostics: true
+
+pipeline:
+  skip_parsing: false
+  skip_training: false
+  skip_evaluation: false

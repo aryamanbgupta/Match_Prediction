@@ -94,6 +94,22 @@ def main():
     parser.add_argument('--mlx', action='store_true',
                        help='Use MLX backend for transformer model (Apple Silicon only, faster on Mac)')
 
+    # Calibration arguments
+    parser.add_argument('--calibrate', action='store_true',
+                       help='Enable match-level LOOCV calibration (Platt or isotonic)')
+    parser.add_argument('--calibration-method', type=str, default='platt', choices=['platt', 'isotonic'],
+                       help='Match-level calibration method (default: platt)')
+    parser.add_argument('--ball-calibrate', action='store_true',
+                       help='Enable ball-level calibration (per-class isotonic on validation data)')
+    parser.add_argument('--ball-calibrate-data', type=str, default=None,
+                       help='Path to validation parquet for fitting ball-level calibrator (default: auto-detect)')
+    parser.add_argument('--ball-diagnostics', action='store_true',
+                       help='Run ball-level ECE diagnostics (read-only, no correction)')
+    parser.add_argument('--save-calibrator', type=str, default=None,
+                       help='Save fitted match-level calibrator to PATH for reuse')
+    parser.add_argument('--load-calibrator', type=str, default=None,
+                       help='Load pre-fitted match-level calibrator from PATH')
+
     args = parser.parse_args()
 
     # Set model paths based on version (can be overridden by explicit args)
@@ -140,6 +156,10 @@ def main():
     print("=" * 60)
     print(f"Model type: {args.model_type}")
     print(f"Model version: {args.model_version}")
+    if args.ball_calibrate:
+        print(f"Ball-level calibration: enabled (isotonic per-class)")
+    if args.calibrate:
+        print(f"Match-level calibration: {args.calibration_method} (LOOCV)")
 
     # Load player stats cache (chunked format)
     print("\nLoading player stats cache...")
@@ -160,6 +180,22 @@ def main():
             print("✓ Player metadata loaded successfully")
         except Exception as e:
             print(f"Warning: Could not load player metadata: {e}")
+
+    # Ball-level calibration is loaded after model init (needs raw XGBoost model)
+    ball_calibrator = None
+    _ball_cal_data_path = None
+    if args.ball_calibrate or args.ball_diagnostics:
+        if args.ball_calibrate_data:
+            _ball_cal_data_path = args.ball_calibrate_data
+        elif args.model_version == 'v3':
+            _ball_cal_data_path = 'data/xgb_data_v3/cricket_data_v3_validation.parquet'
+        else:
+            _ball_cal_data_path = 'data/xgb_data/cricket_data_v2_validation.parquet'
+
+        if not Path(_ball_cal_data_path).exists():
+            print(f"\nWarning: Validation data not found at {_ball_cal_data_path}")
+            print("Ball-level calibration/diagnostics disabled. Use --ball-calibrate-data to specify path.")
+            _ball_cal_data_path = None
 
     # Load model and encoders
     if args.model_type == 'lstm':
@@ -278,6 +314,38 @@ def main():
             print("  3. GPU has sufficient memory (~4GB)")
             return
     else:
+        # Fit ball-level calibrator before loading the wrapper model
+        if _ball_cal_data_path and args.model_type == 'xgboost':
+            from calibration import BallLevelCalibrationDiagnostics, fit_ball_calibrator_from_data
+            feature_columns = [line.strip() for line in open(feature_columns_path) if line.strip()]
+            raw_xgb_model = joblib.load(model_path)
+            encoder_dir = str(Path(model_path).parent)
+
+            if args.ball_calibrate:
+                print("\nFitting ball-level calibrator...")
+                try:
+                    ball_calibrator = fit_ball_calibrator_from_data(
+                        model=raw_xgb_model,
+                        data_path=_ball_cal_data_path,
+                        feature_columns=feature_columns,
+                        encoder_dir=encoder_dir
+                    )
+                    print(f"✓ Ball-level calibrator fitted")
+                except Exception as e:
+                    print(f"Warning: Could not fit ball-level calibrator: {e}")
+
+            if args.ball_diagnostics:
+                print("\nRunning ball-level calibration diagnostics...")
+                try:
+                    diagnostics = BallLevelCalibrationDiagnostics(
+                        raw_xgb_model, _ball_cal_data_path, feature_columns,
+                        encoder_dir=encoder_dir
+                    )
+                    diagnostics.compute_all()
+                    diagnostics.print_summary()
+                except Exception as e:
+                    print(f"Warning: Ball-level diagnostics failed: {e}")
+
         print(f"\nLoading XGBoost model from {model_path}...")
         try:
             model = XGBoostModelV2(
@@ -286,7 +354,8 @@ def main():
                 bowler_encoder_path=bowler_encoder_path,
                 feature_columns_path=feature_columns_path,
                 stats_provider=stats_provider,
-                player_metadata=player_metadata
+                player_metadata=player_metadata,
+                ball_calibrator=ball_calibrator
             )
             print(f"✓ XGBoost model loaded successfully ({args.model_version})")
         except Exception as e:
@@ -329,9 +398,20 @@ def main():
         parallel=args.parallel
     )
     
-    # Run evaluation
-    results = evaluator.evaluate_all(matches, odds_lookup)
-    
+    # Run evaluation (with or without match-level calibration)
+    if args.calibrate or args.load_calibrator:
+        print(f"\nMatch-level calibration: {args.calibration_method} (LOOCV)")
+        results = evaluator.evaluate_all_with_calibration(
+            matches, odds_lookup,
+            calibration_method=args.calibration_method
+        )
+        # Save calibrator if requested
+        if args.save_calibrator and hasattr(results, '_calibrator'):
+            results._calibrator.save(args.save_calibrator)
+            print(f"Calibrator saved to {args.save_calibrator}")
+    else:
+        results = evaluator.evaluate_all(matches, odds_lookup)
+
     # Print summary
     print_evaluation_summary(results)
     
@@ -381,7 +461,16 @@ def main():
                 # Expected value
                 'total_expected_value': results.total_expected_value,
                 # Metadata
-                'total_time': results.total_simulation_time
+                'total_time': results.total_simulation_time,
+                # Calibration (if applied)
+                'calibration_method': results.calibration_method,
+                'pre_calibration_ece': results.pre_calibration_ece,
+                'post_calibration_ece': results.post_calibration_ece,
+                'pre_calibration_log_loss': results.pre_calibration_log_loss,
+                'post_calibration_log_loss': results.post_calibration_log_loss,
+                'pre_calibration_brier': results.pre_calibration_brier,
+                'post_calibration_brier': results.post_calibration_brier,
+                'ball_calibration_enabled': args.ball_calibrate,
             },
             'matches': []
         }

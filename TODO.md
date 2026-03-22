@@ -38,9 +38,9 @@
   - `opp_bowling_econ` — opposition economy
   - `relative_strength` — team_bat - opp_bowl (normalized)
   - `batting_depth_index` — quality of middle/lower order
-- [ ] **Add calibration layer** — isotonic regression on match-level probabilities (target ECE < 0.015)
+- [x] **Add calibration layer** — Implemented ball-level (isotonic) + match-level (Platt LOOCV). Tested scientifically: calibration improves probability metrics but hurts betting ROI. Disabled by default; enable via `--calibrate` / `--ball-calibrate` flags when model resolution improves.
 - [ ] **Add evaluation baselines** — 50-50 random, market odds passthrough, home team always wins
-- [ ] **ELO rating system** — team-level ELO updated after each match
+- [x] **ELO rating system** — Player-level ball-by-ball ELO with context-aware K-factor. 19% log loss improvement. See IMPROVEMENTS.md.
 
 ## Medium Priority (P2)
 - [ ] Phase-aware bowler selection (pace in powerplay/death, spin in middle overs)

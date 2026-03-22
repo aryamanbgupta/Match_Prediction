@@ -456,13 +456,14 @@ class PredictionModel(ABC):
 class XGBoostModelV2(PredictionModel):
     def __init__(self, model_path: str, batter_encoder_path: str, bowler_encoder_path: str,
                  feature_columns_path: str, stats_provider=None, player_metadata=None,
-                 matchup_encoder_path: str = None):
+                 matchup_encoder_path: str = None, ball_calibrator=None):
         import joblib
         self.model = joblib.load(model_path)
         self.batter_encoder = joblib.load(batter_encoder_path)
         self.bowler_encoder = joblib.load(bowler_encoder_path)
         self.stats_provider = stats_provider  # Optional stats provider for simulations
         self.player_metadata = player_metadata  # NEW: Optional player metadata for Tier 1/2/3 features
+        self.ball_calibrator = ball_calibrator  # Optional ball-level calibrator
 
         # NEW: Load matchup encoder if provided
         self.matchup_encoder = None
@@ -812,28 +813,32 @@ class XGBoostModelV2(PredictionModel):
     def predict_next_ball(self, features: pd.DataFrame) -> Dict[str, float]:
         """Get probabilities from model"""
         probs = self.model.predict_proba(features)[0]
-        
+
+        # Apply ball-level calibration if available
+        if self.ball_calibrator:
+            probs = self.ball_calibrator.calibrate_probs(probs)
+
         # Initialize all outcomes with 0 probability
         outcome_probs = {
             'dot': 0.0, 'one': 0.0, 'two': 0.0, 'four': 0.0,
             'six': 0.0, 'wicket': 0.0, 'wide': 0.0, 'no_ball': 0.0
         }
-        
+
         # Map model predictions to our outcomes
         for class_idx, prob in enumerate(probs):
             if class_idx in self.class_to_outcome:
                 outcome_name = self.class_to_outcome[class_idx]
                 outcome_probs[outcome_name] = prob
-        
+
         # Add small probabilities for extras (not in your model)
         outcome_probs['wide'] = 0.01
         outcome_probs['no_ball'] = 0.01
-        
+
         # Normalize
         total = sum(outcome_probs.values())
         if total > 0:
             outcome_probs = {k: v/total for k, v in outcome_probs.items()}
-        
+
         return outcome_probs
 
 class XGBoostModel(PredictionModel):
