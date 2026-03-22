@@ -6,6 +6,7 @@ import numpy as np
 
 # Import from the simulation file
 from sim_v1_2 import MatchState, Player, TeamLineup
+from parsing_v2 import classify_match_context
 
 class TestMatchLoader:
     """Loads test matches and creates initial MatchState objects for simulation"""
@@ -102,15 +103,26 @@ class TestMatchLoader:
             team1_lineup = TeamLineup(team1_name, team1_players[:11])
             team2_lineup = TeamLineup(team2_name, team2_players[:11])
             
+            # Match context features
+            event_info = info.get('event', {})
+            event_name = event_info.get('name', '') if isinstance(event_info, dict) else ''
+            team_type = info.get('team_type', 'unknown')
+            match_ctx = classify_match_context(event_name, team_type, teams)
+
             # Create match state
             match_state = MatchState(
                 team1_lineup=team1_lineup,
                 team2_lineup=team2_lineup,
                 batting_first=batting_first,
                 venue=venue,
-                match_date=match_date
+                match_date=match_date,
+                toss_winner=toss_winner,
+                chose_to_bat=1 if toss_decision == 'bat' else 0,
+                match_importance=match_ctx['match_importance'],
+                is_international=match_ctx['is_international'],
+                competition_tier=match_ctx['competition_tier'],
             )
-            
+
             return match_id, match_state
             
         except Exception as e:

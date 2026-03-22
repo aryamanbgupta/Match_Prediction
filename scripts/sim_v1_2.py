@@ -90,6 +90,13 @@ class MatchState:
     # NEW: Partnership tracking (runs since last wicket)
     partnership_runs: int = 0
 
+    # Match context (for venue profile + match context features)
+    toss_winner: str = ''
+    chose_to_bat: int = 0
+    match_importance: int = 2
+    is_international: int = 0
+    competition_tier: int = 2
+
     @property
     def current_team_idx(self) -> int:
         """0 for team1, 1 for team2 (batting)"""
@@ -331,6 +338,11 @@ class MatchState:
         new_state.bowler_balls = self.bowler_balls.copy()
         new_state.batsman_stats = self.batsman_stats.copy()
         new_state.partnership_runs = self.partnership_runs  # NEW
+        new_state.toss_winner = self.toss_winner
+        new_state.chose_to_bat = self.chose_to_bat
+        new_state.match_importance = self.match_importance
+        new_state.is_international = self.is_international
+        new_state.competition_tier = self.competition_tier
 
         return new_state
 
@@ -716,14 +728,30 @@ class XGBoostModelV2(PredictionModel):
 
         # Pressure indicators
         features.update(self._extract_pressure_features(state))
-        
+
+        # Venue profile features
+        if self.stats_provider and hasattr(self.stats_provider, 'get_venue_profile'):
+            features.update(self.stats_provider.get_venue_profile(state.venue, state.match_date))
+        else:
+            features.update({
+                'venue_boundary_pct': 0.0, 'venue_dot_pct': 0.0, 'venue_wicket_rate': 0.0,
+                'venue_powerplay_avg': 0.0, 'venue_death_avg': 0.0,
+                'venue_first_innings_avg': 0.0, 'venue_chase_win_pct': 0.5,
+            })
+
+        # Match context features
+        features['chose_to_bat'] = state.chose_to_bat
+        features['match_importance'] = state.match_importance
+        features['is_international'] = state.is_international
+        features['competition_tier'] = state.competition_tier
+
         # Create DataFrame with only features that exist in training
         df_features = {}
         for col in self.feature_columns:
             df_features[col] = features.get(col, 0.0)
-        
+
         return pd.DataFrame([df_features])
-    
+
     def _extract_momentum_features(self, state: MatchState) -> dict:
         """Extract momentum features from match history"""
         # Handle case where no balls have been bowled yet
@@ -1236,6 +1264,22 @@ class LSTMModelV1(PredictionModel):
         else:
             features['matchup_type_encoded'] = 0
 
+        # Venue profile features
+        if self.stats_provider and hasattr(self.stats_provider, 'get_venue_profile'):
+            features.update(self.stats_provider.get_venue_profile(state.venue, state.match_date))
+        else:
+            features.update({
+                'venue_boundary_pct': 0.0, 'venue_dot_pct': 0.0, 'venue_wicket_rate': 0.0,
+                'venue_powerplay_avg': 0.0, 'venue_death_avg': 0.0,
+                'venue_first_innings_avg': 0.0, 'venue_chase_win_pct': 0.5,
+            })
+
+        # Match context features
+        features['chose_to_bat'] = state.chose_to_bat
+        features['match_importance'] = state.match_importance
+        features['is_international'] = state.is_international
+        features['competition_tier'] = state.competition_tier
+
         return features
 
     def _extract_momentum_features(self, state: MatchState) -> dict:
@@ -1655,6 +1699,22 @@ class MLPModelV1(PredictionModel):
             features['lead_gap'] = int(state.runs[team_idx])
             features['pressure_cooker_index'] = 0
 
+        # Venue profile features
+        if self.stats_provider and hasattr(self.stats_provider, 'get_venue_profile'):
+            features.update(self.stats_provider.get_venue_profile(state.venue, state.match_date))
+        else:
+            features.update({
+                'venue_boundary_pct': 0.0, 'venue_dot_pct': 0.0, 'venue_wicket_rate': 0.0,
+                'venue_powerplay_avg': 0.0, 'venue_death_avg': 0.0,
+                'venue_first_innings_avg': 0.0, 'venue_chase_win_pct': 0.5,
+            })
+
+        # Match context features
+        features['chose_to_bat'] = state.chose_to_bat
+        features['match_importance'] = state.match_importance
+        features['is_international'] = state.is_international
+        features['competition_tier'] = state.competition_tier
+
         return features
 
     def _extract_momentum_features(self, state: MatchState) -> dict:
@@ -2071,6 +2131,22 @@ class MLPModelV2(PredictionModel):
             features['run_rate_required'] = 0
             features['lead_gap'] = int(state.runs[team_idx])
             features['pressure_cooker_index'] = 0
+
+        # Venue profile features
+        if self.stats_provider and hasattr(self.stats_provider, 'get_venue_profile'):
+            features.update(self.stats_provider.get_venue_profile(state.venue, state.match_date))
+        else:
+            features.update({
+                'venue_boundary_pct': 0.0, 'venue_dot_pct': 0.0, 'venue_wicket_rate': 0.0,
+                'venue_powerplay_avg': 0.0, 'venue_death_avg': 0.0,
+                'venue_first_innings_avg': 0.0, 'venue_chase_win_pct': 0.5,
+            })
+
+        # Match context features
+        features['chose_to_bat'] = state.chose_to_bat
+        features['match_importance'] = state.match_importance
+        features['is_international'] = state.is_international
+        features['competition_tier'] = state.competition_tier
 
         return features
 
@@ -2536,6 +2612,22 @@ class TransformerModelV1(PredictionModel):
                 features['matchup_type_encoded'] = 0
         else:
             features['matchup_type_encoded'] = 0
+
+        # Venue profile features
+        if self.stats_provider and hasattr(self.stats_provider, 'get_venue_profile'):
+            features.update(self.stats_provider.get_venue_profile(state.venue, state.match_date))
+        else:
+            features.update({
+                'venue_boundary_pct': 0.0, 'venue_dot_pct': 0.0, 'venue_wicket_rate': 0.0,
+                'venue_powerplay_avg': 0.0, 'venue_death_avg': 0.0,
+                'venue_first_innings_avg': 0.0, 'venue_chase_win_pct': 0.5,
+            })
+
+        # Match context features
+        features['chose_to_bat'] = state.chose_to_bat
+        features['match_importance'] = state.match_importance
+        features['is_international'] = state.is_international
+        features['competition_tier'] = state.competition_tier
 
         return features
 

@@ -63,6 +63,44 @@ def classify_match_k_factor(event_name, team_type, teams):
     return 1.0
 
 
+def classify_match_context(event_name, team_type, teams):
+    """Return match context features for venue/match-level modeling.
+
+    Returns:
+        dict with match_importance (1-4), is_international (0/1), competition_tier (1-4)
+    """
+    event_lower = event_name.lower()
+    is_international = 1 if team_type == 'international' else 0
+
+    # match_importance: how much pressure/stakes
+    if 'world cup' in event_lower or 'world twenty20' in event_lower:
+        match_importance = 4
+    elif event_name in PREMIUM_LEAGUES:
+        match_importance = 3
+    elif is_international and any(t in ICC_FULL_MEMBERS for t in teams):
+        match_importance = 3
+    elif event_name in STANDARD_LEAGUES:
+        match_importance = 2
+    else:
+        match_importance = 1
+
+    # competition_tier: quality of competition
+    if 'world cup' in event_lower or 'world twenty20' in event_lower:
+        competition_tier = 4
+    elif event_name in PREMIUM_LEAGUES:
+        competition_tier = 3
+    elif event_name in STANDARD_LEAGUES or (is_international and any(t in ICC_FULL_MEMBERS for t in teams)):
+        competition_tier = 2
+    else:
+        competition_tier = 1
+
+    return {
+        'match_importance': match_importance,
+        'is_international': is_international,
+        'competition_tier': competition_tier,
+    }
+
+
 class PlayerEloTracker:
     """Ball-by-ball ELO for batters and bowlers.
 
@@ -351,8 +389,21 @@ class VenueStatsTracker:
     Similar pattern to PlayerStatsTracker - accumulate stats and snapshot before each match.
     """
     def __init__(self):
-        # Venue stats: venue_name -> {'total_runs': X, 'innings_count': Y}
-        self.venue_stats = defaultdict(lambda: {'total_runs': 0, 'innings_count': 0})
+        self.venue_stats = defaultdict(lambda: {
+            'total_runs': 0,
+            'innings_count': 0,
+            'total_balls': 0,
+            'total_boundaries': 0,
+            'total_dots': 0,
+            'total_wickets': 0,
+            'powerplay_runs': 0,
+            'powerplay_balls': 0,
+            'death_runs': 0,
+            'death_balls': 0,
+            'first_innings_totals': [],
+            'matches_total': 0,
+            'chase_wins': 0,
+        })
 
     def get_venue_avg_score(self, venue: str) -> float:
         """
@@ -364,17 +415,80 @@ class VenueStatsTracker:
             return 0.0
         return stats['total_runs'] / stats['innings_count']
 
+    def get_venue_profile(self, venue: str) -> dict:
+        """Return computed venue profile features from accumulated stats."""
+        stats = self.venue_stats[venue]
+        total_balls = stats['total_balls']
+        if total_balls == 0:
+            return {
+                'venue_boundary_pct': 0.0,
+                'venue_dot_pct': 0.0,
+                'venue_wicket_rate': 0.0,
+                'venue_powerplay_avg': 0.0,
+                'venue_death_avg': 0.0,
+                'venue_first_innings_avg': 0.0,
+                'venue_chase_win_pct': 0.5,
+            }
+
+        pp_balls = stats['powerplay_balls']
+        death_balls = stats['death_balls']
+        fi_totals = stats['first_innings_totals']
+
+        return {
+            'venue_boundary_pct': stats['total_boundaries'] / total_balls,
+            'venue_dot_pct': stats['total_dots'] / total_balls,
+            'venue_wicket_rate': stats['total_wickets'] / total_balls,
+            'venue_powerplay_avg': (stats['powerplay_runs'] / pp_balls * 36) if pp_balls > 0 else 0.0,
+            'venue_death_avg': (stats['death_runs'] / death_balls * 30) if death_balls > 0 else 0.0,
+            'venue_first_innings_avg': sum(fi_totals) / len(fi_totals) if fi_totals else 0.0,
+            'venue_chase_win_pct': stats['chase_wins'] / stats['matches_total'] if stats['matches_total'] > 0 else 0.5,
+        }
+
     def update_venue_stats(self, venue: str, innings_total: int):
-        """
-        Update venue stats after an innings is complete.
-        Called AFTER match is processed (not during).
-        """
+        """Legacy method — update venue stats with just innings total."""
         self.venue_stats[venue]['total_runs'] += innings_total
         self.venue_stats[venue]['innings_count'] += 1
 
+    def update_venue_stats_detailed(self, venue: str, innings_data: dict):
+        """
+        Update venue stats with rich per-innings data.
+        Called AFTER match innings is processed (not during).
+
+        Args:
+            innings_data: dict with keys: total_runs, total_balls, boundaries, dots,
+                          wickets, powerplay_runs, powerplay_balls, death_runs, death_balls,
+                          is_first_innings, is_chase_win (bool or None)
+        """
+        stats = self.venue_stats[venue]
+        stats['total_runs'] += innings_data['total_runs']
+        stats['innings_count'] += 1
+        stats['total_balls'] += innings_data['total_balls']
+        stats['total_boundaries'] += innings_data['boundaries']
+        stats['total_dots'] += innings_data['dots']
+        stats['total_wickets'] += innings_data['wickets']
+        stats['powerplay_runs'] += innings_data['powerplay_runs']
+        stats['powerplay_balls'] += innings_data['powerplay_balls']
+        stats['death_runs'] += innings_data['death_runs']
+        stats['death_balls'] += innings_data['death_balls']
+
+        if innings_data['is_first_innings']:
+            stats['first_innings_totals'].append(innings_data['total_runs'])
+
+    def update_venue_match_result(self, venue: str, chase_won: bool):
+        """Update match-level venue stats (called once per match, after both innings)."""
+        stats = self.venue_stats[venue]
+        stats['matches_total'] += 1
+        if chase_won:
+            stats['chase_wins'] += 1
+
     def get_all_venue_stats(self) -> dict:
-        """Return copy of all venue stats for caching"""
-        return {venue: dict(stats) for venue, stats in self.venue_stats.items()}
+        """Return copy of all venue stats for caching."""
+        result = {}
+        for venue, stats in self.venue_stats.items():
+            s = dict(stats)
+            s['first_innings_totals'] = list(stats['first_innings_totals'])
+            result[venue] = s
+        return result
 
 
 def deep_copy_stats(tracker, venue_tracker=None, elo_tracker=None):
@@ -666,8 +780,21 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None, pla
     # NEW: Get venue average BEFORE this match (temporal integrity)
     # This ensures we only use historical data, no lookahead bias
     venue_avg_score = 0.0
+    venue_profile = {
+        'venue_boundary_pct': 0.0, 'venue_dot_pct': 0.0, 'venue_wicket_rate': 0.0,
+        'venue_powerplay_avg': 0.0, 'venue_death_avg': 0.0,
+        'venue_first_innings_avg': 0.0, 'venue_chase_win_pct': 0.5,
+    }
     if venue_tracker is not None:
         venue_avg_score = venue_tracker.get_venue_avg_score(match_info['venue'])
+        venue_profile = venue_tracker.get_venue_profile(match_info['venue'])
+
+    # Match context features (constant for all balls in this match)
+    event_info = data['info'].get('event', {})
+    event_name = event_info.get('name', '') if isinstance(event_info, dict) else ''
+    team_type = data['info'].get('team_type', 'unknown')
+    match_context = classify_match_context(event_name, team_type, match_info['teams'])
+    chose_to_bat = 1 if match_info['toss_decision'] == 'bat' else 0
 
     player_stats_tracker.start_match()
 
@@ -712,6 +839,7 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None, pla
 
     all_balls = []
     innings_totals = []  # Track innings totals for venue stats update
+    innings_details = []  # Rich per-innings data for venue profile
 
     # NEW: Track first innings score for chase features
     first_innings_score = 0
@@ -720,6 +848,14 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None, pla
         score = 0
         wickets = 0
         balls = 0
+
+        # Per-innings accumulator for venue profile stats
+        inn_agg = {
+            'boundaries': 0, 'dots': 0, 'wickets': 0,
+            'total_balls': 0, 'total_runs': 0,
+            'powerplay_runs': 0, 'powerplay_balls': 0,
+            'death_runs': 0, 'death_balls': 0,
+        }
 
         # NEW: Calculate target for 2nd innings
         target = first_innings_score + 1 if inning_idx == 2 else 0
@@ -879,7 +1015,12 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None, pla
                     # Match Context Features
                     'venue': match_info['venue'],
                     'is_toss_winner': 1 if match_info['toss_winner'] == data['innings'][inning_idx-1]['team'] else 0,
-                    'is_batting_first': 1 if inning_idx == 1 else 0
+                    'is_batting_first': 1 if inning_idx == 1 else 0,
+                    # Venue profile features (historical, no lookahead)
+                    **venue_profile,
+                    # Match context features
+                    'chose_to_bat': chose_to_bat,
+                    **match_context,
                 }
 
                 all_balls.append(ball_record)
@@ -919,20 +1060,51 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None, pla
                 if state['is_wicket']:
                     wickets += 1
                 score += state['runs']
-                if not (state['is_wide'] or state['is_noball']):
+                is_legal = not (state['is_wide'] or state['is_noball'])
+                if is_legal:
                     balls += 1
+
+                # Accumulate per-innings stats for venue profile
+                if is_legal:
+                    inn_agg['total_balls'] += 1
+                    inn_agg['total_runs'] += state['runs']
+                    if state['runs'] == 0 and not state['is_wicket']:
+                        inn_agg['dots'] += 1
+                    if state['runs'] >= 4 and not state['is_wicket']:
+                        inn_agg['boundaries'] += 1
+                    if state['is_wicket']:
+                        inn_agg['wickets'] += 1
+                    # Phase stats (balls is already incremented)
+                    if balls <= 36:  # powerplay: first 6 overs
+                        inn_agg['powerplay_runs'] += state['runs']
+                        inn_agg['powerplay_balls'] += 1
+                    if balls > 90:  # death: overs 16-20 (balls 91-120)
+                        inn_agg['death_runs'] += state['runs']
+                        inn_agg['death_balls'] += 1
 
         # NEW: Store first innings score for chase calculation
         if inning_idx == 1:
             first_innings_score = score
 
-        # NEW: Track innings total for venue stats update
+        # Track innings total for venue stats update
         innings_totals.append(score)
+        innings_details.append({
+            **inn_agg,
+            'is_first_innings': inning_idx == 1,
+        })
+
+    # Determine chase outcome for venue stats
+    chase_won = None
+    if len(innings_totals) == 2:
+        outcome = data['info'].get('outcome', {})
+        winner = outcome.get('winner', None)
+        if winner and len(data['innings']) == 2:
+            batting_second_team = data['innings'][1].get('team', '')
+            chase_won = (winner == batting_second_team)
 
     player_stats_tracker.end_match()
 
-    # Return both ball data and innings totals (for venue tracker update)
-    return all_balls, innings_totals, match_info['venue']
+    return all_balls, innings_totals, match_info['venue'], innings_details, chase_won
 
 '''
 def process_folder_v2(folder_path):
@@ -1106,15 +1278,17 @@ def process_folder_v2_with_splits(folder_path):
                     stats_snapshots = {}  # Clear memory
 
             # Process the match (pass gender-filtered ELO tracker and K-factor)
-            match_balls, innings_totals, venue = parse_match_data_v2(
+            match_balls, innings_totals, venue, innings_details, chase_won = parse_match_data_v2(
                 json_data, player_stats_tracker, venue_tracker, player_metadata,
                 elo_tracker=use_elo, match_k_factor=match_k_factor
             )
             print(f"  Processed match on {match_date_str}: {len(match_balls)} balls")
 
             # Update venue stats AFTER processing (temporal integrity)
-            for innings_total in innings_totals:
-                venue_tracker.update_venue_stats(venue, innings_total)
+            for inn_detail in innings_details:
+                venue_tracker.update_venue_stats_detailed(venue, inn_detail)
+            if chase_won is not None:
+                venue_tracker.update_venue_match_result(venue, chase_won)
 
             # Add to appropriate split(s)
             split_data[current_split].extend(match_balls)

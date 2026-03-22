@@ -31,18 +31,34 @@
 - [ ] **Expand test set to 200+ matches** — 44 matches is too small for statistical significance
 
 ## High Priority (P1)
-- [ ] **Add team-level features** to parsing_v2.py:
-  - `team_batting_avg` — aggregate of all 11 batters
-  - `team_batting_sr` — aggregate strike rate
-  - `opp_bowling_avg` — opposition bowlers' quality
-  - `opp_bowling_econ` — opposition economy
-  - `relative_strength` — team_bat - opp_bowl (normalized)
-  - `batting_depth_index` — quality of middle/lower order
-- [x] **Add calibration layer** — Implemented ball-level (isotonic) + match-level (Platt LOOCV). Tested scientifically: calibration improves probability metrics but hurts betting ROI. Disabled by default; enable via `--calibrate` / `--ball-calibrate` flags when model resolution improves.
+- [ ] **Empirical outcome distributions as features** — Replace lossy summary stats (avg/SR) with full 6-class outcome distributions P(0,1,2,4,6,W) for each context. This is multi-class target encoding — directly aligned with the prediction target. Current summary stats have r=0.06-0.11 with ball outcomes; direct historical rates should correlate much more strongly. Implementation: expand `PlayerStatsTracker` to track outcome counts per class instead of just `{runs, balls, dismissals}`. Hierarchy of distributions (each adds 6 features):
+  - **Batter overall**: P(0,1,2,4,6,W | this batter) — captures player shape (power hitter vs accumulator), not just mean
+  - **Bowler overall**: P(0,1,2,4,6,W | this bowler) — same idea, from bowler's perspective
+  - **Batter vs pace/spin**: P(0,1,2,4,6,W | batter, bowler type) — type-specific distributions (min 30 balls, fallback to overall)
+  - **Bowler vs LHB/RHB**: P(0,1,2,4,6,W | bowler, batter hand) — handedness-specific (min 30 balls, fallback to overall)
+  - **Venue**: P(0,1,2,4,6,W | venue) — venue-specific outcome rates
+  - **Phase (global)**: P(0,1,2,4,6,W | powerplay/middle/death) — phase-specific priors with massive sample sizes
+  - ~36-48 new features total. May allow dropping `batter_encoded`/`bowler_encoded` (XGBoost can't learn from label-encoded IDs anyway).
+  - Temporal integrity already handled by stats cache. Not target leakage — uses only pre-match historical data.
+- [ ] **Expand test set to 200+ matches** — 44 matches is too small for statistical significance
 - [ ] **Add evaluation baselines** — 50-50 random, market odds passthrough, home team always wins
-- [x] **ELO rating system** — Player-level ball-by-ball ELO with context-aware K-factor. 19% log loss improvement. See IMPROVEMENTS.md.
+- [x] **Add team-level features** — ELO + aggregated team stats (9 features). 19% log loss improvement.
+- [x] **Add calibration layer** — Implemented ball-level (isotonic) + match-level (Platt LOOCV). Tested scientifically: calibration improves probability metrics but hurts betting ROI. Disabled by default; enable via `--calibrate` / `--ball-calibrate` flags when model resolution improves.
+- [x] **ELO rating system** — Player-level ball-by-ball ELO with context-aware K-factor. See IMPROVEMENTS.md.
+- [x] **Feature importance analysis** — `scripts/analyze_features.py` (gain/weight/cover, correlation, redundancy, group-level)
+- [x] **Tier 1 features: venue profile + match context** — 11 new features across 2 groups:
+  - `venue_profile`: boundary_pct, dot_pct, wicket_rate, powerplay_avg, death_avg, first_innings_avg, chase_win_pct
+  - `match_context`: chose_to_bat, match_importance, is_international, competition_tier
 
-## Medium Priority (P2)
+## Medium Priority (P2) — Tier 2 Features
+- [ ] **Batting order position context**:
+  - `batting_position` (1-11), `remaining_batting_quality` (avg ELO of batters to come), `top_order_wickets`
+- [ ] **Bowler workload / spell context**:
+  - `bowler_spell_balls`, `bowler_overs_left` (max 4 per T20), `new_bowler` (first ball of spell)
+- [ ] **Enhanced momentum features**:
+  - `scoring_acceleration` (last 10 vs last 30 run rate), `wicket_cluster` (wickets in last 10 balls), `boundaries_in_last_over`
+- [ ] **Home advantage (explicit)**:
+  - `is_home_team` (3+ matches at venue in last 2 years), `team_venue_win_pct`
 - [ ] Phase-aware bowler selection (pace in powerplay/death, spin in middle overs)
 - [ ] Second-innings aggression adjustment based on required run rate
 - [ ] Unknown player encoding (bottom 5-10%) for new/unseen players
@@ -50,11 +66,12 @@
 - [ ] CLV (Closing Line Value) tracking
 - [ ] Minimum edge threshold (3-5%) before placing a bet
 
-## Low Priority (P3)
+## Low Priority (P3) — Tier 3 Features (External Data)
+- [ ] **Weather / conditions data** (temperature, humidity, dew, wind via weather API)
+- [ ] **Ground dimensions** (boundary distances — affects 4/6 rates)
 - [ ] Ensemble stacking: 3-7 diverse models + logistic regression meta-learner
 - [ ] Add time decay to features
 - [ ] Consider regression model (predict E[runs]) instead of classification
-- [ ] Weather / dew factor features
 - [ ] Match-level model: predict P(team1 wins) directly from lineups
 
 ## Research Notes

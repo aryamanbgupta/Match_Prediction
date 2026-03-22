@@ -293,6 +293,52 @@ class StatsProvider:
 
         return venue_stats['total_runs'] / venue_stats['innings_count']
 
+    def get_venue_profile(self, venue: str, as_of_date: str) -> Dict[str, float]:
+        """
+        Get rich venue profile as of a specific date.
+        Gracefully handles old cache format (returns defaults for missing fields).
+
+        Returns:
+            Dict with keys matching venue_profile feature group.
+        """
+        if isinstance(as_of_date, datetime):
+            as_of_date = as_of_date.strftime('%Y-%m-%d')
+
+        default = {
+            'venue_boundary_pct': 0.0, 'venue_dot_pct': 0.0, 'venue_wicket_rate': 0.0,
+            'venue_powerplay_avg': 0.0, 'venue_death_avg': 0.0,
+            'venue_first_innings_avg': 0.0, 'venue_chase_win_pct': 0.5,
+        }
+
+        snapshot = self._get_snapshot_for_date(as_of_date)
+        if snapshot is None:
+            return default
+
+        venue_stats = snapshot.get('venue', {}).get(venue, {})
+        total_balls = venue_stats.get('total_balls', 0)
+
+        if total_balls == 0:
+            # Old cache format or no data — fall back to basic avg
+            innings_count = venue_stats.get('innings_count', 0)
+            total_runs = venue_stats.get('total_runs', 0)
+            avg_score = total_runs / innings_count if innings_count > 0 else 0.0
+            return {**default, 'venue_first_innings_avg': avg_score}
+
+        pp_balls = venue_stats.get('powerplay_balls', 0)
+        death_balls = venue_stats.get('death_balls', 0)
+        fi_totals = venue_stats.get('first_innings_totals', [])
+        matches_total = venue_stats.get('matches_total', 0)
+
+        return {
+            'venue_boundary_pct': venue_stats.get('total_boundaries', 0) / total_balls,
+            'venue_dot_pct': venue_stats.get('total_dots', 0) / total_balls,
+            'venue_wicket_rate': venue_stats.get('total_wickets', 0) / total_balls,
+            'venue_powerplay_avg': (venue_stats.get('powerplay_runs', 0) / pp_balls * 36) if pp_balls > 0 else 0.0,
+            'venue_death_avg': (venue_stats.get('death_runs', 0) / death_balls * 30) if death_balls > 0 else 0.0,
+            'venue_first_innings_avg': sum(fi_totals) / len(fi_totals) if fi_totals else 0.0,
+            'venue_chase_win_pct': venue_stats.get('chase_wins', 0) / matches_total if matches_total > 0 else 0.5,
+        }
+
     def get_batting_vs_type_stats(self, batter_id: str, as_of_date: str) -> Dict[str, float]:
         """
         Get batter's stats against pace and spin bowlers as of a specific date.

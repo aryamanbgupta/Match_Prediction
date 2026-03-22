@@ -101,6 +101,90 @@ Player-level ELO + aggregated team stats implemented in March 2026:
 
 See `docs/research/team_level_features.md` for full options analysis.
 
+### Venue Profile + Match Context Features (IMPLEMENTED — Phase 2)
+Tier 1 features implemented in March 2026. 11 new features across 2 groups:
+
+**Venue Profile** (7 features — historical venue behavior with temporal integrity):
+- `venue_boundary_pct` — % of runs from 4s+6s at this venue
+- `venue_dot_pct` — % of balls that are dots
+- `venue_wicket_rate` — wickets per ball
+- `venue_powerplay_avg` — average powerplay score (overs 0-5)
+- `venue_death_avg` — average death score (overs 16-19)
+- `venue_first_innings_avg` — average 1st innings total
+- `venue_chase_win_pct` — % of matches won by chasing team
+
+**Match Context** (4 features):
+- `chose_to_bat` — binary: toss winner chose to bat
+- `match_importance` — ordinal 1-4 (associate bilateral → ICC World Cup)
+- `is_international` — binary: international vs franchise/club
+- `competition_tier` — ordinal 1-4 (associate → ICC/premium league)
+
+**Feature importance analysis** (`scripts/analyze_features.py`):
+- XGBoost gain/weight/cover importances
+- Spearman correlation with target
+- Feature-to-feature redundancy detection (|r| > 0.8)
+- Per-group aggregated importance
+
+**Experiment Results** (March 2026):
+
+| Model | Log Loss | Brier | Flat ROI | Frac Kelly ROI | Win Rate |
+|-------|----------|-------|----------|----------------|----------|
+| v4 baseline (no venue) | **0.710** | **0.255** | **-44.8%** | **-5.5%** | **24.4%** |
+| v5 (all 11 venue+context) | 0.923 | 0.337 | -48.9% | -6.2% | 24.4% |
+| v5b (pruned: 5 features) | 0.965 | 0.354 | -68.1% | -9.0% | 14.6% |
+
+**Conclusion: Venue features hurt all metrics.** Log loss +30%, Brier +32% for v5 vs v4.
+
+**Root cause analysis:**
+- 7 venue features are highly correlated with each other (r > 0.90) and with existing `venue_avg_score`
+- Model became more overconfident (avg signed edge: -20.5% → -25.9%) without improving accuracy
+- Venue features encode "high-scoring ground?" 7 different ways — redundant with `venue_avg_score`
+- `match_importance` and `competition_tier` are correlated (r=0.88) — redundant
+- T20 World Cup test venues have limited historical data → venue features don't generalize
+
+**Decision: Venue features disabled.** v4 (team strength only) remains the best model. The `venue_profile` and `match_context` feature groups are kept in the code but excluded from active configs.
+
+Experiments: `xgb_v5_venue_context_20260322_143913`, `xgb_v5b_venue_pruned_20260322_182632`
+
+### Empirical Outcome Distributions (PLANNED — Next Priority)
+Replace lossy summary stats (avg, SR, econ) with full 6-class outcome distributions as features. This is **multi-class target encoding** — the most direct possible signal for the prediction target.
+
+**Why this is high-impact**:
+- Current summary stats (avg=35, SR=140) compress a player into 2 numbers, destroying the distribution shape. Two batters with identical avg/SR can have completely different outcome profiles (power hitter vs accumulator).
+- XGBoost **cannot learn** outcome distributions from label-encoded player IDs — trees can only split on "id > N", which groups arbitrary players together. Pre-computed distributions give the model exactly the signal it structurally can't extract.
+- Direct target alignment: the model predicts P(outcome class), and these features provide historical P(outcome class | context). The learning task becomes "blend these priors" instead of "reconstruct distributions from scratch."
+- Current player stats correlate r=0.06-0.11 with ball outcomes (<1.5% variance explained). Direct historical outcome rates (e.g., `batter_dot_pct`) should correlate much more strongly with the corresponding binary outcome.
+
+**Proposed feature hierarchy** (each level adds 6 features — one per outcome class):
+
+| Level | Features | ~Sample size | Sparsity risk |
+|-------|----------|-------------|---------------|
+| Batter overall | P(0,1,2,4,6,W \| batter) | 100+ balls | Low |
+| Bowler overall | P(0,1,2,4,6,W \| bowler) | 100+ balls | Low |
+| Batter vs pace/spin | P(0,1,2,4,6,W \| batter, type) | 50+ balls | Moderate |
+| Bowler vs LHB/RHB | P(0,1,2,4,6,W \| bowler, hand) | 50+ balls | Moderate |
+| Venue | P(0,1,2,4,6,W \| venue) | 100+ matches | Low |
+| Phase (global) | P(0,1,2,4,6,W \| PP/mid/death) | Millions | None |
+
+Total: ~36-48 new features. Manageable for XGBoost.
+
+**Implementation notes**:
+- Expand `PlayerStatsTracker` to track `outcome_counts: {0: N, 1: N, 2: N, 4: N, 6: N, W: N}` instead of just `{runs, balls, dismissals}`
+- For sparse cross-cuts (< 30 balls), fall back to the broader distribution or apply shrinkage toward global prior
+- Temporal integrity already handled by stats cache — no target leakage
+- May allow dropping `batter_encoded` / `bowler_encoded` since distributions ARE the player representation
+- Keep existing avg/SR features initially — let feature importance sort out redundancy
+
+### Tier 2 Features (PLANNED — Future)
+- Batting order position context (batting_position, remaining_batting_quality, top_order_wickets)
+- Bowler workload/spell context (spell_balls, overs_left, new_bowler)
+- Enhanced momentum (scoring_acceleration, wicket_cluster, boundaries_in_last_over)
+- Explicit home advantage (is_home_team, team_venue_win_pct)
+
+### Tier 3 Features (PLANNED — Requires External Data)
+- Weather/conditions (temperature, humidity, dew, wind — needs weather API)
+- Ground dimensions (boundary distances — needs manual curation)
+
 ### ELO Rating System — Implemented + Future Improvements
 **Current implementation**:
 - Ball-by-ball ELO with linear outcome scaling: wicket=0.0, dot=0.4, 1=0.5, 2=0.6, 4=0.8, 6=1.0

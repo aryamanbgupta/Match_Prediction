@@ -389,6 +389,21 @@ feature_importance = pd.DataFrame({
 for _, row in feature_importance.head(15).iterrows():
     print(f"  {row['feature']:25s}: {row['importance']:.4f}")
 
+# Save feature importance JSON
+import json as _json
+booster = final_model.get_booster()
+fi_data = {}
+for imp_type in ['gain', 'weight', 'cover']:
+    raw = booster.get_score(importance_type=imp_type)
+    total = sum(raw.values()) if raw else 1.0
+    fi_data[imp_type] = {k: v / total for k, v in raw.items()}
+fi_data['feature_list'] = feature_cols
+
+Path('models/xgb_v3').mkdir(exist_ok=True)
+with open('models/xgb_v3/feature_importance.json', 'w') as f:
+    _json.dump(fi_data, f, indent=2)
+print("  Saved feature_importance.json")
+
 # Save model and encoders
 # v3: Model with player metadata features (Tier 1/2/3)
 print("\nSaving model (v3)...")

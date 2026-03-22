@@ -331,37 +331,91 @@ def main():
 
 
 def _extract_metrics(output: str) -> dict:
-    """Try to extract key metrics from evaluation console output."""
+    """Extract key metrics from evaluation console output.
+
+    Parses the structured summary block from run_sim_eval.py, tracking which
+    betting-strategy section we're in so that identically-named fields (ROI,
+    Win Rate, Total P&L) are attributed to the correct strategy.
+    """
     metrics = {}
+    section = None  # tracks current betting-strategy section
+
     for line in output.split("\n"):
-        line = line.strip()
-        if "Avg Log Loss:" in line:
+        stripped = line.strip()
+
+        # --- section headers ---
+        if stripped.startswith("Flat Staking (1 unit"):
+            section = "flat"
+        elif stripped.startswith("Full Kelly Criterion"):
+            section = "full_kelly"
+        elif stripped.startswith("Fractional Kelly"):
+            section = "frac_kelly"
+        elif stripped.startswith("---") or stripped == "":
+            # Reset section on dividers / blanks so per-match-type blocks
+            # (Favorites, Underdogs) don't overwrite strategy metrics
+            if stripped.startswith("---"):
+                section = None
+
+        # --- top-level metrics (outside any strategy block) ---
+        if "Average Log Loss:" in stripped:
             try:
-                metrics["avg_log_loss"] = float(line.split(":")[-1].strip())
+                metrics["avg_log_loss"] = float(stripped.split(":")[-1].strip())
             except ValueError:
                 pass
-        elif "Avg Brier Score:" in line:
+        elif "Average Brier Score:" in stripped:
             try:
-                metrics["avg_brier_score"] = float(line.split(":")[-1].strip())
+                metrics["avg_brier_score"] = float(stripped.split(":")[-1].strip())
             except ValueError:
                 pass
-        elif "Total P&L:" in line or "Total P/L:" in line:
+        elif "Matches evaluated:" in stripped:
             try:
-                val = line.split(":")[-1].strip().replace("units", "").strip()
-                metrics["total_pnl"] = float(val)
+                metrics["matches_evaluated"] = int(stripped.split(":")[-1].strip())
             except ValueError:
                 pass
-        elif "ROI:" in line:
+        elif "Average Edge (magnitude):" in stripped:
             try:
-                val = line.split(":")[-1].strip().rstrip("%").strip()
-                metrics["roi_pct"] = float(val)
+                metrics["avg_edge_pct"] = float(stripped.split(":")[-1].strip().rstrip("%"))
             except ValueError:
                 pass
-        elif "Matches Evaluated:" in line:
+        elif "Average Signed Edge:" in stripped:
             try:
-                metrics["matches_evaluated"] = int(line.split(":")[-1].strip())
+                val = stripped.split(":")[-1].strip().split("(")[0].strip().rstrip("%")
+                metrics["avg_signed_edge_pct"] = float(val)
             except ValueError:
                 pass
+
+        # --- per-strategy metrics ---
+        elif section and "Total P&L:" in stripped:
+            try:
+                val = stripped.split(":")[-1].strip().replace("units", "").strip()
+                metrics[f"{section}_pnl"] = float(val)
+            except ValueError:
+                pass
+        elif section and "ROI:" in stripped and "Flat ROI" not in stripped:
+            try:
+                val = stripped.split(":")[-1].strip().rstrip("%").strip()
+                metrics[f"{section}_roi_pct"] = float(val)
+            except ValueError:
+                pass
+        elif section and "Win Rate:" in stripped:
+            try:
+                val = stripped.split(":")[-1].strip().rstrip("%").strip()
+                metrics[f"{section}_win_rate_pct"] = float(val)
+            except ValueError:
+                pass
+        elif section and "Sharpe Ratio:" in stripped:
+            try:
+                val = stripped.split(":")[-1].strip().split()[0]
+                metrics[f"{section}_sharpe"] = float(val)
+            except ValueError:
+                pass
+
+    # Backward compat: also store top-level total_pnl / roi_pct from frac kelly
+    if "frac_kelly_pnl" in metrics:
+        metrics["total_pnl"] = metrics["frac_kelly_pnl"]
+    if "frac_kelly_roi_pct" in metrics:
+        metrics["roi_pct"] = metrics["frac_kelly_roi_pct"]
+
     return metrics
 
 

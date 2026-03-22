@@ -167,6 +167,9 @@ class ExperimentTracker:
                         metrics = json.load(f)
                     summary["avg_log_loss"] = metrics.get("avg_log_loss")
                     summary["avg_brier_score"] = metrics.get("avg_brier_score")
+                    summary["flat_roi_pct"] = metrics.get("flat_roi_pct")
+                    summary["frac_kelly_roi_pct"] = metrics.get("frac_kelly_roi_pct")
+                    summary["flat_win_rate_pct"] = metrics.get("flat_win_rate_pct")
 
                 experiments.append(summary)
             except (json.JSONDecodeError, KeyError):

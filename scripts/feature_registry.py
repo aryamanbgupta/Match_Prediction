@@ -86,6 +86,23 @@ FEATURE_GROUPS: Dict[str, List[str]] = {
         'team_batting_avg', 'team_batting_sr',
         'team_bowling_avg', 'team_bowling_econ',
     ],
+
+    'venue_profile': [
+        'venue_boundary_pct',
+        'venue_dot_pct',
+        'venue_wicket_rate',
+        'venue_powerplay_avg',
+        'venue_death_avg',
+        'venue_first_innings_avg',
+        'venue_chase_win_pct',
+    ],
+
+    'match_context': [
+        'chose_to_bat',
+        'match_importance',
+        'is_international',
+        'competition_tier',
+    ],
 }
 
 
@@ -151,8 +168,12 @@ def get_feature_hash(feature_list: List[str]) -> str:
     return hashlib.sha256(content.encode()).hexdigest()[:12]
 
 
-# Convenience: default v3 groups (all groups)
-V3_GROUPS = list(FEATURE_GROUPS.keys())
+# Convenience: default v3/v4 groups (excludes venue_profile + match_context)
+V3_GROUPS = ['basic', 'player_stats', 'h2h', 'momentum', 'pressure', 'chase', 'medium',
+             'player_metadata', 'matchup', 'type_based', 'team_strength']
 
 # Convenience: v2 groups (no metadata/matchup/type_based)
 V2_GROUPS = ['basic', 'player_stats', 'h2h', 'momentum', 'pressure', 'chase', 'medium']
+
+# Convenience: v5 groups (all groups including venue_profile + match_context)
+V5_GROUPS = list(FEATURE_GROUPS.keys())

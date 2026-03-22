@@ -56,8 +56,8 @@ def list_experiments(tag=None, results_dir="experiments/results"):
             return
 
     # Header
-    print(f"\n{'ID':<45} {'Status':<12} {'Log Loss':<12} {'Brier':<12} {'Duration':<10} {'Tags'}")
-    print("-" * 110)
+    print(f"\n{'ID':<45} {'Status':<10} {'Log Loss':<10} {'Brier':<10} {'Flat ROI':<10} {'FK ROI':<10} {'Win %':<8} {'Tags'}")
+    print("-" * 130)
 
     for exp in experiments:
         exp_id = exp["id"]
@@ -66,10 +66,12 @@ def list_experiments(tag=None, results_dir="experiments/results"):
         status = exp.get("status", "?")
         log_loss = format_value(exp.get("avg_log_loss"), 4) if exp.get("avg_log_loss") else "—"
         brier = format_value(exp.get("avg_brier_score"), 4) if exp.get("avg_brier_score") else "—"
-        duration = f"{exp.get('duration', 0):.0f}s" if exp.get("duration") else "—"
+        flat_roi = f"{exp['flat_roi_pct']:.1f}%" if exp.get("flat_roi_pct") is not None else "—"
+        fk_roi = f"{exp['frac_kelly_roi_pct']:.1f}%" if exp.get("frac_kelly_roi_pct") is not None else "—"
+        win_rate = f"{exp['flat_win_rate_pct']:.1f}" if exp.get("flat_win_rate_pct") is not None else "—"
         tags = ", ".join(exp.get("tags", []))
 
-        print(f"{exp_id:<45} {status:<12} {log_loss:<12} {brier:<12} {duration:<10} {tags}")
+        print(f"{exp_id:<45} {status:<10} {log_loss:<10} {brier:<10} {flat_roi:<10} {fk_roi:<10} {win_rate:<8} {tags}")
 
     print(f"\nTotal: {len(experiments)} experiment(s)")
 
@@ -182,17 +184,29 @@ def compare_experiments(exp_ids, results_dir="experiments/results"):
         print(f"  {'─' * min(len(name), col_w):<{col_w}}", end="")
     print()
 
-    # Rows
+    # Rows: (label, getter, lower_is_better)
     rows = [
         ("Model Type", lambda e: e.get("config", {}).get("model", {}).get("type", "?"), False),
         ("Status", lambda e: e.get("metadata", {}).get("status", "?"), False),
         ("Git Hash", lambda e: e.get("metadata", {}).get("git", {}).get("hash", "?"), False),
         ("Features", lambda e: len(e.get("config", {}).get("features", {}).get("groups", [])), False),
+        ("Matches", lambda e: e.get("metrics", {}).get("matches_evaluated"), False),
+        # --- Probability metrics (lower is better) ---
         ("Avg Log Loss", lambda e: e.get("metrics", {}).get("avg_log_loss"), True),
         ("Avg Brier Score", lambda e: e.get("metrics", {}).get("avg_brier_score"), True),
-        ("ROI %", lambda e: e.get("metrics", {}).get("roi_pct"), False),
-        ("Total P&L", lambda e: e.get("metrics", {}).get("total_pnl"), False),
-        ("Matches", lambda e: e.get("metrics", {}).get("matches_evaluated"), False),
+        ("Avg Edge %", lambda e: e.get("metrics", {}).get("avg_edge_pct"), True),
+        ("Avg Signed Edge %", lambda e: e.get("metrics", {}).get("avg_signed_edge_pct"), False),
+        # --- Flat staking ---
+        ("Flat ROI %", lambda e: e.get("metrics", {}).get("flat_roi_pct"), False),
+        ("Flat Win Rate %", lambda e: e.get("metrics", {}).get("flat_win_rate_pct"), False),
+        ("Flat P&L", lambda e: e.get("metrics", {}).get("flat_pnl"), False),
+        # --- Fractional Kelly ---
+        ("Frac Kelly ROI %", lambda e: e.get("metrics", {}).get("frac_kelly_roi_pct"), False),
+        ("Frac Kelly Win %", lambda e: e.get("metrics", {}).get("frac_kelly_win_rate_pct"), False),
+        ("Frac Kelly P&L", lambda e: e.get("metrics", {}).get("frac_kelly_pnl"), False),
+        # --- Full Kelly ---
+        ("Full Kelly ROI %", lambda e: e.get("metrics", {}).get("full_kelly_roi_pct"), False),
+        # --- Meta ---
         ("Duration (s)", lambda e: e.get("metadata", {}).get("total_duration_seconds"), True),
     ]
 

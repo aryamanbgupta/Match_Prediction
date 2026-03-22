@@ -1,0 +1,55 @@
+experiment:
+  name: "xgb_v5b_venue_pruned"
+  description: "XGBoost v5 ablation: only non-redundant venue/context features (venue_dot_pct, venue_wicket_rate, chose_to_bat, match_importance, is_international)"
+  tags: ["xgboost", "v5b", "ablation", "venue_pruned"]
+
+data:
+  version: "v3"
+  test_dir: "data/betting_test"
+  odds_file: "betting_odds_v3.json"
+
+features:
+  groups:
+    - basic
+    - player_stats
+    - h2h
+    - momentum
+    - pressure
+    - chase
+    - medium
+    - player_metadata
+    - matchup
+    - type_based
+    - team_strength
+    - venue_profile
+    - match_context
+  exclude:
+    - venue_boundary_pct
+    - venue_powerplay_avg
+    - venue_death_avg
+    - venue_first_innings_avg
+    - venue_chase_win_pct
+    - competition_tier
+  include_extra: []
+
+model:
+  type: "xgboost"
+  hyperparameters:
+    n_estimators: 444
+    max_depth: 10
+    learning_rate: 0.24036372383981375
+    subsample: 0.8776663421127178
+    colsample_bytree: 0.7424085095268674
+    reg_alpha: 0.8503122682099661
+    reg_lambda: 0.18186045420525845
+  tune: false
+  tune_trials: 50
+
+evaluation:
+  n_sims: 10
+  parallel: false
+
+pipeline:
+  skip_parsing: false
+  skip_training: false
+  skip_evaluation: false
