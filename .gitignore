@@ -41,4 +41,7 @@ venv/
 *.log
 logs/
 
+# Autoresearch experiment log
+results.tsv
+
 docs/CLOUD_GPU_TESTING.md
