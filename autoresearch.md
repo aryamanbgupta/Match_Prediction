@@ -106,18 +106,20 @@ claude
 
 ## Workflow B: Overnight Autonomous Autoresearch
 
-### Step 1: Prevent macOS sleep + open tmux
+### Step 1: Prevent macOS sleep
 
-Your laptop must stay awake or the session suspends mid-training.
+Your Mac must stay awake or the session suspends mid-training.
 
 ```bash
-tmux new-session -s autoresearch       # keeps session alive after terminal close
-caffeinate -s &                        # backgrounded INSIDE tmux — survives terminal close
+caffeinate -s &
 ```
 
-If you don't have tmux: `brew install tmux`
-
-**Alternative**: Run on a desktop or always-on machine instead of a laptop.
+**Optional**: If running on a laptop or want terminal-close protection, use tmux:
+```bash
+brew install tmux                      # if not installed
+tmux new-session -s autoresearch       # keeps session alive after terminal close
+caffeinate -s &                        # backgrounded INSIDE tmux
+```
 
 ### Step 2: Ensure clean worktree + create experiment branch
 
@@ -167,20 +169,16 @@ Focus on hyperparameter tuning first — I think learning_rate and max_depth hav
 Read program.md and run 2 iterations of autoresearch
 ```
 
-### Step 5: Watch 1-2 iterations, then detach
+### Step 5: Watch 1-2 iterations, then walk away
 
-Watch the first iteration or two to make sure the agent is following protocol (commits before training, runs evaluation, logs to results.tsv). Once you're satisfied:
+Watch the first iteration or two to make sure the agent is following protocol (commits before training, runs evaluation, logs to results.tsv). Once you're satisfied, leave the terminal running.
 
-```
-Ctrl+B, then D     # detach tmux (session keeps running)
-```
-
-Close your laptop and sleep.
+**If using tmux**: detach with `Ctrl+B, then D` — you can close the terminal and the session survives.
 
 ### Step 6: Morning review
 
 ```bash
-# Reattach to the tmux session
+# If using tmux:
 tmux attach -t autoresearch
 
 # Check what branch you're on (in case you forgot the name)
@@ -223,6 +221,30 @@ git branch -D "$BRANCH"
 git stash list                               # find your named stash
 git stash pop stash@{0}                      # or: git stash pop stash@{N}
 ```
+
+### Step 8: Cleanup
+
+```bash
+# Kill caffeinate (always needed — it runs until explicitly stopped)
+pkill caffeinate
+
+# If using tmux:
+tmux kill-session -t autoresearch 2>/dev/null
+```
+
+**If the agent crashed** (OOM, hang, etc.):
+```bash
+# Kill any orphaned Python processes
+pkill -f "uv run python"
+pkill -f "scripts/sim_eval"
+pkill -f "scripts/xgboost_v2"
+pkill caffeinate
+
+# Verify nothing is left
+ps aux | grep -E 'caffeinate|uv run|xgboost|sim_eval' | grep -v grep
+```
+
+---
 
 ### How the agent generates ideas (no input needed)
 

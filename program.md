@@ -128,6 +128,9 @@ Go back to step 1. Continue until you've completed the requested number of itera
 - **Never modify fixed files** — especially parsing_v2.py and stats_provider.py
 - **No new dependencies** — work with existing packages only
 - **No test set changes** — the 44 matches and odds file are sacred
+- **Do NOT use --parallel on eval** — it spawns N processes each loading ~550MB stats cache, which OOM-kills this machine. The default sequential eval is fine (~5 min total).
+- **Memory limit: 8GB** — do not launch concurrent heavy processes (no background training + eval, no parallel simulations, no multi-process anything). One heavy process at a time.
+- **Run commands EXACTLY as written** — do not add flags, redirect output, or wrap in background processes unless the protocol says to
 - **If you crash twice in a row** — step back, try a more conservative change
 - **If 5 consecutive discards** — try a completely different direction
 - **Log EVERY attempt** — including crashes and discards. results.tsv is the full history.
