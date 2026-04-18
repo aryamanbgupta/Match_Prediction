@@ -635,6 +635,8 @@ Enable `parallel=True` in SimulationConfig. Reduces simulations for testing.
 | `feature_registry.py` | Central feature defs | Feature lists + hashes | See section 7 above |
 | `run_experiment.py` | Pipeline runner | Experiment results | See section 8 above |
 | `compare_experiments.py` | Experiment comparison | Terminal tables | See section 9 above |
+| `fetch_cricsheet.py` | Refresh match JSONs from Cricsheet | Updated `data/t20s_json/` + zip cache | [docs/OPERATIONS.md](docs/OPERATIONS.md#refreshing-cricsheet-data) |
+| `enrich_players_cricketdata.py` | Fill player metadata via R cricketdata | Appended rows in `all_players_enriched.csv` | [docs/OPERATIONS.md](docs/OPERATIONS.md#enriching-player-metadata-r-cricketdata) |
 
 ---
 

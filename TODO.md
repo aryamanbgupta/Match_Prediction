@@ -12,6 +12,18 @@
 - ✅ Experiment config schema (experiments/configs/*.yaml)
 - ✅ Pipeline runner (scripts/run_experiment.py)
 - ✅ Experiment comparison tool (scripts/compare_experiments.py)
+- ✅ **Cricsheet data refresh** (scripts/fetch_cricsheet.py) — 14 men's T20 leagues (added BPL, PSL, SMAT, LPL, Super Smash); match corpus grew 8,341 → 11,264 (+2,923); latest match date 2025-06-15 → 2026-04-16. Append-only merge, SHA-256 manifest, idempotent re-runs.
+- ✅ **Player enrichment via R cricketdata** (scripts/enrich_players_cricketdata.py) — filled 737 missing player bio rows in `all_players_enriched.csv` (10,519 → 11,256) using `cricketdata::fetch_player_meta` directly; no website scraping needed since Cricsheet's `people.csv` already carries `key_cricinfo` for every player we see.
+
+## Next Steps (post data-refresh)
+Sequential. Each step unblocks the next; the ultimate goal is a 500+ match betting eval set.
+
+1. [ ] **Update hardcoded date splits in `parsing_v2.py`** (lines ~1180-1188). Current splits stop at 2024-09-30 / betting 2024-06-01..2024-06-29, but data now runs to 2026-04-16. Proposed: `train_end=2024-12-31`, `val_end=2025-06-30`, `test_end=2025-12-31`, `golden_start=2026-01-01`, `betting_start=2026-01-01`, `betting_end=2026-04-16`. That betting window is what becomes the expanded eval set.
+2. [ ] **Parse-time gender filter in `parsing_v2.py`** — skip matches where `info.gender != 'male'`. Today only ELO is gender-segregated; women's ball outcomes still leak into training.
+3. [ ] **Rebuild features + stats cache**: `uv run python scripts/parsing_v2.py` (~10-15 min, destructive — regenerates `data/xgb_data_v3/` and `models/cache_chunks_v3/`).
+4. [ ] **Retrain XGBoost v3 baseline** on the expanded corpus: `uv run python scripts/run_experiment.py experiments/configs/xgb_v3_baseline.yaml --skip-parsing`. Expect team-strength and ELO features to sharpen now that we have ~33% more matches.
+5. [ ] **Polymarket odds ingestion** — wire `/Users/aryamangupta/Projects/polymarket-cricket/data/polymarket_prematch_odds.json` (1,161 resolved markets) into `scripts/sim_eval/loaders.py::BettingOddsLoader`. Use the team-name mapping table in `docs/DATA_REFRESH_HANDOFF.md`. This is the step that actually moves the eval set from 44 → 500+.
+6. [ ] **Re-run sim eval** on the expanded test + Polymarket odds: `uv run python scripts/sim_eval/run_sim_eval.py --test-dir data/betting_test --odds <new-odds-file>.json --n-sims 1000`. Compare log loss / Brier / ROI against the old 44-match baseline.
 
 ## Root Cause Analysis (Dec 2024)
 **Why both models predict ~50% for all matches:**
@@ -59,6 +71,7 @@
   - `scoring_acceleration` (last 10 vs last 30 run rate), `wicket_cluster` (wickets in last 10 balls), `boundaries_in_last_over`
 - [ ] **Home advantage (explicit)**:
   - `is_home_team` (3+ matches at venue in last 2 years), `team_venue_win_pct`
+- [ ] **Include The Hundred** (`hnd_json.zip`) in `scripts/fetch_cricsheet.py` once the pipeline supports variable innings length. Current 120-ball hardcodes live in `parsing_v2.py`, `sim_v1_2.py` (`T20Rules`), and `transformer_v1.py` (`max_seq_len=120`).
 - [ ] Phase-aware bowler selection (pace in powerplay/death, spin in middle overs)
 - [ ] Second-innings aggression adjustment based on required run rate
 - [ ] Unknown player encoding (bottom 5-10%) for new/unseen players

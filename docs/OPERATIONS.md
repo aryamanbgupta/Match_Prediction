@@ -40,6 +40,112 @@ python scripts/sim_eval/run_sim_eval.py \
     --n-sims 1000
 ```
 
+### Refreshing Cricsheet data
+
+Use `scripts/fetch_cricsheet.py` to pull the latest men's T20 JSON archives from
+Cricsheet and merge them into `data/t20s_json/`. The script is safe to re-run:
+zip downloads go through `.staging/` and are only committed after a successful
+SHA-256 compare, and match-JSON merges are **append-only** (Cricsheet JSONs are
+immutable once published, so we only add new filenames).
+
+```bash
+# Full refresh (14 men's T20 leagues + player register)
+uv run python scripts/fetch_cricsheet.py
+
+# Preview with no writes
+uv run python scripts/fetch_cricsheet.py --dry-run
+
+# Single league(s)
+uv run python scripts/fetch_cricsheet.py --only ipl,bbl
+
+# List leagues + deliberate exclusions
+uv run python scripts/fetch_cricsheet.py --list
+```
+
+**Artifacts** (all under the already-gitignored `data/` tree):
+- `data/.cricsheet_zips/*.zip` — cached league archives
+- `data/.cricsheet_zips/manifest.json` — per-slug sha256 + download timestamp + extracted match counts
+- `data/.cricsheet_zips/.refresh.log` — append-only run log
+- `data/t20s_json/*.json` — live match data (merge target)
+- `data/cricsheet_people.csv` — Cricsheet player register
+
+**Leagues included (14 men's T20):** IPL, BBL, CPL, T20 Blast, CSA T20 Challenge,
+SA20, ILT20, MLC, men's T20Is, BPL, Super Smash (NZ), PSL, SMAT, LPL.
+
+**Deliberately excluded:** The Hundred (100-ball format — see below), all women's
+competitions (pipeline is men's only), associate-nation T20Is (data quality), and
+the multi-format `all_json.zip` / Tests / ODIs (out of scope).
+
+**After a successful refresh**, re-run the parser manually to regenerate the
+training splits and stats cache:
+
+```bash
+uv run python scripts/parsing_v2.py   # ~10–15 min; rebuilds data/xgb_data_v3/ + models/cache_chunks_v3/
+```
+
+The fetcher will print this command at the end of any run that adds new matches.
+It does **not** auto-chain to `parsing_v2.py` because the cache rebuild is
+destructive.
+
+**New unenriched players.** The fetcher compares cricsheet IDs in the newly-added
+matches against `data/all_players_enriched.csv` and prints any IDs that aren't in
+the enriched metadata. Running `cricinfo_scraper_v3.py` to fill those in is a
+manual follow-up, not part of the fetcher.
+
+### Enriching player metadata (R cricketdata)
+
+After a fetch, `scripts/enrich_players_cricketdata.py` fills in biographical
+metadata (country, DOB, batting/bowling style, full name) for every cricsheet ID
+that appears in `data/t20s_json/*.json` but isn't yet in
+`data/all_players_enriched.csv`.
+
+It uses **only** the R `cricketdata` package via `rpy2` — no website scraping.
+For each missing ID it looks up the cricinfo key in `cricsheet_people.csv`
+(Cricsheet publishes these directly; `key_cricinfo` is present for ~100% of
+players we care about) and calls `cricketdata::fetch_player_meta(playerid=...)`.
+`cricketdata::find_player_id(name)` is only used as a fallback when the register
+has no cricinfo key, which in practice never happens for our data.
+
+```bash
+# Preview counts (no R calls, no writes)
+uv run python scripts/enrich_players_cricketdata.py --dry-run
+
+# Smoke test one player
+uv run python scripts/enrich_players_cricketdata.py --limit 1
+
+# Full enrichment of everything missing
+uv run python scripts/enrich_players_cricketdata.py
+```
+
+The script writes atomically (tmp file → rename), so a crash mid-run leaves
+`all_players_enriched.csv` untouched. Expect ~90%+ fill on country and DOB;
+batting/bowling style is sparser for associate-nation newcomers where Cricinfo
+itself has no data.
+
+Run order after new Cricsheet data lands:
+
+```bash
+uv run python scripts/fetch_cricsheet.py              # 1. pull new match JSONs + people.csv
+uv run python scripts/enrich_players_cricketdata.py   # 2. fill metadata for any new cricsheet IDs
+uv run python scripts/parsing_v2.py                   # 3. rebuild features + stats cache (destructive)
+```
+
+---
+
+#### Future: include The Hundred
+
+The Hundred (`hnd_json.zip`) is currently excluded because its 100-ball innings
+is incompatible with the 120-ball hardcodes that appear in several places:
+
+- `scripts/parsing_v2.py` — innings-length assumptions and feature windows
+- `scripts/sim_v1_2.py` — `T20Rules` caps innings at 20 overs (120 balls)
+- `scripts/transformer_v1.py` — `max_seq_len=120` for positional encoding
+
+Supporting The Hundred would require making innings length data-driven across
+those modules. Tracked in [TODO.md](../TODO.md).
+
+---
+
 ### Quick Simulation (Standalone)
 ```python
 from scripts.sim_v1_2 import *
