@@ -31,8 +31,10 @@ Record ALL metrics from the output.
 
 ## CURRENT BASELINE
 
-- Model: XGBoost v4 (team strength features)
-- Log Loss: ~0.710
+- Model: XGBoost v4 (team strength features, learning_rate=0.15)
+- Log Loss: ~0.584
+- Brier: ~0.203
+- Flat ROI: -35.3%
 - Features: 72 (see `scripts/feature_registry.py`)
 - Training: `uv run python scripts/xgboost_v2.py`
 
@@ -90,6 +92,7 @@ uv run python scripts/sim_eval/run_sim_eval.py \
     --odds betting_odds_v3.json \
     --n-sims 100
 ```
+If evaluation takes > 15 minutes, something is wrong (normal is ~5-10 min). Treat as CRASH.
 Record the "Avg Log Loss" from the output.
 
 ### 4. DECIDE: KEEP or DISCARD

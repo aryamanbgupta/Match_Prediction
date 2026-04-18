@@ -318,6 +318,28 @@ claude --dangerously-skip-permissions
 
 ---
 
+## Test Run Results (2026-04-17)
+
+2-iteration test on branch `autoresearch-test-20260417`, hyperparameter tuning only.
+
+| Iter | Change | Log Loss | Brier | Flat ROI | Win Rate | Avg Edge | Status |
+|------|--------|----------|-------|----------|----------|----------|--------|
+| — | Baseline (lr=0.24) | 0.710 | 0.255 | -44.8% | 24.4% | — | — |
+| 1 | lr 0.24 → 0.15 | **0.584** | **0.203** | **-35.3%** | **31.7%** | 20.9% | keep |
+| 2 | max_depth 10 → 7 | 0.720 | 0.262 | -50.1% | 22.0% | 26.5% | discard |
+
+**Key findings**:
+- Protocol worked correctly: commit → train → eval → decide → log → repeat
+- results.tsv numbers match JSON eval files exactly
+- lr=0.15 is a real improvement: all metrics improved together, avg edge did not shrink
+- max_depth reduction correctly discarded (underfitting)
+
+**Issues to fix before overnight run**:
+1. **Eval speed**: 169 min and 107 min per eval (should be ~5-10 min). Likely caused by orphaned processes from the earlier `--parallel` OOM crash competing for resources. Need to benchmark a clean eval to confirm normal speed, and add a guardrail to program.md (e.g., "if eval takes > 15 min, something is wrong — stop and report").
+2. **Extra JSON files**: Each eval writes a timestamped JSON file. Over 20 iterations, that's 20+ files (plus extras from retries). Not critical, but consider adding `--output-dir` to keep them organized, or have the agent delete stale results after each iteration.
+
+---
+
 ## Issues Previously Discovered & Resolved
 
 ### Issue 1: `rm` bypassed deny list via sandbox auto-allow
