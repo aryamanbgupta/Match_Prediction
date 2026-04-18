@@ -21,7 +21,7 @@ args = parser.parse_args()
 DEFAULT_BEST_PARAMS = {
     'n_estimators': 444,
     'max_depth': 10,
-    'learning_rate': 0.24036372383981375,
+    'learning_rate': 0.15,
     'subsample': 0.8776663421127178,
     'colsample_bytree': 0.7424085095268674,
     'reg_alpha': 0.8503122682099661,
