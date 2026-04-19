@@ -96,9 +96,14 @@ Feature dict construction, `StatsProvider` lookups (LRU cache is working well), 
 
 ---
 
-## 4. Recommended Fixes (suggestions, not yet implemented)
+## 4. Recommended Fixes
 
 Both fixes target `scripts/sim_v1_2.py` inside `XGBoostModelV2` and should be behind small unit tests to prove outputs match the current path.
+
+| Fix | Status | Measured gain |
+|---|---|---|
+| A — Cache encoder lookups | **Pending** (next lever) | Projected ~30% |
+| B — Skip DataFrame round-trip | **Implemented 2026-04-18** | 2.6× on full 44×100 eval (107 min → 41.7 min); bit-exact |
 
 ### Suggestion A — Cache encoder lookups per model instance
 
@@ -126,42 +131,53 @@ Matchup encoder (sim_v1_2.py:707) has the same pattern and should be cached the 
 
 **Risk**: Encoders persist `classes_` as a sorted numpy array of strings; the dict must be built from `str(c)` keys to match the current `str(player_id)` input. Verify behavior for unseen IDs (current code catches `ValueError` and assigns `-1`).
 
-### Suggestion B — Skip the DataFrame round-trip into XGBoost
+### Suggestion B — Skip the DataFrame round-trip into XGBoost *(implemented 2026-04-18)*
 
 **Expected gain**: ~45–50% wall time (removes most of §3a).
+**Actual gain** (44×100 sequential): 107.7 min → **41.7 min** (2.6×). Output `simulated_prob` is bit-identical to the pre-fix baseline with seed=42 (verified on 5 matches, max abs diff = 0.00e+00).
 
 **Where**: end of `extract_features` (sim_v1_2.py:748–753) and `predict_next_ball` (sim_v1_2.py:841–843).
 
-Two options:
+Two options were considered:
 
-1. **NumPy path**: have `extract_features` return a `np.float32` 1D array in `self.feature_columns` order; call `self.model.predict_proba(arr.reshape(1, -1))`. Avoids all pandas dtype inspection.
-2. **DMatrix path**: build an `xgb.DMatrix` once per ball from the numpy row and use `self.model.get_booster().inplace_predict(arr)`. Slightly lower-level but skips the sklearn wrapper entirely.
+1. **NumPy path** *(chosen)*: `extract_features` returns a preallocated `np.float64` 1-D array in `self.feature_columns` order; `predict_next_ball` calls `self.model.predict_proba(arr.reshape(1, -1))`. Avoids all pandas dtype inspection. `float64` (not `float32`) to match the training-time dtype from parquet exactly and keep probs bit-identical.
+2. **DMatrix path**: `self.model.get_booster().inplace_predict(arr)`. Slightly faster but skips the sklearn wrapper entirely — not needed to hit the target.
 
-**Sketch (option 1)**:
+**Sketch (option 1 — shipped)**:
 
 ```python
 # in __init__:
-self._feat_idx = {col: i for i, col in enumerate(self.feature_columns)}
-self._feat_buf = np.zeros(len(self.feature_columns), dtype=np.float32)
+self._feat_buf = np.zeros(len(self.feature_columns), dtype=np.float64)
+if hasattr(self.model, 'n_features_in_'):
+    assert self.model.n_features_in_ == len(self.feature_columns), (
+        f"Feature count mismatch: model expects {self.model.n_features_in_}, "
+        f"feature_columns file has {len(self.feature_columns)}"
+    )
 
 # in extract_features, replace the final DataFrame construction with:
 buf = self._feat_buf
 buf.fill(0.0)
-for col, idx in self._feat_idx.items():
+for i, col in enumerate(self.feature_columns):
     val = features.get(col)
     if val is not None:
-        buf[idx] = val
-return buf  # 1-D np.float32
+        buf[i] = val
+return buf  # 1-D np.float64, reused across calls
 
 # in predict_next_ball:
 probs = self.model.predict_proba(features.reshape(1, -1))[0]
 ```
 
-**Risk**: `predict_proba` on a numpy array may emit the "X does not have valid feature names" warning (currently filtered in `run_sim_eval.py:15`, so fine). Must verify the XGBoost model was trained on a DataFrame with the *same column order* as `feature_columns` — it was (parsing_v2 uses `feature_columns` as the source of truth), but add an assert. Also confirm that the model's 6-class output order is preserved (it is — `predict_proba` returns columns in model-class order).
+**Risks addressed during rollout**:
+- `"X does not have valid feature names"` warning — already filtered in `run_sim_eval.py:15`, so no noise.
+- Column-order drift — guarded by the `n_features_in_` assert at init; `feature_columns_v3.txt` is the single source of truth, written at train time and read at inference.
+- Float32 vs float64 — chose float64 to match the implicit parquet/pandas training dtype. `predict_proba(df)` and `predict_proba(np_row)` came out bit-identical across 100 real feature rows (max abs diff 0.00e+00).
+- Thread safety — `_feat_buf` is reused, so returned arrays must not be retained across calls. Safe under multiprocessing (each worker has its own model); documented in the `extract_features` docstring.
 
 ### Combined expected result
 
 ~5–8× speedup → 44 × 100 sequential in **~10–15 min**, matching the original target. Parallel mode (`--parallel`) would further multiply by core count, but only after these fixes — parallelism over slow inner loops is what caused the OOM before.
+
+**Actual after Fix B alone**: 2.6× (107 min → 41.7 min). Remaining gap to the 10–15 min target is now dominated by §3b — Fix A is the next lever.
 
 ---
 
@@ -173,7 +189,40 @@ probs = self.model.predict_proba(features.reshape(1, -1))[0]
 
 ---
 
-## 6. Reproducing
+## 6. Post-Fix-B Measurements (2026-04-18)
+
+### Profile benchmark (2 × 20)
+
+| Metric | Pre-fix | Post-Fix B |
+|---|---|---|
+| Wall time | 91.4 s | **35.8 s** |
+| Per ball (extract + predict) | 23.2 ms | **~6.5 ms** |
+| `predict_next_ball` cumulative | 52 s | 1.56 s |
+| `_transform_pandas_df` | 52 s (#1 hot spot) | **gone from top-30** |
+| `extract_features` cumulative | 39 s | 34.1 s (now dominated by sklearn `LabelEncoder.transform` — Fix A territory) |
+
+### Full eval (44 matches × 100 sims, sequential, seed=42)
+
+| Metric | Pre-fix baseline (`..._20260417_193516.json`) | Post-fix (`..._20260418_211339.json`) |
+|---|---|---|
+| Wall time | 107.7 min | **41.7 min** |
+| avg_log_loss | 0.71988 | 0.71988 |
+| avg_brier_score | 0.26167 | 0.26167 |
+| flat P&L / ROI | -20.54 / -50.1% | -20.54 / -50.1% |
+
+Metrics are identical to the baseline — the optimization didn't perturb the Monte Carlo.
+
+### Parity verification
+
+`scripts/validate_numpy_predict.py` drives real `MatchState` snapshots through `XGBoostModelV2.extract_features`, builds both the DataFrame and numpy inputs from the same feature dict, and asserts `predict_proba` outputs match to `atol=1e-12`. It also covers four edge cases (unseen player IDs → -1, all-zero row, extreme values, buffer reuse) and a 1,000-call micro-benchmark (requires ≥4× speedup). Run it any time XGBoost is upgraded:
+
+```bash
+uv run python scripts/validate_numpy_predict.py
+```
+
+---
+
+## 7. Reproducing
 
 ```bash
 # Quick smoke (under 2 min)

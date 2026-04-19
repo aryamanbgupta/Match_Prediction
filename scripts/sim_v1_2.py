@@ -489,6 +489,16 @@ class XGBoostModelV2(PredictionModel):
         with open(feature_columns_path, 'r') as f:
             self.feature_columns = [line.strip() for line in f.readlines()]
 
+        # Preallocated float64 row for per-ball prediction. Skips XGBoost's
+        # per-call pandas dtype introspection (the 57% hot spot profiled on
+        # 2026-04-18). float64 matches training-time dtype (parquet default).
+        self._feat_buf = np.zeros(len(self.feature_columns), dtype=np.float64)
+        if hasattr(self.model, 'n_features_in_'):
+            assert self.model.n_features_in_ == len(self.feature_columns), (
+                f"Feature count mismatch: model expects {self.model.n_features_in_}, "
+                f"feature_columns file has {len(self.feature_columns)}"
+            )
+
         # Map model output classes to our Outcome enum
         # XGBoost trains with 6-class remapping: {0:dot, 1:one, 2:two, 4:four, 6:six, 7:wicket}
         # → remapped to classes {0,1,2,3,4,5}
@@ -500,10 +510,14 @@ class XGBoostModelV2(PredictionModel):
         metadata_mode = "with player metadata" if player_metadata else "without player metadata"
         print(f"Loaded XGBoost v2 model with {len(self.feature_columns)} features {stats_mode} {metadata_mode}")
 
-    def extract_features(self, state: MatchState) -> pd.DataFrame:
-        """Extract comprehensive feature set matching v2 training"""
-        import pandas as pd
+    def extract_features(self, state: MatchState) -> np.ndarray:
+        """Extract comprehensive feature set matching v2 training.
 
+        Returns a preallocated, reused float64 buffer in self.feature_columns
+        order. Callers must not retain the returned array across calls. Safe
+        under multiprocessing (each worker has its own model instance); not
+        thread-safe.
+        """
         team_idx = state.current_team_idx
         striker = state.current_striker
         bowler = state.current_bowler
@@ -745,12 +759,14 @@ class XGBoostModelV2(PredictionModel):
         features['is_international'] = state.is_international
         features['competition_tier'] = state.competition_tier
 
-        # Create DataFrame with only features that exist in training
-        df_features = {}
-        for col in self.feature_columns:
-            df_features[col] = features.get(col, 0.0)
-
-        return pd.DataFrame([df_features])
+        # Fill preallocated numpy row in training-time column order.
+        buf = self._feat_buf
+        buf.fill(0.0)
+        for i, col in enumerate(self.feature_columns):
+            val = features.get(col)
+            if val is not None:
+                buf[i] = val
+        return buf
 
     def _extract_momentum_features(self, state: MatchState) -> dict:
         """Extract momentum features from match history"""
@@ -838,9 +854,9 @@ class XGBoostModelV2(PredictionModel):
             'boundary_percentage_recent': boundary_pct,
         }
     
-    def predict_next_ball(self, features: pd.DataFrame) -> Dict[str, float]:
-        """Get probabilities from model"""
-        probs = self.model.predict_proba(features)[0]
+    def predict_next_ball(self, features: np.ndarray) -> Dict[str, float]:
+        """Get probabilities from model. `features` is a 1-D np.float64 row."""
+        probs = self.model.predict_proba(features.reshape(1, -1))[0]
 
         # Apply ball-level calibration if available
         if self.ball_calibrator:
