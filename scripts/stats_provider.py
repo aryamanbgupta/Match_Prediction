@@ -527,6 +527,105 @@ class StatsProvider:
         }
 
 
+class StatsProviderCache:
+    """Per-instance memo layer over a StatsProvider for team/venue lookups.
+
+    The 5 memoized methods are pure functions of (lineup_ids, date) or
+    (venue, date) — both constant across every sim of a single match.
+    Without this wrapper, each of the ~240 balls × 100 sims re-runs
+    11-player loops inside the provider; with it, each match computes
+    them once and the remaining ~24,000 calls are dict hits.
+
+    Thin by design: non-cached methods are forwarded via __getattr__,
+    so callers use the wrapped instance exactly like a StatsProvider.
+    Wrap once at model construction; the wrapper is picklable (memos
+    hold only immutable keys and scalar/dict outputs) and survives the
+    multiprocessing.Pool.starmap hand-off to workers.
+    """
+
+    def __init__(self, provider):
+        self._provider = provider
+        self._team_batting_elo: Dict = {}
+        self._team_bowling_elo: Dict = {}
+        self._team_batting_strength: Dict = {}
+        self._team_bowling_strength: Dict = {}
+        self._venue_profile: Dict = {}
+
+    def __getattr__(self, name):
+        # __getattr__ runs only when normal lookup misses. During pickle
+        # restore, `_provider` itself hasn't been set yet — calling
+        # `self._provider` here would recurse. Use __dict__ directly and
+        # surface the miss as AttributeError so pickle can proceed.
+        try:
+            provider = self.__dict__['_provider']
+        except KeyError:
+            raise AttributeError(name)
+        return getattr(provider, name)
+
+    @staticmethod
+    def _norm_date(as_of_date) -> str:
+        if isinstance(as_of_date, datetime):
+            return as_of_date.strftime('%Y-%m-%d')
+        return as_of_date
+
+    def _team_key(self, player_ids, as_of_date):
+        return (tuple(player_ids), self._norm_date(as_of_date))
+
+    def get_team_batting_elo(self, player_ids, as_of_date) -> float:
+        key = self._team_key(player_ids, as_of_date)
+        cached = self._team_batting_elo.get(key)
+        if cached is None:
+            cached = self._provider.get_team_batting_elo(player_ids, as_of_date)
+            self._team_batting_elo[key] = cached
+        return cached
+
+    def get_team_bowling_elo(self, player_ids, as_of_date) -> float:
+        key = self._team_key(player_ids, as_of_date)
+        cached = self._team_bowling_elo.get(key)
+        if cached is None:
+            cached = self._provider.get_team_bowling_elo(player_ids, as_of_date)
+            self._team_bowling_elo[key] = cached
+        return cached
+
+    def get_team_batting_strength(self, player_ids, as_of_date) -> Dict[str, float]:
+        key = self._team_key(player_ids, as_of_date)
+        cached = self._team_batting_strength.get(key)
+        if cached is None:
+            cached = self._provider.get_team_batting_strength(player_ids, as_of_date)
+            self._team_batting_strength[key] = cached
+        return cached
+
+    def get_team_bowling_strength(self, player_ids, as_of_date) -> Dict[str, float]:
+        key = self._team_key(player_ids, as_of_date)
+        cached = self._team_bowling_strength.get(key)
+        if cached is None:
+            cached = self._provider.get_team_bowling_strength(player_ids, as_of_date)
+            self._team_bowling_strength[key] = cached
+        return cached
+
+    def get_venue_profile(self, venue: str, as_of_date) -> Dict[str, float]:
+        key = (venue, self._norm_date(as_of_date))
+        cached = self._venue_profile.get(key)
+        if cached is None:
+            cached = self._provider.get_venue_profile(venue, as_of_date)
+            self._venue_profile[key] = cached
+        return cached
+
+    def clear_memo(self) -> None:
+        self._team_batting_elo.clear()
+        self._team_bowling_elo.clear()
+        self._team_batting_strength.clear()
+        self._team_bowling_strength.clear()
+        self._venue_profile.clear()
+
+
+def wrap_with_cache(provider):
+    """Return a StatsProviderCache around `provider`; idempotent."""
+    if provider is None or isinstance(provider, StatsProviderCache):
+        return provider
+    return StatsProviderCache(provider)
+
+
 # Example usage and testing
 if __name__ == "__main__":
     # Example: Load and query stats

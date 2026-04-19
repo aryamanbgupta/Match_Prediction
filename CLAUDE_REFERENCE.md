@@ -469,6 +469,8 @@ all_stats = provider.get_all_stats('batter_id', 'bowler_id', '2024-06-01')
 # Returns all 6 features at once
 ```
 
+**Per-match memo wrapper**: `StatsProviderCache` (same module) wraps a `StatsProvider` and caches `get_team_batting_elo`, `get_team_bowling_elo`, `get_team_batting_strength`, `get_team_bowling_strength`, and `get_venue_profile` keyed on `(tuple(lineup_ids), date)` or `(venue, date)`. These are constant for all sims of a single match, so memoizing avoids re-running an 11-player loop per ball. `wrap_with_cache(provider)` is idempotent and is applied automatically inside every model class's `__init__` — callers pass a plain `StatsProvider` and don't need to opt in. The wrapper is pickle-safe for `multiprocessing.Pool.starmap`.
+
 **Cache Architecture** (Chunked Format):
 
 ```

@@ -19,6 +19,7 @@ from player_metadata import (
     encode_is_pace,
     encode_bowling_type
 )
+from stats_provider import wrap_with_cache
 
 
 class Outcome(Enum):
@@ -473,7 +474,7 @@ class XGBoostModelV2(PredictionModel):
         self.model = joblib.load(model_path)
         self.batter_encoder = joblib.load(batter_encoder_path)
         self.bowler_encoder = joblib.load(bowler_encoder_path)
-        self.stats_provider = stats_provider  # Optional stats provider for simulations
+        self.stats_provider = wrap_with_cache(stats_provider)  # Optional stats provider for simulations
         self.player_metadata = player_metadata  # NEW: Optional player metadata for Tier 1/2/3 features
         self.ball_calibrator = ball_calibrator  # Optional ball-level calibrator
 
@@ -1007,7 +1008,7 @@ class LSTMModelV1(PredictionModel):
 
         self.device = torch.device(device)
         self.window_size = window_size
-        self.stats_provider = stats_provider
+        self.stats_provider = wrap_with_cache(stats_provider)
         self.player_metadata = player_metadata
 
         # Load model config
@@ -1460,7 +1461,7 @@ class MLPModelV1(PredictionModel):
         import json
 
         self.device = torch.device(device)
-        self.stats_provider = stats_provider
+        self.stats_provider = wrap_with_cache(stats_provider)
         self.player_metadata = player_metadata
 
         # Load model config
@@ -1850,7 +1851,7 @@ class MLPModelV2(PredictionModel):
         import json
 
         self.device = torch.device(device)
-        self.stats_provider = stats_provider
+        self.stats_provider = wrap_with_cache(stats_provider)
         self.player_metadata = player_metadata
 
         # Load config
@@ -2288,7 +2289,7 @@ class TransformerModelV1(PredictionModel):
         import json
 
         self.max_seq_len = max_seq_len
-        self.stats_provider = stats_provider
+        self.stats_provider = wrap_with_cache(stats_provider)
         self.player_metadata = player_metadata
         self.use_mlx = use_mlx
 
