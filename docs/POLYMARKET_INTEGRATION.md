@@ -261,6 +261,53 @@ missing-info-players-fallback, roster-size-10-fallback, name-not-in-registry,
 appearance-order-preserved); the existing encoder-cache regression
 `scripts/tests/test_xgboost_model_v2_encoder_cache.py` still passes unchanged.
 
+### Impact-Player support — Option B (2026-04-19)
+
+IPL 2023+, ILT20, and SMAT matches carry a **12-man squad** (XI + Impact
+Sub) in `info.players[team]`. The lineup-fix landing above capped the
+lineup at 11 via `team_players[:11]`, silently dropping the 12th player.
+On the 261-match Polymarket set, 93 of 522 team-match pairs (48 matches,
+~18%) ship with a 12-man roster — mostly IPL 2026 and ILT20 2025.
+
+Fix (Option B): drop the `[:11]` slice in `sim_eval/loaders.py` so 12-man
+rosters flow through to `TeamLineup` unchanged, and widen the two
+hardcoded `range(11)` loops in `sim_v1_2.py::get_next_batsman_idx` and
+`get_available_bowlers` to `range(len(lineup.players))`. The innings
+naturally ends at 10 wickets, so one of the 12 typically doesn't bat —
+correct behaviour for the Impact Sub rule.
+
+Paired before/after at 100 sims, identical seed path, same odds file:
+
+| Slice                               | n   | Before LL | After LL | ΔLL        | 95% CI (paired bootstrap, 10k) |
+|-------------------------------------|----:|----------:|---------:|-----------:|--------------------------------|
+| Eleven-only matches                 | 208 |    0.7013 |   0.7013 | **+0.0000**| [+0.0000, +0.0000]             |
+| Impact-Player matches (12-man)      |  47 |    0.7711 |   0.8082 | **+0.0371**| [−0.0029, +0.0814] (includes 0)|
+| All (ex. 6 no-results)              | 255 |    0.7142 |   0.7210 | **+0.0068**| [−0.0005, +0.0152] (includes 0)|
+
+| Metric                             | Before | After | Δ   |
+|------------------------------------|-------:|------:|----:|
+| "Incomplete lineup" warnings       |      0 |     0 |  0  |
+| Team-match pairs shipped at len 12 |      0 |    93 | +93 |
+| Dropped 12th players               |     93 |     0 | −93 |
+| Flat betting P&L (47 impact)       |  −0.03 | +0.58 | +0.61 |
+
+**Interpretation.** The eleven-only slice is bit-identical (0 / 208 matches
+changed), proving the change is surgical. On the 47 impact-player matches,
+46 see a numerical shift in `simulated_prob` (the 12th player does enter
+the sim), but the direction is **high-variance**: top-5 improvements land
+at Δ≈−0.12 to −0.22, top-5 regressions at Δ≈+0.21 to +0.62. The paired-
+bootstrap CI fails to exclude 0, so we cannot claim log-loss improvement.
+Flat P&L moves +0.61 across the 47 impact matches. The fix is a
+**correctness landing, not a score improvement**: it stops silently
+dropping the 12th player, but without modelling the timed swap event
+(`delivery.replacements.match`) the simulator promotes the Impact Sub via
+the same wicket-fall logic as any other player, which is only an
+approximation of the real-world substitution rule.
+
+Regression guards: 2 new unit tests in `test_lineup_extraction.py`
+(`test_twelve_man_squad_preserved`, `test_impact_sub_in_deliveries_and_roster`)
+cover variable-length lineups and 12-man squads; all 10 tests pass.
+
 ## Rollback
 
 The Polymarket artifacts are additive and ignored by legacy configs:

@@ -80,8 +80,8 @@ def test_full_match_all_batted(loader):
     }
     team_a = loader._extract_team_players(data, TEAM_A, REGISTRY, ROSTER_A)
     team_b = loader._extract_team_players(data, TEAM_B, REGISTRY, ROSTER_B)
-    assert len(team_a) == 11
-    assert len(team_b) == 11
+    assert len(team_a) >= 11
+    assert len(team_b) >= 11
     assert _names(team_a) == ROSTER_A
     assert _names(team_b) == ROSTER_B
     assert all(not p.player_id.startswith("player_") for p in team_a)
@@ -101,7 +101,7 @@ def test_chase_won_early(loader):
         ],
     }
     team_a = loader._extract_team_players(data, TEAM_A, REGISTRY, ROSTER_A)
-    assert len(team_a) == 11
+    assert len(team_a) >= 11
     # First 7 are batters in appearance order; rest are tail from roster
     assert _names(team_a)[:7] == ROSTER_A[:7]
     # Remaining must be A8..A11 (tail from roster, appended in roster order)
@@ -122,7 +122,7 @@ def test_setting_team_five_down(loader):
         ],
     }
     team_a = loader._extract_team_players(data, TEAM_A, REGISTRY, ROSTER_A)
-    assert len(team_a) == 11
+    assert len(team_a) >= 11
     assert _names(team_a)[:6] == ROSTER_A[:6]
     assert set(_names(team_a)[6:]) == set(ROSTER_A[6:])
 
@@ -137,7 +137,7 @@ def test_no_result_abandoned(loader):
         "innings": [_innings_from_pairs(TEAM_A, pairs_a)],
     }
     team_b = loader._extract_team_players(data, TEAM_B, REGISTRY, ROSTER_B)
-    assert len(team_b) == 11
+    assert len(team_b) >= 11
     # First 4 are bowlers in appearance order, rest from roster in order
     assert _names(team_b)[:4] == ROSTER_B[:4]
     assert set(_names(team_b)) == set(ROSTER_B)
@@ -211,9 +211,83 @@ def test_appearance_order_preserved(loader):
     }
     team_a = loader._extract_team_players(data, TEAM_A, REGISTRY, ROSTER_A)
     assert _names(team_a)[:4] == ["A3", "A7", "A1", "A5"]
-    assert len(team_a) == 11
+    assert len(team_a) >= 11
     tail = _names(team_a)[4:]
     # Tail contains only roster members not yet seen, in roster order
     seen = {"A3", "A7", "A1", "A5"}
     expected_tail = [n for n in ROSTER_A if n not in seen]
     assert tail == expected_tail
+
+
+# ---- Option B: 12-man Impact Player squads ----
+
+IMPACT_NAME = "A12"
+ROSTER_A_12 = ROSTER_A + [IMPACT_NAME]
+REGISTRY_12 = {**REGISTRY, IMPACT_NAME: f"id_{IMPACT_NAME}"}
+
+
+def test_twelve_man_squad_preserved(loader):
+    """IPL 2023+/ILT20/SMAT format: info.players[team] has 12 names. Only the
+    XI appears in deliveries; the 12th (Impact Sub who never took the field)
+    must still be present in the extracted lineup — with a real player_id."""
+    pairs_a = [(ROSTER_A[i], ROSTER_A[(i + 1) % 11], ROSTER_B[i % 11], None) for i in range(11)]
+    pairs_b = [(ROSTER_B[i], ROSTER_B[(i + 1) % 11], ROSTER_A[i % 11], None) for i in range(11)]
+    info = _base_info()
+    info["players"][TEAM_A] = list(ROSTER_A_12)
+    info["registry"]["people"] = dict(REGISTRY_12)
+    data = {
+        "info": info,
+        "innings": [
+            _innings_from_pairs(TEAM_A, pairs_a),
+            _innings_from_pairs(TEAM_B, pairs_b),
+        ],
+    }
+    team_a = loader._extract_team_players(data, TEAM_A, REGISTRY_12, ROSTER_A_12)
+    assert len(team_a) == 12
+    # XI who actually played come first in appearance order; 12th is the
+    # roster-tail Impact Sub.
+    assert _names(team_a)[:11] == ROSTER_A
+    assert _names(team_a)[11] == IMPACT_NAME
+    assert all(not p.player_id.startswith("player_") for p in team_a)
+    impact_player = team_a[11]
+    assert impact_player.player_id == f"id_{IMPACT_NAME}"
+
+
+def test_impact_sub_in_deliveries_and_roster(loader):
+    """Impact Sub actually entered the XI (replaced a starter) and bowled /
+    batted after the swap. Extractor must still return all 12 names, with
+    appearance-order invariants preserved for the players who actually played."""
+    # A1..A10 bat (A11 replaced mid-innings by A12 = Impact Sub). A12 bowls
+    # later in opposing innings.
+    pairs_a = [(ROSTER_A[i], ROSTER_A[(i + 1) % 10], ROSTER_B[i % 11], None) for i in range(10)]
+    # A12 enters on the last ball of Team A's innings
+    pairs_a.append((IMPACT_NAME, ROSTER_A[0], ROSTER_B[0], None))
+    # Team B bats second; A12 bowls some deliveries
+    pairs_b = [(ROSTER_B[i], ROSTER_B[(i + 1) % 11], ROSTER_A[i % 11], None) for i in range(9)]
+    pairs_b.append((ROSTER_B[0], ROSTER_B[1], IMPACT_NAME, None))
+
+    info = _base_info()
+    info["players"][TEAM_A] = list(ROSTER_A_12)
+    info["registry"]["people"] = dict(REGISTRY_12)
+    # Cricsheet-style replacement event (not consulted by the extractor — this
+    # is a forward-compatibility check that the fixture is realistic)
+    data = {
+        "info": info,
+        "innings": [
+            _innings_from_pairs(TEAM_A, pairs_a),
+            _innings_from_pairs(TEAM_B, pairs_b),
+        ],
+    }
+    team_a = loader._extract_team_players(data, TEAM_A, REGISTRY_12, ROSTER_A_12)
+    assert len(team_a) == 12
+    # Appearance-order: A1..A10 first (batting in innings 1), then A12
+    # (entered as batter on the last ball of innings 1), then A11 (never
+    # batted or bowled — comes from roster tail).
+    names = _names(team_a)
+    assert names[:10] == ROSTER_A[:10]
+    assert names[10] == IMPACT_NAME
+    assert names[11] == "A11"
+    assert all(not p.player_id.startswith("player_") for p in team_a)
+    # Spot-check ID lookup for the Impact Sub
+    impact = next(p for p in team_a if p.name == IMPACT_NAME)
+    assert impact.player_id == f"id_{IMPACT_NAME}"

@@ -102,9 +102,12 @@ class TestMatchLoader:
                 while len(team2_players) < 11:
                     team2_players.append(Player(f"player_{len(team2_players)}", f"Player {len(team2_players)}", team2_name))
             
-            # Create lineups
-            team1_lineup = TeamLineup(team1_name, team1_players[:11])
-            team2_lineup = TeamLineup(team2_name, team2_players[:11])
+            # Create lineups. We keep all rostered players so 12-man Impact Sub
+            # squads (IPL 2023+, ILT20, SMAT) expose the 12th eligible player
+            # to the simulator; the innings-over-at-10-wickets rule ends the
+            # innings naturally before all 12 are exhausted.
+            team1_lineup = TeamLineup(team1_name, team1_players)
+            team2_lineup = TeamLineup(team2_name, team2_players)
             
             # Match context features
             event_info = info.get('event', {})

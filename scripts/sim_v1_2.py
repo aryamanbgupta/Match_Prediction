@@ -70,7 +70,7 @@ class MatchState:
     current_over: List[Outcome] = field(default_factory=list)  # outcomes in current over
     
     # Player tracking
-    striker_idx: int = 0  # index in batting order (0-10)
+    striker_idx: int = 0  # index in batting order
     non_striker_idx: int = 1
     bowler_idx: int = 0  # index in bowling team
     last_bowler_idx: int = -1 
@@ -177,9 +177,9 @@ class MatchState:
         
         # Find the lowest index player who hasn't batted yet
         # and isn't currently batting
-        for idx in range(11):
-            if (idx not in batsmen_out and 
-                idx != self.striker_idx and 
+        for idx in range(len(self.batting_lineup.players)):
+            if (idx not in batsmen_out and
+                idx != self.striker_idx and
                 idx != self.non_striker_idx):
                 return idx
         
@@ -216,7 +216,7 @@ class MatchState:
         available = []
         bowling_team = self.bowling_team_idx
         
-        for idx in range(11):  # All 11 players
+        for idx in range(len(self.bowling_lineup.players)):  # All eligible players
             # Can't bowl consecutive overs
             if self.last_bowler_idx >= 0 and idx == int(self.last_bowler_idx):
                 continue
