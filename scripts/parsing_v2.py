@@ -1176,15 +1176,14 @@ def process_folder_v2_with_splits(folder_path):
     """
     Process matches chronologically and save separate parquet files for each temporal split
     """
-    # Hardcoded date ranges from split summary
-    train_end = datetime(2022, 12, 29)
-    val_start = datetime(2022, 12, 29)
-    val_end = datetime(2024, 1, 11)
-    test_start = datetime(2024, 1, 11)
-    test_end = datetime(2024, 9, 30)
-    betting_start = datetime(2024, 6, 1)
-    betting_end = datetime(2024, 6, 29)
-    golden_start = datetime(2024, 10, 1)
+    # Split boundaries (Option A — betting_eval ⊂ test, driven by the
+    # polymarket odds file at eval time rather than by an event-name filter).
+    train_end = datetime(2024, 12, 31)
+    val_start = datetime(2024, 12, 31)
+    val_end = datetime(2025, 6, 30)
+    test_start = datetime(2025, 7, 1)
+    test_end = datetime(2026, 4, 16)
+    golden_start = datetime(2026, 4, 17)
     
     # Initialize trackers that will accumulate across all matches
     player_stats_tracker = PlayerStatsTracker()
@@ -1194,12 +1193,13 @@ def process_folder_v2_with_splits(folder_path):
     # NEW: Initialize player metadata provider for hand/arm/type/age features
     player_metadata = PlayerMetadataProvider('data/all_players_enriched.csv')
 
-    # Data containers for each split
+    # Data containers for each split. The old `betting_test` subset (T20 WC 2024)
+    # is gone — betting eval now lives in `data/polymarket_test/` + betting_odds_polymarket.json
+    # and is applied at eval time, not parse time.
     split_data = {
         'train': [],
         'validation': [],
         'test': [],
-        'betting_test': [],
         'golden_test': []
     }
 
@@ -1220,15 +1220,24 @@ def process_folder_v2_with_splits(folder_path):
 
     print(f"Processing {len(json_files)} files in chronological order...")
     
+    skipped_non_male = 0
     for file_path in json_files:
         try:
             with open(file_path, 'r') as file:
                 json_data = file.read()
-            
-            # Get match date
+
             data = json.loads(json_data)
+
+            # Parse-time gender filter: women's ball data was previously still
+            # contributing to ball-level training even though ELO was gender-segregated.
+            # Skip entirely so training sees only men's T20 cricket.
+            gender = data['info'].get('gender', 'male')
+            if gender != 'male':
+                skipped_non_male += 1
+                continue
+
             match_date = datetime.strptime(data['info']['dates'][0], '%Y-%m-%d')
-            
+
             # Determine which split this match belongs to
             if match_date < train_end:
                 current_split = 'train'
@@ -1238,25 +1247,14 @@ def process_folder_v2_with_splits(folder_path):
                 current_split = 'test'
             else:
                 current_split = 'golden_test'
-            
-            # Check if it's also a betting test match (T20 WC)
-            is_betting_match = (
-                betting_start <= match_date <= betting_end
-                and 't20' in data['info'].get('event', {}).get('name', '').lower()
-                and 'world cup' in data['info'].get('event', {}).get('name', '').lower()
-            )
 
-            # Gender filter: only update ELO for men's matches
-            # Women's ball data is still used for training (ball outcomes are valid),
-            # but ELO is gender-separated since players never cross that boundary.
-            gender = data['info'].get('gender', 'male')
             event_info = data['info'].get('event', {})
             event_name = event_info.get('name', '') if isinstance(event_info, dict) else ''
             team_type = data['info'].get('team_type', 'unknown')
             teams = data['info'].get('teams', [])
 
             match_k_factor = classify_match_k_factor(event_name, team_type, teams)
-            use_elo = elo_tracker if gender == 'male' else None
+            use_elo = elo_tracker  # gender filter upstream means this is always men's T20
 
             # CRITICAL: Take snapshot BEFORE processing this match
             # This represents what we knew at the START of this match (for simulations)
@@ -1292,9 +1290,7 @@ def process_folder_v2_with_splits(folder_path):
 
             # Add to appropriate split(s)
             split_data[current_split].extend(match_balls)
-            if is_betting_match:
-                split_data['betting_test'].extend(match_balls)
-            
+
             processed_files += 1
 
             if processed_files % 100 == 0:
