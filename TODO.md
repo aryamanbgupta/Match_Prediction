@@ -25,6 +25,47 @@ Sequential. Each step unblocks the next; the ultimate goal is a 500+ match betti
 5. [ ] **Polymarket odds ingestion** — wire `/Users/aryamangupta/Projects/polymarket-cricket/data/polymarket_prematch_odds.json` (1,161 resolved markets) into `scripts/sim_eval/loaders.py::BettingOddsLoader`. Use the team-name mapping table in `docs/DATA_REFRESH_HANDOFF.md`. This is the step that actually moves the eval set from 44 → 500+.
 6. [ ] **Re-run sim eval** on the expanded test + Polymarket odds: `uv run python scripts/sim_eval/run_sim_eval.py --test-dir data/betting_test --odds <new-odds-file>.json --n-sims 1000`. Compare log loss / Brier / ROI against the old 44-match baseline.
 
+## Evaluation Discipline (P0 — post-polymarket-baseline, 2026-04-19)
+
+Gate items before any new modeling work. Baseline is frozen at XGBoost v3 / clean-dedup Polymarket: model LL 0.7319, market LL 0.6267, coinflip LL 0.6931, flat ROI +0.06% (CI [−19%, +23%]), always-favorite baseline +4.15%. Model is worse than coinflip on log loss and worse than always-favorite on ROI. Close these gaps before claiming skill.
+
+### Blockers (must fix before next eval run)
+- [ ] **Fix incomplete-lineup bug** — 96 / 261 (37%) of the Polymarket eval matches hit `_extract_team_players` fallback and pad with dummy `Player` objects carrying fallback stats. `scripts/sim_eval/loaders.py::_extract_team_players` only sees players who actually batted/bowled; use `info.players[team]` as primary source and fall back to innings-derived order only for batting position. Every ablation until this is fixed has degraded lineups confounding the result.
+- [ ] **Match-level calibration layer** — fit isotonic (primary) + Platt (sanity) on the 255 outcome-matches, LOOCV, predict-from-team1-prob. Target: post-calibration LL < market LL (0.6267) or at minimum < coinflip (0.6931). Expected: ~0.68–0.70 from calibration alone (the 74%→51%, 16%→40% bins are symmetric over-dispersion, mechanically fixable). Must land before any feature work — otherwise every "did X help?" is contaminated by miscalibration.
+
+### Benchmark stack (mandatory columns for every experiment result)
+- [ ] Wire a `benchmarks` helper into `scripts/sim_eval/run_sim_eval.py` that emits all four side-by-side:
+
+  | Benchmark | Purpose | Current value |
+  |---|---|---|
+  | Coinflip (50/50) | Sanity floor — any model below this is broken | 0.6931 LL |
+  | Always-bet-favorite | Honest ROI baseline (no model needed) | +4.15% flat ROI, 64% WR |
+  | Polymarket market | Ceiling — closing this is the real win | 0.6267 LL |
+  | Our model | Subject under test | 0.7319 LL, +0.06% ROI |
+
+  Reject any experiment that improves model ROI but not model log loss vs market — that's counterparty noise, not skill.
+
+### Reporting template (three slices, every time)
+- [ ] All 261 matches — maximum n, noisy markets
+- [ ] ≥$50K volume subset (170) — honest liquidity gate
+- [ ] ≥$100K volume subset (110) — tighter, market is sharp
+- [ ] Bootstrap 95% CIs on ROI (≥1,000 resamples). Point estimates without CIs at n≤300 are meaningless — current flat-ROI CI spans ±20 pp.
+
+### Go / no-go rule for any "we can bet this" claim
+Both conditions required:
+1. Model log loss < market log loss on the ≥$50K slice
+2. Flat-ROI bootstrap CI on the ≥$50K slice excludes zero
+
+Nothing weaker ships.
+
+### Preserve a true holdout
+- [ ] Treat `data/polymarket_test/` (2025-07-01 → 2026-04-16) as an iteration set. After ~2–3 iterations, stop tuning against it — overfitting risk is real at 261 matches.
+- [ ] Ship a **golden** eval off matches played after **2026-04-17** (the current `golden_start`). Target 50+ matches before declaring any improvement real. Build a `betting_odds_golden.json` from fresh Polymarket snapshots captured genuinely pre-match (not scraped post-hoc), and keep the script in `scripts/fetch_polymarket_live.py` for ongoing appends.
+
+### Odds-build hardening (post clean-dedup)
+- [ ] Log the 7 residual winner-disagreements + 23 remaining `top_p > 0.92` entries as warnings in `scripts/build_polymarket_odds.py`, not just in the unmatched audit file. Make them grep-visible in eval runs so regressions in upstream Polymarket data are caught immediately.
+- [ ] Add `--min-volume` flag to `scripts/sim_eval/run_sim_eval.py` so liquidity-sliced runs don't need the ad-hoc filter script from `docs/POLYMARKET_INTEGRATION.md` lines 206–212.
+
 ## Root Cause Analysis (Dec 2024)
 **Why both models predict ~50% for all matches:**
 1. **Weak correlation**: Player stats have r=0.06-0.11 with ball outcomes (explains <1.5% of variance)

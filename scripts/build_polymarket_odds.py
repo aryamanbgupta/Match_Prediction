@@ -347,28 +347,41 @@ def write_outputs(matched: list[dict], unmatched: list[dict]) -> None:
     # binary YES/NO markets ("Will Team1 win?" and "Will Team2 win?"), so the
     # upstream extractor emits two records per fixture — one per binary market —
     # each carrying its own `winner` label and its own `prematch_price_team*`
-    # orientation. If we just took highest-volume (they often tie on volume),
-    # we could pick the market whose binary-token orientation doesn't match who
-    # actually won, giving inverted prematch odds.
+    # orientation. Beyond the YES/NO split, the upstream "prematch" snapshots
+    # occasionally contain in-play or post-match prices (top-side probability
+    # near 1.0) — those are obviously not prematch even though they're labelled
+    # as such. Naive highest-volume tiebreak selects them and inverts the
+    # apparent edge on dozens of fixtures.
     #
-    # Tiebreak, in order:
-    #   1. `winner` matches the authoritative Cricsheet outcome
-    #   2. highest volume
+    # Tiebreak, in priority order:
+    #   1. plausible: max(prematch_price_team1, prematch_price_team2) <= 0.92
+    #      (rejects in-play snapshots — genuine prematch T20 favourites rarely
+    #      exceed this, so the cutoff trades a handful of lopsided legitimate
+    #      prematch markets for discarding clearly-contaminated ones)
+    #   2. `winner` matches the authoritative Cricsheet outcome
+    #   3. highest volume
     #
-    # Cricsheet `info.outcome.winner` remains the ground-truth label we feed to
-    # the eval pipeline; the tiebreak just ensures the prematch prices we keep
-    # came from the Polymarket binary market whose "YES" side actually won.
+    # When both siblings are implausible we still keep the best-scoring one
+    # rather than dropping the fixture — log-loss from a noisy market price is
+    # better than losing the eval match entirely.
+    PLAUSIBLE_TOP_P = 0.92
     best_by_match: dict[str, tuple[dict, dict]] = {}
     winner_disagreements: list[dict] = []
     dup_dropped = 0
 
-    def score(m: dict) -> tuple[int, float]:
+    def score(m: dict) -> tuple[int, int, float]:
         poly_winner = m["market"].get("winner")
         mapped = normalize_team(poly_winner) if poly_winner else None
         cric = m["cricsheet"]["winner"]
         matches_cric = 1 if (mapped and cric and mapped == cric) else 0
+        p1 = m["market"].get("prematch_price_team1")
+        p2 = m["market"].get("prematch_price_team2")
+        if p1 is not None and p2 is not None:
+            plausible = 1 if max(p1, p2) <= PLAUSIBLE_TOP_P else 0
+        else:
+            plausible = 0
         vol = m["market"].get("volume_usd") or 0
-        return (matches_cric, vol)
+        return (plausible, matches_cric, vol)
 
     for m in matched:
         entry = build_odds_entry(m)

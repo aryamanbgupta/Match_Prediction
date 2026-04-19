@@ -267,7 +267,81 @@ uv run python scripts/validate_numpy_predict.py
 
 ---
 
-## 8. Reproducing
+## 8. Post-Expansion Profile (2026-04-18, retrained model)
+
+After the 2026-04-18 data refresh + retrain on 1.88M training balls, the 2×20 profile bench runs in **5.92 s** wall (vs 2.25 s pre-expansion). Per-match cost on the 44-match betting_test eval (seq, 100 sims) is **9.41 s/match → 6.9 min total**. Extrapolations to other test sets:
+
+| Test set | Matches | Sequential wall |
+|---|---|---|
+| `betting_test` + `betting_odds_v3.json` (current default) | 44 | **6.9 min** (measured) |
+| `betting_test` all files (if odds added) | 68 | ~10.7 min |
+| `polymarket_test` + `betting_odds_polymarket.json` | 261 | **~41 min** |
+| `golden_test` (no odds today) | 835 | ~131 min |
+
+### New dominant hot spots
+
+| Rank | Function | tottime / 5.92s | Notes |
+|---|---|---|---|
+| 1 | `xgboost.core.inplace_predict` | 2.71 s (46%) | Grew ~4× after retrain (deeper/more trees). Only batching kills it. |
+| 2 | `datetime.strftime` | **0.53 s (9%)** | 53 calls/ball, all on the same `match_date`. Easy memoize. |
+| 3 | `json.encoder.iterencode` | 0.38 s (6%) | Inside XGBoost's `make_jcargs`. Only reachable via batching. |
+| 4 | `_get_snapshot_for_date` (ex-strftime) | ~0.20 s (3%) | Same date across a match — memoize result. |
+| 5 | `extract_features` Python body | 0.20 s (3%) | Marginal. |
+
+---
+
+## 9. Candidate Next-Step Improvements
+
+Ordered by payoff vs effort. None are implemented yet.
+
+### Option A — `--n-workers N` for sim-level parallelism *(recommended first)*
+
+`SimulationEngine._simulate_parallel` (`sim_v1_2.py:3352`) already supports multiprocessing within a match (100 sims split across workers), but defaults to `cpu_count()` under `spawn`. On a 16 GB Mac Mini each worker re-instantiates the XGBoost model (~125 MB) + StatsProvider cache (≤550 MB), so 8 workers blew out RAM in the 2026-04-17 attempt.
+
+**Change**: expose `n_workers` through `SimulationConfig` → `MatchLevelEvaluator` → `run_sim_eval.py --n-workers N`. Bundle two tweaks:
+- Pass `max_cached_chunks=2` to the workers' `StatsProvider` (cuts per-worker 550 MB → 220 MB).
+- Set `OMP_NUM_THREADS=1` inside each worker so XGBoost doesn't over-subscribe CPU.
+
+**Expected gain**: ~3× (Amdahl + spawn overhead). Polymarket 261 × 100: **41 min → ~14 min**.
+**Memory budget at 4 workers**: 4 × (~125 MB model + ~220 MB cache + overhead) ≈ 2.5 GB — comfortable on 16 GB.
+**Code size**: ~15 lines across `run_sim_eval.py`, `SimulationConfig`, `_simulate_parallel`.
+**Risk**: spawn serializes `self`, which includes a warm StatsProvider cache — construct the StatsProvider inside the worker entry point, not at the parent, to avoid shipping 500 MB of chunk bytes per worker.
+
+### Option B — Batch predictions across sims *(biggest lever, real refactor)*
+
+Run all 100 sims lock-step per ball: at each ball, gather all live sims' feature rows into shape `(n_live, 63)` and call `predict_proba` once instead of 100 times. XGBoost amortizes kernel launch + `make_jcargs` over the batch — empirically ~5-10× faster than row-at-a-time on models of this size.
+
+**Expected gain**: 3-5× over Option A (single-process, no RAM multiplication). Polymarket: **41 min → ~10 min**.
+**Blockers**:
+- Sims diverge (wicket / innings end / match end at different balls) — need to thread a "live sims" mask through `simulate_ball`.
+- `MatchState` + `T20Rules.simulate_ball` are built assuming single-state-per-call — needs either a vectorized variant or batched-loop + masked predict.
+- Determinism: per-sim seeding still works but requires per-sim RNG instances (not `random.seed()` global).
+**Code size**: 100-200 LOC in `sim_v1_2.py`, plus a new test that asserts batched vs sequential produce identical distributions at a known seed.
+**Risk**: subtle — the refactor touches the inner loop used by every XGBoost eval. Would need a side-by-side parity run on 5 matches before rollout.
+
+### Option C — Small wins, stackable *(lowest risk, modest total)*
+
+Independent drop-in optimizations. Good filler when bigger levers are blocked.
+
+| Tweak | Where | Est. gain | Notes |
+|---|---|---|---|
+| Memoize `strftime` in `StatsProvider` | 9 call sites → one `@functools.lru_cache` helper | ~9% | `datetime` is hashable; per-worker cache is per-instance, safe. |
+| Memoize `_get_snapshot_for_date` result for the most-recent date | `stats_provider.py:126` | ~5% | Caller must not mutate the returned dict — it's already treated as read-only. |
+| Reduce `--n-sims` 100 → 50 | CLI flag | 2× | Sacrifices ~√2 MC noise on win probs; fine for iteration, not for final calibration. |
+
+**Combined (without n-sims drop)**: ~15% → Polymarket ~35 min. With n-sims=50: ~18 min.
+
+### Recommended sequencing
+
+1. Ship Option A + the strftime memoization from C → Polymarket under 15 min, safe on 16 GB.
+2. Run a Polymarket baseline at n_sims=100 to lock in calibration metrics.
+3. If iteration speed still matters (e.g. for autoresearch), tackle Option B as a dedicated PR with parity tests.
+
+Out of scope here: `--parallel` at the match level (across matches instead of within-match sims). Would require a different orchestration layer and `MatchLevelEvaluator` refactor; only worth it if single-match wall stays above a few seconds after A+B.
+
+---
+
+## 10. Reproducing
 
 ```bash
 # Quick smoke (under 2 min)

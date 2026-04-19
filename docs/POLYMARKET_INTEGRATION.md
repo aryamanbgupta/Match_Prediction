@@ -50,17 +50,32 @@ The 411 unmatched are mostly ODIs, Tests, U19 WC, women's T20s (WPL/WNCL), and t
 
 `TEAM_NAME_MAP` in `build_polymarket_odds.py` covers abbreviations (USA, UAE, Lanka, Kong), IPL single-city → franchise names, and `Emirates → United Arab Emirates` (Asia Cup context — `MI Emirates` is always spelled out in ILT20 records). Use `--verify-mapping` to dump unmapped Polymarket team names and fuzzy Cricsheet candidates before rerunning the build.
 
-### Dedup: Polymarket YES/NO binary markets
+### Dedup: Polymarket YES/NO binary markets + in-play contamination
 
-Polymarket runs each cricket fixture as two binary YES/NO markets ("Will Team1 win?" / "Will Team2 win?"). The upstream extractor (`polymarket-cricket/extract_prematch_odds.py`) emits one record per binary market, each with its own `winner` label and its own `prematch_price_team*` orientation. In the raw export, **201 (date, team-set) groups had contradictory winner labels** across their duplicate entries.
+Polymarket runs each cricket fixture as two binary YES/NO markets ("Will Team1 win?" / "Will Team2 win?"). The upstream extractor (`polymarket-cricket/extract_prematch_odds.py`) emits one record per binary market, each with its own `winner` label and its own `prematch_price_team*` orientation.
 
-Dedup tiebreak, in order:
-1. Polymarket `winner` (normalized) matches the authoritative Cricsheet `info.outcome.winner`.
-2. Highest `volume_usd`.
+A second contamination source: the upstream `prematch_price_team*` field is occasionally populated from an in-play or post-match snapshot with `max(p1, p2)` near 1.0. Raw inspection of siblings shows **61 fixtures** where one sibling has `top_p > 0.92` and another sibling for the same fixture has a plausible `top_p < 0.85`; 59 of those are recoverable by picking the plausible sibling.
 
-This ensures the prematch prices we keep come from the binary market whose YES side actually won. Without step 1, 62 of 261 eval entries were orientation-flipped (picking a match with implied probability 0.73 for the team that lost because we kept the wrong sibling).
+Dedup tiebreak, in priority order (see `scripts/build_polymarket_odds.py::score`):
+1. **Plausibility**: `max(prematch_price_team1, prematch_price_team2) ≤ 0.92`. Rejects in-play snapshots masquerading as prematch while keeping legitimate lopsided markets.
+2. Polymarket `winner` matches Cricsheet `info.outcome.winner`.
+3. Highest `volume_usd`.
 
-Post-fix: 63 raw disagreements → **1 residual disagreement** (France vs Norway 2026-04-07, single-entry fixture where Polymarket's upstream data is genuinely wrong). Cricsheet remains authoritative for `actual_winner` in the eval file regardless.
+When both siblings are implausible we still keep the best-scoring one rather than dropping the fixture; `actual_winner` always comes from Cricsheet regardless.
+
+**Impact of plausibility prefilter** (same 261 matches, only the kept sibling changes):
+
+| Metric (full 261)                  | Buggy dedup | Clean dedup | Δ            |
+|------------------------------------|------------:|------------:|-------------:|
+| shipped prices with `top_p > 0.92` | 23          | 9           | −14 recovered|
+| shipped prices with `top_p > 0.99` | 3           | 0           | −3           |
+| market log loss                    | 0.5917      | 0.6267      | +0.035       |
+| model flat ROI                     | −7.60%      | +0.06%      | +7.7 pp      |
+| model beats market (count)         | 100 / 255   | 110 / 255   | +10          |
+
+Model log loss and Brier do not change (predictions are independent of the odds file). The buggy numbers made the market look falsely prescient (its "prematch" price was actually post-match) and fabricated 49%+ "edges" that the model kept betting into and losing. Both effects disappear with the fix.
+
+Residual disagreements post-dedup: **7** (vs 1 before). The rise is an expected side-effect of preferring the plausible sibling over the matches-Cricsheet sibling in the 7 cases where the plausible one has the "wrong" orientation — benign because team1/team2 prices in each market are oriented to the fixture's teams (not the YES/NO orientation), so the kept prices are still correctly aligned.
 
 ## Parse-time gender filter
 
@@ -136,22 +151,72 @@ Top features: `is_middle_overs`, `is_pace`, `is_death_overs`, `score`, `balls_bo
 
 ### Sim-eval (match-level, 261 Polymarket matches, 100 sims each)
 
-| Metric              | Prior v3 (WC 2024, 44 matches) | New v3 (Polymarket, 261 matches) | Δ                |
-|---------------------|-------------------------------:|---------------------------------:|-----------------:|
-| matches             |                             44 |                              261 | 6×               |
-| avg log loss        |                          0.875 |                            0.732 | −16.4%           |
-| avg Brier           |                          0.317 |                            0.265 | −16.4%           |
-| avg edge            |                         +33.4% |                           +19.2% | closer to market |
-| avg signed edge     |                         −22.2% |                            −6.8% | closer to 0      |
-| flat ROI            |                         −43.9% |                            −5.4% | +38.5 pp         |
-| full Kelly ROI      |                         −22.7% |                            +0.3% | +23 pp, breakeven|
-| win rate            |                          26.8% |                            39.2% | +12.4 pp         |
+Two numbers are needed: a **full-set baseline** on all 261 matches (maximum data, keeps thin-market noise) and a **high-liquidity subset** so readers can see what the numbers look like once thin markets are stripped out. No single threshold is right — report both and let downstream decisions pick.
 
-**Segment breakdown:**
-- Favorites (odds < 2.0, 82 bets): WR 59.0%, flat ROI **+3.9%**, Kelly −0.54 u, edge 10.9%.
-- Underdogs (odds ≥ 2.0, 173 bets of 178): WR 28.7%, flat ROI −9.9%, Kelly **+1.25 u**, edge 23.1%.
+**Headline framing (full 261, clean dedup):**
 
-**Calibration:** model is well-calibrated in the middle band (predicted 45–65% tracks actual within ±1 pp) but over-confident at the high end (predicted 74.1% → actual 51.0%; predicted 83.5% → actual 52.4%). Underconfident at the low end (predicted 15.8% → actual 40.0%). Isotonic/Platt on match-level output is an obvious next lever.
+| Log loss           | value  | n   |
+|--------------------|-------:|----:|
+| Polymarket         | 0.6267 | 255 |
+| Coinflip (50/50)   | 0.6931 | —   |
+| Our model          | 0.7319 | 255 |
+
+Our model beats Polymarket on **110 / 255 (43%)** fixtures and is worse than coinflip in log loss. The 0.875 → 0.732 improvement over the prior v3 eval is real, but it's mostly eval-mix change (44 hardest WC 2024 matches → 261 mixed-tournament) plus more training data. **The model has never been closer to the market's own prices than it is now — and the market still beats it by 0.105 log loss units.**
+
+**Liquidity splits (clean dedup, full model predictions):**
+
+| Subset               |   n | Model LL | Market LL | Model flat ROI | Always-fav ROI | CI on model ROI    |
+|----------------------|----:|---------:|----------:|---------------:|---------------:|--------------------|
+| All matches          | 261 |   0.7319 |    0.6267 |         +0.06% |         +4.15% | [−19.0%, +23.2%]   |
+| ≥ $10K volume        | 239 |   0.7338 |    0.6373 |         +4.20% |         +2.94% | [−16.5%, +29.2%]   |
+| ≥ $50K volume        | 170 |   0.7664 |    0.6482 |         +0.36% |         +0.87% | [−19.5%, +22.7%]   |
+| ≥ $100K volume       | 110 |   0.7151 |    0.6224 |         +7.29% |         +9.28% | [−19.3%, +38.8%]   |
+| ≥ $500K volume       |  64 |   0.7437 |    0.6839 |        +21.67% |         −0.75% | [−18.5%, +70.2%]   |
+
+**Key reads from the liquidity table:**
+- Market beats model by ~0.10 log loss units **in every slice**. Volume doesn't unlock a hidden edge — it just shrinks the sample.
+- Model > always-bet-favorite baseline only at the ≥$500K bucket (n=64, CI [−18.5%, +70.2%] spans zero so not significant).
+- Filtering to ≥$50K makes model log loss *worse* (0.77), suggesting positive flat ROI on thin markets is mostly the model betting into dumb counterparties rather than finding real edges. This is the reverse of what we'd want in a skill story.
+- The favorite baseline is the honest benchmark: **+4.15% ROI / 64% WR on all 261 matches**. Any future modeling change has to beat that, not just beat our own prior number.
+
+**Calibration (all 261):** well-behaved in the middle band (predicted 45–65% tracks actual within ±1 pp), severely **over-confident at the high end** (predicted 74% → actual 51% on n=51; predicted 84% → actual 52% on n=21), and **under-confident at the low end** (predicted 16% → actual 40% on n=20). Isotonic regression or Platt scaling on the match-level output is the single most actionable next lever.
+
+**Prior vs new (context, not a skill claim):**
+
+| Metric              | Prior v3 (WC 2024, 44) | Clean-dedup Polymarket (261) |
+|---------------------|-----------------------:|-----------------------------:|
+| matches             |                     44 |                          261 |
+| avg log loss        |                  0.875 |                       0.7319 |
+| avg Brier           |                  0.317 |                       0.2649 |
+| flat ROI            |                 −43.9% |                       +0.06% |
+| win rate            |                  26.8% |                        42.1% |
+
+Delta is driven by eval-mix change and larger training corpus, not by the model getting closer to the market.
+
+### How to reproduce both baselines
+
+```bash
+# full 261
+uv run python scripts/sim_eval/run_sim_eval.py \
+    --test-dir data/polymarket_test \
+    --odds betting_odds_polymarket.json \
+    --n-sims 100
+
+# high-liquidity subset — filter the odds file, point sim-eval at the filtered copy
+uv run python - <<'PY'
+import json
+src = json.load(open('betting_odds_polymarket.json'))
+kept = [m for m in src['matches'] if (m.get('polymarket_volume_usd') or 0) >= 50_000]
+src['matches'] = kept; src['total_matches'] = len(kept)
+json.dump(src, open('betting_odds_polymarket_50k.json', 'w'), indent=2)
+PY
+uv run python scripts/sim_eval/run_sim_eval.py \
+    --test-dir data/polymarket_test \
+    --odds betting_odds_polymarket_50k.json \
+    --n-sims 100
+```
+
+The sim-eval script evaluates every match whose `match_id` appears in the odds file and whose JSON exists under `--test-dir`. `data/polymarket_test/` contains all 261 match JSONs; filtering happens purely via the odds file.
 
 ### Known caveats
 
