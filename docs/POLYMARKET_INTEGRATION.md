@@ -220,9 +220,46 @@ The sim-eval script evaluates every match whose `match_id` appears in the odds f
 
 ### Known caveats
 
-- **96 / 261 matches (37%) emit "Incomplete team lineups"** during eval. `TestMatchLoader._extract_team_players` only sees players who actually batted/bowled; rain-shortened / large-margin matches leave some players unobserved. Loader pads with dummy `Player` objects, which carry fallback stats into the sim. Pre-existing behavior; not a regression from the rebuild. Worth investigating whether the full `info.players[team]` roster should be used for lineups even when innings coverage is partial.
+- ~~**96 / 261 matches (37%) emit "Incomplete team lineups"**~~ **Fixed 2026-04-19.** `TestMatchLoader._extract_team_players` now uses `info.players[team]` as the authoritative roster and only falls back to dummy padding when the roster itself has < 11 names (never observed in the 261-match set). See the Lineup-fix impact section below.
 - **1 residual winner disagreement** (France vs Norway 2026-04-07) remains after YES/NO dedup — single-entry fixture where Polymarket's upstream `winner` field is genuinely wrong; Cricsheet outcome is authoritative for `actual_winner`.
 - **Afghanistan men's T20I gap**: ~24 Polymarket markets for Afghanistan bilaterals don't match any Cricsheet JSON. Coverage gap in our corpus, not a mapping bug.
+
+### Lineup-fix impact (2026-04-19)
+
+Before: 104 / 522 team-match pairs (across 96 matches) shipped with dummy
+`Player` objects (zero-stat ghosts) that polluted the Monte Carlo promotion
+sequence when top-order wickets fell. Root cause: the extractor walked only
+`innings.overs.deliveries`, so tail-enders who neither batted nor bowled
+(chase-won-quickly finishers, bat-all-20-overs lower orders, abandoned-match
+rosters) were invisible. Fix: `scripts/sim_eval/loaders.py::_extract_team_players`
+now treats `info.players[team]` as the source of truth and appends any
+roster member not seen in deliveries after the real batters and bowlers.
+
+Paired before/after at 100 sims, identical seed path, same odds file:
+
+| Slice                          | n    | Before LL | After LL | ΔLL        | 95% CI (paired bootstrap, 10k) |
+|--------------------------------|-----:|----------:|---------:|-----------:|--------------------------------|
+| Unaffected matches             | 163  |    0.7086 |   0.7086 | **+0.0000**| [+0.0000, +0.0000]             |
+| Affected matches               |  92  |    0.7734 |   0.7242 | **−0.0492**| [−0.0816, −0.0205] (excludes 0)|
+| All (ex. 6 no-results)         | 255  |    0.7319 |   0.7142 | **−0.0177**| [−0.0298, −0.0068] (excludes 0)|
+
+| Metric                        | Before       | After        | Δ          |
+|-------------------------------|-------------:|-------------:|-----------:|
+| "Incomplete lineup" warnings  |           96 |            0 | −96        |
+| Dummy `Player` objects shipped|          104 |            0 | −104       |
+| Flat betting ROI              |       +0.06% |       +2.78% | +2.72 pp   |
+| Full-Kelly ROI                |       +0.31% |       +4.37% | +4.06 pp   |
+
+Unaffected slice is bit-identical (ΔLL = 0), confirming the fix is surgical.
+Spot-checks on 3 affected matches (1477609 SA, 1479578 India, 1490236 India)
+confirmed real tail-enders (D Brevis, RA Herman, JF Smith, JM Sharma, RK Singh)
+now enter the lineup with real `StatsProvider` career stats instead of zeros.
+
+Regression guards: `scripts/tests/test_lineup_extraction.py` (8 unit tests
+covering full-match, chase-won-early, setting-team-5-down, no-result,
+missing-info-players-fallback, roster-size-10-fallback, name-not-in-registry,
+appearance-order-preserved); the existing encoder-cache regression
+`scripts/tests/test_xgboost_model_v2_encoder_cache.py` still passes unchanged.
 
 ## Rollback
 

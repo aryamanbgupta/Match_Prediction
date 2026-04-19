@@ -14,12 +14,18 @@ python scripts/parsing_v2.py
 # Step 2: Model training (~30-60 min)
 python scripts/xgboost_v2.py
 
-# Step 3: Evaluation (~5-10 min for 45 matches)
+# Step 3: Evaluation (~5-10 min for 45 matches, ~40 min for 261 polymarket matches)
 python scripts/sim_eval/run_sim_eval.py \
     --test-dir data/betting_test \
     --odds betting_odds_v3.json \
     --n-sims 1000
 ```
+
+> **WARNING — do not use `--parallel` on `run_sim_eval.py`.** The parallel
+> code path has been observed to crash this machine (2026-04-19). Always run
+> serial; budget ~40 min for 261×100 sims, ~5–10 min for 45×1000. For long
+> runs, launch as a background task and wait for the completion notification
+> rather than polling.
 
 ### Training Pipeline (LSTM)
 ```bash

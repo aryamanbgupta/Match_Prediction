@@ -86,14 +86,17 @@ class TestMatchLoader:
             # Get player registry
             player_registry = info['registry']['people']
             
-            # Extract players from innings (in batting order)
-            team1_players = self._extract_team_players(data, team1_name, player_registry)
-            team2_players = self._extract_team_players(data, team2_name, player_registry)
-            
-            # Ensure we have 11 players per team
+            # Roster from info.players[team] is the authoritative team sheet.
+            info_players = info.get('players', {}) or {}
+            team1_roster = list(info_players.get(team1_name, []))
+            team2_roster = list(info_players.get(team2_name, []))
+
+            team1_players = self._extract_team_players(data, team1_name, player_registry, team1_roster)
+            team2_players = self._extract_team_players(data, team2_name, player_registry, team2_roster)
+
+            # Only pad with dummies if the authoritative roster itself is < 11.
             if len(team1_players) < 11 or len(team2_players) < 11:
                 print(f"    Warning: Incomplete team lineups for {match_id}")
-                # Pad with dummy players if needed
                 while len(team1_players) < 11:
                     team1_players.append(Player(f"player_{len(team1_players)}", f"Player {len(team1_players)}", team1_name))
                 while len(team2_players) < 11:
@@ -129,47 +132,54 @@ class TestMatchLoader:
             print(f"    Error creating match state: {e}")
             return None, None
         
-    def _extract_team_players(self, data: dict, team_name: str, player_registry: dict) -> List[Player]:
-        """Extract players for a team in batting order
+    def _extract_team_players(
+        self,
+        data: dict,
+        team_name: str,
+        player_registry: dict,
+        roster: Optional[List[str]] = None,
+    ) -> List[Player]:
+        """Extract players for a team in batting order.
 
-        Design decision: Use order of appearance in innings as batting order
+        Order:
+          1. Batters in appearance order in the team's own innings.
+          2. Bowlers (not already seen) in appearance order in the opposing innings.
+          3. Any roster members not yet seen, appended in the roster's own order.
+             These are typically tail-enders who neither batted nor bowled.
 
-        BUG FIX: Previously was adding bowlers from opposing team's innings.
-        Now correctly extracts:
-        - Batters from innings where team_name is batting
-        - Bowlers from innings where team_name is BOWLING (i.e., opposing team's batting innings)
+        `roster` is the authoritative 11-man team sheet from
+        `data.info.players[team_name]`. When provided, step 3 recovers players
+        missed by a deliveries-only walk (chase-won-quickly tail-enders,
+        bat-all-20-overs lower orders, rain-abandoned squads).
         """
-        players = []
-        seen_players = set()
+        players: List[Player] = []
+        seen_names: set = set()
 
-        # First pass: Get batters from innings where this team batted
+        def _add(name: str) -> None:
+            if name in seen_names:
+                return
+            player_id = player_registry.get(name, name.lower().replace(' ', '_'))
+            players.append(Player(str(player_id), name, team_name))
+            seen_names.add(name)
+
         for innings in data.get('innings', []):
             if innings.get('team') == team_name:
                 for over in innings.get('overs', []):
                     for delivery in over.get('deliveries', []):
-                        # Add batsmen in order of appearance
-                        for role in ['batter', 'non_striker']:
+                        for role in ('batter', 'non_striker'):
                             if role in delivery:
-                                player_name = delivery[role]
-                                if player_name not in seen_players:
-                                    player_id = player_registry.get(player_name, player_name.lower().replace(' ', '_'))
-                                    player_id = str(player_id)
-                                    players.append(Player(player_id, player_name, team_name))
-                                    seen_players.add(player_name)
+                                _add(delivery[role])
 
-        # Second pass: Get bowlers from innings where OPPOSING team batted
-        # (because our bowlers bowl in the other team's batting innings)
         for innings in data.get('innings', []):
-            if innings.get('team') != team_name:  # Opposing team's batting innings
+            if innings.get('team') != team_name:
                 for over in innings.get('overs', []):
                     for delivery in over.get('deliveries', []):
                         if 'bowler' in delivery:
-                            player_name = delivery['bowler']
-                            if player_name not in seen_players:
-                                player_id = player_registry.get(player_name, player_name.lower().replace(' ', '_'))
-                                player_id = str(player_id)
-                                players.append(Player(player_id, player_name, team_name))
-                                seen_players.add(player_name)
+                            _add(delivery['bowler'])
+
+        if roster:
+            for name in roster:
+                _add(name)
 
         return players
     
