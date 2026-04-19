@@ -102,34 +102,47 @@ Both fixes target `scripts/sim_v1_2.py` inside `XGBoostModelV2` and should be be
 
 | Fix | Status | Measured gain |
 |---|---|---|
-| A — Cache encoder lookups | **Pending** (next lever) | Projected ~30% |
+| A — Cache encoder lookups | **Implemented 2026-04-18** | 16× on 2×20 profile bench (35.8s → 2.25s); 5×100 eval slice runs in 23.7s (extrapolates to ~3.5 min for 44×100). Bit-exact. |
 | B — Skip DataFrame round-trip | **Implemented 2026-04-18** | 2.6× on full 44×100 eval (107 min → 41.7 min); bit-exact |
 
-### Suggestion A — Cache encoder lookups per model instance
+### Suggestion A — Cache encoder lookups per model instance *(implemented 2026-04-18)*
 
-**Expected gain**: ~30% wall time (removes §3b).
+**Expected gain**: ~30% wall time vs pre-B; expected to dominate post-B (was the residual ~80% of post-B time).
+**Actual gain** (2×20 profile bench, post-B baseline): 35.8 s → **2.25 s** (~16×). 5×100 real eval slice ran in **23.7 s wall** — extrapolates to ~3.5 min for 44×100, well inside the 10–15 min target.
 
-**Where**: `XGBoostModelV2.__init__` + `extract_features` (sim_v1_2.py:469–540).
+**Where**: `XGBoostModelV2.__init__` and `extract_features` in `scripts/sim_v1_2.py`.
 
-**Sketch**:
+**Sketch (shipped)**:
 
 ```python
 # in __init__ after loading encoders:
 self._batter_id_to_code = {
-    cls: int(i) for i, cls in enumerate(self.batter_encoder.classes_)
+    str(c): int(i) for i, c in enumerate(self.batter_encoder.classes_)
 }
 self._bowler_id_to_code = {
-    cls: int(i) for i, cls in enumerate(self.bowler_encoder.classes_)
+    str(c): int(i) for i, c in enumerate(self.bowler_encoder.classes_)
 }
+self._matchup_to_code = (
+    {str(c): int(i) for i, c in enumerate(self.matchup_encoder.classes_)}
+    if self.matchup_encoder is not None else None
+)
 
-# in extract_features:
+# in extract_features (replaces try/except: -1 path):
 features['batter_encoded'] = self._batter_id_to_code.get(str(striker.player_id), -1)
 features['bowler_encoded'] = self._bowler_id_to_code.get(str(bowler.player_id), -1)
+if self._matchup_to_code is not None:
+    features['matchup_type_encoded'] = self._matchup_to_code.get(matchup_type, -1)
+else:
+    features['matchup_type_encoded'] = 0
 ```
 
-Matchup encoder (sim_v1_2.py:707) has the same pattern and should be cached the same way.
+**Risks addressed during rollout**:
+- `numpy.str_` vs plain `str` — `LabelEncoder.classes_` stores `numpy.str_`. Both ends use `str()` to coerce; verified bit-exact via the round-trip check in `scripts/tests/test_xgboost_model_v2_encoder_cache.py` against the real production encoders (6,590 batter + 4,856 bowler + 27 matchup classes).
+- Unknown IDs — old path raised `ValueError` then assigned `-1`. New path uses `dict.get(key, -1)` for the same observable behavior. Tested on a sentinel ID across all three caches.
+- Calibration drift — `predict_next_ball` outputs are bit-equal between cached and legacy paths on a real `MatchState` (max |Δ prob| = 0.00e+00 across all outcomes). Test: `scripts/tests/test_xgboost_model_v2_encoder_cache.py`.
+- External callers (`sim_v1.py`, debug scripts) — original `self.batter_encoder` / `self.bowler_encoder` / `self.matchup_encoder` attributes are kept untouched; only the internal `extract_features` path changed.
 
-**Risk**: Encoders persist `classes_` as a sorted numpy array of strings; the dict must be built from `str(c)` keys to match the current `str(player_id)` input. Verify behavior for unseen IDs (current code catches `ValueError` and assigns `-1`).
+**Out-of-scope follow-ups (same recipe, different files)**: legacy `XGBoostModel` (sim_v1_2.py:902–903 — note: uses raw int IDs, not `str()`); `LSTMModelV1` (1094, 1099, 1106, 1261); `MLPModelV1` (1546, 1551, 1670); `MLPModelV2` (1964, 1969, 1976, 2103); `TransformerModelV1` (2448, 2453, 2460, 2610). Each adds the `+1` offset for embedding padding. Not in the XGBoost eval hot path.
 
 ### Suggestion B — Skip the DataFrame round-trip into XGBoost *(implemented 2026-04-18)*
 
@@ -177,7 +190,8 @@ probs = self.model.predict_proba(features.reshape(1, -1))[0]
 
 ~5–8× speedup → 44 × 100 sequential in **~10–15 min**, matching the original target. Parallel mode (`--parallel`) would further multiply by core count, but only after these fixes — parallelism over slow inner loops is what caused the OOM before.
 
-**Actual after Fix B alone**: 2.6× (107 min → 41.7 min). Remaining gap to the 10–15 min target is now dominated by §3b — Fix A is the next lever.
+**Actual after Fix B alone**: 2.6× (107 min → 41.7 min).
+**Actual after Fix A + B**: ~30× cumulative (107 min → ~3.5 min projected from 5×100 in 23.7 s). Inside the 10–15 min target with headroom; the new dominant cost is `xgboost.core.inplace_predict` itself, which is the legitimate floor.
 
 ---
 
@@ -189,7 +203,38 @@ probs = self.model.predict_proba(features.reshape(1, -1))[0]
 
 ---
 
-## 6. Post-Fix-B Measurements (2026-04-18)
+## 6. Post-Fix-A Measurements (2026-04-18)
+
+### Profile benchmark (2 × 20)
+
+| Metric | Pre-fix | Post-Fix B | **Post-Fix A + B** |
+|---|---|---|---|
+| Wall time | 91.4 s | 35.8 s | **2.25 s** |
+| `extract_features` cumtime | 39 s | 34.1 s | **1.07 s** |
+| `predict_next_ball` cumtime | 52 s | 1.56 s | 1.06 s |
+| `LabelEncoder.transform` | 33.8 s (top 3) | 33.8 s (top 1) | **gone from top-30** |
+| `is_scalar_nan` | 26.5 s (top 5) | 26.5 s (top 4) | **gone from top-30** |
+| New top hot spot (tottime) | `_transform_pandas_df` (52 s) | `LabelEncoder.transform` (33.8 s) | `xgboost.core.inplace_predict` (0.68 s) |
+
+### Real eval slice (5 matches × 100 sims, sequential)
+
+23.7 s wall. Extrapolation to 44 × 100: **~3.5 min** (target was 10–15). Output `simulated_prob` is bit-identical to the post-B path (predict_next_ball test asserts max |Δ prob| < 1e-12 on a real `MatchState`).
+
+### Parity verification
+
+`scripts/tests/test_xgboost_model_v2_encoder_cache.py` — runs four checks against the real `models/xgb_v3/*` artifacts:
+1. Round-trip equality for every class in batter/bowler/matchup encoders (cache dict vs `LabelEncoder.transform`).
+2. Unknown ID → -1 across all three caches.
+3. `extract_features` parity vs the legacy try/except path on a real test match.
+4. `predict_next_ball` bit-equality on the same `MatchState` (max |Δ prob| < 1e-12).
+
+```bash
+uv run python scripts/tests/test_xgboost_model_v2_encoder_cache.py
+```
+
+---
+
+## 7. Post-Fix-B Measurements (2026-04-18)
 
 ### Profile benchmark (2 × 20)
 
@@ -222,7 +267,7 @@ uv run python scripts/validate_numpy_predict.py
 
 ---
 
-## 7. Reproducing
+## 8. Reproducing
 
 ```bash
 # Quick smoke (under 2 min)

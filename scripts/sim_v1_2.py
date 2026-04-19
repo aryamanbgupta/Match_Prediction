@@ -485,6 +485,20 @@ class XGBoostModelV2(PredictionModel):
             except:
                 print(f"  Warning: Could not load matchup encoder from {matchup_encoder_path}")
 
+        # Encoder lookup caches: replaces sklearn LabelEncoder.transform per ball
+        # (the 37% hot spot profiled on 2026-04-18). Verified bit-exact against
+        # transform() over all classes_ in scripts/scratch/verify_encoder_cache.py.
+        self._batter_id_to_code = {
+            str(c): int(i) for i, c in enumerate(self.batter_encoder.classes_)
+        }
+        self._bowler_id_to_code = {
+            str(c): int(i) for i, c in enumerate(self.bowler_encoder.classes_)
+        }
+        self._matchup_to_code = (
+            {str(c): int(i) for i, c in enumerate(self.matchup_encoder.classes_)}
+            if self.matchup_encoder is not None else None
+        )
+
         # Load feature columns to ensure consistency
         with open(feature_columns_path, 'r') as f:
             self.feature_columns = [line.strip() for line in f.readlines()]
@@ -542,16 +556,9 @@ class XGBoostModelV2(PredictionModel):
             'balls_in_over': state.balls % 6,
         }
 
-        # Player encoding
-        try:
-            features['batter_encoded'] = self.batter_encoder.transform([str(striker.player_id)])[0]
-        except:
-            features['batter_encoded'] = -1
-
-        try:
-            features['bowler_encoded'] = self.bowler_encoder.transform([str(bowler.player_id)])[0]
-        except:
-            features['bowler_encoded'] = -1
+        # Player encoding (cached dict lookup; -1 sentinel for unknown IDs)
+        features['batter_encoded'] = self._batter_id_to_code.get(str(striker.player_id), -1)
+        features['bowler_encoded'] = self._bowler_id_to_code.get(str(bowler.player_id), -1)
 
         # NEW: Per-innings batter stats (from batsman_stats tracking)
         batsman_key = (team_idx, state.striker_idx)
@@ -715,14 +722,11 @@ class XGBoostModelV2(PredictionModel):
             features['spin_matchup_advantage'] = spin_matchup_advantage
             features['same_arm_matchup'] = 1 if same_arm_matchup else (0 if same_arm_matchup is False else -1)
 
-            # Encode matchup_type if encoder available
-            if self.matchup_encoder:
-                try:
-                    features['matchup_type_encoded'] = self.matchup_encoder.transform([matchup_type])[0]
-                except:
-                    features['matchup_type_encoded'] = -1  # Unknown matchup
+            # Encode matchup_type via cached dict (-1 for unknown, 0 if no encoder)
+            if self._matchup_to_code is not None:
+                features['matchup_type_encoded'] = self._matchup_to_code.get(matchup_type, -1)
             else:
-                features['matchup_type_encoded'] = 0  # Default if no encoder
+                features['matchup_type_encoded'] = 0
         else:
             # Fallback if no player metadata
             features.update({

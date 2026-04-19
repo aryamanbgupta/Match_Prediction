@@ -665,7 +665,7 @@ Enable `parallel=True` in SimulationConfig. Reduces simulations for testing.
 | Transformer | v1 | 63 | `models/transformer_v1/` |
 
 **Recent Updates**:
-- ✅ Eval speedup Fix B (2026-04-18): `XGBoostModelV2` now returns a preallocated float64 row and skips the per-ball DataFrame→XGBoost conversion. 44×100 eval: 107.7 min → 41.7 min (2.6×), bit-identical `simulated_prob`. See `docs/EVAL_PROFILING.md`; regression guard: `scripts/validate_numpy_predict.py`.
+- ✅ Eval speedup Fix A + B (2026-04-18): `XGBoostModelV2` now (A) caches `LabelEncoder` classes as dicts to replace per-ball `transform()` calls, and (B) returns a preallocated float64 row to skip the per-ball DataFrame→XGBoost conversion. Combined: 2×20 profile bench 91.4 s → **2.25 s** (~40×); full 44×100 eval projected ~3.5 min (from 107.7 min). Bit-identical `simulated_prob`. See `docs/EVAL_PROFILING.md`; regression guards: `scripts/tests/test_xgboost_model_v2_encoder_cache.py`, `scripts/validate_numpy_predict.py`.
 - ✅ Fixed XGBoost class_to_outcome bug (was 8-class, now correct 6-class)
 - ✅ Fixed evaluation JSON output — now saves full betting metrics (P&L, ROI, win rate, Kelly) with timestamped filenames
 - ✅ Re-evaluated all 4 models post-bug-fix — all lose money (best: XGBoost -43.9% flat ROI). Root cause: no team-level signal.
