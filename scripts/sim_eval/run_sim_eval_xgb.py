@@ -85,7 +85,7 @@ def test_v2_simulation():
     try:
         features = model.extract_features(state)
         print(f"✓ Features extracted: {features.shape}")
-        print(f"  Sample features: {list(features.columns)[:10]}")
+        print(f"  Sample features: {model.feature_columns[:10]}")
     except Exception as e:
         print(f"✗ Feature extraction failed: {e}")
         return

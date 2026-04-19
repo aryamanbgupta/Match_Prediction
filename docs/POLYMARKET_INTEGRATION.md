@@ -1,7 +1,7 @@
 # Polymarket Odds Ingestion & Test-Set Expansion
 
 **Created**: April 2026
-**Status**: Phases 1-3 complete. Phase 4 (destructive parse rebuild) and Phase 5 (retrain + sim-eval) pending user trigger.
+**Status**: All phases complete as of 2026-04-18. New XGBoost v3 baseline retrained on the post-split/gender-filter corpus and evaluated against the 261-match Polymarket set — results below.
 
 Expands the betting eval set from the legacy 44 T20 WC 2024 matches to **261 matches** across T20 WC 2026, BBL 2025-26, ILT20 2025-26, SA20 2025-26, and bilateral internationals, using Polymarket pre-match prices as the market baseline.
 
@@ -87,29 +87,77 @@ Last result (2026-04-18):
 
 Test-split events look sane (Vitality Blast, T20 WC, BBL, ILT20, BPL, CPL, SA20, Super Smash, …) and dates spread evenly across 2025-07 → 2026-04.
 
-## Pending phases
+## Phase 4 — destructive rebuild (completed 2026-04-18)
 
-### Phase 4 — destructive rebuild (user-triggered)
+Before rebuilding, the old artifacts were renamed rather than overwritten so we had an atomic rollback path:
 
 ```
-uv run python scripts/parsing_v2.py
+mv data/xgb_data_v3      data/xgb_data_v3_old        (159 MB)
+mv models/cache_chunks_v3 models/cache_chunks_v3_old  (8.9 GB)
+mv models/xgb_v3          models/xgb_v3_old           (23 MB)
+uv run python scripts/parsing_v2.py                   (~10-15 min)
 ```
 
-Regenerates `data/xgb_data_v3/` + `models/cache_chunks_v3/` (~10-15 min). Only run after the dry-run looks good.
+Post-rebuild sanity check (`/tmp/claude/post_rebuild_sanity.py`) passed:
 
-### Phase 5 — retrain + sim-eval
+| Check                                            | Value                           |
+|--------------------------------------------------|---------------------------------|
+| train parquet rows                               | 1,876,971                       |
+| validation parquet rows                          | 124,292                         |
+| test parquet rows                                | 186,667                         |
+| cache chunks generated                           | 75                              |
+| cache snapshot dates                             | 2005-02-17 → 2026-04-16 (3,709) |
+| `data/polymarket_test/*.json` count              | 261                             |
+| odds match_ids resolving to test JSONs           | 261 / 261                       |
+| StatsProvider temporal lookup (random v3 batter) | returns stats cleanly           |
+
+## Phase 5 — retrain + sim-eval (completed 2026-04-18)
+
+Config: `experiments/configs/xgb_v3_polymarket.yaml` (v2 Optuna hyperparams, `n_sims: 100`, `remove_margin=False` handled in loader).
 
 ```
 uv run python scripts/run_experiment.py \
-    experiments/configs/xgb_v3_baseline.yaml --skip-parsing
-
-uv run python scripts/sim_eval/run_sim_eval.py \
-    --test-dir data/polymarket_test \
-    --odds betting_odds_polymarket.json \
-    --n-sims 100
+    experiments/configs/xgb_v3_polymarket.yaml --skip-parsing
 ```
 
-`BettingOddsLoader` should be called with `remove_margin=False` — Polymarket is margin-free by construction (prices sum to ~1.0 from the two binary YES tokens, not bookmaker-padded).
+Runtime: ~4 min training + ~38 min sim-eval (exit 0). Experiment dir: `experiments/results/xgb_v3_polymarket_20260418_223639_9848fb3/`.
+
+### Training (ball-level, XGBoost v3, 63 features)
+
+| Metric              | Value  |
+|---------------------|-------:|
+| val log loss        | 1.6447 |
+| test log loss       | 1.6379 |
+| val accuracy        | 0.3159 |
+| test accuracy       | 0.3181 |
+| n_estimators used   | 444    |
+
+Top features: `is_middle_overs`, `is_pace`, `is_death_overs`, `score`, `balls_bowled`, `batter_runs_scored`, `balls_ratio`, `batter_balls_faced`, `wickets`, `wickets_in_hand`.
+
+### Sim-eval (match-level, 261 Polymarket matches, 100 sims each)
+
+| Metric              | Prior v3 (WC 2024, 44 matches) | New v3 (Polymarket, 261 matches) | Δ                |
+|---------------------|-------------------------------:|---------------------------------:|-----------------:|
+| matches             |                             44 |                              261 | 6×               |
+| avg log loss        |                          0.875 |                            0.732 | −16.4%           |
+| avg Brier           |                          0.317 |                            0.265 | −16.4%           |
+| avg edge            |                         +33.4% |                           +19.2% | closer to market |
+| avg signed edge     |                         −22.2% |                            −6.8% | closer to 0      |
+| flat ROI            |                         −43.9% |                            −5.4% | +38.5 pp         |
+| full Kelly ROI      |                         −22.7% |                            +0.3% | +23 pp, breakeven|
+| win rate            |                          26.8% |                            39.2% | +12.4 pp         |
+
+**Segment breakdown:**
+- Favorites (odds < 2.0, 82 bets): WR 59.0%, flat ROI **+3.9%**, Kelly −0.54 u, edge 10.9%.
+- Underdogs (odds ≥ 2.0, 173 bets of 178): WR 28.7%, flat ROI −9.9%, Kelly **+1.25 u**, edge 23.1%.
+
+**Calibration:** model is well-calibrated in the middle band (predicted 45–65% tracks actual within ±1 pp) but over-confident at the high end (predicted 74.1% → actual 51.0%; predicted 83.5% → actual 52.4%). Underconfident at the low end (predicted 15.8% → actual 40.0%). Isotonic/Platt on match-level output is an obvious next lever.
+
+### Known caveats
+
+- **96 / 261 matches (37%) emit "Incomplete team lineups"** during eval. `TestMatchLoader._extract_team_players` only sees players who actually batted/bowled; rain-shortened / large-margin matches leave some players unobserved. Loader pads with dummy `Player` objects, which carry fallback stats into the sim. Pre-existing behavior; not a regression from the rebuild. Worth investigating whether the full `info.players[team]` roster should be used for lineups even when innings coverage is partial.
+- **1 residual winner disagreement** (France vs Norway 2026-04-07) remains after YES/NO dedup — single-entry fixture where Polymarket's upstream `winner` field is genuinely wrong; Cricsheet outcome is authoritative for `actual_winner`.
+- **Afghanistan men's T20I gap**: ~24 Polymarket markets for Afghanistan bilaterals don't match any Cricsheet JSON. Coverage gap in our corpus, not a mapping bug.
 
 ## Rollback
 
@@ -117,3 +165,4 @@ The Polymarket artifacts are additive and ignored by legacy configs:
 
 - Delete `betting_odds_polymarket.json`, `data/polymarket_test/`, `data/polymarket_build_unmatched.json` — no impact on legacy pipeline.
 - `parsing_v2.py` split-constant + gender-filter change is the one destructive step. `git revert` and re-run `uv run python scripts/parsing_v2.py` to restore old splits. Cricsheet corpus + `all_players_enriched.csv` are append-only and safe.
+- `data/xgb_data_v3_old/`, `models/cache_chunks_v3_old/`, `models/xgb_v3_old/` hold the pre-rebuild copies (~9 GB). Kept until the new baseline is confirmed stable; delete to reclaim disk.
