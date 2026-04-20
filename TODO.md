@@ -123,13 +123,15 @@ Nothing weaker ships.
 
 ## Infrastructure & Refactoring
 - [ ] **Delete legacy v2 stats cache** (`models/cache_chunks/`, 7.4GB) — `StatsProvider` defaults to v3; no active code path loads v2 by default. Confirm `--model-version v2` usage is dead, then `rm -rf`. Instant -7.4GB disk.
-- [ ] **Rewrite v3 stats cache as per-entity timelines** (~30–50x size reduction, same API). Current format stores a full global snapshot per date (3,442 dates × ~7,700 players × ~242k h2h matchups → 8.9GB), but consecutive snapshots differ by <1.5% for batting and <0.1% for h2h — measured redundancy is ~49x. Switch to per-entity timeline tables:
-  - `batting_timeline.parquet`: `player_id, date, runs, balls, dismissals` — one row per date that player actually played
-  - `bowling_timeline.parquet`, `h2h_timeline.parquet`, `venue_timeline.parquet`, `batting_vs_type.parquet`, `bowling_vs_hand.parquet`, `batting_elo.parquet`, `bowling_elo.parquet`
-  - Query: index by entity id, bisect that entity's date list for target_date. Same O(log n) as today; drop chunked-LRU machinery entirely.
-  - Expected size: ~200–400MB total (down from 8.9GB). `StatsProvider.get_*` public API unchanged.
-  - Alternative backend: SQLite with `(entity_id, date)` compound index — zero memory footprint, ms-latency random access.
-  - Suggested path: prototype on batting_timeline first, measure actual size + latency vs chunks, then roll remaining entities.
+- [x] ~~Rewrite v3 stats cache as per-entity timelines~~ — **superseded by SQLite migration (Phase 1+2, 2026-04-19)**. 11 GB chunks → 39.7 MB SQLite (276× smaller) with same public API. `StatsProvider` auto-detects `models/player_stats_cache_v3.sqlite`. See `docs/SQLITE_MIGRATION_PROFILE.md`.
+- [ ] **Phase 5: rewrite `parsing_v2.py` to emit SQLite directly, delete chunks format** (destructive, ~2 days, deferred per migration plan until Phase 4 has been stable 1+ weeks — i.e. not before **2026-04-26**):
+  - Modify `scripts/parsing_v2.py` (lines ~1200–1380) to stream snapshots straight into `models/player_stats_cache_v3.sqlite` using the delta-compression pattern from `scripts/build_stats_sqlite.py`. Drop the per-chunk pickle write.
+  - Delete `scripts/build_stats_sqlite.py` (one-shot converter, no longer needed).
+  - Delete `_ChunkedBackend` from `scripts/stats_provider.py` and all its chunk-lookup/LRU machinery.
+  - `rm -rf models/cache_chunks_v3/` (11 GB); delete `models/player_stats_cache_v3_metadata.pkl`.
+  - Remove chunk-path references from `CLAUDE.md`, `docs/`, and the `feedback_no_parallel_sim_eval` memory entry (the "chunks crash parallel eval" warning becomes historical).
+  - Regression guard: `scripts/tests/test_sqlite_equivalence.py` already validates the SQLite output format bit-exactly; the new parsing_v2 path must produce a DB that passes the same harness when re-run against a reference chunk build (so keep one reference SQLite file around for the diff, then delete chunks).
+  - Gate before starting: ≥ 7 days of uneventful production eval runs on the SQLite backend. No regressions, no surprises.
 - [ ] **Deduplicate feature-assembly blocks in `sim_v1_2.py`** — 4 near-identical blocks at lines ~601, ~1153, ~1596, ~2017 all call the same `stats_provider` methods and stitch the same feature dict. Drift risk when adding/modifying features. Extract one `build_ball_features(state, striker, bowler, stats_provider)` helper and have all model wrappers (XGBoostModelV2, LSTMModelV1, TransformerModelV1, MLPModelV1) call it.
 - [ ] **Split `parsing_v2.py` into cache-builder + feature-materializer** — currently one 10–15 min monolithic pass builds the stats cache AND materializes training parquet. Splitting lets you iterate on feature definitions without rebuilding the stats backbone:
   - `build_stats_cache.py`: read JSONs, update trackers, write per-entity timelines (one-time per data refresh)

@@ -1,145 +1,111 @@
 #!/usr/bin/env python3
-"""
-Validate that player stats from training data match stats from cache
+"""Validate cache stats derivation against raw counters, backend-agnostic.
 
-This ensures simulations use the exact same stats that the model was trained on
-"""
+Asserts `get_batting_stats` / `get_bowling_stats` compute the same values
+from the underlying integer counters that `_get_raw_batting` /
+`_get_raw_bowling` return. Works for both the chunked StatsProvider and
+the SQLite backend (Phase 3), because it doesn't touch the in-memory
+snapshot format — it uses the public raw getters instead.
 
-import pandas as pd
-from stats_provider import StatsProvider
+Sample players come from the training parquet (real batter/bowler IDs
+from v3 training data). Test dates are spread across the cache range.
+"""
 from pathlib import Path
 
-def validate_stats_match():
-    """Compare training data stats with cache stats"""
+import pandas as pd
 
+from stats_provider import StatsProvider
+
+
+N_SAMPLE_PLAYERS = 5
+TEST_DATES = ['2010-01-01', '2015-01-01', '2020-01-01', '2022-01-01']
+TRAIN_PARQUET = Path('data/xgb_data_v3/cricket_data_v3_train.parquet')
+TOL = 0.01
+
+
+def _expected_batting(raw):
+    if not raw or raw['balls'] == 0:
+        return 0.0, 0.0
+    avg = raw['runs'] / max(raw['dismissals'], 1)
+    sr = (raw['runs'] / raw['balls']) * 100
+    return avg, sr
+
+
+def _expected_bowling(raw):
+    if not raw or raw['balls_bowled'] == 0:
+        return 0.0, 0.0
+    avg = raw['runs_given'] / max(raw['wickets'], 1)
+    econ = (raw['runs_given'] / raw['balls_bowled']) * 6
+    return avg, econ
+
+
+def _pick_sample_players():
+    df = pd.read_parquet(TRAIN_PARQUET)
+    batters = df['batter_id'].dropna().drop_duplicates()
+    bowlers = df['bowler_id'].dropna().drop_duplicates()
+    return (
+        batters.sample(N_SAMPLE_PLAYERS, random_state=0).tolist(),
+        bowlers.sample(N_SAMPLE_PLAYERS, random_state=0).tolist(),
+    )
+
+
+def validate_stats_match() -> bool:
     print("=" * 60)
     print("Validating Training vs Cache Stats Match")
     print("=" * 60)
 
-    # Load training data
-    print("\n1. Loading training data...")
-    train_path = Path('data/xgb_data/cricket_data_v2_train.parquet')
-
-    if not train_path.exists():
-        print(f"  ✗ Training data not found at {train_path}")
-        print("  Please run parsing_v2.py first to generate training data")
+    if not TRAIN_PARQUET.exists():
+        print(f"✗ Training data not found at {TRAIN_PARQUET}")
+        print("  Run parsing_v2.py first to generate training data")
         return False
 
-    df = pd.read_parquet(train_path)
-    print(f"  ✓ Loaded {len(df):,} training rows")
+    print(f"\n1. Sampling {N_SAMPLE_PLAYERS} batters + bowlers from "
+          f"{TRAIN_PARQUET.name}")
+    batters, bowlers = _pick_sample_players()
 
-    # Load stats cache
-    print("\n2. Loading stats cache...")
-    try:
-        provider = StatsProvider('models')
-        print("  ✓ Stats cache loaded")
-    except Exception as e:
-        print(f"  ✗ Failed to load cache: {e}")
-        return False
+    print("\n2. Loading stats cache ...")
+    provider = StatsProvider('models', version='v3')
+    print("   ✓ loaded")
 
-    # Sample some rows for validation
-    print("\n3. Sampling rows for validation...")
-    # Take rows from different time periods
-    sample_indices = [
-        len(df) // 4,      # Early
-        len(df) // 2,      # Middle
-        3 * len(df) // 4,  # Late
-    ]
+    print("\n3. Validating derivation formula against raw counters")
+    mismatches = 0
+    checked = 0
+    for date in TEST_DATES:
+        print(f"\n   date: {date}")
+        for pid in batters:
+            raw = provider._get_raw_batting(pid, date)
+            exp_avg, exp_sr = _expected_batting(raw)
+            got = provider.get_batting_stats(pid, date)
+            if abs(got['avg'] - exp_avg) > TOL or abs(got['sr'] - exp_sr) > TOL:
+                print(f"   ✗ batter {pid[:8]}  "
+                      f"expected avg={exp_avg:.2f} sr={exp_sr:.2f}  "
+                      f"got avg={got['avg']:.2f} sr={got['sr']:.2f}")
+                mismatches += 1
+            checked += 1
 
-    validation_errors = []
-    validated_count = 0
+        for pid in bowlers:
+            raw = provider._get_raw_bowling(pid, date)
+            exp_avg, exp_econ = _expected_bowling(raw)
+            got = provider.get_bowling_stats(pid, date)
+            if abs(got['avg'] - exp_avg) > TOL or abs(got['econ'] - exp_econ) > TOL:
+                print(f"   ✗ bowler {pid[:8]}  "
+                      f"expected avg={exp_avg:.2f} econ={exp_econ:.2f}  "
+                      f"got avg={got['avg']:.2f} econ={got['econ']:.2f}")
+                mismatches += 1
+            checked += 1
 
-    for idx in sample_indices:
-        row = df.iloc[idx]
-
-        # Get date from the match (we need to find the match date)
-        # Since we don't store match_date in the training data, we'll need to
-        # use a different approach - let's validate using specific known dates
-
-    # Alternative approach: Use known dates and check consistency
-    print("\n3. Validating stats for sample dates...")
-
-    test_dates = [
-        '2010-01-01',
-        '2015-01-01',
-        '2020-01-01',
-        '2022-01-01',
-    ]
-
-    all_match = True
-
-    for test_date in test_dates:
-        print(f"\n   Testing date: {test_date}")
-
-        # Get snapshot from cache
-        snapshot = provider._get_snapshot_for_date(test_date)
-
-        if not snapshot:
-            print(f"   ⚠ No snapshot found for {test_date}")
-            continue
-
-        # Get some sample players
-        sample_batters = list(snapshot['batting'].keys())[:3]
-        sample_bowlers = list(snapshot['bowling'].keys())[:3]
-
-        # Validate batting stats
-        for batter_id in sample_batters:
-            cache_stats = provider.get_batting_stats(batter_id, test_date)
-
-            # Get raw stats from snapshot for manual calculation
-            raw_stats = snapshot['batting'][batter_id]
-
-            # Calculate what stats SHOULD be
-            if raw_stats['balls'] > 0:
-                expected_avg = raw_stats['runs'] / max(raw_stats['dismissals'], 1)
-                expected_sr = (raw_stats['runs'] / raw_stats['balls']) * 100
-            else:
-                expected_avg = 0.0
-                expected_sr = 0.0
-
-            # Compare
-            if abs(cache_stats['avg'] - expected_avg) > 0.01 or abs(cache_stats['sr'] - expected_sr) > 0.01:
-                print(f"   ✗ Mismatch for batter {batter_id[:8]}")
-                print(f"      Expected: avg={expected_avg:.2f}, sr={expected_sr:.2f}")
-                print(f"      Got:      avg={cache_stats['avg']:.2f}, sr={cache_stats['sr']:.2f}")
-                all_match = False
-            else:
-                validated_count += 1
-
-        # Validate bowling stats
-        for bowler_id in sample_bowlers:
-            cache_stats = provider.get_bowling_stats(bowler_id, test_date)
-
-            raw_stats = snapshot['bowling'][bowler_id]
-
-            if raw_stats['balls_bowled'] > 0:
-                expected_avg = raw_stats['runs_given'] / max(raw_stats['wickets'], 1)
-                expected_econ = (raw_stats['runs_given'] / raw_stats['balls_bowled']) * 6
-            else:
-                expected_avg = 0.0
-                expected_econ = 0.0
-
-            if abs(cache_stats['avg'] - expected_avg) > 0.01 or abs(cache_stats['econ'] - expected_econ) > 0.01:
-                print(f"   ✗ Mismatch for bowler {bowler_id[:8]}")
-                print(f"      Expected: avg={expected_avg:.2f}, econ={expected_econ:.2f}")
-                print(f"      Got:      avg={cache_stats['avg']:.2f}, econ={cache_stats['econ']:.2f}")
-                all_match = False
-            else:
-                validated_count += 1
-
-        print(f"   ✓ Validated {len(sample_batters) + len(sample_bowlers)} players")
+        print(f"   ✓ checked {2 * N_SAMPLE_PLAYERS} players")
 
     print("\n" + "=" * 60)
-    if all_match:
-        print(f"✓ SUCCESS! All {validated_count} stats validated successfully")
-        print("  Training and cache stats match exactly")
+    if mismatches == 0:
+        print(f"✓ SUCCESS — {checked} checks passed")
         print("=" * 60)
         return True
-    else:
-        print("✗ FAILED! Some stats do not match")
-        print("=" * 60)
-        return False
+    print(f"✗ FAILED — {mismatches}/{checked} checks mismatched")
+    print("=" * 60)
+    return False
+
 
 if __name__ == "__main__":
-    success = validate_stats_match()
-    exit(0 if success else 1)
+    import sys
+    sys.exit(0 if validate_stats_match() else 1)

@@ -89,9 +89,11 @@ def test_simulation_with_real_stats():
     # Step 4: Extract features to verify real stats are being used
     print("\n4. Verifying real player stats are being used...")
     try:
-        # Extract features from initial match state
-        features_df = model.extract_features(match_state)
-        features = features_df.iloc[0]
+        # Extract features from initial match state. Since the 2026-04-18
+        # eval-speedup change, extract_features returns a preallocated
+        # np.ndarray — rehydrate it into a dict for readable assertions.
+        feat_arr = model.extract_features(match_state)
+        features = dict(zip(model.feature_columns, feat_arr))
 
         # Get player info
         striker = match_state.current_striker

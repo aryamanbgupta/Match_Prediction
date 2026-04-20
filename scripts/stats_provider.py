@@ -29,9 +29,12 @@ from typing import Dict, Optional, Tuple
 import bisect
 
 
-class StatsProvider:
-    """
-    Provides temporal access to player statistics for simulations.
+class _ChunkedBackend:
+    """Chunked pickle backend (legacy).
+
+    Kept behind the `StatsProvider` facade below as the fallback when no
+    SQLite cache file exists. API is identical to `_SQLiteBackend` so the
+    facade can dispatch to either transparently.
 
     DESIGN DECISION: Chunked lazy loading with LRU cache
     REASONING: 7.8GB full cache too large for memory, chunking allows
@@ -152,6 +155,36 @@ class StatsProvider:
         chunk_data = self._load_chunk(chunk_idx)
 
         return chunk_data[snapshot_date]
+
+    # -- raw counter access (for validators / parity tests) ---------------
+    # These return the same int dicts the derivation formulas above start
+    # from. Exposed so validators don't need to reach into the snapshot
+    # dict via `_get_snapshot_for_date`, which isn't portable across
+    # backends (the SQLite backend has no materialised snapshots).
+
+    def _get_raw_batting(self, player_id: str, as_of_date) -> Optional[Dict[str, int]]:
+        if isinstance(as_of_date, datetime):
+            as_of_date = as_of_date.strftime('%Y-%m-%d')
+        snap = self._get_snapshot_for_date(as_of_date)
+        if snap is None:
+            return None
+        return snap['batting'].get(player_id)
+
+    def _get_raw_bowling(self, player_id: str, as_of_date) -> Optional[Dict[str, int]]:
+        if isinstance(as_of_date, datetime):
+            as_of_date = as_of_date.strftime('%Y-%m-%d')
+        snap = self._get_snapshot_for_date(as_of_date)
+        if snap is None:
+            return None
+        return snap['bowling'].get(player_id)
+
+    def _get_raw_h2h(self, batter_id: str, bowler_id: str, as_of_date) -> Optional[Dict[str, int]]:
+        if isinstance(as_of_date, datetime):
+            as_of_date = as_of_date.strftime('%Y-%m-%d')
+        snap = self._get_snapshot_for_date(as_of_date)
+        if snap is None:
+            return None
+        return snap.get('h2h', {}).get((batter_id, bowler_id))
 
     def get_batting_stats(self, player_id: str, as_of_date: str) -> Dict[str, float]:
         """
@@ -525,6 +558,114 @@ class StatsProvider:
             'h2h_avg': h2h['avg'],
             'h2h_sr': h2h['sr']
         }
+
+
+class StatsProvider:
+    """Public stats-provider facade — dispatches to SQLite or chunks.
+
+    Auto-detect:
+      * If `models/player_stats_cache_{version}.sqlite` exists, use the
+        mmap-backed `_SQLiteBackend`. Validate its schema_version, and
+        fail loudly if the file is older than the raw chunks (staleness
+        is a real source of hard-to-debug parity drift — don't mask it).
+      * Otherwise fall back to `_ChunkedBackend`.
+
+    The backend choice is logged at init time so anyone running eval can
+    see which cache is in use without grepping RSS.
+
+    Method calls are delegated to the underlying backend via __getattr__.
+    For back-compat, the facade exposes `.dates` and `.version` directly
+    (callers read these). The chunked-only internal `_get_snapshot_for_date`
+    is intentionally NOT implemented on SQLite — reconstructing a full
+    snapshot would be ~300K queries, a trap. Use the `_get_raw_*`
+    helpers for per-entity raw-counter access instead.
+    """
+
+    def __init__(self, cache_dir: str = 'models', max_cached_chunks: int = 5,
+                 version: str = 'v3'):
+        from pathlib import Path as _Path
+
+        cache_root = _Path(cache_dir)
+        sqlite_path = cache_root / f'player_stats_cache_{version}.sqlite'
+
+        if sqlite_path.exists():
+            self._backend = self._open_sqlite(sqlite_path, cache_root, version)
+            self.dates = list(self._backend._date_strs)
+            self.backend_name = 'sqlite'
+        else:
+            print(
+                f"StatsProvider: {sqlite_path.name} not found — "
+                "falling back to chunked backend",
+                flush=True,
+            )
+            self._backend = _ChunkedBackend(
+                cache_dir=str(cache_root),
+                max_cached_chunks=max_cached_chunks,
+                version=version,
+            )
+            self.dates = self._backend.dates
+            self.backend_name = 'chunks'
+
+        self.version = version
+        self.cache_dir = cache_root
+
+    # --- backend selection ----------------------------------------------
+
+    @staticmethod
+    def _open_sqlite(sqlite_path, cache_root, version):
+        # Local import keeps the chunked backend usable when sqlite3 is
+        # unavailable or the module is imported for its class symbols
+        # only. stats_sqlite_backend itself pulls sqlite3.
+        from stats_sqlite_backend import _SQLiteBackend, SCHEMA_VERSION
+
+        backend = _SQLiteBackend(str(sqlite_path))
+        backend._ensure_conn()
+        meta = backend.get_meta()
+
+        file_schema = int(meta.get('schema_version', -1))
+        if file_schema != SCHEMA_VERSION:
+            raise RuntimeError(
+                f"SQLite schema mismatch: {sqlite_path} has "
+                f"schema_version={file_schema}, code expects "
+                f"{SCHEMA_VERSION}. Delete the file and rebuild with "
+                f"`uv run python scripts/build_stats_sqlite.py`."
+            )
+
+        # Staleness: fail loudly rather than silently serving old stats.
+        chunks_dir = cache_root / f'cache_chunks_{version}'
+        if chunks_dir.exists():
+            chunk_files = list(chunks_dir.glob('*.pkl'))
+            if chunk_files:
+                chunks_mtime = max(p.stat().st_mtime for p in chunk_files)
+                sqlite_src_mtime = float(meta.get('source_chunks_mtime_max', 0))
+                # 1s tolerance absorbs filesystem-level rounding.
+                if sqlite_src_mtime + 1 < chunks_mtime:
+                    raise RuntimeError(
+                        f"SQLite cache is stale:\n"
+                        f"  {sqlite_path} built from chunks @ "
+                        f"{sqlite_src_mtime}\n"
+                        f"  {chunks_dir} current max mtime = {chunks_mtime}\n"
+                        f"Rebuild with: "
+                        f"uv run python scripts/build_stats_sqlite.py"
+                    )
+
+        print(
+            f"StatsProvider: using SQLite backend "
+            f"{sqlite_path.name} ({sqlite_path.stat().st_size / 1e6:.1f} MB)",
+            flush=True,
+        )
+        return backend
+
+    # --- delegation ------------------------------------------------------
+
+    def __getattr__(self, name):
+        # Only hit when the attribute isn't set on `self` directly. Defer
+        # to the underlying backend (either chunks or sqlite).
+        try:
+            backend = self.__dict__['_backend']
+        except KeyError:
+            raise AttributeError(name)
+        return getattr(backend, name)
 
 
 class StatsProviderCache:
