@@ -69,12 +69,16 @@ def build(chunks_dir: Path, metadata_path: Path, out_path: Path,
     print(f"  processing {n_chunks} chunks (of {metadata['num_chunks']} total)",
           flush=True)
 
-    # First pass: for each date, record the LAST chunk it appears in (that
-    # chunk's snapshot is authoritative — matches StatsProvider dedup).
+    # First pass: for each date, record the FIRST chunk it appears in.
+    # The first snapshot for a date is the one taken BEFORE the first match
+    # of that date (correct pre-day state). Later snapshots (when a date
+    # straddles a chunk boundary) reflect mid-day state after an earlier
+    # same-day match, which leaks forward into inference.
     final_chunk_of_date: Dict[str, int] = {}
     for chunk_idx in range(n_chunks):
         for d in metadata['chunks'][chunk_idx]['dates']:
-            final_chunk_of_date[d] = chunk_idx  # last-write-wins
+            if d not in final_chunk_of_date:
+                final_chunk_of_date[d] = chunk_idx  # first-write-wins
     print(f"  unique dates across selected chunks: {len(final_chunk_of_date):,}",
           flush=True)
 
@@ -100,8 +104,12 @@ def build(chunks_dir: Path, metadata_path: Path, out_path: Path,
     date_rows: List[Tuple[int, str]] = []
 
     # Delta trackers. Keyed by interned int ids so the dicts stay compact.
-    prev_batting: Dict[int, Tuple[int, int, int]] = {}
-    prev_bowling: Dict[int, Tuple[int, int, int]] = {}
+    # Row schema (v2): (runs, balls, dismissals, recent_runs, recent_balls,
+    #   recent_dismissals) for batting; (runs_given, balls_bowled, wickets,
+    #   recent_runs_given, recent_balls_bowled, recent_wickets) for bowling.
+    # Delta compression fires when *any* of the 6 counters changes.
+    prev_batting: Dict[int, Tuple[int, int, int, int, int, int]] = {}
+    prev_bowling: Dict[int, Tuple[int, int, int, int, int, int]] = {}
     prev_h2h: Dict[Tuple[int, int], Tuple[int, int, int]] = {}
     prev_bat_vs_type: Dict[Tuple[int, int], Tuple[int, int, int]] = {}
     prev_bowl_vs_hand: Dict[Tuple[int, int], Tuple[int, int, int]] = {}
@@ -122,11 +130,13 @@ def build(chunks_dir: Path, metadata_path: Path, out_path: Path,
     def flush_all():
         if batting_rows:
             conn.executemany(
-                "INSERT INTO batting VALUES (?, ?, ?, ?, ?)", batting_rows)
+                "INSERT INTO batting VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                batting_rows)
             batting_rows.clear()
         if bowling_rows:
             conn.executemany(
-                "INSERT INTO bowling VALUES (?, ?, ?, ?, ?)", bowling_rows)
+                "INSERT INTO bowling VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                bowling_rows)
             bowling_rows.clear()
         if h2h_rows:
             conn.executemany(
@@ -183,7 +193,12 @@ def build(chunks_dir: Path, metadata_path: Path, out_path: Path,
             # --- batting -------------------------------------------------
             for pid_str, st in snap.get('batting', {}).items():
                 pid = _intern(player_ids, pid_str)
-                cur = (int(st['runs']), int(st['balls']), int(st['dismissals']))
+                cur = (
+                    int(st['runs']), int(st['balls']), int(st['dismissals']),
+                    int(st.get('recent_runs', 0)),
+                    int(st.get('recent_balls', 0)),
+                    int(st.get('recent_dismissals', 0)),
+                )
                 if prev_batting.get(pid) != cur:
                     batting_rows.append((pid, date_id) + cur)
                     prev_batting[pid] = cur
@@ -191,8 +206,13 @@ def build(chunks_dir: Path, metadata_path: Path, out_path: Path,
             # --- bowling -------------------------------------------------
             for pid_str, st in snap.get('bowling', {}).items():
                 pid = _intern(player_ids, pid_str)
-                cur = (int(st['runs_given']), int(st['balls_bowled']),
-                       int(st['wickets']))
+                cur = (
+                    int(st['runs_given']), int(st['balls_bowled']),
+                    int(st['wickets']),
+                    int(st.get('recent_runs_given', 0)),
+                    int(st.get('recent_balls_bowled', 0)),
+                    int(st.get('recent_wickets', 0)),
+                )
                 if prev_bowling.get(pid) != cur:
                     bowling_rows.append((pid, date_id) + cur)
                     prev_bowling[pid] = cur

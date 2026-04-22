@@ -609,6 +609,8 @@ class XGBoostModelV2(PredictionModel):
             batting_stats = self.stats_provider.get_batting_stats(striker.player_id, state.match_date)
             bowling_stats = self.stats_provider.get_bowling_stats(bowler.player_id, state.match_date)
             h2h_stats = self.stats_provider.get_h2h_stats(striker.player_id, bowler.player_id, state.match_date)
+            batting_recent = self.stats_provider.get_batting_recent(striker.player_id, state.match_date)
+            bowling_recent = self.stats_provider.get_bowling_recent(bowler.player_id, state.match_date)
 
             # NEW: Get venue average score (temporal integrity)
             venue_avg = self.stats_provider.get_venue_avg_score(state.venue, state.match_date)
@@ -616,8 +618,12 @@ class XGBoostModelV2(PredictionModel):
             features.update({
                 'batsman_avg': batting_stats['avg'],
                 'batsman_sr': batting_stats['sr'],
+                'batsman_recent_avg': batting_recent['avg'],
+                'batsman_recent_sr': batting_recent['sr'],
                 'bowler_avg': bowling_stats['avg'],
                 'bowler_econ': bowling_stats['econ'],
+                'bowler_recent_avg': bowling_recent['avg'],
+                'bowler_recent_econ': bowling_recent['econ'],
                 'h2h_avg': h2h_stats['avg'],
                 'h2h_sr': h2h_stats['sr'],
                 'venue_avg_score': venue_avg,  # Historical venue average
@@ -674,8 +680,12 @@ class XGBoostModelV2(PredictionModel):
             features.update({
                 'batsman_avg': 0.0,
                 'batsman_sr': 0.0,
+                'batsman_recent_avg': 0.0,
+                'batsman_recent_sr': 0.0,
                 'bowler_avg': 0.0,
                 'bowler_econ': 0.0,
+                'bowler_recent_avg': 0.0,
+                'bowler_recent_econ': 0.0,
                 'h2h_avg': 0.0,
                 'h2h_sr': 0.0,
                 'venue_avg_score': 0.0,
@@ -1158,6 +1168,8 @@ class LSTMModelV1(PredictionModel):
             bat_stats = self.stats_provider.get_batting_stats(str(striker.player_id), match_date)
             bowl_stats = self.stats_provider.get_bowling_stats(str(bowler.player_id), match_date)
             h2h_stats = self.stats_provider.get_h2h_stats(str(striker.player_id), str(bowler.player_id), match_date)
+            bat_recent = self.stats_provider.get_batting_recent(str(striker.player_id), match_date)
+            bowl_recent = self.stats_provider.get_bowling_recent(str(bowler.player_id), match_date)
 
             features['batsman_avg'] = bat_stats.get('avg', 25.0)
             features['batsman_sr'] = bat_stats.get('sr', 125.0)
@@ -1166,11 +1178,10 @@ class LSTMModelV1(PredictionModel):
             features['h2h_avg'] = h2h_stats.get('avg', 25.0)
             features['h2h_sr'] = h2h_stats.get('sr', 125.0)
 
-            # Recent form stats (use same as career stats if not available separately)
-            features['batsman_recent_avg'] = bat_stats.get('recent_avg', bat_stats.get('avg', 25.0))
-            features['batsman_recent_sr'] = bat_stats.get('recent_sr', bat_stats.get('sr', 125.0))
-            features['bowler_recent_avg'] = bowl_stats.get('recent_avg', bowl_stats.get('avg', 30.0))
-            features['bowler_recent_econ'] = bowl_stats.get('recent_econ', bowl_stats.get('econ', 8.0))
+            features['batsman_recent_avg'] = bat_recent['avg']
+            features['batsman_recent_sr'] = bat_recent['sr']
+            features['bowler_recent_avg'] = bowl_recent['avg']
+            features['bowler_recent_econ'] = bowl_recent['econ']
 
             # Venue average score
             venue_avg = self.stats_provider.get_venue_avg_score(state.venue, match_date)
@@ -1207,10 +1218,10 @@ class LSTMModelV1(PredictionModel):
             features['bowler_econ'] = 8.0
             features['h2h_avg'] = 25.0
             features['h2h_sr'] = 125.0
-            features['batsman_recent_avg'] = 25.0
-            features['batsman_recent_sr'] = 125.0
-            features['bowler_recent_avg'] = 30.0
-            features['bowler_recent_econ'] = 8.0
+            features['batsman_recent_avg'] = 0.0
+            features['batsman_recent_sr'] = 0.0
+            features['bowler_recent_avg'] = 0.0
+            features['bowler_recent_econ'] = 0.0
             features['venue_avg_score'] = 160.0
             features['batter_avg_vs_pace'] = 0.0
             features['batter_sr_vs_pace'] = 0.0
@@ -1600,12 +1611,18 @@ class MLPModelV1(PredictionModel):
             match_date = state.match_date
             bat_stats = self.stats_provider.get_batting_stats(str(striker.player_id), match_date)
             bowl_stats = self.stats_provider.get_bowling_stats(str(bowler.player_id), match_date)
+            bat_recent = self.stats_provider.get_batting_recent(str(striker.player_id), match_date)
+            bowl_recent = self.stats_provider.get_bowling_recent(str(bowler.player_id), match_date)
             h2h_stats = self.stats_provider.get_h2h_stats(str(striker.player_id), str(bowler.player_id), match_date)
 
             features['batsman_avg'] = bat_stats.get('avg', 25.0)
             features['batsman_sr'] = bat_stats.get('sr', 125.0)
+            features['batsman_recent_avg'] = bat_recent['avg']
+            features['batsman_recent_sr'] = bat_recent['sr']
             features['bowler_avg'] = bowl_stats.get('avg', 30.0)
             features['bowler_econ'] = bowl_stats.get('econ', 8.0)
+            features['bowler_recent_avg'] = bowl_recent['avg']
+            features['bowler_recent_econ'] = bowl_recent['econ']
             features['h2h_avg'] = h2h_stats.get('avg', 25.0)
             features['h2h_sr'] = h2h_stats.get('sr', 125.0)
             features['venue_avg_score'] = self.stats_provider.get_venue_avg_score(state.venue, match_date)
@@ -1646,8 +1663,12 @@ class MLPModelV1(PredictionModel):
         else:
             features['batsman_avg'] = 25.0
             features['batsman_sr'] = 125.0
+            features['batsman_recent_avg'] = 0.0
+            features['batsman_recent_sr'] = 0.0
             features['bowler_avg'] = 30.0
             features['bowler_econ'] = 8.0
+            features['bowler_recent_avg'] = 0.0
+            features['bowler_recent_econ'] = 0.0
             features['h2h_avg'] = 25.0
             features['h2h_sr'] = 125.0
             features['venue_avg_score'] = 160.0
@@ -2021,6 +2042,8 @@ class MLPModelV2(PredictionModel):
             match_date = state.match_date
             bat_stats = self.stats_provider.get_batting_stats(str(striker.player_id), match_date)
             bowl_stats = self.stats_provider.get_bowling_stats(str(bowler.player_id), match_date)
+            bat_recent = self.stats_provider.get_batting_recent(str(striker.player_id), match_date)
+            bowl_recent = self.stats_provider.get_bowling_recent(str(bowler.player_id), match_date)
             h2h_stats = self.stats_provider.get_h2h_stats(str(striker.player_id), str(bowler.player_id), match_date)
 
             # Historical stats
@@ -2028,12 +2051,12 @@ class MLPModelV2(PredictionModel):
             features['batsman_sr'] = bat_stats.get('sr', 125.0)
             features['bowler_avg'] = bowl_stats.get('avg', 30.0)
             features['bowler_econ'] = bowl_stats.get('econ', 8.0)
-            
-            # Recent form stats (CRITICAL for player differentiation)
-            features['batsman_recent_avg'] = bat_stats.get('recent_avg', bat_stats.get('avg', 25.0))
-            features['batsman_recent_sr'] = bat_stats.get('recent_sr', bat_stats.get('sr', 125.0))
-            features['bowler_recent_avg'] = bowl_stats.get('recent_avg', bowl_stats.get('avg', 30.0))
-            features['bowler_recent_econ'] = bowl_stats.get('recent_econ', bowl_stats.get('econ', 8.0))
+
+            # Recent form stats (last-5-match window from SQLite)
+            features['batsman_recent_avg'] = bat_recent['avg']
+            features['batsman_recent_sr'] = bat_recent['sr']
+            features['bowler_recent_avg'] = bowl_recent['avg']
+            features['bowler_recent_econ'] = bowl_recent['econ']
             
             # H2H stats
             features['h2h_avg'] = h2h_stats.get('avg', 25.0)
@@ -2075,12 +2098,12 @@ class MLPModelV2(PredictionModel):
         else:
             features['batsman_avg'] = 25.0
             features['batsman_sr'] = 125.0
-            features['batsman_recent_avg'] = 25.0
-            features['batsman_recent_sr'] = 125.0
+            features['batsman_recent_avg'] = 0.0
+            features['batsman_recent_sr'] = 0.0
             features['bowler_avg'] = 30.0
             features['bowler_econ'] = 8.0
-            features['bowler_recent_avg'] = 30.0
-            features['bowler_recent_econ'] = 8.0
+            features['bowler_recent_avg'] = 0.0
+            features['bowler_recent_econ'] = 0.0
             features['h2h_avg'] = 25.0
             features['h2h_sr'] = 125.0
             features['venue_avg_score'] = 160.0
@@ -2511,6 +2534,8 @@ class TransformerModelV1(PredictionModel):
             match_date = state.match_date
             bat_stats = self.stats_provider.get_batting_stats(str(striker.player_id), match_date)
             bowl_stats = self.stats_provider.get_bowling_stats(str(bowler.player_id), match_date)
+            bat_recent = self.stats_provider.get_batting_recent(str(striker.player_id), match_date)
+            bowl_recent = self.stats_provider.get_bowling_recent(str(bowler.player_id), match_date)
             h2h_stats = self.stats_provider.get_h2h_stats(str(striker.player_id), str(bowler.player_id), match_date)
 
             features['batsman_avg'] = bat_stats.get('avg', 25.0)
@@ -2520,10 +2545,10 @@ class TransformerModelV1(PredictionModel):
             features['h2h_avg'] = h2h_stats.get('avg', 25.0)
             features['h2h_sr'] = h2h_stats.get('sr', 125.0)
 
-            features['batsman_recent_avg'] = bat_stats.get('recent_avg', bat_stats.get('avg', 25.0))
-            features['batsman_recent_sr'] = bat_stats.get('recent_sr', bat_stats.get('sr', 125.0))
-            features['bowler_recent_avg'] = bowl_stats.get('recent_avg', bowl_stats.get('avg', 30.0))
-            features['bowler_recent_econ'] = bowl_stats.get('recent_econ', bowl_stats.get('econ', 8.0))
+            features['batsman_recent_avg'] = bat_recent['avg']
+            features['batsman_recent_sr'] = bat_recent['sr']
+            features['bowler_recent_avg'] = bowl_recent['avg']
+            features['bowler_recent_econ'] = bowl_recent['econ']
 
             venue_avg = self.stats_provider.get_venue_avg_score(state.venue, match_date)
             features['venue_avg_score'] = venue_avg
@@ -2559,10 +2584,10 @@ class TransformerModelV1(PredictionModel):
             features['bowler_econ'] = 8.0
             features['h2h_avg'] = 25.0
             features['h2h_sr'] = 125.0
-            features['batsman_recent_avg'] = 25.0
-            features['batsman_recent_sr'] = 125.0
-            features['bowler_recent_avg'] = 30.0
-            features['bowler_recent_econ'] = 8.0
+            features['batsman_recent_avg'] = 0.0
+            features['batsman_recent_sr'] = 0.0
+            features['bowler_recent_avg'] = 0.0
+            features['bowler_recent_econ'] = 0.0
             features['venue_avg_score'] = 160.0
             features['batter_avg_vs_pace'] = 0.0
             features['batter_sr_vs_pace'] = 0.0

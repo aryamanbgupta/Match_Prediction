@@ -300,6 +300,211 @@ Experiments: `xgb_v4_no_calibration_20260321_215322`, `xgb_v4_ball_calibration_2
 
 ---
 
+## Parsing Pipeline Split (PLANNED — bundle with Phase 5 SQLite migration)
+
+**Planned 2026-04-19. Phase A lands this week; Phase B after the Phase-5 gate (≥ 2026-04-26).**
+
+### Goal
+Replace the monolithic `scripts/parsing_v2.py` (1409 lines, ~15 min per run) with two scripts whose boundaries map to the two real data artifacts:
+
+1. `scripts/build_stats_cache.py` — chronological tracker walk → `models/player_stats_cache_v3.sqlite`
+2. `scripts/materialize_features.py` — stateless per-match feature emission → `data/xgb_data_v3/*.parquet`
+
+This subsumes Phase 5 of the SQLite migration (`TODO.md:127-134`) and the "split parsing" bullet (`TODO.md:136-139`). The two items were scoped separately but edit the same code; bundling halves the migration cost.
+
+### Motivation
+The parser today does three things in one pass, only one of which is truly stateful:
+
+1. **Stateful (chronological)**: tracker updates (`PlayerStatsTracker`, `VenueStatsTracker`, `PlayerEloTracker`). SQLite is the serialized output of this.
+2. **Snapshot emission**: frozen view per match-date → pickle chunks today, SQLite rows after Phase 5.
+3. **Feature materialization** (`parse_match_data_v2`, `parsing_v2.py:744-1107`): per-ball feature row. Stateful only within an innings (`InningsFeatureCalculator` for momentum / partnership / per-batter balls faced). **Across matches it's a pure function of (ball context, cache snapshot at match_date, player metadata).**
+
+Point 3 is the key insight: once the SQLite cache exists, feature materialization doesn't need chronological order, which unlocks incremental refresh, parallelization, and a per-match materialization cache.
+
+### Proposed architecture
+
+#### `build_stats_cache.py`
+- Input: `data/t20s_json/`, `--gender-filter` (default `male`)
+- Sorted JSON iteration → tracker updates → delta-compressed rows streamed into SQLite
+- Reuses the streaming pattern from `scripts/build_stats_sqlite.py:58-328` but sources from JSONs instead of pickle chunks
+- No parquet output, no feature materialization
+- Output: `models/player_stats_cache_v3.sqlite` with `_meta.schema_version` and `_meta.source_json_mtime_max`
+
+#### `materialize_features.py`
+- Input: SQLite DB (read-only), `data/t20s_json/`, `--splits` config, `--feature-groups` / `--exclude` / `--include-extra`
+- Per-match (any order): walks deliveries, runs `InningsFeatureCalculator` (per-innings state), queries SQLite for as-of-`match_date` historicals, joins `PlayerMetadataProvider`
+- Writes split parquets + `.feature_hash`
+- Output: `data/xgb_data_v3/{train,val,test,golden_test}.parquet`
+
+### YAML config changes
+Today `xgb_v3_baseline.yaml` has no parsing controls; splits are hardcoded at `parsing_v2.py:1181-1186`. After the split:
+
+```yaml
+data:
+  version: "v3"
+  splits:
+    train_end: "2024-12-31"
+    val_end: "2025-06-30"
+    test_end: "2026-04-16"
+    golden_start: "2026-04-17"
+  gender_filter: "male"
+  test_dir: "data/polymarket_test"
+  odds_file: "betting_odds_polymarket.json"
+```
+
+`run_experiment.py`'s smart-cache check (lines 54-75) extends to two artifacts:
+- **Cache valid** if `SQLite source_json_mtime_max ≥ latest JSON mtime`
+- **Parquet valid** if `feature_hash matches AND cache mtime ≤ parquet mtime AND splits match`
+
+### Phased rollout
+
+**Phase A — Soft split** (bridge, low-risk, ~half day) — **pre-2026-04-26**
+- Add `--materialize-only` flag to `parsing_v2.py`. Skips tracker updates + snapshot emission; reuses existing SQLite; regenerates parquet only.
+- Validates the "cache stable, materialization stateless" assumption under the safe monolith before any extraction.
+- Lets the split bullet move forward without touching the Phase-5 gate.
+- **Exit gate**: `--materialize-only` parquet is bit-identical to a full `parsing_v2.py` run on all 4 splits.
+
+**Phase B — Structural split** (bundled with Phase 5, ~2 days) — **after 2026-04-26**
+- Extract `build_stats_cache.py` from `parsing_v2.py` (tracker half).
+- Extract `materialize_features.py` from `parsing_v2.py` (feature half).
+- Delete `scripts/parsing_v2.py`, `scripts/build_stats_sqlite.py`, `_ChunkedBackend` in `stats_provider.py`, `models/player_stats_cache_v3_metadata.pkl`.
+- `rm -rf models/cache_chunks_v3/` (11 GB reclaimed).
+- Update `run_experiment.py` to dispatch both scripts with the new YAML schema.
+- Keep `parsing_v2.py` under `scripts/legacy/` for 30 days as rollback.
+
+**Phase C — Per-match materialization cache** (optional follow-up, ~1-2 days) — **post-Phase B**
+- Materializer writes per-match parquet to `data/balls_cache/<match_id>_<feature_hash>.parquet`.
+- Final split parquet = concat of per-match parquets.
+- Ablations changing a ball-context feature only re-materialize matches whose inputs changed.
+- Ablation iteration time: 10-15 min → seconds.
+- Storage cost: ~100-200 MB extra (delta from monolithic parquet is small).
+
+### Validation strategy
+
+**Primary gate (both phases): bit-identical parquet output vs reference monolith.**
+
+New harness `scripts/tests/test_split_parity.py` (~150 lines):
+1. Run `parsing_v2.py` on a pinned 500-match slice → reference parquet.
+2. Run the new pipeline on the same slice → candidate parquet.
+3. `pd.testing.assert_frame_equal(check_exact=True)` across all 4 splits. Column-level diff on failure.
+
+**Secondary gates**:
+- **Eval parity**: train XGBoost on both parquets, run `sim_eval/run_sim_eval.py`. `simulated_prob` bit-identical per match (same shape as `scripts/tests/compare_phase4_evals.py`).
+- **Cache parity (Phase B only)**: the SQLite from `build_stats_cache.py` matches a `build_stats_sqlite.py` output when both read the same JSONs. Row-count + `_meta` checks + 100 random `_get_raw_batting` spot-checks.
+- **Temporal integrity**: for each parquet row, assert `match_date > every cache snapshot date used in that row's feature lookups`. Catches any as-of-date leak.
+
+**Rollback**:
+- Phase A: revert the `--materialize-only` branch; `parsing_v2.py` is untouched.
+- Phase B: `run_experiment.py` dispatch flip back to `scripts/legacy/parsing_v2.py` for 30 days.
+
+### Pros
+1. Phase 5 comes for free — SQLite becomes source of truth; 11 GB of chunks reclaimed.
+2. Ball-context feature additions: re-materialize only (5-10 min) vs full re-parse (15 min).
+3. YAML-driven splits and feature sets; today splits are buried in code.
+4. Incremental data refresh — cache-builder appends new JSONs without replaying the corpus.
+5. Unlocks Phase C per-match cache; ablation time → seconds.
+6. Natural home for empirical outcome distributions (see §"Empirical Outcome Distributions" above) — expanded `PlayerStatsTracker` lives in one place.
+7. Materializer is embarrassingly parallel across matches; SQLite mmap supports N readers (proven in Phase 4: 2 concurrent evals at 1.7 GB combined).
+8. Cleaner concerns: trackers vs stateless feature emission vs XGBoost training.
+
+### Cons / Risks
+1. **Drift risk**: materializer's as-of-date SQLite lookup could diverge from the monolith's live-tracker lookup if the snapshot-boundary semantics are off by one ball. **Mitigation**: Phase A's bit-exact parity harness under the safe monolith catches any drift before extraction; Phase B re-runs the same harness.
+2. **Two artifacts to version**: cache (`_meta.schema_version`) + parquet (`.feature_hash`). **Mitigation**: extend `run_experiment.py:check_smart_cache` to validate both and fail loudly on mismatch (already the pattern for the existing SQLite staleness check at `stats_provider.py:635-650`).
+3. **JSON read twice** (cache-builder + materializer). ~11K matches × small JSON = <1 min extra; not a blocker. Premature to optimize.
+4. **Immediate wall-clock win is small** — `skip_parsing: true` already makes most ablations free today. Structural wins compound over many experiments, not one.
+5. **`PlayerMetadataProvider` needed by both scripts** — the cache-builder already needs `batter_hand` + `is_pace` for `batting_vs_type` / `bowling_vs_hand` tracker keys (`parsing_v2.py:1036-1038`). Loading a 100 KB CSV twice is free.
+
+### Alternatives considered
+
+**Pure soft-split only (no structural split)** — keep monolith, only ship `--materialize-only`.
+- Captures ~70% of benefit, zero refactor risk.
+- Leaves Phase 5 cleanup undone, keeps the tracker/feature entanglement, blocks the plugin-feature system.
+- **Verdict**: adopted as Phase A stepping-stone; don't stop there.
+
+**Feature plugin registry** — each feature group registers `compute(ball_context, stats_provider) -> dict`.
+- Enables "drop a feature file, run" workflow.
+- Big refactor, fights XGBoost's static-feature-list assumption, `feature_registry.py` would need to carry compute functions alongside column names.
+- **Verdict**: defer until post-Phase-C. The materializer's structure makes this cheap to add later.
+
+**Single undifferentiated parquet, split at train time** — materializer emits one ~11M-row parquet; `xgboost_v2.py` filters by date.
+- Removes hardcoded split logic from the materializer.
+- Training-memory hit; extra date-column filtering in every training script.
+- **Verdict**: rejected. Split-by-time is a clean dataset boundary and keeps training simple.
+
+### Open questions
+1. **Cache rebuild trigger** — `build_stats_cache.py` should detect new JSONs (mtime-based) and append-only; force full rebuild only when tracker semantics change (e.g., new type-based stat). **Resolution**: `--force-rebuild` flag + mtime comparison in Phase B design.
+2. **Innings-state in materializer** — per-match JSON walk stays; the materializer is not purely SQL. Accepted; JSON I/O is fast at this corpus size.
+3. **Multi-JSON-same-date handling** — the monolith takes the first snapshot per date and ignores subsequent ones (`parsing_v2.py:1263`). SQLite dedup is already last-write-wins (`build_stats_sqlite.py:73-77`). **Resolution**: keep the existing semantics; the parity harness will catch any divergence.
+
+### Recent-form features — train/inference mismatch (BLOCKER surfaced 2026-04-21)
+
+Discovered while scoping Phase A. Four features in the training parquet are computed from state that the stats cache does not serialize — so any materializer that reads from the cache alone will diverge on these columns, and any simulator that reads from the cache alone already does.
+
+**Features affected**:
+- `batsman_recent_avg`, `batsman_recent_sr`
+- `bowler_recent_avg`, `bowler_recent_econ`
+
+**Where they come from today**:
+- `PlayerStatsTracker.recent_batting` / `recent_bowling` are `defaultdict(lambda: deque(maxlen=5))` (parsing_v2.py:187-188).
+- `start_match()` / `end_match()` (parsing_v2.py:194-205) push per-match aggregates into those deques.
+- `get_batting_features()` / `get_bowling_features()` (parsing_v2.py:218-231, 243-255) sum the last-5-match deque contents to compute `*_recent_*`.
+- Training parquet receives real values via `**batting_features` / `**bowling_features` at parsing_v2.py:971-972.
+
+**What the cache stores**:
+- `deep_copy_stats()` (parsing_v2.py:494-535) serializes only career totals: `batting_stats`, `bowling_stats`, `h2h_stats`, `batting_vs_type`, `bowling_vs_hand`, plus optional `venue` and `batting_elo`/`bowling_elo`. **The per-match deques are not in the snapshot.**
+- SQLite schema (`stats_sqlite_backend.py:64-161`) has no `recent_batting` / `recent_bowling` tables — it's a direct serialization of the snapshot format.
+
+**Consequence for inference (already live, already wrong)**:
+- `sim_v1_2.py:1170-1173, 2033-2036, 2523-2526` all do `features['batsman_recent_avg'] = bat_stats.get('recent_avg', bat_stats.get('avg', 25.0))`. Since the StatsProvider-returned dict has no `recent_avg` key, this silently falls through to `avg` (career) or the literal default `25.0`.
+- The simulator never supplies real recent form. XGBoost was trained on last-5-match rolling aggregates; at inference it sees career averages. Feature-shift on 4 of 63 features.
+- Impact magnitude unmeasured. Candidate explanation for part of the train-vs-eval discrepancy; worth measuring with an ablation (drop the 4 columns, retrain, compare eval metrics).
+
+**Consequence for Phase A**:
+- The `--materialize-only` flag would read from SQLite via `StatsProvider`, so it cannot reproduce the 4 columns either. Bit-identical parity vs the full monolith is unachievable on these columns without a cache-schema change.
+
+**Proposed fix** (folded into Phase A scope):
+1. Extend `deep_copy_stats` to serialize `recent_batting` / `recent_bowling` deques (store as `list[dict]`, not deque — JSON/SQLite friendly).
+2. Add `recent_batting` / `recent_bowling` tables to SQLite schema (keys: `(player_id, date_id)`, values: aggregated-last-5 blob — runs/balls/dismissals totals already summed, not the raw deque, to keep rows compact).
+3. Add `StatsProvider.get_batting_recent(pid, date) -> {avg, sr}` / `get_bowling_recent(pid, date) -> {avg, econ}` methods.
+4. Update `sim_v1_2.py` to call the new methods instead of the current `.get('recent_avg', ...)` fallback. Removes the train/inference mismatch.
+5. Rebuild the SQLite cache once under the new schema. Since chunks still exist (Phase-5 gate), we have a fallback.
+
+**Validation**:
+- Parity gate (test_split_parity.py): now achievable on all 63 columns.
+- Eval delta (2026-04-21, 261-match polymarket × 10 sims, XGBoost v3):
+
+  | metric                  | pre-fix (silent 0 / career-avg) | post-fix (SQLite recent) | delta |
+  |-------------------------|---------------------------------|--------------------------|-------|
+  | avg_log_loss            | 0.7541                          | 0.7518                   | −0.0023 |
+  | avg_brier_score         | 0.2743                          | 0.2728                   | −0.0014 |
+  | avg_edge (\|model−mkt\|) | 0.1994                          | 0.1864                   | −0.0130 |
+  | flat_betting_roi_pct    | −1.37 %                         | +6.51 %                  | +7.88 pp |
+  | flat_betting_win_rate   | 41.18 %                         | 45.10 %                  | +3.92 pp |
+  | frac_kelly_roi_pct      | +0.22 %                         | +1.27 %                  | +1.05 pp |
+  | bets_placed             | 255                             | 255                      | 0 |
+
+  216 / 261 matches diverged — silent-fallback was live on 83 % of matches. All metrics moved favorably without changing bet volume.
+  Baseline: `eval_out_baseline/xgboost_20260421_213207.json`. Post-fix: `eval_out_postfix/xgboost_20260421_220541.json`. Diff via `scripts/tests/compare_phase4_evals.py`.
+- Risk: fixing this feature-shift could improve eval metrics (model finally sees the features it was trained on) OR could expose a deeper miscalibration. Outcome: improvement (see table). Separate calibration work still warranted — pre-calibration ECE was already on the todo list.
+
+**Scope impact**: ~1 extra day in Phase A. Phase A becomes "fix the recent-form mismatch + soft split" instead of just "soft split".
+
+### Success criteria
+- **Phase A**: `--materialize-only` parquet bit-identical to full monolith on all 4 splits. Landed before 2026-04-26.
+- **Phase B**: split scripts produce parquet + SQLite bit-identical to Phase-A reference. `run_experiment.py` works unchanged for every `experiments/configs/*.yaml`. 11 GB reclaimed. Landed within 7 days of the Phase-5 gate.
+- **Phase C**: ablation iteration ≤ 30 s for feature-only changes. Per-match cache hit rate ≥ 95 % across 3 consecutive ablation runs.
+
+### Estimated effort
+| Phase | Cost | Blocker |
+|---|---|---|
+| A — `--materialize-only` flag | ~half day | None |
+| B — structural split + Phase 5 cleanup | ~2 days | Phase-5 gate (≥ 2026-04-26) |
+| C — per-match cache | ~1-2 days | Phase B stable for 3+ ablations |
+
+Critical path: ~3 days of focused work, spread over ~2 weeks.
+
+---
+
 ## What NOT To Do
 
 - Don't chase ball-level accuracy beyond ~60% — individual balls are inherently noisy.

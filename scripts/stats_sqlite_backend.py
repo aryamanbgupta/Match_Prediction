@@ -57,7 +57,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 SCHEMA_SQL = """
@@ -80,6 +80,9 @@ CREATE TABLE IF NOT EXISTS batting (
     runs INTEGER NOT NULL,
     balls INTEGER NOT NULL,
     dismissals INTEGER NOT NULL,
+    recent_runs INTEGER NOT NULL DEFAULT 0,
+    recent_balls INTEGER NOT NULL DEFAULT 0,
+    recent_dismissals INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (player_id, date_id)
 ) WITHOUT ROWID;
 
@@ -89,6 +92,9 @@ CREATE TABLE IF NOT EXISTS bowling (
     runs_given INTEGER NOT NULL,
     balls_bowled INTEGER NOT NULL,
     wickets INTEGER NOT NULL,
+    recent_runs_given INTEGER NOT NULL DEFAULT 0,
+    recent_balls_bowled INTEGER NOT NULL DEFAULT 0,
+    recent_wickets INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (player_id, date_id)
 ) WITHOUT ROWID;
 
@@ -171,12 +177,16 @@ CREATE TABLE IF NOT EXISTS _meta (
 # extra secondary index. Same for bowling_vs_hand.
 
 _Q_BATTING = """
-SELECT runs, balls, dismissals FROM batting
+SELECT runs, balls, dismissals,
+       recent_runs, recent_balls, recent_dismissals
+FROM batting
 WHERE player_id = ? AND date_id <= ?
 ORDER BY date_id DESC LIMIT 1
 """
 _Q_BOWLING = """
-SELECT runs_given, balls_bowled, wickets FROM bowling
+SELECT runs_given, balls_bowled, wickets,
+       recent_runs_given, recent_balls_bowled, recent_wickets
+FROM bowling
 WHERE player_id = ? AND date_id <= ?
 ORDER BY date_id DESC LIMIT 1
 """
@@ -320,12 +330,31 @@ class _SQLiteBackend:
         row = conn.execute(_Q_BATTING, (pid, did)).fetchone()
         if row is None:
             return {'avg': 0.0, 'sr': 0.0}
-        runs, balls, dismissals = row
+        runs, balls, dismissals = row[0], row[1], row[2]
         if balls == 0:
             return {'avg': 0.0, 'sr': 0.0}
         return {
             'avg': runs / max(dismissals, 1),
             'sr': (runs / balls) * 100,
+        }
+
+    def get_batting_recent(self, player_id, as_of_date) -> Dict[str, float]:
+        conn = self._ensure_conn()
+        pid = self._player_id_map.get(str(player_id))
+        if pid is None:
+            return {'avg': 0.0, 'sr': 0.0}
+        did = self._resolve_date_id(as_of_date)
+        if did < 0:
+            return {'avg': 0.0, 'sr': 0.0}
+        row = conn.execute(_Q_BATTING, (pid, did)).fetchone()
+        if row is None:
+            return {'avg': 0.0, 'sr': 0.0}
+        recent_runs, recent_balls, recent_dismissals = row[3], row[4], row[5]
+        if recent_balls == 0:
+            return {'avg': 0.0, 'sr': 0.0}
+        return {
+            'avg': recent_runs / max(recent_dismissals, 1),
+            'sr': (recent_runs / recent_balls) * 100,
         }
 
     def get_bowling_stats(self, player_id, as_of_date) -> Dict[str, float]:
@@ -339,12 +368,31 @@ class _SQLiteBackend:
         row = conn.execute(_Q_BOWLING, (pid, did)).fetchone()
         if row is None:
             return {'avg': 0.0, 'econ': 0.0}
-        runs_given, balls_bowled, wickets = row
+        runs_given, balls_bowled, wickets = row[0], row[1], row[2]
         if balls_bowled == 0:
             return {'avg': 0.0, 'econ': 0.0}
         return {
             'avg': runs_given / max(wickets, 1),
             'econ': (runs_given / balls_bowled) * 6,
+        }
+
+    def get_bowling_recent(self, player_id, as_of_date) -> Dict[str, float]:
+        conn = self._ensure_conn()
+        pid = self._player_id_map.get(str(player_id))
+        if pid is None:
+            return {'avg': 0.0, 'econ': 0.0}
+        did = self._resolve_date_id(as_of_date)
+        if did < 0:
+            return {'avg': 0.0, 'econ': 0.0}
+        row = conn.execute(_Q_BOWLING, (pid, did)).fetchone()
+        if row is None:
+            return {'avg': 0.0, 'econ': 0.0}
+        recent_runs_given, recent_balls_bowled, recent_wickets = row[3], row[4], row[5]
+        if recent_balls_bowled == 0:
+            return {'avg': 0.0, 'econ': 0.0}
+        return {
+            'avg': recent_runs_given / max(recent_wickets, 1),
+            'econ': (recent_runs_given / recent_balls_bowled) * 6,
         }
 
     def get_h2h_stats(self, batter_id, bowler_id, as_of_date) -> Dict[str, float]:
@@ -542,7 +590,11 @@ class _SQLiteBackend:
         row = conn.execute(_Q_BATTING, (pid, did)).fetchone()
         if row is None:
             return None
-        return {'runs': row[0], 'balls': row[1], 'dismissals': row[2]}
+        return {
+            'runs': row[0], 'balls': row[1], 'dismissals': row[2],
+            'recent_runs': row[3], 'recent_balls': row[4],
+            'recent_dismissals': row[5],
+        }
 
     def _get_raw_bowling(self, player_id, as_of_date) -> Optional[Dict[str, int]]:
         conn = self._ensure_conn()
@@ -555,7 +607,11 @@ class _SQLiteBackend:
         row = conn.execute(_Q_BOWLING, (pid, did)).fetchone()
         if row is None:
             return None
-        return {'runs_given': row[0], 'balls_bowled': row[1], 'wickets': row[2]}
+        return {
+            'runs_given': row[0], 'balls_bowled': row[1], 'wickets': row[2],
+            'recent_runs_given': row[3], 'recent_balls_bowled': row[4],
+            'recent_wickets': row[5],
+        }
 
     def _get_raw_h2h(self, batter_id, bowler_id, as_of_date) -> Optional[Dict[str, int]]:
         conn = self._ensure_conn()

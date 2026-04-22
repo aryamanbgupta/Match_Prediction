@@ -71,17 +71,20 @@ class _ChunkedBackend:
 
         print(f"  Found {self.metadata['num_chunks']} cache chunks")
 
-        # Build date-to-chunk-index mapping for fast lookup
+        # Build date-to-chunk-index mapping for fast lookup.
+        # FIRST chunk wins when a date appears in multiple chunks (chunk-
+        # boundary duplicates). The first snapshot is the pre-first-match
+        # state for that date; later duplicates reflect mid-day state which
+        # would leak future info into inference.
         self.date_to_chunk_idx = {}
-        all_dates = []
 
         for chunk_idx, chunk_info in enumerate(self.metadata['chunks']):
             for date in chunk_info['dates']:
-                self.date_to_chunk_idx[date] = chunk_idx
-                all_dates.append(date)
+                if date not in self.date_to_chunk_idx:
+                    self.date_to_chunk_idx[date] = chunk_idx
 
-        # Pre-sort all dates for binary search
-        self.dates = sorted(all_dates)
+        # Pre-sort unique dates for binary search.
+        self.dates = sorted(self.date_to_chunk_idx.keys())
 
         # Initialize LRU cache for chunks
         self.max_cached_chunks = max_cached_chunks
@@ -223,6 +226,32 @@ class _ChunkedBackend:
 
         return {'avg': avg, 'sr': sr}
 
+    def get_batting_recent(self, player_id: str, as_of_date: str) -> Dict[str, float]:
+        """Last-5-match batting aggregates as of date. {'avg', 'sr'}."""
+        if isinstance(as_of_date, datetime):
+            as_of_date = as_of_date.strftime('%Y-%m-%d')
+        snapshot = self._get_snapshot_for_date(as_of_date)
+        if snapshot is None:
+            return {'avg': 0.0, 'sr': 0.0}
+        st = snapshot['batting'].get(player_id)
+        if st is None:
+            return {'avg': 0.0, 'sr': 0.0}
+        # Pre-v2 snapshots lack the recent_* keys entirely. Fail loud
+        # rather than returning silent 0.0 which masks the feature-shift
+        # bug this fix exists to prevent.
+        if 'recent_balls' not in st:
+            raise RuntimeError(
+                f"Snapshot for {as_of_date} lacks recent-form fields — "
+                f"chunks are pre-v2. Rebuild models/cache_chunks_v3/ via "
+                f"parsing_v2.py, then rebuild the SQLite cache."
+            )
+        rb = st['recent_balls']
+        if rb == 0:
+            return {'avg': 0.0, 'sr': 0.0}
+        rr = st['recent_runs']
+        rd = st['recent_dismissals']
+        return {'avg': rr / max(rd, 1), 'sr': (rr / rb) * 100}
+
     def get_bowling_stats(self, player_id: str, as_of_date: str) -> Dict[str, float]:
         """
         Get bowling statistics for a player as of a specific date.
@@ -258,6 +287,29 @@ class _ChunkedBackend:
         econ = (bowling_stats['runs_given'] / bowling_stats['balls_bowled']) * 6
 
         return {'avg': avg, 'econ': econ}
+
+    def get_bowling_recent(self, player_id: str, as_of_date: str) -> Dict[str, float]:
+        """Last-5-match bowling aggregates as of date. {'avg', 'econ'}."""
+        if isinstance(as_of_date, datetime):
+            as_of_date = as_of_date.strftime('%Y-%m-%d')
+        snapshot = self._get_snapshot_for_date(as_of_date)
+        if snapshot is None:
+            return {'avg': 0.0, 'econ': 0.0}
+        st = snapshot['bowling'].get(player_id)
+        if st is None:
+            return {'avg': 0.0, 'econ': 0.0}
+        if 'recent_balls_bowled' not in st:
+            raise RuntimeError(
+                f"Snapshot for {as_of_date} lacks recent-form fields — "
+                f"chunks are pre-v2. Rebuild models/cache_chunks_v3/ via "
+                f"parsing_v2.py, then rebuild the SQLite cache."
+            )
+        rbb = st['recent_balls_bowled']
+        if rbb == 0:
+            return {'avg': 0.0, 'econ': 0.0}
+        rrg = st['recent_runs_given']
+        rw = st['recent_wickets']
+        return {'avg': rrg / max(rw, 1), 'econ': (rrg / rbb) * 6}
 
     def get_h2h_stats(self, batter_id: str, bowler_id: str, as_of_date: str) -> Dict[str, float]:
         """

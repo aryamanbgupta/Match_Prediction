@@ -499,13 +499,41 @@ def deep_copy_stats(tracker, venue_tracker=None, elo_tracker=None):
     DESIGN DECISION: Deep copy to avoid reference issues
     REASONING: Snapshots must be immutable - changes to tracker shouldn't affect past snapshots
     """
+    # Pre-sum last-5-match recent totals once per player so consumers
+    # (SQLite cache, StatsProvider) don't need to carry the raw deques.
+    def _batting_row(pid, stats):
+        row = dict(stats)
+        dq = tracker.recent_batting.get(pid)
+        if dq:
+            row['recent_runs'] = sum(m['runs'] for m in dq)
+            row['recent_balls'] = sum(m['balls'] for m in dq)
+            row['recent_dismissals'] = sum(m['dismissals'] for m in dq)
+        else:
+            row['recent_runs'] = 0
+            row['recent_balls'] = 0
+            row['recent_dismissals'] = 0
+        return row
+
+    def _bowling_row(pid, stats):
+        row = dict(stats)
+        dq = tracker.recent_bowling.get(pid)
+        if dq:
+            row['recent_runs_given'] = sum(m['runs_given'] for m in dq)
+            row['recent_balls_bowled'] = sum(m['balls_bowled'] for m in dq)
+            row['recent_wickets'] = sum(m['wickets'] for m in dq)
+        else:
+            row['recent_runs_given'] = 0
+            row['recent_balls_bowled'] = 0
+            row['recent_wickets'] = 0
+        return row
+
     snapshot = {
         'batting': {
-            player_id: dict(stats)
+            player_id: _batting_row(player_id, stats)
             for player_id, stats in tracker.batting_stats.items()
         },
         'bowling': {
-            player_id: dict(stats)
+            player_id: _bowling_row(player_id, stats)
             for player_id, stats in tracker.bowling_stats.items()
         },
         'h2h': {
@@ -964,6 +992,7 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None, pla
                     'inning_idx': inning_idx,
                     'over_idx': over_idx,
                     'ball_idx': balls,
+                    'match_date': match_date.strftime('%Y-%m-%d') if match_date else None,
                     # Raw state
                     **state,
                     # Computed features
@@ -1206,6 +1235,12 @@ def process_folder_v2_with_splits(folder_path):
     # Stats cache: snapshots at each match date
     # To avoid memory issues, we'll save incrementally
     stats_snapshots = {}
+    # Dates we have ever snapshotted (across all chunks) — persists after
+    # stats_snapshots is cleared on chunk save. Without this, a date that
+    # straddles a chunk boundary (i.e. its first match triggers a chunk
+    # save) would get a second, wrong snapshot when its later same-day
+    # matches are processed.
+    snapshotted_dates: set = set()
     cache_chunks = []  # List of saved chunk files
     save_interval = 50  # Save every 50 snapshots (smaller to prevent huge chunks)
 
@@ -1260,7 +1295,8 @@ def process_folder_v2_with_splits(folder_path):
             # This represents what we knew at the START of this match (for simulations)
             # Only save first snapshot per date to avoid overwriting when multiple matches on same day
             match_date_str = match_date.strftime('%Y-%m-%d')
-            if match_date_str not in stats_snapshots:
+            if match_date_str not in snapshotted_dates:
+                snapshotted_dates.add(match_date_str)
                 # Include venue stats and ELO in snapshot for temporal integrity
                 stats_snapshots[match_date_str] = deep_copy_stats(player_stats_tracker, venue_tracker, elo_tracker)
 

@@ -118,6 +118,8 @@ def _stratified_cases(chunks: StatsProvider, sql: _SQLiteBackend):
                        ('one_before_mid', one_before_mid)]:
         add(f'batting({d_label})', 'get_batting_stats', (player_main, d))
         add(f'bowling({d_label})', 'get_bowling_stats', (player_main, d))
+        add(f'bat_recent({d_label})', 'get_batting_recent', (player_main, d))
+        add(f'bowl_recent({d_label})', 'get_bowling_recent', (player_main, d))
         add(f'h2h({d_label})', 'get_h2h_stats',
             (player_main, player_other, d))
         add(f'venue_avg({d_label})', 'get_venue_avg_score', (venue_main, d))
@@ -132,6 +134,8 @@ def _stratified_cases(chunks: StatsProvider, sql: _SQLiteBackend):
     # Unknown player / venue / H2H pair
     add('batting(unknown_p)', 'get_batting_stats', (UNKNOWN_P, mid_d))
     add('bowling(unknown_p)', 'get_bowling_stats', (UNKNOWN_P, mid_d))
+    add('bat_recent(unknown_p)', 'get_batting_recent', (UNKNOWN_P, mid_d))
+    add('bowl_recent(unknown_p)', 'get_bowling_recent', (UNKNOWN_P, mid_d))
     add('h2h(unknown_batter)', 'get_h2h_stats', (UNKNOWN_P, player_other, mid_d))
     add('h2h(unknown_bowler)', 'get_h2h_stats', (player_main, UNKNOWN_P, mid_d))
     add('venue_avg(unknown_v)', 'get_venue_avg_score', (UNKNOWN_V, mid_d))
@@ -191,6 +195,10 @@ def test_random_sample():
         ('get_batting_stats',
          lambda: (rng.choice(players), rng.choice(stretched_dates))),
         ('get_bowling_stats',
+         lambda: (rng.choice(players), rng.choice(stretched_dates))),
+        ('get_batting_recent',
+         lambda: (rng.choice(players), rng.choice(stretched_dates))),
+        ('get_bowling_recent',
          lambda: (rng.choice(players), rng.choice(stretched_dates))),
         ('get_h2h_stats',
          lambda: (rng.choice(players), rng.choice(players),
