@@ -358,19 +358,30 @@ data:
 
 ### Phased rollout
 
-**Phase A — Soft split** (bridge, low-risk, ~half day) — **pre-2026-04-26**
-- Add `--materialize-only` flag to `parsing_v2.py`. Skips tracker updates + snapshot emission; reuses existing SQLite; regenerates parquet only.
-- Validates the "cache stable, materialization stateless" assumption under the safe monolith before any extraction.
-- Lets the split bullet move forward without touching the Phase-5 gate.
-- **Exit gate**: `--materialize-only` parquet is bit-identical to a full `parsing_v2.py` run on all 4 splits.
+**Phase A — Parity harness** (LANDED 2026-04-22, ~1 day)
+- Standalone test harness at `scripts/tests/test_phase_a_parity.py` proves the "per-date stateful, cross-date stateless" materializer assumption without editing the monolith. Replaces the `--materialize-only` soft-split proposal (which would have branched inside a script we plan to delete).
+- New helpers: `scripts/loaders_common.py` (`iter_matches_chronological`), `scripts/tracker_rehydration.py` (`rehydrate_stats_tracker` / `rehydrate_elo_tracker` / `rehydrate_venue_tracker` — reads SQLite raw counters, reconstructs the three trackers per-date).
+- Harness groups matches by date; rehydrates `temp_*` once per date from SQLite using the union of same-day players + venues; then for each match on the date runs BOTH the live-tracker reference path and the `temp_*` candidate path and `assert_frame_equal(check_exact=True, check_dtype=True)`. `temp_*` accumulates across same-day matches via `parse_match_data_v2`'s mutations + post-match venue updates — matching the monolith.
+- **Result**: PASS on all **9519 male T20 matches** in 186s (~51 match/s).
+  - 3664 first-of-date matches: **63/63 columns** bit-exact.
+  - 5855 same-day-secondary matches: **59/63 columns** bit-exact. The 4 recent-form columns (`batsman_recent_avg/sr`, `bowler_recent_avg/econ`) are excluded (see schema-v2 limitation below).
+- **Exit gate**: met. Becomes the reusable regression gate for Phase B.
 
-**Phase B — Structural split** (bundled with Phase 5, ~2 days) — **after 2026-04-26**
-- Extract `build_stats_cache.py` from `parsing_v2.py` (tracker half).
-- Extract `materialize_features.py` from `parsing_v2.py` (feature half).
+**Schema-v2 limitation, deferred to Phase B (schema-v3 bump)**
+- SQLite schema v2 stores the 5-match recent-form window as a single summed triple per (player, date) — `recent_runs/balls/dismissals` on the batting/bowling rows (stats_sqlite_backend.py:83-85, 95-97). The monolith's `PlayerStatsTracker.recent_batting` / `recent_bowling` are 5-entry deques (parsing_v2.py:187-188); `end_match` pushes the current match's aggregates in, evicting the oldest slot when the deque is already at maxlen.
+- The eviction identity is lost in the sum. The candidate seeds its temp deque with a single 1-entry sum, so on the first `end_match` inside a same-day batch it appends without evicting (because the seeded deque has length 1, not 5). For players at deque.maxlen with ≥1 same-day secondary match to process, candidate sums 5 pre-date matches + 1 same-day match; monolith sums 4 pre-date matches + 1 same-day. Divergence on those 4 columns.
+- Measured blast radius: 5 failing matches in a 2016-match diagnostic run = ~0.25% of same-day secondaries (narrow intersection of "career ≥ 5 prior matches" × "same-day ≥ 2 matches" × "recent-form columns").
+- **Fix in Phase B**: schema v3 introduces `recent_batting_entries` / `recent_bowling_entries` tables keyed `(player_id, date_id, slot_idx)` with up to 5 rows per (player, date). `deep_copy_stats` emits individual deque entries; `build_stats_cache.py` writes the new tables; `_SQLiteBackend` adds `get_batting_recent_entries(pid, date) -> list[dict]`; `rehydrate_stats_tracker` rebuilds a faithful 5-entry deque. Re-run the Phase A harness WITHOUT the `RECENT_FORM_COLUMNS` exclusion — target is 63/63 bit-exact on all 9519 matches. Disk cost estimate: +20-40 MB (current DB is 41.7 MB).
+- Tracked separately in TODO.md so it doesn't get lost during the Phase 5 cleanup.
+
+**Phase B — Structural split** (bundled with Phase 5, ~2 days + 0.5 day for schema v3) — **after 2026-04-26**
+- Extract `build_stats_cache.py` from `parsing_v2.py` (tracker half). Writes schema v3 with recent-form deque entries (see limitation above).
+- Extract `materialize_features.py` from `parsing_v2.py` (feature half). Reuses `scripts/tracker_rehydration.py` (already Phase-A-validated) and `scripts/loaders_common.py`. Per-date batching for same-day continuations.
 - Delete `scripts/parsing_v2.py`, `scripts/build_stats_sqlite.py`, `_ChunkedBackend` in `stats_provider.py`, `models/player_stats_cache_v3_metadata.pkl`.
 - `rm -rf models/cache_chunks_v3/` (11 GB reclaimed).
 - Update `run_experiment.py` to dispatch both scripts with the new YAML schema.
 - Keep `parsing_v2.py` under `scripts/legacy/` for 30 days as rollback.
+- **Exit gate**: Phase A harness passes 63/63 columns on all 9519 matches (recent-form exclusion removed) against the new two-script pipeline.
 
 **Phase C — Per-match materialization cache** (optional follow-up, ~1-2 days) — **post-Phase B**
 - Materializer writes per-match parquet to `data/balls_cache/<match_id>_<feature_hash>.parquet`.
@@ -383,18 +394,19 @@ data:
 
 **Primary gate (both phases): bit-identical parquet output vs reference monolith.**
 
-New harness `scripts/tests/test_split_parity.py` (~150 lines):
-1. Run `parsing_v2.py` on a pinned 500-match slice → reference parquet.
-2. Run the new pipeline on the same slice → candidate parquet.
-3. `pd.testing.assert_frame_equal(check_exact=True)` across all 4 splits. Column-level diff on failure.
+`scripts/tests/test_phase_a_parity.py` (LANDED 2026-04-22):
+1. Chronological walk; group matches by date.
+2. Per date: rehydrate `temp_*` trackers from SQLite; iterate same-day matches accumulating temp state.
+3. `assert_frame_equal(check_exact=True, check_dtype=True)` candidate vs live-tracker reference, per match.
+4. Same-day secondaries skip the 4 recent-form columns until Phase B's schema-v3 bump.
 
 **Secondary gates**:
-- **Eval parity**: train XGBoost on both parquets, run `sim_eval/run_sim_eval.py`. `simulated_prob` bit-identical per match (same shape as `scripts/tests/compare_phase4_evals.py`).
+- **Eval parity** (Phase B post-cleanup): train XGBoost on the new parquet, run `sim_eval/run_sim_eval.py`. `simulated_prob` bit-identical per match on the 261-match polymarket test (same shape as `scripts/tests/compare_phase4_evals.py`).
 - **Cache parity (Phase B only)**: the SQLite from `build_stats_cache.py` matches a `build_stats_sqlite.py` output when both read the same JSONs. Row-count + `_meta` checks + 100 random `_get_raw_batting` spot-checks.
 - **Temporal integrity**: for each parquet row, assert `match_date > every cache snapshot date used in that row's feature lookups`. Catches any as-of-date leak.
 
 **Rollback**:
-- Phase A: revert the `--materialize-only` branch; `parsing_v2.py` is untouched.
+- Phase A: harness is read-only; nothing to revert (no monolith edits).
 - Phase B: `run_experiment.py` dispatch flip back to `scripts/legacy/parsing_v2.py` for 30 days.
 
 ### Pros
