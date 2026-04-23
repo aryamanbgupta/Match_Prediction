@@ -89,19 +89,13 @@ from tracker_rehydration import (  # noqa: E402
 MAX_MISMATCHES = 5
 PROGRESS_EVERY = 500
 
-# SQLite schema v2 stores the 5-match recent-form window as a single summed
-# triple (recent_runs/balls/dismissals). The monolith keeps a deque whose
-# eviction order is lost in that compression, so the FIRST append inside a
-# same-day batch diverges for players already at deque.maxlen: monolith
-# evicts-and-appends; candidate just appends. Affects ~0.25% of matches on
-# 4 of 63 columns. Deferred to Phase B via a schema-v3 bump that stores the
-# deque entries individually. See IMPROVEMENTS.md §"Parsing Pipeline Split".
-RECENT_FORM_COLUMNS = frozenset({
-    "batsman_recent_avg",
-    "batsman_recent_sr",
-    "bowler_recent_avg",
-    "bowler_recent_econ",
-})
+# Schema v3 (Phase B) stores per-match aggregates in `batting_match_log` /
+# `bowling_match_log`, letting rehydration reconstruct the full 5-entry
+# deque. That closes the same-day-secondary recent-form gap that schema v2
+# had, so the exclusion list is now empty — all 63 columns are checked on
+# every match. Kept as a named constant (empty) for backward-compat with
+# the `is_secondary` exclusion branch below.
+RECENT_FORM_COLUMNS = frozenset()
 
 
 def _first_diff_report(candidate: pd.DataFrame, reference: pd.DataFrame) -> str:
@@ -363,11 +357,19 @@ def run_harness(
     if skip_same_day_secondary:
         skip_summary += f", {n_skipped_same_day} same-day-secondary"
 
-    coverage = (
-        f"{n_checked_full} first-of-date (63/63 cols), "
-        f"{n_checked_partial} same-day-secondary (59/63 cols; "
-        f"recent-form excluded per schema-v2 limitation)"
-    )
+    if RECENT_FORM_COLUMNS:
+        n_cols_partial = 63 - len(RECENT_FORM_COLUMNS)
+        coverage = (
+            f"{n_checked_full} first-of-date (63/63 cols), "
+            f"{n_checked_partial} same-day-secondary ({n_cols_partial}/63 "
+            f"cols; {sorted(RECENT_FORM_COLUMNS)} excluded)"
+        )
+    else:
+        coverage = (
+            f"{n_checked_full} first-of-date (63/63 cols), "
+            f"{n_checked_partial} same-day-secondary (63/63 cols — "
+            f"schema v3 match log fully reproduces monolith's deque)"
+        )
 
     if mismatches:
         print(

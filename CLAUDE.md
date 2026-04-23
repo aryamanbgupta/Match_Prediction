@@ -36,11 +36,25 @@ A production-scale machine learning system that predicts T20 cricket match outco
 > **Important**: Use `uv run` to execute all scripts. This ensures the correct virtual environment and dependencies are used.
 
 ```bash
-# Full training pipeline (v3 model with player metadata)
-uv run python scripts/parsing_v2.py          # ~10-15 min (generates v3 data + cache)
-uv run python scripts/xgboost_v2.py          # ~5-10 min (uses saved hyperparameters)
+# Full training pipeline (v3 model with player metadata).
+# Phase B split (2026-04-22): parsing is two scripts now — the stats cache is
+# built once (schema v3 SQLite) and the parquet is materialized from it +
+# the JSONs. run_experiment.py dispatches both automatically.
 
-# OR with Optuna hyperparameter tuning
+# --- Option A: run everything via run_experiment.py (recommended) ---
+uv run python scripts/run_experiment.py experiments/configs/xgb_v3_baseline.yaml
+# Dispatches cache-build + materialize + train + eval, skipping any step
+# whose artifact is already current per check_smart_cache().
+
+# --- Option B: run the new parsing scripts directly ---
+uv run python scripts/build_stats_cache.py          # JSON → SQLite v3 (~6 min, 46 MB DB)
+uv run python scripts/materialize_features.py       # SQLite + JSON → parquet (~3 min)
+uv run python scripts/xgboost_v2.py                 # ~5-10 min
+# build_stats_cache.py is idempotent — it no-ops if the JSONs haven't
+# changed since the last build (compares _meta.source_json_mtime_max).
+# Force with --force-rebuild if needed.
+
+# --- Optuna hyperparameter tuning ---
 uv run python scripts/xgboost_v2.py --tune --n-trials 50  # ~30-60 min
 
 # Run evaluation (defaults to XGBoost v3 model)
@@ -145,9 +159,9 @@ uv run python scripts/compare_experiments.py <exp_id_1> <exp_id_2>
 │  Raw JSON (15K+ matches)                                    │
 │       │                                                       │
 │       ▼                                                       │
-│  parsing_v2.py                                              │
+│  build_stats_cache.py + materialize_features.py            │
 │   - 46+ features (basic, player stats, momentum, metadata) │
-│   - Temporal stats cache (v3: cache_chunks_v3/, lazy-loaded)│
+│   - Temporal stats cache (v3: SQLite mmap, schema v3)      │
 │       │                                                       │
 │       ▼                                                       │
 │  Parquet files (train/val/test splits)                     │
@@ -215,21 +229,26 @@ Match_Prediction/
 │   ├── xgb_v3/                 # Trained XGBoost model + encoders (v3)
 │   ├── lstm_v1/                # Trained LSTM model + encoders
 │   ├── transformer_v1/         # Trained Transformer model + encoders
-│   ├── cache_chunks/           # Player stats cache v2 (69 files)
-│   └── cache_chunks_v3/        # Player stats cache v3 (69 files, 7.6GB)
+│   ├── cache_chunks/           # Player stats cache v2 (69 files, legacy)
+│   └── player_stats_cache_v3.sqlite  # Player stats cache v3 (SQLite, ~46 MB)
 │
 ├── scripts/
-│   ├── parsing_v2.py           # Feature engineering pipeline
+│   ├── build_stats_cache.py    # Phase B: JSON → SQLite schema v3
+│   ├── materialize_features.py # Phase B: SQLite + JSON → parquet
+│   ├── parsing_v2.py           # Core helpers (trackers, parse_match_data_v2, deep_copy_stats)
+│   ├── tracker_rehydration.py  # Per-date tracker seeding from SQLite
+│   ├── loaders_common.py       # Shared chronological match iterator
+│   ├── stats_sqlite_backend.py # SQLite reader (schema v3)
+│   ├── stats_provider.py       # Facade over the SQLite backend
 │   ├── xgboost_v2.py           # XGBoost training with Optuna
 │   ├── lstm_v1.py              # LSTM training script (PyTorch)
 │   ├── transformer_v1.py       # Transformer training script (PyTorch/MLX)
 │   ├── mlp_v1.py               # MLP baseline training script
 │   ├── sim_v1_2.py             # Monte Carlo simulation engine
-│   ├── stats_provider.py       # Lazy-loading stats access
 │   ├── player_metadata.py      # Player metadata provider
 │   ├── feature_registry.py     # Central feature definitions (single source of truth)
 │   ├── experiment_tracker.py   # Structured experiment result storage
-│   ├── run_experiment.py       # Pipeline runner (parse → train → eval)
+│   ├── run_experiment.py       # Pipeline runner (cache → materialize → train → eval)
 │   ├── compare_experiments.py  # Compare experiment results CLI
 │   └── sim_eval/               # Evaluation framework
 │       ├── run_sim_eval.py     # Main evaluation script
@@ -261,18 +280,27 @@ Match_Prediction/
 
 ## Core Modules
 
-### 1. `scripts/parsing_v2.py` - Feature Engineering
+### 1. Feature pipeline — `build_stats_cache.py` + `materialize_features.py`
 
-**Purpose**: Transform raw JSON into ML-ready features with temporal integrity
+**Purpose**: Transform raw JSON into ML-ready features with temporal integrity. Split into two scripts in Phase B (2026-04-22) so the stateful stats cache and the stateless per-match feature emission can evolve independently.
 
-**Key Features**:
-- 29 features: basic state (12), player stats (6), H2H (2), momentum (5), pressure (4)
-- Temporal stats cache: Snapshots player stats BEFORE each match (prevents data leakage)
-- Outputs: Parquet files + 69 cache chunks (lazy-loaded)
+**`scripts/build_stats_cache.py`** — JSON → SQLite schema v3.
+- Chronological walk over `data/t20s_json/` with `PlayerStatsTracker` + `PlayerEloTracker` + `VenueStatsTracker`.
+- Writes delta-compressed snapshots + per-match `batting_match_log` / `bowling_match_log` rows.
+- Output: `models/player_stats_cache_v3.sqlite` (~46 MB). Idempotent via `_meta.source_json_mtime_max` vs live JSON mtime.
+- Runtime: ~6 min on full corpus.
+- CLI: `uv run python scripts/build_stats_cache.py [--source-dir data/t20s_json] [--out models/player_stats_cache_v3.sqlite] [--force-rebuild]`
 
-**Critical Design**: Features reflect state BEFORE ball, stats updated AFTER ball
+**`scripts/materialize_features.py`** — SQLite + JSON → parquet.
+- Per-date batching: one rehydration per date from SQLite (via `tracker_rehydration.py`), then replays same-day matches in monolith order so the tracker drift inside a batch matches the reference pipeline.
+- Splits from YAML `data.splits` block (optional; defaults preserve the hardcoded train/val/test/golden cutoffs).
+- Output: `data/xgb_data_v3/{train,val,test,golden_test}.parquet` + `.feature_hash` marker.
+- Runtime: ~3 min on full corpus (3.5× faster than the monolith — skips the tracker walk).
+- CLI: `uv run python scripts/materialize_features.py [--config experiments/configs/xgb_v3_baseline.yaml]`
 
-**Usage**: `python scripts/parsing_v2.py` (~10-15 min)
+**Critical Design**: Features reflect state BEFORE ball, stats updated AFTER ball. Phase A harness (`scripts/tests/test_phase_a_parity.py`) proves bit-exact parity with the original monolith — 63/63 columns across all 9519 matches.
+
+**Related**: the helper primitives (`parse_match_data_v2`, `deep_copy_stats`, tracker classes, `classify_match_k_factor`) still live in `scripts/parsing_v2.py` and are imported by both scripts. The old monolith orchestrator was removed in the Phase 5 cleanup.
 
 ---
 
@@ -504,14 +532,27 @@ Player stats must reflect only historical data available at match time.
 # 1. Add new matches
 cp new_matches/*.json data/t20s_json/
 
-# 2. Re-run pipeline
-python scripts/parsing_v2.py
-python scripts/xgboost_v2.py
+# 2. Re-run everything via run_experiment.py (detects SQLite/parquet staleness
+#    from JSON mtime + feature hash, rebuilds only what's changed):
+uv run python scripts/run_experiment.py experiments/configs/xgb_v3_baseline.yaml
 
-# 3. Evaluate
-python scripts/sim_eval/run_sim_eval.py \
+# --- OR explicit step-by-step ---
+# 2a. Rebuild the SQLite stats cache (new matches → new snapshots + match log)
+uv run python scripts/build_stats_cache.py
+
+# 2b. Rematerialize feature parquet
+uv run python scripts/materialize_features.py
+
+# 2c. Retrain XGBoost
+uv run python scripts/xgboost_v2.py
+
+# 3. Evaluate (betting_test = 44 T20 World Cup 2024 matches;
+#    for the 261-match polymarket regression use --test-dir data/polymarket_test
+#    --odds betting_odds_polymarket.json)
+uv run python scripts/sim_eval/run_sim_eval.py \
     --test-dir data/betting_test \
-    --odds betting_odds_v3.json
+    --odds betting_odds_v3.json \
+    --n-sims 1000
 ```
 
 ### Simulate a Specific Match
@@ -543,7 +584,8 @@ print(f"vs Pace: {bat_vs_type['avg_vs_pace']:.1f}, vs Spin: {bat_vs_type['avg_vs
 
 **Training**:
 ```
-Raw JSON → parsing_v2.py → Parquet + Cache → xgboost_v2.py → Model
+Raw JSON → build_stats_cache.py → SQLite cache
+         → materialize_features.py (uses SQLite + JSON) → Parquet → xgboost_v2.py → Model
 ```
 
 **Simulation**:
@@ -594,7 +636,7 @@ Enable `parallel=True` in SimulationConfig. Reduces simulations for testing.
 - `data/xgb_data_v3/*.parquet` - Processed training data (v3 with player metadata)
 - `data/all_players_enriched.csv` - Player metadata (hand, arm, DOB, bowling style)
 - `models/xgb_v3/xgboost_model_v3.pkl` - Trained model (v3)
-- `models/cache_chunks_v3/` - Player stats cache (with type-based stats)
+- `models/player_stats_cache_v3.sqlite` - Player stats cache (SQLite schema v3, with match logs)
 - `scripts/player_metadata.py` - Player metadata provider
 
 **Training (LSTM v1)**:
@@ -611,7 +653,9 @@ Enable `parallel=True` in SimulationConfig. Reduces simulations for testing.
 
 **Simulation**:
 - `scripts/sim_v1_2.py` - Simulation engine (XGBoostModelV2, LSTMModelV1)
-- `scripts/stats_provider.py` - Stats access (supports v2 and v3)
+- `scripts/stats_provider.py` - Stats access (SQLite v3 only post-Phase-B)
+- `scripts/stats_sqlite_backend.py` - SQLite reader (schema v3, match-log getters)
+- `scripts/tracker_rehydration.py` - Rehydrates trackers from SQLite for replay
 
 **Evaluation**:
 - `data/betting_test/` - Test matches
@@ -624,7 +668,11 @@ Enable `parallel=True` in SimulationConfig. Reduces simulations for testing.
 
 | Module | Purpose | Key Output | Documentation |
 |--------|---------|------------|---------------|
-| `parsing_v2.py` | Feature engineering | Parquet files + cache chunks | [CLAUDE_REFERENCE.md](CLAUDE_REFERENCE.md#1-scriptsparsing_v2py---feature-engineering-pipeline) |
+| `build_stats_cache.py` | JSON → SQLite schema v3 | `models/player_stats_cache_v3.sqlite` | See section 1 above |
+| `materialize_features.py` | SQLite + JSON → parquet (per-date batching) | `data/xgb_data_v3/*.parquet` + `.feature_hash` | See section 1 above |
+| `parsing_v2.py` (helpers only) | Tracker primitives (`parse_match_data_v2`, `deep_copy_stats`, tracker classes, `classify_match_k_factor`) | Imported by the two scripts above | [CLAUDE_REFERENCE.md](CLAUDE_REFERENCE.md#1-scriptsparsing_v2py---feature-engineering-pipeline) |
+| `tracker_rehydration.py` | Seed `PlayerStatsTracker`/`Elo`/`Venue` from SQLite at a date boundary | Per-date `temp_*` trackers | See section 1 above |
+| `loaders_common.py` | `iter_matches_chronological(folder, gender)` | Shared chronological match iterator | — |
 | `xgboost_v2.py` | XGBoost training | Trained XGBoost model | [CLAUDE_REFERENCE.md](CLAUDE_REFERENCE.md#2-scriptsxgboost_v2py---model-training) |
 | `lstm_v1.py` | LSTM training | Trained LSTM model | See section 3 above |
 | `transformer_v1.py` | Transformer training | Trained Transformer model | See section above |
@@ -665,6 +713,15 @@ Enable `parallel=True` in SimulationConfig. Reduces simulations for testing.
 | Transformer | v1 | 63 | `models/transformer_v1/` |
 
 **Recent Updates**:
+- ✅ **Parsing pipeline split — Phase B / schema v3 (2026-04-22)**: the parsing monolith `process_folder_v2_with_splits` was retired in favor of two scripts with a clean concern split:
+  - `scripts/build_stats_cache.py` — JSON → SQLite (schema v3, 46.5 MB, built from JSONs directly; replaces the pickle-chunk intermediate).
+  - `scripts/materialize_features.py` — SQLite + JSON → parquet via per-date batching; 3.5× faster than the monolith (170 s vs ~600 s) because it skips the tracker walk.
+  - Schema v3 adds `batting_match_log` / `bowling_match_log` tables — one row per `(player, match)` with an `intra_date_idx` — so `tracker_rehydration.py` can reconstruct the monolith's 5-entry recent-form deque bit-exactly, including eviction behavior on same-day secondaries. `get_batting_match_log_recent(pid, as_of_date, limit=5)` + bowling equivalent live on `_SQLiteBackend`; the denormalized `batting.recent_*` / `bowling.recent_*` sum columns (written by Phase A) stay as the fast hot-path cache for the 5 sim wrappers in `sim_v1_2.py`.
+  - **Phase A parity harness (`scripts/tests/test_phase_a_parity.py`) passes 63/63 columns on all 9519 matches** (was 59/63 on 5855 same-day-secondaries under schema v2). Eval parity on 261 polymarket matches × 10 sims: flat betting P&L / ROI / win rate / bets-placed bit-identical to `eval_out_postfix/xgboost_20260421_220541.json`; log-loss + Brier within 0.001 (Monte Carlo noise).
+  - **Phase 5 cleanup landed**: 12 GB of `models/cache_chunks_v3/` reclaimed, `scripts/build_stats_sqlite.py` deleted (its chunks→SQLite converter is obsolete), `_ChunkedBackend` + chunk fallback code removed from `scripts/stats_provider.py` (861 lines → 264, −583 lines), `models/player_stats_cache_v3_metadata.pkl` removed (metadata now lives in SQLite `_meta`). `scripts/parsing_v2.py` trimmed from 1446 → 1137 lines (orchestrator + `__main__` removed; helpers retained because the new scripts + sim pipeline still import `parse_match_data_v2`, `deep_copy_stats`, the tracker classes, and `classify_match_k_factor`).
+  - **`run_experiment.py`**: `check_smart_cache` now returns `(sqlite_valid, parquet_valid)` — SQLite validity checks `_meta.schema_version==3` + `_meta.source_json_mtime_max ≥ max(JSON mtime)`; parquet validity unchanged. Dispatch runs `build_stats_cache.py` if SQLite stale, `materialize_features.py` if parquet stale; either is skipped independently.
+  - YAML `data.splits` block optional — missing keys fall back to the hardcoded `DEFAULT_SPLITS` in `materialize_features.py`, so existing `experiments/configs/*.yaml` keep working unchanged.
+  - New tests: `scripts/tests/test_schema_v3_match_log.py` (7 assertions on log queries: newest-first ordering, `limit` honor, strict `date_id<?`, log-sum ≡ denormalized sum columns, `USING INDEX` query plan, intra_date ordering).
 - ✅ Recent-form cache fix — schema v2 (2026-04-21): SQLite stats cache bumped to schema v2. `batting` / `bowling` tables each gained 3 columns for last-5-match totals (`recent_runs/balls/dismissals`, `recent_runs_given/balls_bowled/wickets`). New getters `get_batting_recent` / `get_bowling_recent` on both backends, wired through `StatsProvider`/`StatsProviderCache` via `__getattr__`. `deep_copy_stats` in `parsing_v2.py` now pre-sums the recent deques at snapshot time; `build_stats_sqlite.py` delta-compresses on the 6-tuple. Fixed a silent-fallback bug: the 4 `*_recent_*` features were baked into training but inference paths substituted **0** (XGB `buf.fill`) or **career-avg** (3 PyTorch wrappers — LSTM, MLP, Transformer). All 5 wrappers in `sim_v1_2.py` now call the getters explicitly. `_ChunkedBackend` has a schema gate that raises on pre-v2 chunks (no silent `st.get(...)` defaults). DB size 39.7 → 41.7 MB, build 5:48; all Phase-1 bench gates still PASS (p50 2.96 µs, p99 6.58 µs, 4-worker RSS 222 MB), 78 stratified + 10k random equivalence green. Eval delta on 261-match polymarket × 10 sims: log_loss 0.7541 → 0.7518, flat_roi −1.37% → +6.51%, frac_kelly_roi +0.22% → +1.27%, 216/261 matches diverged (bug was live-wrong on 83%). Baseline at `eval_out_baseline/xgboost_20260421_213207.json`, post-fix at `eval_out_postfix/xgboost_20260421_220541.json`. **Parquet ↔ SQLite parity regression test** (`scripts/tests/test_recent_form_parquet_parity.py`) — parsing now writes `match_date` into each ball row; test samples single-match (player, date) pairs and asserts `get_batting_recent`/`get_bowling_recent` match `batsman_recent_*` / `bowler_recent_*` parquet columns bit-exactly (2 000 batting + 2 000 bowling rows, PASS).
 - ✅ Duplicate-snapshot dedup (2026-04-21): building the parity test above surfaced a latent bug — 45/3 664 dates (1.2%) had TWO snapshots stored across chunks (chunk-boundary straddle: `stats_snapshots` dict was reset on chunk save, so a same-day match after the reset triggered a second, mid-day snapshot for that date). Both `_ChunkedBackend._build_date_index` and `build_stats_sqlite.py` used last-write-wins, returning the mid-day snapshot at inference — a temporal-integrity leak. Fixed at three layers: `parsing_v2.py` now tracks `snapshotted_dates: set` that persists across chunk-save resets (prevents future duplicates); `build_stats_sqlite.py` and `_ChunkedBackend` both switched to first-write-wins. Dates index now correctly 3 664 unique (was 3 709 with duplicates). Existing chunks on disk still contain both snapshots for those 45 dates — consumers just pick the first, so no parsing rebuild required. Verified: `fc4375ef` on `2026-02-10` now returns `{'avg': 11.4, 'sr': 83.82}` (pre-first-match snapshot, matches parquet) instead of `{'avg': 28.5, 'sr': 123.91}` (pre-match-2-of-day).
 - ✅ SQLite stats-cache migration Phase 3+4 (2026-04-19): `StatsProvider` now auto-detects and uses `models/player_stats_cache_v3.sqlite` when present (logs `StatsProvider: using SQLite backend`), falls back to chunks with a log line otherwise. Staleness guard: `_meta.source_chunks_mtime_max` compared against live chunk mtimes — fails loud if SQLite is older than chunks. `_ChunkedBackend` split out of the facade; public API preserved (`__getattr__` delegation). Legacy tests (`test_stats_cache.py`, `test_sim_with_stats.py`, `validate_training_cache_match.py`) rewritten backend-agnostic and pass on both. **Phase 4 end-to-end**: 261×100 eval serial on polymarket_test — SQLite 36 min, chunks 38 min, `simulated_prob` **bit-identical to 16 dp across all 261 matches** (`scripts/tests/compare_phase4_evals.py`). 2-worktree parallel SQLite eval (the original crash scenario on chunks): peak combined RSS **1 736 MB** — no OOM, outputs bit-identical to serial. See `docs/SQLITE_MIGRATION_PROFILE.md` Phase 4 section. Parallel comparison tool: `scripts/tests/sample_rss_by_name.py`.

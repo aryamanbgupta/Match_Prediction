@@ -51,17 +51,28 @@ def load_config(config_path: str) -> dict:
     return config
 
 
-def check_smart_cache(config: dict, feature_list: list) -> bool:
-    """Check if parsing can be skipped (parquet exists + feature hash matches)."""
+def _check_parquet_cache(config: dict, feature_list: list) -> bool:
+    """Check if the parquet split files are current.
+
+    Returns True iff ALL of:
+      1. train parquet file exists
+      2. `.feature_hash` JSON exists and parses
+      3. cached `hash` matches the feature list
+      4. cached `splits` matches YAML's effective splits (merge of
+         data.splits over DEFAULT_SPLITS)
+      5. cached `gender_filter` matches YAML's (None → 'all')
+      6. parquet mtime >= SQLite mtime (if SQLite exists)
+
+    Missing `splits`/`gender_filter` in the cached payload → legacy
+    format → cache miss (forces one rematerialize; subsequent runs hit).
+    """
     version = config["data"].get("version", "v3")
     data_dir = Path(f"data/xgb_data_{version}") if version != "v2" else Path("data/xgb_data")
 
-    # Check if parquet files exist
     train_file = data_dir / f"cricket_data_{version}_train.parquet"
     if not train_file.exists():
         return False
 
-    # Check feature hash
     hash_file = data_dir / ".feature_hash"
     if not hash_file.exists():
         return False
@@ -69,10 +80,95 @@ def check_smart_cache(config: dict, feature_list: list) -> bool:
     try:
         with open(hash_file) as f:
             cached = json.load(f)
-        current_hash = get_feature_hash(feature_list)
-        return cached.get("hash") == current_hash
-    except (json.JSONDecodeError, KeyError):
+    except (json.JSONDecodeError, OSError):
         return False
+
+    # Feature hash.
+    if cached.get("hash") != get_feature_hash(feature_list):
+        return False
+
+    # Splits (must be present in cached payload and match effective splits).
+    try:
+        sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+        from loaders_common import effective_splits
+    except ImportError:
+        return False
+    yaml_splits = config.get("data", {}).get("splits") or {}
+    want_splits = effective_splits(yaml_splits)
+    cached_splits = cached.get("splits")
+    if cached_splits != want_splits:
+        return False
+
+    # Gender filter (canonicalized the same way materialize_features.py writes it).
+    yaml_gender = config.get("data", {}).get("gender_filter", "male")
+    want_gender = yaml_gender if yaml_gender else "all"
+    cached_gender = cached.get("gender_filter")
+    if cached_gender != want_gender:
+        return False
+
+    # Parquet mtime >= SQLite mtime. A rebuild of SQLite invalidates the
+    # parquet even if features/splits/gender are unchanged — the parquet
+    # may contain snapshots derived from older SQLite state.
+    sqlite_path = PROJECT_ROOT / "models" / f"player_stats_cache_{version}.sqlite"
+    if sqlite_path.exists():
+        if train_file.stat().st_mtime < sqlite_path.stat().st_mtime - 1:
+            return False
+
+    return True
+
+
+def _check_sqlite_cache(config: dict) -> bool:
+    """Schema-v3 SQLite is current iff schema_version matches AND
+    source_json_mtime_max is at least as new as the live JSON corpus.
+    Returns False on any read error (missing file, bad schema, etc.)."""
+    import sqlite3
+    version = config["data"].get("version", "v3")
+    sqlite_path = Path(f"models/player_stats_cache_{version}.sqlite")
+    if not sqlite_path.exists():
+        return False
+
+    try:
+        conn = sqlite3.connect(f"file:{sqlite_path}?mode=ro", uri=True)
+        meta = dict(conn.execute("SELECT key, value FROM _meta"))
+        conn.close()
+    except sqlite3.DatabaseError:
+        return False
+
+    # Schema check — import lazily to avoid hard dep if Phase B backend missing
+    try:
+        sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+        from stats_sqlite_backend import SCHEMA_VERSION
+    except ImportError:
+        return False
+    try:
+        if int(meta.get("schema_version", -1)) != SCHEMA_VERSION:
+            return False
+    except (TypeError, ValueError):
+        return False
+
+    # JSON mtime check — SQLite is stale if any JSON is newer.
+    json_dir = PROJECT_ROOT / "data" / "t20s_json"
+    if not json_dir.exists():
+        # No JSONs to check against; trust the SQLite.
+        return True
+    json_files = list(json_dir.glob("*.json"))
+    if not json_files:
+        return True
+    live_mtime = max(p.stat().st_mtime for p in json_files)
+    try:
+        cached_mtime = float(meta.get("source_json_mtime_max", 0))
+    except (TypeError, ValueError):
+        return False
+    return cached_mtime + 1 >= live_mtime
+
+
+def check_smart_cache(config: dict, feature_list: list) -> tuple[bool, bool]:
+    """Return (sqlite_valid, parquet_valid). Phase B introduces two
+    independent artifacts; the caller decides which steps to skip."""
+    return (
+        _check_sqlite_cache(config),
+        _check_parquet_cache(config, feature_list),
+    )
 
 
 def run_step(cmd: list, step_name: str, tracker: ExperimentTracker,
@@ -255,22 +351,37 @@ def main():
     skip_training = args.skip_training or args.only_eval or pipeline.get("skip_training", False)
     skip_eval = pipeline.get("skip_evaluation", False)
 
-    # Smart cache check
-    if not skip_parsing and check_smart_cache(config, feature_list):
-        print("\n  Smart cache hit — parsed data matches feature hash. Skipping parsing.")
-        skip_parsing = True
+    # Phase B pipeline: two independent artifacts (SQLite cache + parquet).
+    sqlite_valid = parquet_valid = False
+    if not skip_parsing:
+        sqlite_valid, parquet_valid = check_smart_cache(config, feature_list)
+        if sqlite_valid and parquet_valid:
+            print("\n  Smart cache hit — SQLite + parquet both current. "
+                  "Skipping parsing.")
+            skip_parsing = True
+        else:
+            print(f"\n  Cache state: sqlite_valid={sqlite_valid}, "
+                  f"parquet_valid={parquet_valid}")
 
-    # Build commands
-    parse_cmd = [sys.executable, "scripts/parsing_v2.py"]
+    cache_cmd = [sys.executable, "scripts/build_stats_cache.py"]
+    mat_cmd = [sys.executable, "scripts/materialize_features.py",
+               "--config", args.config]
     train_cmd = build_training_cmd(config, feature_list)
     eval_cmd = build_eval_cmd(config)
 
     if args.dry_run:
         print("\n--- DRY RUN ---")
-        if not skip_parsing:
-            print(f"[1/3] PARSE: {' '.join(parse_cmd)}")
+        if skip_parsing:
+            print("[1/3] PARSE: SKIPPED (smart cache hit)")
         else:
-            print("[1/3] PARSE: SKIPPED")
+            if sqlite_valid:
+                print("[1a/3] BUILD_STATS_CACHE: SKIPPED (sqlite current)")
+            else:
+                print(f"[1a/3] BUILD_STATS_CACHE: {' '.join(cache_cmd)}")
+            if parquet_valid:
+                print("[1b/3] MATERIALIZE_FEATURES: SKIPPED (parquet current)")
+            else:
+                print(f"[1b/3] MATERIALIZE_FEATURES: {' '.join(mat_cmd)}")
         if not skip_training:
             print(f"[2/3] TRAIN: {' '.join(train_cmd)}")
         else:
@@ -291,9 +402,21 @@ def main():
     print(f"  Results dir: {tracker.experiment_dir}")
 
     try:
-        # Step 1: Parsing
+        # Step 1: Parsing — two-artifact pipeline.
         if not skip_parsing:
-            run_step(parse_cmd, "Parsing (feature engineering)", tracker, capture=False)
+            if not sqlite_valid:
+                run_step(cache_cmd, "Build stats cache (JSON → SQLite)",
+                         tracker, capture=False)
+            else:
+                print("\n  Stats cache current; skipping "
+                      "build_stats_cache.py.")
+            if not parquet_valid:
+                run_step(mat_cmd,
+                         "Materialize features (SQLite + JSON → parquet)",
+                         tracker, capture=False)
+            else:
+                print("\n  Parquet current; skipping "
+                      "materialize_features.py.")
         else:
             print("\n  Skipping parsing step.")
 

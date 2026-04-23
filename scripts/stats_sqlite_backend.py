@@ -57,7 +57,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 SCHEMA_SQL = """
@@ -164,6 +164,32 @@ CREATE TABLE IF NOT EXISTS bowling_elo (
     PRIMARY KEY (player_id, date_id)
 ) WITHOUT ROWID;
 
+-- Schema v3: per-match aggregate logs. One row per (player, match) for
+-- each role (batting / bowling). The deque-reconstruction path reads the
+-- 5 most recent rows strictly before an as-of-date, allowing bit-exact
+-- reproduction of monolith's recent-form evictions on same-day secondary
+-- matches. Pre-summed recent_* columns on batting/bowling remain as a
+-- denormalized cache for the simulation hot path (E1 decision).
+CREATE TABLE IF NOT EXISTS batting_match_log (
+    player_id INTEGER NOT NULL,
+    date_id INTEGER NOT NULL,
+    intra_date_idx INTEGER NOT NULL,   -- 0,1,2... monolith order within date
+    runs INTEGER NOT NULL,
+    balls INTEGER NOT NULL,
+    dismissals INTEGER NOT NULL,
+    PRIMARY KEY (player_id, date_id, intra_date_idx)
+) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS bowling_match_log (
+    player_id INTEGER NOT NULL,
+    date_id INTEGER NOT NULL,
+    intra_date_idx INTEGER NOT NULL,
+    runs_given INTEGER NOT NULL,
+    balls_bowled INTEGER NOT NULL,
+    wickets INTEGER NOT NULL,
+    PRIMARY KEY (player_id, date_id, intra_date_idx)
+) WITHOUT ROWID;
+
 CREATE TABLE IF NOT EXISTS _meta (
     key TEXT PRIMARY KEY,
     value TEXT
@@ -224,18 +250,37 @@ WHERE player_id = ? AND date_id <= ?
 ORDER BY date_id DESC LIMIT 1
 """
 
+# Schema v3 match-log recency queries. Strict `date_id < ?` (not `<=`) —
+# we read at the pre-date boundary, so same-date matches must be excluded.
+# PK (player_id, date_id, intra_date_idx) lets the planner walk the index
+# backwards and LIMIT terminate early.
+_Q_BATTING_LOG_RECENT = """
+SELECT runs, balls, dismissals FROM batting_match_log
+WHERE player_id = ? AND date_id < ?
+ORDER BY date_id DESC, intra_date_idx DESC
+LIMIT ?
+"""
+_Q_BOWLING_LOG_RECENT = """
+SELECT runs_given, balls_bowled, wickets FROM bowling_match_log
+WHERE player_id = ? AND date_id < ?
+ORDER BY date_id DESC, intra_date_idx DESC
+LIMIT ?
+"""
+
 
 # Every getter is one of these shapes. Exported so benchmarks can
 # iterate the full set for EXPLAIN QUERY PLAN assertions.
 QUERY_PLAN_CASES = [
-    ("batting",         _Q_BATTING,         (1, 1)),
-    ("bowling",         _Q_BOWLING,         (1, 1)),
-    ("h2h",             _Q_H2H,             (1, 1, 1)),
-    ("batting_vs_type", _Q_BATTING_VS_TYPE, (1, 0, 1)),
-    ("bowling_vs_hand", _Q_BOWLING_VS_HAND, (1, 0, 1)),
-    ("venue",           _Q_VENUE,           (1, 1)),
-    ("batting_elo",     _Q_BATTING_ELO,     (1, 1)),
-    ("bowling_elo",     _Q_BOWLING_ELO,     (1, 1)),
+    ("batting",             _Q_BATTING,             (1, 1)),
+    ("bowling",             _Q_BOWLING,             (1, 1)),
+    ("h2h",                 _Q_H2H,                 (1, 1, 1)),
+    ("batting_vs_type",     _Q_BATTING_VS_TYPE,     (1, 0, 1)),
+    ("bowling_vs_hand",     _Q_BOWLING_VS_HAND,     (1, 0, 1)),
+    ("venue",               _Q_VENUE,               (1, 1)),
+    ("batting_elo",         _Q_BATTING_ELO,         (1, 1)),
+    ("bowling_elo",         _Q_BOWLING_ELO,         (1, 1)),
+    ("batting_match_log",   _Q_BATTING_LOG_RECENT,  (1, 1, 5)),
+    ("bowling_match_log",   _Q_BOWLING_LOG_RECENT,  (1, 1, 5)),
 ]
 
 
@@ -626,6 +671,63 @@ class _SQLiteBackend:
         if row is None:
             return None
         return {'runs': row[0], 'balls': row[1], 'dismissals': row[2]}
+
+    # --- schema v3 match-log getters ------------------------------------
+    # Result ordered newest-first (date_id DESC, intra_date_idx DESC).
+    # Callers that need deque append order (oldest-first) should reverse.
+    # Used by tracker_rehydration.py to rebuild PlayerStatsTracker's
+    # recent_batting / recent_bowling deques bit-exactly on same-day
+    # secondaries.
+
+    def _strict_before_bound(self, as_of_date) -> int:
+        """Return the smallest date_id whose date is >= as_of_date.
+        Rows with date_id strictly less than this bound are matches
+        played BEFORE as_of_date. Used for strict-pre-date queries.
+
+        Returns 0 when as_of_date is before all snapshots (→ no rows).
+        Returns len(_date_strs) when as_of_date is after all snapshots
+        (→ all rows). `_resolve_date_id` is not reusable here because
+        it returns the LARGEST did <= target, which for an exact-date
+        match gives target's own date_id — we need the one AFTER.
+        """
+        target = self._norm_date(as_of_date)
+        return bisect.bisect_left(self._date_strs, target)
+
+    def get_batting_match_log_recent(
+        self, player_id, as_of_date, limit: int = 5,
+    ) -> list:
+        conn = self._ensure_conn()
+        pid = self._player_id_map.get(str(player_id))
+        if pid is None:
+            return []
+        bound = self._strict_before_bound(as_of_date)
+        if bound <= 0:
+            return []
+        rows = conn.execute(
+            _Q_BATTING_LOG_RECENT, (pid, bound, limit)
+        ).fetchall()
+        return [
+            {"runs": r[0], "balls": r[1], "dismissals": r[2]}
+            for r in rows
+        ]
+
+    def get_bowling_match_log_recent(
+        self, player_id, as_of_date, limit: int = 5,
+    ) -> list:
+        conn = self._ensure_conn()
+        pid = self._player_id_map.get(str(player_id))
+        if pid is None:
+            return []
+        bound = self._strict_before_bound(as_of_date)
+        if bound <= 0:
+            return []
+        rows = conn.execute(
+            _Q_BOWLING_LOG_RECENT, (pid, bound, limit)
+        ).fetchall()
+        return [
+            {"runs_given": r[0], "balls_bowled": r[1], "wickets": r[2]}
+            for r in rows
+        ]
 
     def get_all_stats(self, batter_id, bowler_id, as_of_date) -> Dict[str, float]:
         b = self.get_batting_stats(batter_id, as_of_date)

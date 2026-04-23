@@ -7,19 +7,37 @@ Complete guide for running all pipelines and common operations in the CricML Mat
 ## Quick Start
 
 ### Training Pipeline (XGBoost - Default)
+
+**Recommended: one command via `run_experiment.py`**
 ```bash
-# Step 1: Feature engineering (~10-15 min)
-python scripts/parsing_v2.py
+uv run python scripts/run_experiment.py experiments/configs/xgb_v3_baseline.yaml
+```
+Dispatches build-cache → materialize → train → eval. Each step is skipped if its artifact is current (`check_smart_cache` inspects SQLite `_meta.schema_version` + `_meta.source_json_mtime_max` and parquet `.feature_hash`).
 
-# Step 2: Model training (~30-60 min)
-python scripts/xgboost_v2.py
+**Explicit step-by-step (same four steps, lets you run them in isolation):**
+```bash
+# Step 1a: Build SQLite stats cache (~6 min on full corpus).
+# Idempotent — no-ops if the JSONs haven't changed since the last build.
+uv run python scripts/build_stats_cache.py
+# Force a full rebuild with --force-rebuild (e.g. after a schema change).
 
-# Step 3: Evaluation (~5-10 min for 45 matches, ~40 min for 261 polymarket matches)
-python scripts/sim_eval/run_sim_eval.py \
+# Step 1b: Materialize feature parquet (~3 min; reads SQLite + JSON).
+# Per-date batching with tracker rehydration from SQLite.
+uv run python scripts/materialize_features.py \
+    --config experiments/configs/xgb_v3_baseline.yaml
+
+# Step 2: Model training (~5-10 min with pinned hyperparameters; ~30-60 min with --tune).
+uv run python scripts/xgboost_v2.py
+
+# Step 3: Evaluation (~5-10 min for 45-match betting_test × 1000 sims; 
+# ~4 min for 261-match polymarket_test × 10 sims).
+uv run python scripts/sim_eval/run_sim_eval.py \
     --test-dir data/betting_test \
     --odds betting_odds_v3.json \
     --n-sims 1000
 ```
+
+> **Phase B note (2026-04-22)**: `scripts/parsing_v2.py` was split into `scripts/build_stats_cache.py` + `scripts/materialize_features.py`. The monolithic orchestrator `process_folder_v2_with_splits` is gone; the helper primitives (tracker classes, `parse_match_data_v2`, `deep_copy_stats`) remain in `parsing_v2.py` and are imported by the new scripts.
 
 > **WARNING — do not use `--parallel` on `run_sim_eval.py`.** The parallel
 > code path has been observed to crash this machine (2026-04-19). Always run
@@ -29,8 +47,9 @@ python scripts/sim_eval/run_sim_eval.py \
 
 ### Training Pipeline (LSTM)
 ```bash
-# Step 1: Feature engineering (same as XGBoost)
-python scripts/parsing_v2.py
+# Step 1: Feature engineering (same two-step as XGBoost)
+uv run python scripts/build_stats_cache.py
+uv run python scripts/materialize_features.py
 
 # Step 2: LSTM training (~30-60 min for full training)
 python scripts/lstm_v1.py --epochs 50 --batch-size 512
@@ -82,16 +101,22 @@ SA20, ILT20, MLC, men's T20Is, BPL, Super Smash (NZ), PSL, SMAT, LPL.
 competitions (pipeline is men's only), associate-nation T20Is (data quality), and
 the multi-format `all_json.zip` / Tests / ODIs (out of scope).
 
-**After a successful refresh**, re-run the parser manually to regenerate the
-training splits and stats cache:
+**After a successful refresh**, re-run the two parsing scripts to regenerate the
+stats cache and training splits:
 
 ```bash
-uv run python scripts/parsing_v2.py   # ~10–15 min; rebuilds data/xgb_data_v3/ + models/cache_chunks_v3/
+uv run python scripts/build_stats_cache.py       # ~6 min; rebuilds models/player_stats_cache_v3.sqlite
+uv run python scripts/materialize_features.py    # ~3 min; rebuilds data/xgb_data_v3/
 ```
 
-The fetcher will print this command at the end of any run that adds new matches.
-It does **not** auto-chain to `parsing_v2.py` because the cache rebuild is
-destructive.
+Or run everything (including training + eval) via:
+
+```bash
+uv run python scripts/run_experiment.py experiments/configs/xgb_v3_baseline.yaml
+```
+
+The fetcher does **not** auto-chain because the cache rebuild is destructive
+(overwrites the SQLite).
 
 **New unenriched players.** The fetcher compares cricsheet IDs in the newly-added
 matches against `data/all_players_enriched.csv` and prints any IDs that aren't in
@@ -133,7 +158,8 @@ Run order after new Cricsheet data lands:
 ```bash
 uv run python scripts/fetch_cricsheet.py              # 1. pull new match JSONs + people.csv
 uv run python scripts/enrich_players_cricketdata.py   # 2. fill metadata for any new cricsheet IDs
-uv run python scripts/parsing_v2.py                   # 3. rebuild features + stats cache (destructive)
+uv run python scripts/build_stats_cache.py            # 3a. rebuild SQLite stats cache (destructive)
+uv run python scripts/materialize_features.py        # 3b. rematerialize feature parquet
 ```
 
 ---
@@ -175,40 +201,40 @@ engine = SimulationEngine(model, T20Rules())
 
 ## Training Pipeline
 
-### 1. Feature Engineering (`parsing_v2.py`)
+### 1. Feature Engineering — Phase B split pipeline
 
-**Purpose**: Transform raw JSON into ML-ready features with temporal integrity.
+**Post-Phase-B (2026-04-22)**: the monolith `parsing_v2.py` was split into two scripts. The stateful stats cache is built once; feature materialization reads from it and replays deliveries per-date. See CLAUDE.md §"Core Modules" for the full rationale.
 
-**Input**:
-- `data/t20s_json/*.json` - 15,000+ raw match files
+**Input** (both scripts): `data/t20s_json/*.json` — 9,500+ raw match files.
 
-**Output**:
-- `data/xgb_data/cricket_data_v2_train.parquet`
-- `data/xgb_data/cricket_data_v2_validation.parquet`
-- `data/xgb_data/cricket_data_v2_test.parquet`
-- `models/cache_chunks/cache_chunk_*.pkl` (69 files, ~7.6GB)
-- `models/player_stats_cache_metadata.pkl`
+**Outputs**:
+- `models/player_stats_cache_v3.sqlite` (schema v3, ~46 MB) — from `build_stats_cache.py`.
+- `data/xgb_data_v3/{train,validation,test,golden_test}.parquet` + `.feature_hash` — from `materialize_features.py`.
 
-**Command**:
+**Commands**:
 ```bash
-python scripts/parsing_v2.py
+# 1a. Build SQLite stats cache (chronological tracker walk).
+uv run python scripts/build_stats_cache.py
+# Options: --source-dir data/t20s_json, --out models/player_stats_cache_v3.sqlite,
+#          --gender-filter male, --force-rebuild.
+# Idempotent: no-ops if _meta.source_json_mtime_max >= max(JSON mtime).
+
+# 1b. Materialize feature parquet (per-date batching, SQLite rehydration).
+uv run python scripts/materialize_features.py \
+    --config experiments/configs/xgb_v3_baseline.yaml
+# Options: --source-dir, --sqlite-dir, --out-dir, --version, --gender-filter.
+# Ships serial; per-date ProcessPoolExecutor parallelism is a follow-up TODO.
 ```
 
-**Performance**:
-- Duration: ~10-15 minutes
-- Memory: ~4-8 GB
-- Processes: 8,341 matches → 4+ million ball records
-- Cache: 3,442 date snapshots across 69 chunks
+**Performance (full corpus, 2026-04-22)**:
+- `build_stats_cache.py`: **~6 min**, ~4–8 GB RAM, 9,519 matches → 46.5 MB SQLite.
+- `materialize_features.py`: **~3 min**, ~2 GB RAM, 9,519 matches → 2.2M ball records across 4 parquets. **3.5× faster than the old monolith** because the tracker walk is skipped.
 
-**What It Does**:
-1. Loads matches chronologically
-2. For each match:
-   - Takes snapshot of current player stats (BEFORE match)
-   - Processes each ball and extracts 29 features
-   - Updates player stats (AFTER each ball)
-3. Saves chunked cache (every 50 date snapshots)
-4. Splits data into train/val/test by date
-5. Outputs parquet files for training
+**What it does**:
+1. **`build_stats_cache.py`**: Loads matches chronologically, runs `PlayerStatsTracker` + `PlayerEloTracker` + `VenueStatsTracker`, takes first-write-wins snapshots per date, emits delta-compressed rows to SQLite, and writes one `batting_match_log` / `bowling_match_log` row per (player, match) for schema-v3 recent-form reconstruction.
+2. **`materialize_features.py`**: Groups matches by date, rehydrates trackers from SQLite once per date using the union of same-day players + venues, replays same-day matches in monolith order so within-date drift matches, calls `parse_match_data_v2` per match, and writes per-split parquets. Splits come from the YAML `data.splits` block (falls back to the hardcoded defaults).
+
+**Parity guarantee**: `scripts/tests/test_phase_a_parity.py` validates that this two-step pipeline produces bit-exact parquet output vs the original monolith across all 9,519 matches, 63/63 columns. Run it after any change to either script.
 
 **Temporal Splits**:
 - Train: Matches before 2023
@@ -602,9 +628,11 @@ hash_val = get_feature_hash(features)
 
 ### How to Add a New Feature
 
-**Step 1: Add the feature to `scripts/parsing_v2.py`**
+**Step 1: Add the feature to `scripts/parsing_v2.py` (helper module)**
 
-This is where raw JSON is transformed into ML features. Find the ball-processing loop and add your feature computation. Respect temporal integrity — the feature must only use data available before the ball is bowled.
+Find `parse_match_data_v2` in `scripts/parsing_v2.py` — the ball-processing loop lives there, and both `build_stats_cache.py` and `materialize_features.py` import it. Add your feature computation respecting temporal integrity (the feature must only use data available before the ball is bowled).
+
+If the feature requires a new kind of stats snapshot (e.g., a new `batting_vs_*` variant), also extend `PlayerStatsTracker` / `deep_copy_stats` in the same file and the SQLite schema in `scripts/stats_sqlite_backend.py` — then bump `SCHEMA_VERSION` and rebuild.
 
 **Step 2: Register the feature in `scripts/feature_registry.py`**
 
@@ -624,16 +652,20 @@ FEATURE_GROUPS['team_strength'] = [
 **Step 3: Re-run parsing and test**
 
 ```bash
-# Re-parse data (generates new parquet files with the feature)
-uv run python scripts/parsing_v2.py
+# If the feature added new tracker state / snapshot fields, rebuild the cache:
+uv run python scripts/build_stats_cache.py --force-rebuild
+
+# Otherwise just rematerialize the parquet (the feature is ball-context-only):
+uv run python scripts/materialize_features.py
 
 # Create an experiment config that includes your new feature group
-# Copy an existing config and add your group to features.groups
+# (copy an existing config and add your group to features.groups)
 
-# Run experiment
+# Run experiment — run_experiment.py autodetects cache/parquet staleness and
+# skips whichever step is already current.
 uv run python scripts/run_experiment.py experiments/configs/your_config.yaml --skip-training
 
-# Or test manually
+# Or test training manually
 uv run python scripts/xgboost_v2.py
 ```
 
@@ -738,11 +770,14 @@ uv run python scripts/run_experiment.py experiments/configs/your_model_baseline.
 # 1. Add match JSON files
 cp new_matches/*.json data/t20s_json/
 
-# 2. Re-run parsing (rebuilds cache + parquet)
-uv run python scripts/parsing_v2.py
-
-# 3. Retrain and evaluate
+# 2. Retrain and evaluate — run_experiment.py autodetects the new JSONs
+#    (via _meta.source_json_mtime_max) and rebuilds both SQLite + parquet.
 uv run python scripts/run_experiment.py experiments/configs/xgb_v3_baseline.yaml
+
+# --- OR run the parsing steps manually ---
+# uv run python scripts/build_stats_cache.py        # SQLite (~6 min)
+# uv run python scripts/materialize_features.py     # parquet (~3 min)
+# uv run python scripts/xgboost_v2.py               # train (~5-10 min)
 ```
 
 **For test/evaluation matches**: Add JSON files to `data/betting_test/` and update `betting_odds_v3.json` with corresponding odds.
@@ -820,11 +855,12 @@ When making changes, verify:
 # 1. Add new matches to data folder
 cp new_matches/*.json data/t20s_json/
 
-# 2. Re-run feature engineering (updates cache and parquet files)
-python scripts/parsing_v2.py
+# 2. Re-run feature engineering (Phase B split: SQLite cache → parquet)
+uv run python scripts/build_stats_cache.py
+uv run python scripts/materialize_features.py
 
 # 3. Re-train model
-python scripts/xgboost_v2.py
+uv run python scripts/xgboost_v2.py
 
 # 4. Verify performance on test set
 python scripts/sim_eval/run_sim_eval.py \

@@ -1,19 +1,34 @@
 """Rehydrate PlayerStatsTracker / PlayerEloTracker / VenueStatsTracker
 from a SQLite snapshot.
 
-Phase A parity harness uses these to prove that a per-match, SQLite-seeded
+Phase A parity harness uses these to prove that a SQLite-seeded
 materializer reproduces the monolith's output bit-for-bit. Phase B's
-`materialize_features.py` will reuse them.
+`materialize_features.py` reuses them for the real pipeline.
 
 Design:
-* Only rehydrate state needed by one match: players in the two lineups plus
-  the venue. This bounds each per-match rehydration to ~250 SQLite reads.
+* Rehydrate state needed for the date batch: the union of players across
+  all same-day matches, plus the set of same-day venues. Per-date batching
+  means that on a solo-date match, we touch ~250 SQLite reads (22 pids × 6
+  tables + ~100 h2h pairs + 2 ELO × 22 + 1 venue); a 4-fixture ICC day
+  with ~80 unique pids scales h2h cross-product to ~6 400 queries. Absolute
+  cost is tiny on mmap SQLite (p50 ~3 µs → ~20 ms/date), but watch for
+  regressions if h2h schema changes its PK shape.
 * Raw counters, not computed averages — the tracker re-derives averages
   from counters, so we match its internal representation exactly.
-* `first_innings_totals` is reconstructed as a length-`count` integer list
-  whose sum equals the stored `fi_sum`; that preserves `sum(list) /
-  len(list)` exactly (down to the last ULP) even though the individual
-  innings totals are lost in SQLite.
+* `first_innings_totals` is reconstructed losslessly w.r.t. sum AND len
+  (see `_reconstruct_fi_list`). Contract: **no consumer may iterate
+  individual entries of that list** — only `sum(…) / len(…)` reads are
+  supported. Currently honored by `VenueStatsTracker.get_venue_profile` /
+  `get_venue_avg_score` (parsing_v2.py). Adding a variance/trajectory
+  feature that reads individual entries would silently diverge from the
+  monolith; if such a feature is needed, extend SQLite to store the full
+  list (schema bump) before reading it here.
+
+Architectural note (TODO): this module reaches into
+`_SQLiteBackend._get_raw_batting` / `_player_id_map` / `_resolve_date_id` —
+private accessors on the backend. Promoting them to public API (or adding a
+batched `get_rehydration_snapshot` method) is tracked in TODO.md as a
+follow-up to Phase B's facade narrowing.
 """
 from __future__ import annotations
 
@@ -77,12 +92,28 @@ def _get_raw_venue(backend, venue: str, as_of_date):
 def _reconstruct_fi_list(fi_sum: int, fi_count: int) -> list[int]:
     """Return a length-fi_count integer list summing to fi_sum.
 
-    The monolith keeps `first_innings_totals` as a list of individual
-    innings scores; SQLite stores only (sum, count). `get_venue_profile`
-    uses `sum(list) / len(list)` — so any reconstruction with the same
-    sum and length is observation-equivalent. We spread the remainder
-    across the first `r` entries so all values stay integers; this keeps
-    the final float division bit-identical to the monolith's path.
+    **Contract (observation-equivalence, NOT equality)**: this returns a
+    list that is indistinguishable from the monolith's original list
+    under `sum(list) / len(list)` — i.e. only aggregate consumers are
+    supported. Individual entries are NOT reconstructible from SQLite
+    because only (fi_sum, fi_count) is stored.
+
+    Current consumers in `parse_match_data_v2` are all aggregate:
+    - `VenueStatsTracker.get_venue_avg_score` — `sum / len`
+    - `VenueStatsTracker.get_venue_profile` — `sum / len` (as
+      `venue_first_innings_avg`)
+
+    If you add a feature that reads individual entries (e.g. a
+    first-innings-variance or trajectory feature), this reconstruction
+    will silently diverge from the monolith. In that case, extend the
+    SQLite `venue` schema to store the full list (e.g. a new
+    `venue_first_innings_totals(venue_id, date_id, seq_idx, runs)` table)
+    and rewrite this function to read it. At ~18k rows full-corpus, the
+    storage cost is negligible.
+
+    We spread the remainder across the first `r` entries so all values
+    stay integers; the final `sum / len` division is then bit-identical
+    to the monolith's path.
     """
     if fi_count == 0:
         return []
@@ -127,14 +158,18 @@ def rehydrate_stats_tracker(
                 "balls": int(raw["balls"]),
                 "dismissals": int(raw["dismissals"]),
             }
-            # Seed recent deque with a single aggregated entry — sum of a
-            # 1-entry deque == pre-summed total, so get_batting_features'
-            # sum() call returns the same value as the monolith.
-            tracker.recent_batting[pid].append({
-                "runs": int(raw["recent_runs"]),
-                "balls": int(raw["recent_balls"]),
-                "dismissals": int(raw["recent_dismissals"]),
-            })
+            # Schema v3: seed the deque with up to 5 individual match
+            # aggregates from `batting_match_log`. This reproduces the
+            # monolith's eviction behavior on same-day `end_match` pushes,
+            # which a single summed seed cannot. Log is newest-first;
+            # deque append order is oldest-first.
+            log = backend.get_batting_match_log_recent(pid, as_of, limit=5)
+            for entry in reversed(log):
+                tracker.recent_batting[pid].append({
+                    "runs": int(entry["runs"]),
+                    "balls": int(entry["balls"]),
+                    "dismissals": int(entry["dismissals"]),
+                })
 
         raw = backend._get_raw_bowling(pid, as_of)
         if raw is not None:
@@ -143,11 +178,14 @@ def rehydrate_stats_tracker(
                 "balls_bowled": int(raw["balls_bowled"]),
                 "wickets": int(raw["wickets"]),
             }
-            tracker.recent_bowling[pid].append({
-                "runs_given": int(raw["recent_runs_given"]),
-                "balls_bowled": int(raw["recent_balls_bowled"]),
-                "wickets": int(raw["recent_wickets"]),
-            })
+            # Schema v3: same treatment for bowling recent-form.
+            log = backend.get_bowling_match_log_recent(pid, as_of, limit=5)
+            for entry in reversed(log):
+                tracker.recent_bowling[pid].append({
+                    "runs_given": int(entry["runs_given"]),
+                    "balls_bowled": int(entry["balls_bowled"]),
+                    "wickets": int(entry["wickets"]),
+                })
 
         # pace=0, spin=1
         pace = _get_raw_batting_vs_type(backend, pid, 0, as_of)

@@ -300,9 +300,9 @@ Experiments: `xgb_v4_no_calibration_20260321_215322`, `xgb_v4_ball_calibration_2
 
 ---
 
-## Parsing Pipeline Split (PLANNED — bundle with Phase 5 SQLite migration)
+## Parsing Pipeline Split (Phase A + B LANDED, Phase C pending)
 
-**Planned 2026-04-19. Phase A lands this week; Phase B after the Phase-5 gate (≥ 2026-04-26).**
+**Planned 2026-04-19. Phase A + Phase B both LANDED 2026-04-22.**
 
 ### Goal
 Replace the monolithic `scripts/parsing_v2.py` (1409 lines, ~15 min per run) with two scripts whose boundaries map to the two real data artifacts:
@@ -313,13 +313,17 @@ Replace the monolithic `scripts/parsing_v2.py` (1409 lines, ~15 min per run) wit
 This subsumes Phase 5 of the SQLite migration (`TODO.md:127-134`) and the "split parsing" bullet (`TODO.md:136-139`). The two items were scoped separately but edit the same code; bundling halves the migration cost.
 
 ### Motivation
-The parser today does three things in one pass, only one of which is truly stateful:
+The parser today does three things in one pass. They split along a **cross-date stateless, within-date stateful** boundary — not the "stateless across matches" framing an earlier draft of this section used:
 
-1. **Stateful (chronological)**: tracker updates (`PlayerStatsTracker`, `VenueStatsTracker`, `PlayerEloTracker`). SQLite is the serialized output of this.
-2. **Snapshot emission**: frozen view per match-date → pickle chunks today, SQLite rows after Phase 5.
-3. **Feature materialization** (`parse_match_data_v2`, `parsing_v2.py:744-1107`): per-ball feature row. Stateful only within an innings (`InningsFeatureCalculator` for momentum / partnership / per-batter balls faced). **Across matches it's a pure function of (ball context, cache snapshot at match_date, player metadata).**
+1. **Cross-date chronological tracker walk**: `PlayerStatsTracker`, `VenueStatsTracker`, `PlayerEloTracker`. SQLite is the serialized output of this.
+2. **Snapshot emission**: pre-match snapshot (first-write-wins per date). SQLite rows keyed on `(entity, date_id)`.
+3. **Feature materialization** (`parse_match_data_v2`, `parsing_v2.py:744-1107`): per-ball feature row. Stateful within an innings (`InningsFeatureCalculator`) AND stateful across same-day matches within a batch — `end_match` advances the recent-form deque, `update_venue_stats_detailed` mutates venue counters, and ball-level `update_stats` / ELO updates advance career state mid-batch. **Across *dates* it's a pure function of (ball context, SQLite snapshot at match_date, player metadata); within a date, same-day matches must run serially in monolith order.**
 
-Point 3 is the key insight: once the SQLite cache exists, feature materialization doesn't need chronological order, which unlocks incremental refresh, parallelization, and a per-match materialization cache.
+Point 3 is the key insight — and its honest form: once the SQLite cache exists, feature materialization is cross-date parallelizable per date, not per match. The unit of independence is **the date**, not **the match**. This has three downstream consequences:
+
+- **Phase C per-match cache**: the cache key must include position-in-same-day-batch, not just `<match_id, feature_hash>`. Swapping M1 ↔ M2 inside a same-day batch produces different features, so adding one match to a busy day invalidates every same-day sibling. The per-match cache is still useful (solo-date matches hit it cleanly; most dates in the corpus have one match), but the hit rate on busy-ICC days is low.
+- **Parallelism unlock**: per-date, not per-match. `ProcessPoolExecutor(max_workers=N)` across dates is the future optimization.
+- **Incremental refresh**: a new JSON for a date that already has matches forces re-materializing the full date (can't skip to "just this match"). Phase B ships a full-rebuild cache-builder anyway; a real `--since` path is a future add.
 
 ### Proposed architecture
 
@@ -367,21 +371,119 @@ data:
   - 5855 same-day-secondary matches: **59/63 columns** bit-exact. The 4 recent-form columns (`batsman_recent_avg/sr`, `bowler_recent_avg/econ`) are excluded (see schema-v2 limitation below).
 - **Exit gate**: met. Becomes the reusable regression gate for Phase B.
 
-**Schema-v2 limitation, deferred to Phase B (schema-v3 bump)**
-- SQLite schema v2 stores the 5-match recent-form window as a single summed triple per (player, date) — `recent_runs/balls/dismissals` on the batting/bowling rows (stats_sqlite_backend.py:83-85, 95-97). The monolith's `PlayerStatsTracker.recent_batting` / `recent_bowling` are 5-entry deques (parsing_v2.py:187-188); `end_match` pushes the current match's aggregates in, evicting the oldest slot when the deque is already at maxlen.
-- The eviction identity is lost in the sum. The candidate seeds its temp deque with a single 1-entry sum, so on the first `end_match` inside a same-day batch it appends without evicting (because the seeded deque has length 1, not 5). For players at deque.maxlen with ≥1 same-day secondary match to process, candidate sums 5 pre-date matches + 1 same-day match; monolith sums 4 pre-date matches + 1 same-day. Divergence on those 4 columns.
-- Measured blast radius: 5 failing matches in a 2016-match diagnostic run = ~0.25% of same-day secondaries (narrow intersection of "career ≥ 5 prior matches" × "same-day ≥ 2 matches" × "recent-form columns").
-- **Fix in Phase B**: schema v3 introduces `recent_batting_entries` / `recent_bowling_entries` tables keyed `(player_id, date_id, slot_idx)` with up to 5 rows per (player, date). `deep_copy_stats` emits individual deque entries; `build_stats_cache.py` writes the new tables; `_SQLiteBackend` adds `get_batting_recent_entries(pid, date) -> list[dict]`; `rehydrate_stats_tracker` rebuilds a faithful 5-entry deque. Re-run the Phase A harness WITHOUT the `RECENT_FORM_COLUMNS` exclusion — target is 63/63 bit-exact on all 9519 matches. Disk cost estimate: +20-40 MB (current DB is 41.7 MB).
-- Tracked separately in TODO.md so it doesn't get lost during the Phase 5 cleanup.
+**Schema-v2 limitation — resolved by Phase B schema v3 bump**
+- Schema v2 stored 5-match recent-form as a single summed triple per (player, date) — `recent_runs/balls/dismissals` on the batting/bowling rows (stats_sqlite_backend.py:83-85, 95-97). The monolith's `PlayerStatsTracker.recent_batting` / `recent_bowling` are 5-entry `deque(maxlen=5)`; `end_match` pushes the current match's aggregates and evicts the oldest slot when full. Eviction identity was lost in the single-sum, so first `end_match` inside a same-day batch on players already at maxlen couldn't be reproduced from the schema-v2 seed.
+- Blast radius: ~0.25% of same-day secondaries, 4 of 63 columns (`batsman_recent_avg/sr`, `bowler_recent_avg/econ`).
+- **Schema v3 (Option E: per-match aggregate log)** closes the gap. See Phase B writeup below.
 
-**Phase B — Structural split** (bundled with Phase 5, ~2 days + 0.5 day for schema v3) — **after 2026-04-26**
-- Extract `build_stats_cache.py` from `parsing_v2.py` (tracker half). Writes schema v3 with recent-form deque entries (see limitation above).
-- Extract `materialize_features.py` from `parsing_v2.py` (feature half). Reuses `scripts/tracker_rehydration.py` (already Phase-A-validated) and `scripts/loaders_common.py`. Per-date batching for same-day continuations.
-- Delete `scripts/parsing_v2.py`, `scripts/build_stats_sqlite.py`, `_ChunkedBackend` in `stats_provider.py`, `models/player_stats_cache_v3_metadata.pkl`.
-- `rm -rf models/cache_chunks_v3/` (11 GB reclaimed).
-- Update `run_experiment.py` to dispatch both scripts with the new YAML schema.
-- Keep `parsing_v2.py` under `scripts/legacy/` for 30 days as rollback.
-- **Exit gate**: Phase A harness passes 63/63 columns on all 9519 matches (recent-form exclusion removed) against the new two-script pipeline.
+**Phase B — Structural split + schema v3** (LANDED 2026-04-22, 1 day)
+
+Extracted the parsing monolith into two scripts, bumped SQLite to schema v3, deleted 12 GB of chunk remnants. Plan file: `~/.claude/plans/yes-go-ahead-and-structured-lecun.md`.
+
+#### Landed state
+
+| Deliverable | Where |
+|---|---|
+| `scripts/build_stats_cache.py` (~400 lines) | JSON → SQLite schema v3 directly. Replaces `scripts/build_stats_sqlite.py` (which was a chunks→SQLite converter; now deleted). Full corpus build: **9519 matches in 396 s → 46.5 MB DB** (+4.8 MB over schema v2 for match-log tables). |
+| `scripts/materialize_features.py` (~320 lines) | SQLite + JSON → parquet via per-date batching (reuses Phase A's `tracker_rehydration.py` + `loaders_common.py`). **9519 matches in 170 s** — 3.5× faster than the monolith (~600 s) because the tracker-walk is skipped. Pandas shape bit-identical to monolith parquet: 92/93 columns match exactly; `innings_id` (93rd) has identical grouping semantics but different hash values due to Python `hash()` randomization (benign — only used as a `groupby` key in transformer dataset code, not as a training feature). |
+| `scripts/stats_sqlite_backend.py` | `SCHEMA_VERSION = 3`. Added `batting_match_log` / `bowling_match_log` tables (composite PK `(player_id, date_id, intra_date_idx) WITHOUT ROWID`). Added `get_batting_match_log_recent(pid, as_of_date, limit=5)` / `get_bowling_match_log_recent(...)` with `_strict_before_bound` helper (uses `bisect_left` so strict `date_id < target` semantics work when `as_of_date` is exactly a snapshot date). |
+| `scripts/tracker_rehydration.py` | `rehydrate_stats_tracker` reads from the match-log (newest-first, reversed into the deque) instead of seeding a single summed entry. Empty log → empty deque (covered by `get_batting_features`'s `balls==0` branch). |
+| `scripts/tests/test_schema_v3_match_log.py` | 7 unit tests on the new getters: newest-first ordering, `limit` honored, strict `date_id<?`, log-sum consistency with the denormalized `batting.recent_*` / `bowling.recent_*` columns, `USING INDEX` query plan, intra_date_idx ordering within a date. All PASS. |
+| `scripts/run_experiment.py` | `check_smart_cache` returns `(sqlite_valid, parquet_valid)`. SQLite validity: `_meta.schema_version == 3` AND `_meta.source_json_mtime_max >= max(data/t20s_json/*.json mtime)`. Parquet validity unchanged. Dispatch runs `build_stats_cache.py` / `materialize_features.py` independently based on each flag. |
+| YAML `data.splits` block | Optional. Missing keys fall back to `DEFAULT_SPLITS` in `materialize_features.py`, so existing `experiments/configs/*.yaml` continue working unchanged. |
+| `scripts/stats_provider.py` | Single-backend facade over SQLite. `_ChunkedBackend` class + chunks fallback deleted (861 → 264 lines, −69% / −583 lines). |
+| `scripts/parsing_v2.py` | Orchestrator (`process_folder_v2_with_splits`) + `__main__` block removed (1446 → 1137 lines, −21% / −309 lines). Helper primitives (tracker classes, `deep_copy_stats`, `parse_match_data_v2`, `classify_match_k_factor`, `InningsFeatureCalculator`) retained — all still used by the new pipeline + simulation code. |
+
+#### Schema v3 design — Option E (per-match aggregate log)
+
+One row per `(player, match-they-played-in)`. Deque reconstructed at read time via `ORDER BY date_id DESC, intra_date_idx DESC LIMIT N`.
+
+#### Schema v3 design — Option E (per-match aggregate log)
+
+Instead of storing recent-form as a single summed triple per (player, snapshot-date), store **one row per (player, match-they-played-in)**. The deque is reconstructed at read time via `ORDER BY date_id DESC, intra_date_idx DESC LIMIT N`. Picks flexibility (variable N, venue/tier-filtered recency, corrections-friendly) over a minimal-change schema.
+
+```sql
+CREATE TABLE batting_match_log (
+    player_id INTEGER NOT NULL,
+    date_id INTEGER NOT NULL,
+    intra_date_idx INTEGER NOT NULL,   -- 0,1,2... monolith order within date
+    runs INTEGER NOT NULL,
+    balls INTEGER NOT NULL,
+    dismissals INTEGER NOT NULL,
+    PRIMARY KEY (player_id, date_id, intra_date_idx)
+) WITHOUT ROWID;
+
+CREATE TABLE bowling_match_log (
+    player_id INTEGER NOT NULL,
+    date_id INTEGER NOT NULL,
+    intra_date_idx INTEGER NOT NULL,
+    runs_given INTEGER NOT NULL,
+    balls_bowled INTEGER NOT NULL,
+    wickets INTEGER NOT NULL,
+    PRIMARY KEY (player_id, date_id, intra_date_idx)
+) WITHOUT ROWID;
+```
+
+PK rows are structurally unique — **no delta compression needed**. Disk cost: ~30 log rows/match × 9500 matches × 28 bytes ≈ 8 MB. DB grows 41.7 → ~50 MB.
+
+**Sum-columns decision (E1)**: keep existing `batting.recent_*` and `bowling.recent_*` columns AS-IS. They're the denormalized cache read on the simulation hot path by the 5 sim wrappers in `sim_v1_2.py` (the 2026-04-21 recent-form-fix patches). The log is additive, used only for rehydration and future flexible queries. Two derivations of the same underlying tracker state — consistent by construction.
+
+#### Rehydration correctness (per-date batching from Phase A still works)
+
+Phase A rehydrates `temp_*` trackers ONCE at each date boundary; `parse_match_data_v2` mutates `temp_stats.recent_batting[pid]` across same-day matches via `end_match`. With Option E:
+
+- At start of date D: `get_batting_match_log_recent(pid, D, limit=5)` returns up to 5 matches strictly before D, newest-first. Reverse and append → `recent_batting[pid] = deque([oldest, ..., newest])`.
+- Same-day match M1 runs; `end_match` pushes M1's aggregates; deque evicts oldest if at maxlen (matching monolith).
+- Same-day match M2 runs; deque reflects post-M1 state.
+
+Strict `date_id < ?` in the query (not `<=`) — at the start of D's batch, we want matches BEFORE D; the monolith's deque at that moment contains only pre-D entries.
+
+#### Flexibility unlocked
+
+These become trivial once schema v3 is live. All are marked NON-GOALS for Phase B itself (scope discipline) — they're the reason Option E was chosen over Option A:
+
+1. **Variable window size** — `limit` is a getter parameter. Recent-10 instead of recent-5 = one parameter change.
+2. **Venue-filtered recent form** — add a `venue_id` column to the log (additive), filter the query.
+3. **Competition-tier filtered recent form** — same pattern with a tier column.
+4. **Recency-weighted averages** — compute in Python from 5 returned rows with age-based weights. Zero schema change.
+5. **Form trajectory features** — "last match runs vs avg of prior 4" — second query over the log.
+6. **Cricsheet corrections** — `REPLACE INTO batting_match_log` for a revised match flows through downstream rehydration automatically. Recent-form self-heals; career-cumulative tables still need date-replay.
+
+#### Validation gates — all passed
+
+| Gate | Result |
+|---|---|
+| `scripts/tests/test_schema_v3_match_log.py` (7 assertions) | **PASS** (newest-first ordering, `limit` honored, strict `date_id<?`, log-sum ≡ denormalized `batting.recent_*` sum columns, `USING INDEX` query plan, intra_date_idx ordering) |
+| **`scripts/tests/test_phase_a_parity.py` — primary exit criterion** | **PASS on all 9519 male T20 matches, 63/63 columns bit-exact, 194 s** (3664 first-of-date + 5855 same-day-secondary — schema v3 match log fully reproduces the monolith's deque eviction) |
+| Parquet parity spot-check — new `materialize_features.py` output vs pre-Phase-B monolith parquet | **92/93 columns bit-identical** on all 2,187,930 rows across train/validation/test splits; `innings_id` differs due to Python `hash()` randomization (benign, same grouping semantics) |
+| Cross-DB spot-check — new SQLite vs `models/player_stats_cache_v3.sqlite.pre_phase_b` | **Row counts identical** on all 8 v2-subset tables (batting=150 006, bowling=114 850, h2h=473 757, etc.); 500 random batting + 500 random bowling rows bit-identical by string-key (int-ID ordering differs because intern order depends on data source) |
+| Eval parity — 261-match polymarket × 10 sims, new model vs `eval_out_postfix/xgboost_20260421_220541.json` | **Flat-betting P&L / ROI / win rate / bets-placed bit-identical** (255 bets, +16.60 PnL, +6.51% ROI, 45.10% win rate). Log loss 0.7528 (Δ +0.0010), Brier 0.2730 (Δ +0.0002), edge 0.1852 (Δ −0.0011) — all within Monte Carlo noise at n_sims=10. Kelly ROIs diverged more (frac -0.37 pp, full -1.50 pp) because Kelly sizing is non-linear in probability estimates; the *decisions* are preserved perfectly. |
+
+#### Measured results
+
+| Metric | Pre-Phase-B | Post-Phase-B | Notes |
+|---|---|---|---|
+| Stats cache disk | 11 GB (chunks) + 41.7 MB (SQLite v2) | 46.5 MB (SQLite v3 only) | **−12 GB reclaimed**; +4.8 MB over schema v2 for match-log tables |
+| Cache rebuild walltime (full corpus) | 5 min 43 s (chunks) + 5 min 43 s (chunks→SQLite convert) | 6 min 36 s (JSON → SQLite v3 direct) | One-step build; chunk intermediate eliminated |
+| Feature materialization walltime | ~600 s (monolith `process_folder_v2_with_splits`) | **170 s** (`materialize_features.py`) | **3.5× faster** — skips the tracker walk now that SQLite exists |
+| Lines of code — parsing core | `parsing_v2.py` 1 446 | `parsing_v2.py` 1 137 (helpers only) + `build_stats_cache.py` ~400 + `materialize_features.py` ~320 | Concerns split; each script <500 lines |
+| Lines of code — stats provider | `stats_provider.py` 861 (incl `_ChunkedBackend`) | `stats_provider.py` 264 | **−583 lines / −69%** |
+| Phase A harness coverage | 59/63 cols on same-day secondaries | **63/63 cols on all matches** | Schema v3 resolves the recent-form gap |
+
+#### Rollback
+
+`scripts/parsing_v2.py` helper primitives retained, but the orchestrator + `PARSING_LEGACY=1` dispatch were removed in the Phase 5 cleanup — `git revert` / `git checkout` is the rollback path if we ever need the old pipeline. The pre-Phase-B SQLite (`player_stats_cache_v3.sqlite.pre_phase_b`) was retained through validation and then removed; re-obtainable by building at the parent commit if needed. `models/cache_chunks_v3/` is gone (12 GB reclaimed, not recoverable on this machine; re-derivable by a full `build_stats_cache.py` run in ~6 min).
+
+#### Flexibility unlocked (future feature experiments)
+
+Option E's key payoff — these become trivial additions rather than schema migrations. Each is its own feature-ablation experiment, out-of-scope for Phase B:
+
+1. **Variable window size** — `limit` is a getter parameter. Recent-10 vs recent-5 = one call-site change.
+2. **Venue-filtered recent form** — add a `venue_id` column to the log (additive ALTER), filter the query.
+3. **Competition-tier filtered recent form** — same pattern with a tier column.
+4. **Recency-weighted averages** — compute in Python from the returned rows with age-based weights. Zero schema change.
+5. **Form trajectory features** — "last match runs vs avg of prior 4" — second query over the log.
+6. **Cricsheet corrections self-heal** — `REPLACE INTO batting_match_log` for a revised match flows through downstream rehydration automatically. Career-cumulative tables still require date-replay, but recent-form is already self-consistent.
 
 **Phase C — Per-match materialization cache** (optional follow-up, ~1-2 days) — **post-Phase B**
 - Materializer writes per-match parquet to `data/balls_cache/<match_id>_<feature_hash>.parquet`.
@@ -410,14 +512,18 @@ data:
 - Phase B: `run_experiment.py` dispatch flip back to `scripts/legacy/parsing_v2.py` for 30 days.
 
 ### Pros
-1. Phase 5 comes for free — SQLite becomes source of truth; 11 GB of chunks reclaimed.
-2. Ball-context feature additions: re-materialize only (5-10 min) vs full re-parse (15 min).
-3. YAML-driven splits and feature sets; today splits are buried in code.
-4. Incremental data refresh — cache-builder appends new JSONs without replaying the corpus.
-5. Unlocks Phase C per-match cache; ablation time → seconds.
-6. Natural home for empirical outcome distributions (see §"Empirical Outcome Distributions" above) — expanded `PlayerStatsTracker` lives in one place.
-7. Materializer is embarrassingly parallel across matches; SQLite mmap supports N readers (proven in Phase 4: 2 concurrent evals at 1.7 GB combined).
-8. Cleaner concerns: trackers vs stateless feature emission vs XGBoost training.
+1. Phase 5 comes for free — SQLite becomes source of truth; 12 GB of chunks reclaimed.
+2. Ball-context feature additions: re-materialize only (~3 min) vs full re-parse (~10 min).
+3. YAML-driven splits and feature sets (schema in place; `data.splits` block optional, defaults cover existing configs).
+4. Unlocks Phase C per-match cache; ablation time → seconds. (Cache key must include the same-day prefix — see Motivation — so hit rate on busy-ICC days is lower than on solo-date days.)
+5. Natural home for empirical outcome distributions (see §"Empirical Outcome Distributions" above) — expanded `PlayerStatsTracker` lives in one place.
+6. Materializer is parallelizable **per date** (not per match); SQLite mmap supports N readers (proven in Phase 4: 2 concurrent evals at 1.7 GB combined).
+7. Cleaner concerns: trackers vs per-date-batched feature emission vs XGBoost training.
+
+### Deferred follow-ups (not delivered in Phase B)
+- **Incremental cache refresh (`--since`)** — today `build_stats_cache.py` is all-or-nothing (`out_path.unlink()` before every rebuild). A real append/resume path needs: checkpoint last processed date in `_meta`, reopen trackers from that snapshot, and append new rows. Doable, but its own plan.
+- **Per-match parallelism** — ruled out by the same-day-stateful contract. Per-date parallelism via `ProcessPoolExecutor` is the future optimization (the YAML already supports it; materialize_features ships serial).
+- **Promote `_SQLiteBackend` private accessors to public API** — `tracker_rehydration.py` currently punches through the `StatsProvider` facade to `_get_raw_batting` / `_player_id_map` / etc. Architectural cleanup, tracked in TODO.md.
 
 ### Cons / Risks
 1. **Drift risk**: materializer's as-of-date SQLite lookup could diverge from the monolith's live-tracker lookup if the snapshot-boundary semantics are off by one ball. **Mitigation**: Phase A's bit-exact parity harness under the safe monolith catches any drift before extraction; Phase B re-runs the same harness.
@@ -502,18 +608,18 @@ Discovered while scoping Phase A. Four features in the training parquet are comp
 **Scope impact**: ~1 extra day in Phase A. Phase A becomes "fix the recent-form mismatch + soft split" instead of just "soft split".
 
 ### Success criteria
-- **Phase A**: `--materialize-only` parquet bit-identical to full monolith on all 4 splits. Landed before 2026-04-26.
-- **Phase B**: split scripts produce parquet + SQLite bit-identical to Phase-A reference. `run_experiment.py` works unchanged for every `experiments/configs/*.yaml`. 11 GB reclaimed. Landed within 7 days of the Phase-5 gate.
+- **Phase A** (LANDED 2026-04-22): parity harness bit-exact on 9519 matches. 63/63 columns on 3664 first-of-date; 59/63 on 5855 same-day-secondary (4 recent-form cols excluded per schema-v2 limitation).
+- **Phase B** (LANDED 2026-04-22): schema v3 + two-script split landed; Phase A harness **63/63 on all 9519 matches** (no exclusions); eval parity bit-identical flat-betting metrics on polymarket_test; **12 GB of chunks reclaimed**; monolith orchestrator retired.
 - **Phase C**: ablation iteration ≤ 30 s for feature-only changes. Per-match cache hit rate ≥ 95 % across 3 consecutive ablation runs.
 
-### Estimated effort
-| Phase | Cost | Blocker |
+### Estimated effort (actual)
+| Phase | Cost | Status |
 |---|---|---|
-| A — `--materialize-only` flag | ~half day | None |
-| B — structural split + Phase 5 cleanup | ~2 days | Phase-5 gate (≥ 2026-04-26) |
-| C — per-match cache | ~1-2 days | Phase B stable for 3+ ablations |
+| A — parity harness | ~1 day | LANDED 2026-04-22 |
+| B — structural split + schema v3 + Phase 5 cleanup | ~1 day (beat the 4-day estimate, Phase A infrastructure reuse paid off) | LANDED 2026-04-22 |
+| C — per-match cache | ~1-2 days | Pending — gated on Phase B stable for 3+ ablations |
 
-Critical path: ~3 days of focused work, spread over ~2 weeks.
+Critical path complete for Phase A+B. Phase C remains the next opportunity.
 
 ---
 

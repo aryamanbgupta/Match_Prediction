@@ -124,19 +124,14 @@ Nothing weaker ships.
 ## Infrastructure & Refactoring
 - [ ] **Delete legacy v2 stats cache** (`models/cache_chunks/`, 7.4GB) — `StatsProvider` defaults to v3; no active code path loads v2 by default. Confirm `--model-version v2` usage is dead, then `rm -rf`. Instant -7.4GB disk.
 - [x] ~~Rewrite v3 stats cache as per-entity timelines~~ — **superseded by SQLite migration (Phase 1+2, 2026-04-19)**. 11 GB chunks → 39.7 MB SQLite (276× smaller) with same public API. `StatsProvider` auto-detects `models/player_stats_cache_v3.sqlite`. See `docs/SQLITE_MIGRATION_PROFILE.md`.
-- [ ] **Phase 5: rewrite `parsing_v2.py` to emit SQLite directly, delete chunks format** (destructive, ~2 days, deferred per migration plan until Phase 4 has been stable 1+ weeks — i.e. not before **2026-04-26**):
-  - Modify `scripts/parsing_v2.py` (lines ~1200–1380) to stream snapshots straight into `models/player_stats_cache_v3.sqlite` using the delta-compression pattern from `scripts/build_stats_sqlite.py`. Drop the per-chunk pickle write.
-  - Delete `scripts/build_stats_sqlite.py` (one-shot converter, no longer needed).
-  - Delete `_ChunkedBackend` from `scripts/stats_provider.py` and all its chunk-lookup/LRU machinery.
-  - `rm -rf models/cache_chunks_v3/` (11 GB); delete `models/player_stats_cache_v3_metadata.pkl`.
-  - Remove chunk-path references from `CLAUDE.md`, `docs/`, and the `feedback_no_parallel_sim_eval` memory entry (the "chunks crash parallel eval" warning becomes historical).
-  - Regression guard: `scripts/tests/test_sqlite_equivalence.py` already validates the SQLite output format bit-exactly; the new parsing_v2 path must produce a DB that passes the same harness when re-run against a reference chunk build (so keep one reference SQLite file around for the diff, then delete chunks).
-  - Gate before starting: ≥ 7 days of uneventful production eval runs on the SQLite backend. No regressions, no surprises.
+- [x] ~~**Phase 5: rewrite `parsing_v2.py` to emit SQLite directly, delete chunks format**~~ — **LANDED 2026-04-22** as part of Phase B. `build_stats_cache.py` writes SQLite schema v3 directly from JSONs; `build_stats_sqlite.py` deleted; `_ChunkedBackend` removed; `models/cache_chunks_v3/` reclaimed (12 GB); `models/player_stats_cache_v3_metadata.pkl` removed. See IMPROVEMENTS.md §"Parsing Pipeline Split".
+- [x] ~~**Split `parsing_v2.py` into cache-builder + feature-materializer**~~ — **LANDED 2026-04-22** as Phase B Option E. `scripts/build_stats_cache.py` (JSON → SQLite) + `scripts/materialize_features.py` (SQLite + JSON → parquet, per-date batching). Phase A harness passes 63/63 on all 9519 matches; eval parity bit-identical flat betting metrics on polymarket_test.
+- [ ] **Promote `_SQLiteBackend` private accessors to public API** — `scripts/tracker_rehydration.py` currently reaches into `provider._backend._get_raw_batting` / `_get_raw_bowling` / `_get_raw_h2h` / `_venue_row` / `_player_id_map` / `_resolve_date_id` — underscore-prefixed private methods on the backend. This breaks the `StatsProvider` facade narrowing that Phase B landed (861 → 264 lines). Two options:
+  - Strip the underscores and document the 6 accessors as public API on `_SQLiteBackend` (then rename that class to `SQLiteBackend`).
+  - Add a batched `get_rehydration_snapshot(as_of_date, player_ids, venues) -> dict` method that returns all the raw rows in one call, and delete the cross-module private access.
+  Follow-up to Phase B; not urgent. Noted in IMPROVEMENTS.md §"Parsing Pipeline Split → Deferred follow-ups".
+- [ ] **Incremental cache refresh (`--since`) for `build_stats_cache.py`** — today the cache-builder is all-or-nothing (`out_path.unlink()` before every rebuild, ~6 min on full corpus). A real incremental path needs: checkpoint last processed date in `_meta`, reopen trackers from that snapshot on startup, append new rows instead of rebuilding from zero. Worth its own plan; small data corpora make this low urgency today.
 - [ ] **Deduplicate feature-assembly blocks in `sim_v1_2.py`** — 4 near-identical blocks at lines ~601, ~1153, ~1596, ~2017 all call the same `stats_provider` methods and stitch the same feature dict. Drift risk when adding/modifying features. Extract one `build_ball_features(state, striker, bowler, stats_provider)` helper and have all model wrappers (XGBoostModelV2, LSTMModelV1, TransformerModelV1, MLPModelV1) call it.
-- [ ] **Split `parsing_v2.py` into cache-builder + feature-materializer** — currently one 10–15 min monolithic pass builds the stats cache AND materializes training parquet. Splitting lets you iterate on feature definitions without rebuilding the stats backbone:
-  - `build_stats_cache.py`: read JSONs, update trackers, write per-entity timelines (one-time per data refresh)
-  - `materialize_features.py`: read timelines + JSONs, emit `data/xgb_data_v3/*.parquet` (cheap, re-runnable per feature ablation)
-  - Unlocks fast ablations — `feature_registry.py` changes no longer require a cache rebuild.
 
 ## Low Priority (P3) — Tier 3 Features (External Data)
 - [ ] **Weather / conditions data** (temperature, humidity, dew, wind via weather API)
