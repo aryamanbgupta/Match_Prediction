@@ -1,14 +1,16 @@
 """Build `models/player_stats_cache_v3.sqlite` directly from JSON matches.
 
-Replaces the pickle-chunk intermediate used by `scripts/build_stats_sqlite.py`.
 Walks `data/t20s_json/` in chronological order, advances `PlayerStatsTracker`
-/ `PlayerEloTracker` / `VenueStatsTracker` exactly as the monolith
-`parsing_v2.py:process_folder_v2_with_splits` does, takes pre-match snapshots
-via `deep_copy_stats`, and streams delta-compressed rows straight into
-SQLite schema v3 (including the new `batting_match_log` / `bowling_match_log`
-tables for recent-form deque reconstruction).
+/ `PlayerEloTracker` / `VenueStatsTracker` exactly as the (now-removed)
+monolith `parsing_v2.py:process_folder_v2_with_splits` did, takes pre-match
+snapshots via `deep_copy_stats`, and streams delta-compressed rows straight
+into SQLite schema v3 (including the `batting_match_log` /
+`bowling_match_log` tables for recent-form deque reconstruction).
 
-Phase B deliverable §2. Phase 5 cleanup removes `build_stats_sqlite.py`.
+Replaces the chunks→SQLite intermediate `scripts/build_stats_sqlite.py`,
+which was deleted in the Phase 5 cleanup. Schema v4 (2026-04-23) added
+6 outcome-count columns per row + the global empirical prior π in `_meta`
+for the v6 outcome-distribution feature pass.
 
 Usage:
     uv run python scripts/build_stats_cache.py \\

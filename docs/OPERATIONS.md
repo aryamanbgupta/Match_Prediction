@@ -162,8 +162,10 @@ The fetcher does **not** auto-chain because the cache rebuild is destructive
 
 **New unenriched players.** The fetcher compares cricsheet IDs in the newly-added
 matches against `data/all_players_enriched.csv` and prints any IDs that aren't in
-the enriched metadata. Running `cricinfo_scraper_v3.py` to fill those in is a
-manual follow-up, not part of the fetcher.
+the enriched metadata. Running `enrich_players_cricketdata.py` (R `cricketdata`
+via `rpy2`, see next section) to fill those in is a manual follow-up, not part
+of the fetcher. The legacy HTML scrapers (`cricinfo_scraper{,_v2,_v3}.py`) are
+under `archive/scripts/` and are no longer the recommended path.
 
 ### Enriching player metadata (R cricketdata)
 
@@ -432,7 +434,7 @@ python scripts/sim_eval/run_sim_eval.py \
 
 **Options**:
 - `--model-type`: Model type to use (`xgboost` or `lstm`, default: `xgboost`)
-- `--model-version`: XGBoost version (`v2` or `v3`, default: `v3`)
+- `--model-version`: XGBoost version (only `v3` is supported; v2 artifacts were deleted in the 2026-04-26 cleanup)
 - `--test-dir`: Directory with test match JSONs
 - `--odds`: Path to betting odds JSON file
 - `--n-sims`: Number of simulations per match (default: 1000)

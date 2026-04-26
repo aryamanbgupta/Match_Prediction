@@ -73,7 +73,7 @@ def main():
                        help='JSON file containing betting odds')
     parser.add_argument('--model-type', type=str, default='xgboost', choices=['xgboost', 'lstm', 'mlp', 'mlp_v2', 'transformer', 'llm'],
                        help='Model type to use (xgboost, lstm, mlp, mlp_v2, transformer, or llm)')
-    parser.add_argument('--model-version', type=str, default='v3', choices=['v2', 'v3'],
+    parser.add_argument('--model-version', type=str, default='v3', choices=['v3'],
                        help='Model version to use (v2=legacy 29 features, v3=46+ features with player metadata)')
     parser.add_argument('--model', type=str, default=None,
                        help='Path to trained model (overrides --model-version)')
@@ -118,19 +118,19 @@ def main():
 
     args = parser.parse_args()
 
-    # Set model paths based on version (can be overridden by explicit args)
-    if args.model_version == 'v3':
-        default_model = 'models/xgb_v3/xgboost_model_v3.pkl'
-        default_batter_encoder = 'models/xgb_v3/batter_encoder_v3.pkl'
-        default_bowler_encoder = 'models/xgb_v3/bowler_encoder_v3.pkl'
-        default_feature_columns = 'models/xgb_v3/feature_columns_v3.txt'
-        stats_version = 'v3'
-    else:
-        default_model = 'models/xgb/xgboost_model_v2.pkl'
-        default_batter_encoder = 'models/xgb/batter_encoder_v2.pkl'
-        default_bowler_encoder = 'models/xgb/bowler_encoder_v2.pkl'
-        default_feature_columns = 'models/xgb/feature_columns_v2.txt'
-        stats_version = 'v2'
+    # Set model paths based on version (can be overridden by explicit args).
+    # Only v3 is supported — v2 artifacts (models/xgb/) were deleted in the
+    # 2026-04-26 cleanup. The arg is retained for forward-compat with future
+    # versions, but unknown values fall back to v3 paths.
+    if args.model_version != 'v3':
+        print(f"warning: --model-version={args.model_version!r} is unsupported; "
+              f"v2 artifacts were deleted. Falling back to v3 paths.",
+              file=sys.stderr)
+    default_model = 'models/xgb_v3/xgboost_model_v3.pkl'
+    default_batter_encoder = 'models/xgb_v3/batter_encoder_v3.pkl'
+    default_bowler_encoder = 'models/xgb_v3/bowler_encoder_v3.pkl'
+    default_feature_columns = 'models/xgb_v3/feature_columns_v3.txt'
+    stats_version = 'v3'
 
     model_path = args.model or default_model
     batter_encoder_path = args.batter_encoder or default_batter_encoder
@@ -193,10 +193,9 @@ def main():
     if args.ball_calibrate or args.ball_diagnostics:
         if args.ball_calibrate_data:
             _ball_cal_data_path = args.ball_calibrate_data
-        elif args.model_version == 'v3':
-            _ball_cal_data_path = 'data/xgb_data_v3/cricket_data_v3_validation.parquet'
         else:
-            _ball_cal_data_path = 'data/xgb_data/cricket_data_v2_validation.parquet'
+            # Only v3 parquet exists post-2026-04-26; v2 was deleted.
+            _ball_cal_data_path = 'data/xgb_data_v3/cricket_data_v3_validation.parquet'
 
         if not Path(_ball_cal_data_path).exists():
             print(f"\nWarning: Validation data not found at {_ball_cal_data_path}")

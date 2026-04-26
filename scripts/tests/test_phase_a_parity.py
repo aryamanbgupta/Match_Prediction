@@ -191,7 +191,7 @@ def run_harness(
         print(
             "ERROR: Phase A harness requires SQLite backend; got "
             f"{provider.backend_name!r}. Run "
-            "`uv run python scripts/build_stats_sqlite.py` first.",
+            "`uv run python scripts/build_stats_cache.py` first.",
             file=sys.stderr,
         )
         return 1

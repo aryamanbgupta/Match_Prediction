@@ -157,7 +157,8 @@ uv run python scripts/sim_eval/run_sim_eval.py --model-type transformer --mlx  .
 chunks (~11 GB on disk, with LRU loading). Migrated to a single 57 MB mmap
 SQLite file: **276 × smaller on disk**, `~3 µs` p50 query, safe to open
 concurrently for multi-process evaluation. See
-[docs/SQLITE_MIGRATION_PROFILE.md](docs/SQLITE_MIGRATION_PROFILE.md).
+[docs/archive/SQLITE_MIGRATION_PROFILE.md](docs/archive/SQLITE_MIGRATION_PROFILE.md)
+for the migration memo.
 
 **Temporal integrity**. All features reflect state *before* each ball; stats
 are updated *after*. `build_stats_cache.py` takes a first-write-wins snapshot
@@ -185,8 +186,7 @@ signal that label-encoded IDs structurally can't give XGBoost.
 
 ```
 Match_Prediction/
-├── CLAUDE.md              # Concise agent guide (current)
-├── CLAUDE_REFERENCE.md    # Complete technical reference
+├── CLAUDE.md              # Concise agent entrypoint (auto-loaded for agents)
 ├── IMPROVEMENTS.md        # Research log + per-experiment results
 ├── TODO.md                # Current workstreams and P0 gates
 ├── README.md              # This file
