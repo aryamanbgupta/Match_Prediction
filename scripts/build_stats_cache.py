@@ -56,6 +56,43 @@ def _intern(d: Dict[str, int], key: str) -> int:
     return i
 
 
+def _verify_outcome_count_conservation(conn, sample_n: int = 500) -> None:
+    """Schema v4 guard: Σ(c0..cw) must equal the `balls` column on every
+    batting / bowling / batting_vs_type / bowling_vs_hand row, and equal
+    `total_balls` on every venue row. A schema migration or a future
+    `update_stats` refactor that miscounts a bucket would corrupt the 42
+    distribution features downstream; catch drift at build time.
+    """
+    import random
+
+    print("  verifying outcome-count conservation...", flush=True)
+    specs = (
+        # (table, balls_col, has_many_rows_bool)
+        ("batting", "balls", True),
+        ("bowling", "balls_bowled", True),
+        ("batting_vs_type", "balls", True),
+        ("bowling_vs_hand", "balls_bowled", True),
+        ("venue", "total_balls", True),
+    )
+    for table, balls_col, _ in specs:
+        rows = conn.execute(
+            f"SELECT {balls_col}, c0, c1, c2, c4, c6, cw "
+            f"FROM {table} WHERE {balls_col} > 0 "
+            f"ORDER BY RANDOM() LIMIT ?",
+            (sample_n,),
+        ).fetchall()
+        if not rows:
+            continue
+        for row in rows:
+            balls, c0, c1, c2, c4, c6, cw = row
+            if c0 + c1 + c2 + c4 + c6 + cw != balls:
+                raise RuntimeError(
+                    f"{table}: outcome-count conservation violated — "
+                    f"{balls_col}={balls}, Σ(cX)={c0+c1+c2+c4+c6+cw}"
+                )
+        print(f"    {table}: {len(rows)} rows OK", flush=True)
+
+
 def _verify_log_denormalized_consistency(conn, sample_n: int = 500) -> None:
     """Fail the build if `batting_match_log` / `bowling_match_log` rows
     don't sum to the denormalized `batting.recent_*` / `bowling.recent_*`
@@ -221,12 +258,14 @@ def build(
     def flush_all():
         if batting_rows:
             conn.executemany(
-                "INSERT INTO batting VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO batting VALUES ("
+                "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 batting_rows)
             batting_rows.clear()
         if bowling_rows:
             conn.executemany(
-                "INSERT INTO bowling VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO bowling VALUES ("
+                "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 bowling_rows)
             bowling_rows.clear()
         if h2h_rows:
@@ -237,18 +276,21 @@ def build(
             h2h_rows.clear()
         if bat_vs_type_rows:
             conn.executemany(
-                "INSERT INTO batting_vs_type VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO batting_vs_type VALUES "
+                "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 bat_vs_type_rows)
             bat_vs_type_rows.clear()
         if bowl_vs_hand_rows:
             conn.executemany(
-                "INSERT INTO bowling_vs_hand VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO bowling_vs_hand VALUES "
+                "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 bowl_vs_hand_rows)
             bowl_vs_hand_rows.clear()
         if venue_rows:
             conn.executemany(
                 "INSERT INTO venue VALUES "
-                "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                "?, ?, ?, ?, ?, ?)",
                 venue_rows)
             venue_rows.clear()
         if batting_elo_rows:
@@ -281,6 +323,9 @@ def build(
                 int(st.get('recent_runs', 0)),
                 int(st.get('recent_balls', 0)),
                 int(st.get('recent_dismissals', 0)),
+                int(st.get('c0', 0)), int(st.get('c1', 0)),
+                int(st.get('c2', 0)), int(st.get('c4', 0)),
+                int(st.get('c6', 0)), int(st.get('cw', 0)),
             )
             if prev_batting.get(pid) != cur:
                 batting_rows.append((pid, date_id) + cur)
@@ -294,6 +339,9 @@ def build(
                 int(st.get('recent_runs_given', 0)),
                 int(st.get('recent_balls_bowled', 0)),
                 int(st.get('recent_wickets', 0)),
+                int(st.get('c0', 0)), int(st.get('c1', 0)),
+                int(st.get('c2', 0)), int(st.get('c4', 0)),
+                int(st.get('c6', 0)), int(st.get('cw', 0)),
             )
             if prev_bowling.get(pid) != cur:
                 bowling_rows.append((pid, date_id) + cur)
@@ -314,8 +362,13 @@ def build(
                 st = by_type.get(type_name)
                 if st is None:
                     continue
-                cur = (int(st['runs']), int(st['balls']),
-                       int(st['dismissals']))
+                cur = (
+                    int(st['runs']), int(st['balls']),
+                    int(st['dismissals']),
+                    int(st.get('c0', 0)), int(st.get('c1', 0)),
+                    int(st.get('c2', 0)), int(st.get('c4', 0)),
+                    int(st.get('c6', 0)), int(st.get('cw', 0)),
+                )
                 key = (pid, type_code)
                 if prev_bat_vs_type.get(key) != cur:
                     bat_vs_type_rows.append(
@@ -328,8 +381,13 @@ def build(
                 st = by_hand.get(hand_name)
                 if st is None:
                     continue
-                cur = (int(st['runs_given']), int(st['balls_bowled']),
-                       int(st['wickets']))
+                cur = (
+                    int(st['runs_given']), int(st['balls_bowled']),
+                    int(st['wickets']),
+                    int(st.get('c0', 0)), int(st.get('c1', 0)),
+                    int(st.get('c2', 0)), int(st.get('c4', 0)),
+                    int(st.get('c6', 0)), int(st.get('cw', 0)),
+                )
                 key = (pid, hand_code)
                 if prev_bowl_vs_hand.get(key) != cur:
                     bowl_vs_hand_rows.append(
@@ -354,6 +412,9 @@ def build(
                 int(len(fi)),
                 int(st.get('matches_total', 0)),
                 int(st.get('chase_wins', 0)),
+                int(st.get('c0', 0)), int(st.get('c1', 0)),
+                int(st.get('c2', 0)), int(st.get('c4', 0)),
+                int(st.get('c6', 0)), int(st.get('cw', 0)),
             )
             if prev_venue.get(vid) != cur:
                 venue_rows.append((vid, date_id) + cur)
@@ -378,6 +439,17 @@ def build(
     intra_idx_by_date: Dict[str, int] = defaultdict(int)
     n_matches = 0
     source_json_mtime_max = 0.0
+
+    # Phase 3: per-phase outcome-count totals across all innings.
+    # Σ over phases ≡ Σ overall cX (per-innings conservation guarantee in
+    # parsing_v2.py inn_agg). Used after the walk to compute 18 phase
+    # priors written to _meta.
+    phase_total_counts = {
+        'powerplay': [0, 0, 0, 0, 0, 0],
+        'middle':    [0, 0, 0, 0, 0, 0],
+        'death':     [0, 0, 0, 0, 0, 0],
+    }
+    _PHASE_CK_KEYS = ('c0', 'c1', 'c2', 'c4', 'c6', 'cw')
 
     import json as _json
     for match_id, json_text, match_date in iter_matches_chronological(
@@ -431,6 +503,32 @@ def build(
         # --- post-match venue updates (parsing_v2.py:1321-1325) -------
         for det in innings_details:
             venue.update_venue_stats_detailed(vname, det)
+            # Phase 3: per-phase outcome-count accumulation. Each
+            # innings_details dict carries 18 c{X}_{phase} keys
+            # (powerplay/middle/death × 6 outcomes) emitted by
+            # parse_match_data_v2 inn_agg. Pre-Phase-3 inn_agg dicts
+            # lack these keys; .get(...,0) preserves backwards
+            # compatibility for old caches being re-read.
+            #
+            # Per-innings conservation: Σ phases of cX_{phase} must
+            # equal cX (legal-only). Holds by construction in
+            # parse_match_data_v2 (every legal ball fires both the
+            # global cX bump and exactly one cX_{phase} bump). Cheap
+            # check (18 ints per innings); fails loud if a future
+            # parsing refactor breaks the dispatch.
+            for i, ck in enumerate(_PHASE_CK_KEYS):
+                overall = int(det.get(ck, 0))
+                phase_sum = sum(int(det.get(f"{ck}_{ph}", 0))
+                                for ph in ('powerplay', 'middle', 'death'))
+                if phase_sum != overall:
+                    raise RuntimeError(
+                        f"phase split conservation violated in innings: "
+                        f"bucket {ck} overall={overall}, "
+                        f"Σ phases={phase_sum} (Δ={phase_sum-overall:+,})"
+                    )
+            for phase, totals in phase_total_counts.items():
+                for i, ck in enumerate(_PHASE_CK_KEYS):
+                    totals[i] += int(det.get(f"{ck}_{phase}", 0))
         if chase_won is not None:
             venue.update_venue_match_result(vname, chase_won)
 
@@ -468,6 +566,72 @@ def build(
         (p.stat().st_mtime for p in source_dir.glob('*.json')),
         default=0.0,
     )
+    # Schema v4: global empirical outcome prior π. Computed by summing
+    # the tracker's final-state outcome counts across all batters (one
+    # of the two conservation-equivalent views; bowling sum would give
+    # the same totals). Used as the shrinkage target for 42 distribution
+    # features. Fixed constant — not rolling, not as-of-date — since
+    # ratios stabilize to < 0.5 % within the first ~10 k balls and a
+    # rolling prior would add as-of-date complexity for no measurable
+    # gain.
+    total_counts = [0, 0, 0, 0, 0, 0]
+    ck_keys = ('c0', 'c1', 'c2', 'c4', 'c6', 'cw')
+    for st in stats.batting_stats.values():
+        for i, k in enumerate(ck_keys):
+            total_counts[i] += int(st.get(k, 0))
+    grand_total = sum(total_counts)
+    if grand_total <= 0:
+        prior = (1/6,) * 6
+    else:
+        prior = tuple(c / grand_total for c in total_counts)
+    print(f"  global prior π (n={grand_total:,}): "
+          f"p0={prior[0]:.4f} p1={prior[1]:.4f} p2={prior[2]:.4f} "
+          f"p4={prior[3]:.4f} p6={prior[4]:.4f} pw={prior[5]:.4f}",
+          flush=True)
+
+    # Phase 3: per-phase priors. Compute fractional probabilities per
+    # phase from accumulated counts. Falls back to flat (1/6,)*6 if a
+    # phase has zero balls (defensive — should never happen on a real
+    # corpus). Conservation invariant: Σ phase_total_counts[phase][c]
+    # == total_counts[c] for every c — checked below.
+    phase_prior_pcts = {}
+    for phase, totals in phase_total_counts.items():
+        n = sum(totals)
+        if n <= 0:
+            phase_prior_pcts[phase] = (1/6,) * 6
+        else:
+            phase_prior_pcts[phase] = tuple(c / n for c in totals)
+
+    # Aggregate sanity check: the per-phase totals are computed from
+    # innings_details (legal-only), but `total_counts` is the
+    # batting-stats sum (includes wides/noballs since update_stats is
+    # called on every delivery). They will NOT match in general — Δ
+    # equals the wide+noball count. Per-innings conservation is enforced
+    # in the loop above; here we just log the legal-only grand total
+    # for visibility, and confirm it doesn't exceed the inclusive total.
+    legal_grand_total = sum(
+        sum(phase_total_counts[ph][i]
+            for ph in ('powerplay', 'middle', 'death'))
+        for i in range(6)
+    )
+    inclusive_grand_total = sum(total_counts)
+    if legal_grand_total > inclusive_grand_total:
+        raise RuntimeError(
+            f"legal-only phase total {legal_grand_total:,} exceeds "
+            f"inclusive batting-stats total {inclusive_grand_total:,}"
+        )
+    print(f"  legal balls (Σ over phases): {legal_grand_total:,} "
+          f"(vs {inclusive_grand_total:,} inclusive incl. wides/noballs)",
+          flush=True)
+    print(f"  per-phase priors:", flush=True)
+    for phase in ('powerplay', 'middle', 'death'):
+        n = sum(phase_total_counts[phase])
+        p = phase_prior_pcts[phase]
+        print(f"    {phase:>9s} (n={n:>10,}): "
+              f"p0={p[0]:.4f} p1={p[1]:.4f} p2={p[2]:.4f} "
+              f"p4={p[3]:.4f} p6={p[4]:.4f} pw={p[5]:.4f}",
+              flush=True)
+
     meta_rows = [
         ('schema_version', str(SCHEMA_VERSION)),
         ('build_timestamp', datetime.utcnow().isoformat() + 'Z'),
@@ -477,8 +641,23 @@ def build(
         ('num_players', str(len(player_ids))),
         ('num_venues', str(len(venue_ids))),
         ('num_dates', str(len(date_ids))),
-        ('features', 'v3'),
+        ('features', 'v4'),
+        ('prior_p0', f"{prior[0]:.10f}"),
+        ('prior_p1', f"{prior[1]:.10f}"),
+        ('prior_p2', f"{prior[2]:.10f}"),
+        ('prior_p4', f"{prior[3]:.10f}"),
+        ('prior_p6', f"{prior[4]:.10f}"),
+        ('prior_pw', f"{prior[5]:.10f}"),
     ]
+    # Phase 3: 18 phase-prior _meta rows. Schema unchanged; we widen the
+    # _meta key/value table with new keys instead of bumping schema.
+    # Naming: prior_{pp,mid,death}_p{0,1,2,4,6,w} (matches the keys read
+    # by stats_sqlite_backend._load_lookups).
+    _phase_short = {'powerplay': 'pp', 'middle': 'mid', 'death': 'death'}
+    for phase, short in _phase_short.items():
+        p = phase_prior_pcts[phase]
+        for i, suffix in enumerate(('p0', 'p1', 'p2', 'p4', 'p6', 'pw')):
+            meta_rows.append((f"prior_{short}_{suffix}", f"{p[i]:.10f}"))
     conn.executemany("INSERT INTO _meta VALUES (?, ?)", meta_rows)
 
     conn.commit()
@@ -491,6 +670,8 @@ def build(
     # views of the same state. Drift between them would silently serve
     # stale recent-form on the sim hot path. Sample-check before close.
     _verify_log_denormalized_consistency(conn, sample_n=500)
+    # Schema v4: outcome-count conservation guard (Σ cX == balls).
+    _verify_outcome_count_conservation(conn, sample_n=500)
 
     conn.close()
 

@@ -1,266 +1,275 @@
-# Cricket Match Prediction: Ball-by-Ball Simulation System
+# CricML: Ball-by-Ball T20 Match Prediction
 
-An end-to-end machine learning system that predicts T20 cricket match outcomes by simulating individual ball outcomes. Built to demonstrate production-scale ML engineering, from data architecture through model training to Monte Carlo simulation and market evaluation.
+An end-to-end ML system that predicts T20 cricket match outcomes by learning
+individual ball outcomes (dot / 1 / 2 / 4 / 6 / wicket) and simulating complete
+matches via Monte Carlo. Built as a portfolio project demonstrating production
+ML engineering — data architecture, temporal-integrity features, model training,
+simulation, and market-based evaluation.
 
 ---
 
-## Project Objectives
+## The Idea
 
-**Goal**: Build a production-quality ML pipeline that combines predictive modeling with stochastic simulation to forecast cricket match outcomes.
+Directly predicting "who wins" gives you ~11,000 training examples (one per
+match). Predicting each ball gives you ~2.2 million. We model the ball, then
+recover match probabilities by running 1000 simulations per match.
 
+```
+Raw Cricsheet JSON (11K matches)
+        ↓
+Feature engineering — schema-v4 SQLite stats cache + parquet splits
+        ↓
+XGBoost 6-class classifier (114 features, v6)
+        ↓
+Monte Carlo simulation (ball-by-ball, 1000 iterations/match)
+        ↓
+Win probabilities & score distributions → compared to Polymarket / bookmaker odds
+```
+
+---
+
+## Current State
+
+- **Data**: ~11,260 men's T20 match JSONs from Cricsheet (2005 → 2026-04) across
+  14 leagues (IPL, BBL, PSL, SA20, ILT20, CPL, BPL, T20Is, …).
+- **Feature pipeline**: two stages.
+  - `build_stats_cache.py` — JSON → SQLite schema v4 (`models/player_stats_cache_v3.sqlite`, ~57 MB, mmap-read).
+  - `materialize_features.py` — SQLite + JSON → four parquet splits
+    (`data/xgb_data_v3/{train,validation,test,golden_test}.parquet`,
+    2.2 M rows × 105 columns).
+- **Model**: XGBoost v6 — 114 features, including 42 empirical-Bayes-shrunk
+  outcome-distribution features (per batter / bowler / batter-vs-pace|spin /
+  bowler-vs-LHB|RHB / venue). Other trainers (LSTM, MLP, Transformer) are kept
+  for comparison; XGBoost is the production path.
+- **Evaluation**: 261-match Polymarket test set (2025-07 → 2026-04) + legacy
+  44-match T20 WC 2024 set. Metrics: log loss, Brier score, edge, flat /
+  Kelly ROI, win rate.
+
+**Latest numbers** (v6 outcome-dist, 261 matches × 100 sims, April 2026):
+log loss **0.7122**, Brier **0.2562**, flat ROI **−7.1 %**, fractional-Kelly
+ROI **+0.7 %**. Calibration vs the v4 baseline improved ~5–6 %; flat-betting
+regressed (sharper probabilities compress betting edges — a known
+calibration-vs-ROI tension). Market log loss on the same set is 0.6267.
+See [IMPROVEMENTS.md](IMPROVEMENTS.md) for per-experiment breakdowns and
+[TODO.md](TODO.md) for the `≥ $50 K` / `≥ $100 K` liquidity-sliced evaluation
+still outstanding.
+
+---
 
 ## Architecture
 
 ```
-Raw Match Data (15K+ matches)
-         ↓
-Feature Engineering Pipeline (29 features, temporal tracking)
-         ↓
-Model Training (XGBoost with Optuna tuning)
-         ↓
-Ball-by-Ball Predictions (6-class classification)
-         ↓
-Monte Carlo Simulation Engine (1000+ iterations/match)
-         ↓
-Match Outcome Probabilities + Score Distributions
-         ↓
-Betting Market Evaluation (Log Loss, Brier Score, Calibration)
-```
+┌─────────────────────────────────────────────────────────────┐
+│                   TRAINING PIPELINE                         │
+├─────────────────────────────────────────────────────────────┤
+│ data/t20s_json/*.json                                       │
+│        │                                                    │
+│        ▼                                                    │
+│ scripts/build_stats_cache.py      (JSON → SQLite v4, ~7 min)│
+│        │                                                    │
+│        ▼                                                    │
+│ models/player_stats_cache_v3.sqlite (~57 MB)                │
+│        │                                                    │
+│        ▼                                                    │
+│ scripts/materialize_features.py   (SQLite+JSON → parquet,   │
+│        │                           per-date batching, ~5 min)│
+│        ▼                                                    │
+│ data/xgb_data_v3/{train,validation,test,golden_test}.parquet│
+│        │                                                    │
+│        ▼                                                    │
+│ scripts/xgboost_v2.py             (Optuna hyperparam tune)  │
+│        │                                                    │
+│        ▼                                                    │
+│ models/xgb_v3/ (model + encoders + feature_columns)         │
+└─────────────────────────────────────────────────────────────┘
 
-**Core Approach**: Rather than directly predicting match winners (limited training data), predict individual ball outcomes (abundant data) and simulate complete matches through Monte Carlo methods.
+┌─────────────────────────────────────────────────────────────┐
+│                 SIMULATION + EVAL PIPELINE                  │
+├─────────────────────────────────────────────────────────────┤
+│ Match JSON + lineup ─► MatchState                           │
+│        │                                                    │
+│        ▼                                                    │
+│ scripts/sim_v1_2.py (SimulationEngine)                      │
+│   ├─ XGBoostModelV2 / LSTMModelV1 / TransformerModelV1 / …  │
+│   ├─ StatsProvider  (SQLite mmap, StatsProviderCache memo)  │
+│   ├─ T20Rules       (strike rotation, bowler limits, chase) │
+│   └─ Monte Carlo    (1000 iterations, multiprocessing)      │
+│        │                                                    │
+│        ▼                                                    │
+│ Per-match win probs + score distributions                   │
+│        │                                                    │
+│        ▼                                                    │
+│ scripts/sim_eval/                                           │
+│   ├─ loaders.py         (TestMatchLoader, BettingOddsLoader) │
+│   ├─ match_evaluator.py (log loss, Brier, edge, P&L, Kelly) │
+│   └─ run_sim_eval.py    (CLI)                               │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## Technical Implementation
+## Quick Start
 
-### Iterative Model Development
+All scripts run via `uv run` to pick up the pinned environment.
 
-Systematic improvement through multiple iterations:
+```bash
+# One-command run: cache → parquet → train → eval.
+# Each step is skipped if its artifact is already current.
+uv run python scripts/run_experiment.py \
+    experiments/configs/xgb_v6_outcome_dist.yaml
 
-| Model | Features | Architecture | Key Addition |
-|-------|----------|--------------|--------------|
-| **GBM v1** | 9 basic | Gradient Boosting | Baseline |
-| **XGBoost v1** | 9 basic | XGBoost | Class imbalance handling |
-| **XGBoost v2** | 29 features | XGBoost + Optuna | Temporal player stats, momentum |
+# Or the same pipeline, step by step
+uv run python scripts/build_stats_cache.py              # ~7 min → SQLite v4
+uv run python scripts/materialize_features.py \
+    --config experiments/configs/xgb_v6_outcome_dist.yaml   # ~5 min → parquet
+uv run python scripts/xgboost_v2.py                     # ~5–10 min (no tune)
+uv run python scripts/sim_eval/run_sim_eval.py \
+    --test-dir data/polymarket_test \
+    --odds betting_odds_polymarket.json \
+    --n-sims 100                                        # ~40 min serial
+```
 
-**Feature Evolution** (9 → 29):
-- Basic match state (12): Score, wickets, phase, run rate, balls remaining
-- Player statistics (6): Career batting/bowling averages and strike rates
-- Head-to-head matchups (2): Historical batter vs bowler performance
-- Momentum indicators (5): Recent scoring patterns, boundary timing
-- Pressure metrics (4): Dot ball percentages, wicket clusters
+`scripts/build_stats_cache.py` is idempotent: it no-ops when no JSON has
+changed since the last build (compares `_meta.source_json_mtime_max`).
 
-### Production-Scale Data Engineering
+Alternative trainers:
+```bash
+uv run python scripts/lstm_v1.py --epochs 50 --batch-size 512
+uv run python scripts/mlp_v1.py --epochs 30 --device cpu
+uv run python scripts/transformer_v1.py --epochs 50 --batch-size 64
+uv run python scripts/transformer_v1.py --mlx --epochs 50 --batch-size 128  # Apple Silicon
+```
 
-**Temporal Stats Cache**:
-- **Challenge**: 7.8GB of player statistics needed for simulation
-- **Solution**: Chunked lazy-loading (69 files, LRU caching with 5-chunk limit)
-- **Performance**: O(log n) binary search, <10ms queries, ~550MB memory footprint
-- **Integrity**: Date-indexed snapshots ensure only historical stats are used
+Select an alternative trainer at eval time:
+```bash
+uv run python scripts/sim_eval/run_sim_eval.py --model-type lstm  ...
+uv run python scripts/sim_eval/run_sim_eval.py --model-type transformer --mlx  ...
+```
 
-**Pipeline Design**:
-- Temporal splits prevent future information leakage
-- Class balancing via sample weights for rare outcomes (wickets, sixes)
-- Automated hyperparameter tuning (Optuna with 50 trials)
-- Extensive validation infrastructure
-
-### Monte Carlo Simulation Engine
-
-**Why Simulation?**
-Individual ball outcomes have abundant training data (millions of examples) while match outcomes are rare (thousands). By predicting balls and simulating matches, we leverage data more efficiently and naturally capture uncertainty.
-
-**Implementation**:
-- Stateful match simulation with cricket rules enforcement
-- Parallel processing via multiprocessing
-- Configurable iteration counts (typically 1000+)
-- Complete ball-by-ball recording for analysis
-
-**Benefits**:
-- Natural uncertainty quantification
-- Score distributions, not just point estimates
-- Scenario analysis capabilities
-- Well-calibrated probability estimates
-
-### Evaluation Framework
-
-**Validation against T20 World Cup 2024** (44 matches with betting odds):
-- **Log Loss**: 0.961 (measures probability accuracy)
-- **Brier Score**: 0.131 (calibration quality)
-- **Average Edge**: 31.9% (model-market disagreement)
-- **Approach**: Academic rigor with temporal validation
-
-**Analysis Methods**:
-- Probability calibration curves (predicted vs actual win rates)
-- Market comparison to identify model strengths
-- Signed edge metrics (correct confident predictions vs incorrect ones)
-- Split analysis by favorites vs underdogs
+> **Warning**: `--parallel` on `run_sim_eval.py` has crashed the 16 GB test
+> machine; default is serial. Schedule long runs as background tasks.
 
 ---
 
 ## Key Engineering Decisions
 
-**Chunked Stats Cache** (vs loading 7.8GB into RAM)
-- Trades slight I/O overhead for 14x memory reduction
-- LRU eviction keeps hot data accessible
-- Sequential date access patterns yield ~95% cache hit rate
+**SQLite-backed temporal stats cache**. An earlier iteration used 69 pickle
+chunks (~11 GB on disk, with LRU loading). Migrated to a single 57 MB mmap
+SQLite file: **276 × smaller on disk**, `~3 µs` p50 query, safe to open
+concurrently for multi-process evaluation. See
+[docs/SQLITE_MIGRATION_PROFILE.md](docs/SQLITE_MIGRATION_PROFILE.md).
 
-**Ball-Level Modeling** (vs direct match prediction)
-- Provides 100x more training examples
-- Better uncertainty estimates through simulation variance
-- Allows granular feature engineering (momentum, pressure)
+**Temporal integrity**. All features reflect state *before* each ball; stats
+are updated *after*. `build_stats_cache.py` takes a first-write-wins snapshot
+per date, so simulations for a 2024-06-15 match can never read a 2024-06-16
+stat. Verified bit-exact against the reference monolith on all 9,519 matches
+via `scripts/tests/test_phase_a_parity.py`.
 
-**Multi-Model Comparison** (vs single "best" model)
-- Reveals which architectures capture different aspects of cricket
-- Foundation for future ensemble methods
-- Documents systematic improvement path
+**Ball-level modelling + Monte Carlo**. 2.2 M training balls vs 11 K matches is
+a 200× data multiplier. Simulation variance gives us uncertainty for free.
 
-**Optuna Tuning** (vs manual/grid search)
-- Efficient Bayesian optimization
-- 50 trials across 7 hyperparameters
-- Reproducible via study serialization
+**Per-match memoization** (`StatsProviderCache`). Team-strength / venue-profile
+features are constant across every ball of a given match, so we memoize the
+expensive 11-player-loop lookups once per match. ~1.2× speedup on XGBoost sim.
 
----
-
-## Current Results
-
-### Model Performance
-- **Ball-level accuracy**: 55-60% (6-class classification)
-- **Most predictive features**: Player statistics, match phase, momentum indicators
-- **Challenge**: Class imbalance (dots common, sixes rare)
-
-### Market Analysis Insights
-- Large disagreements with betting odds indicate methodological differences
-- Model less extreme on underdogs than markets
-- Divergence highest for lesser-known teams and new venues
-- Strong calibration on evenly-matched games
-
-### System Performance
-- **Simulation speed**: ~3 minutes per match (1000 iterations)
-- **Cache initialization**: ~2 seconds
-- **Full pipeline**: Processes 15K matches in ~15 minutes
+**Empirical-Bayes outcome distributions (v6, schema v4)**. For each batter /
+bowler / batter-vs-bowler-type / bowler-vs-batter-hand / venue, emit
+`P(0, 1, 2, 4, 6, W)` shrunk toward a global corpus prior π via
+`p̂_c = (n_c + k·π_c) / (N + k)`. Computed over 2.19 M balls;
+π = (0.304, 0.411, 0.076, 0.108, 0.047, 0.054). Adds the distributional
+signal that label-encoded IDs structurally can't give XGBoost.
 
 ---
 
-## Future Development
-
-### Planned Models
-1. **xLSTM**: Capture sequential dependencies across ball sequences
-2. **Transformer**: Long-range context over entire innings
-3. **Temporal Fusion Transformer**: Combine static (venue, team) with dynamic (ball sequence) features
-4. **Dual Attention Transformer**: Separate attention for batting and bowling sides
-
-### Feature Roadmap
-- Venue-specific statistics (pitch behavior, boundary dimensions)
-- Weather integration (humidity, temperature effects on swing)
-- Player form trends (weighted recent performances)
-- Partnership dynamics (batter compatibility metrics)
-- Bowler types and variations (pace, spin, swing characteristics)
-
-### System Enhancements
-- GPU acceleration for neural network models
-- Real-time prediction API
-- Ensemble methods combining multiple models
-- Advanced betting strategies (Kelly Criterion sizing)
-
----
-
-## Technical Stack
-
-**Machine Learning**:
-- XGBoost 2.0+ (gradient boosting)
-- scikit-learn (preprocessing, evaluation)
-- Optuna (hyperparameter optimization)
-- NumPy/Pandas (data processing)
-
-**System Design**:
-- Python 3.11+
-- Multiprocessing (parallel simulation)
-- Pickle (efficient serialization)
-- Parquet (columnar data storage)
-
-**Validation**:
-- Temporal cross-validation
-- Market odds benchmarking
-- Custom evaluation metrics
-- Calibration analysis
-
----
-
-## Project Structure
+## Repository Layout
 
 ```
 Match_Prediction/
+├── CLAUDE.md              # Concise agent guide (current)
+├── CLAUDE_REFERENCE.md    # Complete technical reference
+├── IMPROVEMENTS.md        # Research log + per-experiment results
+├── TODO.md                # Current workstreams and P0 gates
+├── README.md              # This file
+│
 ├── data/
-│   ├── t20s_json/              # 15K+ raw matches (ball-by-ball JSON)
-│   ├── xgb_data/               # Processed parquet files (train/val/test)
-│   └── betting_test/           # T20 World Cup 2024 for evaluation
+│   ├── t20s_json/              # 11K+ cricsheet match JSONs
+│   ├── all_players_enriched.csv   # Player metadata (hand, arm, DOB, bowling style)
+│   ├── cricsheet_people.csv       # Cricsheet player register
+│   ├── xgb_data_v3/               # Parquet splits (train/val/test/golden_test)
+│   ├── betting_test/              # Legacy 44-match WC 2024 eval set
+│   ├── polymarket_test/           # 261-match Polymarket eval set (2025-07 → 2026-04)
+│   └── .cricsheet_zips/           # Cached Cricsheet downloads + manifest
+│
 ├── models/
-│   ├── xgb/                    # Trained models, encoders, metadata
-│   └── cache_chunks/           # Player stats cache (7.8GB, 69 files)
+│   ├── player_stats_cache_v3.sqlite  # Schema-v4 stats cache (~57 MB)
+│   ├── xgb_v3/                    # Current XGBoost artifacts
+│   ├── lstm_v1/                   # LSTM artifacts
+│   ├── mlp_v1/                    # MLP artifacts
+│   └── transformer_v1/            # Transformer artifacts (PyTorch + MLX)
+│
 ├── scripts/
-│   ├── parsing_v2.py           # Feature engineering pipeline
-│   ├── xgboost_v2.py           # Model training with Optuna
-│   ├── sim_v1_2.py             # Monte Carlo simulation engine
-│   ├── stats_provider.py       # Lazy-loading stats interface
-│   └── sim_eval/               # Evaluation framework
-│       ├── run_sim_eval.py     # Main evaluation script
-│       ├── match_evaluator.py  # Metrics calculation
-│       └── loaders.py          # Data and odds loading
-└── CLAUDE.md                   # Full technical documentation
+│   ├── build_stats_cache.py       # JSON → SQLite v4
+│   ├── materialize_features.py    # SQLite + JSON → parquet
+│   ├── parsing_v2.py              # Tracker primitives + parse_match_data_v2
+│   ├── stats_sqlite_backend.py    # _SQLiteBackend reader
+│   ├── stats_provider.py          # Facade + StatsProviderCache memo
+│   ├── tracker_rehydration.py     # Per-date tracker seeding from SQLite
+│   ├── loaders_common.py          # iter_matches_chronological + DEFAULT_SPLITS
+│   ├── feature_registry.py        # Central feature definitions
+│   ├── player_metadata.py         # Player metadata provider
+│   ├── xgboost_v2.py              # XGBoost training with Optuna
+│   ├── lstm_v1.py                 # LSTM training
+│   ├── transformer_v1.py          # Transformer training (PyTorch + MLX)
+│   ├── mlp_v1.py                  # MLP baseline
+│   ├── sim_v1_2.py                # Simulation engine + all model wrappers
+│   ├── run_experiment.py          # YAML-driven pipeline runner
+│   ├── compare_experiments.py     # List / compare experiment results
+│   ├── experiment_tracker.py      # Per-experiment metrics + git state
+│   ├── calibration.py             # Platt / isotonic calibrators (off by default)
+│   ├── fetch_cricsheet.py         # Refresh Cricsheet data
+│   ├── enrich_players_cricketdata.py  # Fill player metadata via R cricketdata
+│   ├── build_polymarket_odds.py   # Match Polymarket markets → Cricsheet → odds JSON
+│   ├── sim_eval/                  # Evaluation framework
+│   └── tests/                     # Parity harness + benchmarks
+│
+├── experiments/
+│   ├── configs/*.yaml             # Declarative experiment definitions
+│   └── results/                   # Auto-generated per-run artifacts
+│
+└── docs/                          # Detailed reference documentation
+    ├── OPERATIONS.md              # How to run every pipeline
+    ├── DATA_FORMATS.md            # Parquet / SQLite / odds schemas
+    ├── DESIGN_DECISIONS.md        # Architectural rationale
+    ├── ADDING_NEW_MODELS.md       # Model-plugin guide
+    ├── feature_roadmap.md         # Feature set + status
+    ├── SQLITE_MIGRATION_PROFILE.md    # Chunks → SQLite migration notes
+    ├── POLYMARKET_INTEGRATION.md  # Test-set expansion + odds build
+    └── EVAL_PROFILING.md          # Eval hot-path analysis
 ```
 
 ---
 
-## Key Learnings
+## Validation Discipline
 
-### Cricket Analytics
-- Phase-based modeling essential (powerplay/middle/death overs behave differently)
-- Matchup effects (specific batter vs bowler) surprisingly predictive
-- Momentum indicators capture psychological aspects markets may miss
-- Venue effects significant but require more granular features
+Every experiment reports four benchmarks side by side: coinflip (0.6931 LL
+floor), always-bet-favorite (~4 % ROI honest baseline), the current Polymarket
+market (0.6267 LL ceiling), and our model. Before claiming skill:
 
-### ML Engineering
-- Data leakage prevention requires architectural thinking, not just careful coding
-- Memory-compute tradeoffs critical at scale (lazy loading vs speed)
-- Simulation excels when granular data is abundant but aggregate outcomes are rare
-- Probability calibration matters as much as accuracy for decision-making
+1. Model log loss must beat market log loss on the ≥ $50 K liquidity slice.
+2. Flat-ROI bootstrap CI on that slice must exclude zero.
 
-### Production Insights
-- Temporal validation catches issues that random splits miss
-- Feature importance aids interpretability for domain experts
-- Reproducibility demands versioning features, splits, and random seeds
-- Real-world benchmarks (betting markets) reveal model limitations
+Anything weaker is counterparty noise — see [TODO.md](TODO.md)
+§ "Evaluation Discipline".
 
 ---
 
-## Validation Rigor
+## Stack
 
-This project follows ML best practices:
+Python 3.11+, XGBoost 2.x, PyTorch 2.x (+ MLX for Apple Silicon), Optuna,
+scikit-learn, pandas + pyarrow (parquet), SQLite, `uv` for env + execution.
 
-- Temporal validation (strict chronological splits)
-- Held-out test sets (unseen tournament data)
-- Multiple baselines (systematic comparison)
-- Probability calibration analysis
-- Statistical evaluation (confidence intervals on 44-match test set)
-- Full reproducibility (seeded processes, version control)
+System recommended: 16 GB RAM, 10 GB disk, 4+ CPU cores.
 
 ---
 
-## About This Project
-
-This work demonstrates the intersection of domain knowledge (cricket), machine learning engineering, and systems design. It showcases:
-
-- End-to-end pipeline development (data → features → models → evaluation)
-- Large-scale data processing and feature engineering
-- Systematic model experimentation
-- Production-oriented architecture (memory efficiency, modularity)
-- Academic rigor in validation methodology
-
-**Author**: Aryaman Gupta
-**Type**: Personal Portfolio Project
-**Status**: Active Development
-**Branch**: main
-
----
-
-*Last Updated: October 2024*
+**Author**: Aryaman Gupta · **Type**: Personal portfolio project · **Branch**: `main`

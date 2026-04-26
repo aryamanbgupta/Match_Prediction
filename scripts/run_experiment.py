@@ -106,6 +106,27 @@ def _check_parquet_cache(config: dict, feature_list: list) -> bool:
     if cached_gender != want_gender:
         return False
 
+    # Phase 6: outcome_dist k_player / k_venue. parquet content depends
+    # on these (shrinkage strength), so a k-sweep config must invalidate
+    # the cache. None on either side defaults to 30/200 (matches the
+    # materialize_features default).
+    od_cfg = config.get("outcome_dist", {}) or {}
+    want_k_player = float(od_cfg.get("k_player", 30.0))
+    want_k_venue  = float(od_cfg.get("k_venue", 200.0))
+    cached_k_player = cached.get("k_player")
+    cached_k_venue  = cached.get("k_venue")
+    if cached_k_player is not None and float(cached_k_player) != want_k_player:
+        return False
+    if cached_k_venue  is not None and float(cached_k_venue)  != want_k_venue:
+        return False
+    # Cached payloads from before Phase 6 lack these fields. Treat them
+    # as 30/200 (the default at the time). If the YAML asks for the
+    # default, it's a hit; otherwise a miss.
+    if cached_k_player is None and want_k_player != 30.0:
+        return False
+    if cached_k_venue is None and want_k_venue != 200.0:
+        return False
+
     # Parquet mtime >= SQLite mtime. A rebuild of SQLite invalidates the
     # parquet even if features/splits/gender are unchanged — the parquet
     # may contain snapshots derived from older SQLite state.
@@ -118,8 +139,9 @@ def _check_parquet_cache(config: dict, feature_list: list) -> bool:
 
 
 def _check_sqlite_cache(config: dict) -> bool:
-    """Schema-v3 SQLite is current iff schema_version matches AND
-    source_json_mtime_max is at least as new as the live JSON corpus.
+    """SQLite cache is current iff `_meta.schema_version` matches the
+    live `stats_sqlite_backend.SCHEMA_VERSION` (currently 4) AND
+    `source_json_mtime_max` is at least as new as the live JSON corpus.
     Returns False on any read error (missing file, bad schema, etc.)."""
     import sqlite3
     version = config["data"].get("version", "v3")
@@ -224,6 +246,10 @@ def build_training_cmd(config: dict, feature_list: list) -> list:
         "model": {
             "hyperparameters": hyperparams,
         },
+        # Phase 6: forward outcome_dist YAML block so xgboost_v2.py can
+        # write the sidecar (k_player / k_venue) consumed by the sim
+        # wrappers at inference time.
+        "outcome_dist": config.get("outcome_dist", {}),
     })
 
     script_map = {
@@ -294,6 +320,13 @@ def build_eval_cmd(config: dict) -> list:
 
     # Calibration flags
     eval_config = config.get("evaluation", {})
+
+    # Liquidity slice (Phase 1 of outcome-dist follow-ups)
+    if eval_config.get("min_volume") is not None:
+        cmd.extend(["--min-volume", str(eval_config["min_volume"])])
+    if eval_config.get("bootstrap_resamples") is not None:
+        cmd.extend(["--bootstrap-resamples", str(eval_config["bootstrap_resamples"])])
+
     if eval_config.get("calibrate"):
         cmd.append("--calibrate")
     if eval_config.get("calibration_method"):

@@ -6,8 +6,19 @@ This document outlines the feature sets used in the model and tracks implementat
 
 | Version | Features | Data Path | Model Path | Status |
 |---------|----------|-----------|------------|--------|
-| **v3** | 46+ | `data/xgb_data_v3/` | `models/xgb_v3/` | Current (with player metadata) |
+| **v7** | **114** (V6 + hierarchical shrinkage on vs-type/vs-hand) | `data/xgb_data_v3/` | `models/xgb_v3/` | **Current (Phase 5 hier shrink + Phase 6 k=30, 2026-04-25)** |
+| v6 | 114 (V3 + 42 outcome-dist, flat shrinkage) | `data/xgb_data_v3/` | `models/xgb_v3_v6_backup/` | Prior baseline (2026-04-23) |
+| v4 (team strength) | 72 | `data/xgb_data_v3/` | (retrain to recover) | Prior baseline (March 2026) |
+| v3 | 46+ | `data/xgb_data_v3/` | (retrain to recover) | With player metadata, no team strength |
 | v2 | 29 | `data/xgb_data/` | `models/xgb/` | Legacy |
+
+> Filename note: `models/xgb_v3/` and `data/xgb_data_v3/` paths are retained across versions; the SQLite cache is `models/player_stats_cache_v3.sqlite`. The actual schema/feature contract is governed by `_meta.schema_version` (currently 4) and `feature_registry.V6_GROUPS`. v7 has the same feature names as v6 but the *computed values* differ (shrinkage composition).
+>
+> **v7 vs v6**: same SQLite schema, same parquet column count (141 incl. metadata + emit-but-ignored phase_p*), same 114-feature feature_columns_v3.txt. v7 adds two-stage shrinkage on the 4 narrow cells (`batter_p*_vs_pace`, `batter_p*_vs_spin`, `bowler_p*_vs_lhb`, `bowler_p*_vs_rhb`) — these now shrink toward the player's overall distribution instead of toward the global prior π. k_player=30 is the Phase 6 sweep optimum. The hierarchical/flat split is controlled by the `hierarchical=True` default kwarg on `_SQLiteBackend.get_{batter_vs_type,bowler_vs_hand}_outcome_dist` and the equivalent tracker getters; pass `hierarchical=False` to recover v6 flat-shrunk values.
+>
+> **v7 backups**: `models/xgb_v3_v6_backup/` (v6), `models/xgb_v3_phase5_k30/` (Phase 5 origin), `models/xgb_v3_phase6_k{10,100,300}/` (k-sweep variants). The active `models/xgb_v3/` carries the Phase 5 model + sidecar `outcome_dist_config_v3.json` declaring k_player=30.0, k_venue=200.0; sim wrappers read this at __init__ time.
+>
+> **Deferred / negative results**: `phase_outcome_dist` (Phase 3) is implemented end-to-end (cache rebuild populates `prior_{pp,mid,death}_p*` in `_meta`; `parsing_v2._classify_phase_pre_ball` + `stats_sqlite_backend.get_phase_outcome_dist` + `sim_v1_2._fill_outcome_dists` all wired) but the corresponding feature group is NOT in V7_GROUPS — Phase 3 ablation showed it regresses LL (collinear with is_powerplay/middle/death indicators). Code stays inert; resurrect via `experiments/configs/xgb_v7_phase_prior.yaml` if you want to re-test.
 
 ---
 
@@ -56,6 +67,16 @@ These features are currently implemented in `scripts/parsing_v2.py` and used in 
 - **`batter_encoded`**: Label encoded Batter ID.
 - **`bowler_encoded`**: Label encoded Bowler ID.
 - **`venue_encoded`**: Label encoded Venue ID.
+
+### Empirical Outcome Distributions (LANDED 2026-04-23, schema v4)
+Direct multi-class target encoding — for each context, emit `P(0,1,2,4,6,W)` shrunk toward the global corpus prior π via Dirichlet-posterior-mean shrinkage `(n_c + k·π_c)/(N + k)`. π is computed during `build_stats_cache.py` and stored in `_meta.prior_p*`. 42 features total.
+- `batter_p{0,1,2,4,6,w}` — overall batter outcome distribution. **k=30**.
+- `bowler_p{0,1,2,4,6,w}` — overall bowler outcome distribution. **k=30**.
+- `batter_p{c}_vs_{pace,spin}` — 12 features, batter's distribution against bowler type. **k=30**.
+- `bowler_p{c}_vs_{lhb,rhb}` — 12 features, bowler's distribution against batter hand. **k=30**.
+- `venue_p{0,1,2,4,6,w}` — venue outcome distribution. **k=200** (more data per venue).
+
+See IMPROVEMENTS.md §"Empirical Outcome Distributions" for the implementation, eval results, and 5 deferred follow-ups (phase prior, k-sweep, encoding ablation, hierarchical shrinkage, per-slice eval).
 
 ---
 

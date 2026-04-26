@@ -57,7 +57,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 SCHEMA_SQL = """
@@ -83,6 +83,12 @@ CREATE TABLE IF NOT EXISTS batting (
     recent_runs INTEGER NOT NULL DEFAULT 0,
     recent_balls INTEGER NOT NULL DEFAULT 0,
     recent_dismissals INTEGER NOT NULL DEFAULT 0,
+    c0 INTEGER NOT NULL DEFAULT 0,
+    c1 INTEGER NOT NULL DEFAULT 0,
+    c2 INTEGER NOT NULL DEFAULT 0,
+    c4 INTEGER NOT NULL DEFAULT 0,
+    c6 INTEGER NOT NULL DEFAULT 0,
+    cw INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (player_id, date_id)
 ) WITHOUT ROWID;
 
@@ -95,6 +101,12 @@ CREATE TABLE IF NOT EXISTS bowling (
     recent_runs_given INTEGER NOT NULL DEFAULT 0,
     recent_balls_bowled INTEGER NOT NULL DEFAULT 0,
     recent_wickets INTEGER NOT NULL DEFAULT 0,
+    c0 INTEGER NOT NULL DEFAULT 0,
+    c1 INTEGER NOT NULL DEFAULT 0,
+    c2 INTEGER NOT NULL DEFAULT 0,
+    c4 INTEGER NOT NULL DEFAULT 0,
+    c6 INTEGER NOT NULL DEFAULT 0,
+    cw INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (player_id, date_id)
 ) WITHOUT ROWID;
 
@@ -117,6 +129,12 @@ CREATE TABLE IF NOT EXISTS batting_vs_type (
     runs INTEGER NOT NULL,
     balls INTEGER NOT NULL,
     dismissals INTEGER NOT NULL,
+    c0 INTEGER NOT NULL DEFAULT 0,
+    c1 INTEGER NOT NULL DEFAULT 0,
+    c2 INTEGER NOT NULL DEFAULT 0,
+    c4 INTEGER NOT NULL DEFAULT 0,
+    c6 INTEGER NOT NULL DEFAULT 0,
+    cw INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (player_id, bowl_type, date_id)
 ) WITHOUT ROWID;
 
@@ -127,6 +145,12 @@ CREATE TABLE IF NOT EXISTS bowling_vs_hand (
     runs_given INTEGER NOT NULL,
     balls_bowled INTEGER NOT NULL,
     wickets INTEGER NOT NULL,
+    c0 INTEGER NOT NULL DEFAULT 0,
+    c1 INTEGER NOT NULL DEFAULT 0,
+    c2 INTEGER NOT NULL DEFAULT 0,
+    c4 INTEGER NOT NULL DEFAULT 0,
+    c6 INTEGER NOT NULL DEFAULT 0,
+    cw INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (player_id, bat_hand, date_id)
 ) WITHOUT ROWID;
 
@@ -147,6 +171,12 @@ CREATE TABLE IF NOT EXISTS venue (
     fi_totals_count INTEGER NOT NULL,
     matches_total INTEGER NOT NULL,
     chase_wins INTEGER NOT NULL,
+    c0 INTEGER NOT NULL DEFAULT 0,
+    c1 INTEGER NOT NULL DEFAULT 0,
+    c2 INTEGER NOT NULL DEFAULT 0,
+    c4 INTEGER NOT NULL DEFAULT 0,
+    c6 INTEGER NOT NULL DEFAULT 0,
+    cw INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (venue_id, date_id)
 ) WITHOUT ROWID;
 
@@ -204,14 +234,16 @@ CREATE TABLE IF NOT EXISTS _meta (
 
 _Q_BATTING = """
 SELECT runs, balls, dismissals,
-       recent_runs, recent_balls, recent_dismissals
+       recent_runs, recent_balls, recent_dismissals,
+       c0, c1, c2, c4, c6, cw
 FROM batting
 WHERE player_id = ? AND date_id <= ?
 ORDER BY date_id DESC LIMIT 1
 """
 _Q_BOWLING = """
 SELECT runs_given, balls_bowled, wickets,
-       recent_runs_given, recent_balls_bowled, recent_wickets
+       recent_runs_given, recent_balls_bowled, recent_wickets,
+       c0, c1, c2, c4, c6, cw
 FROM bowling
 WHERE player_id = ? AND date_id <= ?
 ORDER BY date_id DESC LIMIT 1
@@ -222,12 +254,16 @@ WHERE batter_id = ? AND bowler_id = ? AND date_id <= ?
 ORDER BY date_id DESC LIMIT 1
 """
 _Q_BATTING_VS_TYPE = """
-SELECT runs, balls, dismissals FROM batting_vs_type
+SELECT runs, balls, dismissals,
+       c0, c1, c2, c4, c6, cw
+FROM batting_vs_type
 WHERE player_id = ? AND bowl_type = ? AND date_id <= ?
 ORDER BY date_id DESC LIMIT 1
 """
 _Q_BOWLING_VS_HAND = """
-SELECT runs_given, balls_bowled, wickets FROM bowling_vs_hand
+SELECT runs_given, balls_bowled, wickets,
+       c0, c1, c2, c4, c6, cw
+FROM bowling_vs_hand
 WHERE player_id = ? AND bat_hand = ? AND date_id <= ?
 ORDER BY date_id DESC LIMIT 1
 """
@@ -235,7 +271,8 @@ _Q_VENUE = """
 SELECT total_runs, innings_count, total_balls, total_boundaries,
        total_dots, total_wickets, powerplay_runs, powerplay_balls,
        death_runs, death_balls, fi_totals_sum, fi_totals_count,
-       matches_total, chase_wins
+       matches_total, chase_wins,
+       c0, c1, c2, c4, c6, cw
 FROM venue WHERE venue_id = ? AND date_id <= ?
 ORDER BY date_id DESC LIMIT 1
 """
@@ -295,6 +332,15 @@ class _SQLiteBackend:
         self._player_id_map: Optional[Dict[str, int]] = None
         self._venue_id_map: Optional[Dict[str, int]] = None
         self._date_strs: Optional[list] = None  # sorted; index = date_id
+        # Schema v4: global empirical outcome prior (p0, p1, p2, p4, p6, pw),
+        # loaded from _meta at first connection. Used for empirical-Bayes
+        # shrinkage in get_*_outcome_dist getters.
+        self._prior: Optional[tuple] = None
+        # Phase 3: per-phase priors. Keyed by 'powerplay'/'middle'/'death'.
+        # Loaded lazily from _meta; falls back to the global prior π if the
+        # phase rows are absent (pre-Phase-3 cache). The per-phase getter
+        # is the only consumer; outcome-dist features unchanged.
+        self._phase_priors: Optional[Dict[str, tuple]] = None
 
     # --- pickle: strip PID-bound connection so workers re-open ----------
 
@@ -349,6 +395,37 @@ class _SQLiteBackend:
             row[0]
             for row in conn.execute("SELECT date FROM dates ORDER BY id ASC")
         ]
+        meta = dict(conn.execute("SELECT key, value FROM _meta"))
+        # Fall back to a flat uniform prior if the DB predates v4; keeps
+        # the backend usable in migration windows. Real rebuilds always
+        # write the six prior_p* rows from build_stats_cache.
+        try:
+            self._prior = (
+                float(meta['prior_p0']), float(meta['prior_p1']),
+                float(meta['prior_p2']), float(meta['prior_p4']),
+                float(meta['prior_p6']), float(meta['prior_pw']),
+            )
+        except (KeyError, ValueError, TypeError):
+            self._prior = (1/6,) * 6
+
+        # Phase 3: read 18 phase-prior _meta rows (prior_{pp,mid,death}_p*).
+        # Missing rows → fall back to global π for that phase, so the
+        # backend stays usable on pre-Phase-3 caches.
+        _phase_short = {'powerplay': 'pp', 'middle': 'mid', 'death': 'death'}
+        phase_priors: Dict[str, tuple] = {}
+        for phase, short in _phase_short.items():
+            try:
+                phase_priors[phase] = (
+                    float(meta[f'prior_{short}_p0']),
+                    float(meta[f'prior_{short}_p1']),
+                    float(meta[f'prior_{short}_p2']),
+                    float(meta[f'prior_{short}_p4']),
+                    float(meta[f'prior_{short}_p6']),
+                    float(meta[f'prior_{short}_pw']),
+                )
+            except (KeyError, ValueError, TypeError):
+                phase_priors[phase] = self._prior
+        self._phase_priors = phase_priors
 
     @staticmethod
     def _norm_date(as_of_date) -> str:
@@ -492,7 +569,7 @@ class _SQLiteBackend:
         (total_runs, innings_count, total_balls, total_boundaries,
          total_dots, total_wickets, pp_runs, pp_balls,
          death_runs, death_balls, fi_sum, fi_count,
-         matches_total, chase_wins) = row
+         matches_total, chase_wins) = row[:14]
 
         if total_balls == 0:
             # Legacy/empty venue — fall back to innings avg like
@@ -527,7 +604,7 @@ class _SQLiteBackend:
         def _pair(row):
             if row is None:
                 return 0.0, 0.0
-            runs, balls, dismissals = row
+            runs, balls, dismissals = row[0], row[1], row[2]
             if balls == 0:
                 return 0.0, 0.0
             return runs / max(dismissals, 1), (runs / balls) * 100
@@ -556,7 +633,7 @@ class _SQLiteBackend:
         def _pair(row):
             if row is None:
                 return 0.0, 0.0
-            runs_given, balls_bowled, wickets = row
+            runs_given, balls_bowled, wickets = row[0], row[1], row[2]
             if balls_bowled == 0:
                 return 0.0, 0.0
             return runs_given / max(wickets, 1), (runs_given / balls_bowled) * 6
@@ -639,6 +716,8 @@ class _SQLiteBackend:
             'runs': row[0], 'balls': row[1], 'dismissals': row[2],
             'recent_runs': row[3], 'recent_balls': row[4],
             'recent_dismissals': row[5],
+            'c0': row[6], 'c1': row[7], 'c2': row[8],
+            'c4': row[9], 'c6': row[10], 'cw': row[11],
         }
 
     def _get_raw_bowling(self, player_id, as_of_date) -> Optional[Dict[str, int]]:
@@ -656,6 +735,8 @@ class _SQLiteBackend:
             'runs_given': row[0], 'balls_bowled': row[1], 'wickets': row[2],
             'recent_runs_given': row[3], 'recent_balls_bowled': row[4],
             'recent_wickets': row[5],
+            'c0': row[6], 'c1': row[7], 'c2': row[8],
+            'c4': row[9], 'c6': row[10], 'cw': row[11],
         }
 
     def _get_raw_h2h(self, batter_id, bowler_id, as_of_date) -> Optional[Dict[str, int]]:
@@ -671,6 +752,183 @@ class _SQLiteBackend:
         if row is None:
             return None
         return {'runs': row[0], 'balls': row[1], 'dismissals': row[2]}
+
+    # --- schema v4 outcome-distribution getters -------------------------
+    # Empirical Bayes shrinkage toward the global corpus prior π:
+    #     p̂_c = (n_c + k · π_c) / (N + k),  N = Σ n_c
+    # N → 0  ⇒ p̂ → π   (new player / unseen venue falls back to prior)
+    # N → ∞  ⇒ p̂ → n/N (rich history dominates)
+    # k is the "prior sample size"; larger k = more shrinkage. Per-
+    # hierarchy defaults are on the caller side.
+
+    @staticmethod
+    def _shrink(counts, prior, k: float) -> tuple:
+        """Dirichlet-posterior-mean shrinkage of a 6-count vector toward a
+        6-prob prior. Returns a 6-tuple summing to 1.0 (within fp eps)."""
+        n = counts[0] + counts[1] + counts[2] + counts[3] + counts[4] + counts[5]
+        denom = n + k
+        # denom > 0 always, since k > 0 is required by the caller.
+        return (
+            (counts[0] + k * prior[0]) / denom,
+            (counts[1] + k * prior[1]) / denom,
+            (counts[2] + k * prior[2]) / denom,
+            (counts[3] + k * prior[3]) / denom,
+            (counts[4] + k * prior[4]) / denom,
+            (counts[5] + k * prior[5]) / denom,
+        )
+
+    def _batting_counts(self, player_id, as_of_date) -> tuple:
+        """Return the 6-tuple of outcome counts for a batter at as-of-date
+        (or (0,0,0,0,0,0) if the player has no history). Zero tuple drives
+        full fallback to the prior in _shrink."""
+        conn = self._ensure_conn()
+        pid = self._player_id_map.get(str(player_id))
+        if pid is None:
+            return (0, 0, 0, 0, 0, 0)
+        did = self._resolve_date_id(as_of_date)
+        if did < 0:
+            return (0, 0, 0, 0, 0, 0)
+        row = conn.execute(_Q_BATTING, (pid, did)).fetchone()
+        if row is None:
+            return (0, 0, 0, 0, 0, 0)
+        return (row[6], row[7], row[8], row[9], row[10], row[11])
+
+    def _bowling_counts(self, player_id, as_of_date) -> tuple:
+        conn = self._ensure_conn()
+        pid = self._player_id_map.get(str(player_id))
+        if pid is None:
+            return (0, 0, 0, 0, 0, 0)
+        did = self._resolve_date_id(as_of_date)
+        if did < 0:
+            return (0, 0, 0, 0, 0, 0)
+        row = conn.execute(_Q_BOWLING, (pid, did)).fetchone()
+        if row is None:
+            return (0, 0, 0, 0, 0, 0)
+        return (row[6], row[7], row[8], row[9], row[10], row[11])
+
+    def _batting_vs_type_counts(self, player_id, bowl_type: int, as_of_date) -> tuple:
+        row = self._typed_batting(player_id, bowl_type, as_of_date)
+        if row is None:
+            return (0, 0, 0, 0, 0, 0)
+        # row = (runs, balls, dismissals, c0, c1, c2, c4, c6, cw)
+        return (row[3], row[4], row[5], row[6], row[7], row[8])
+
+    def _bowling_vs_hand_counts(self, player_id, bat_hand: int, as_of_date) -> tuple:
+        row = self._hand_bowling(player_id, bat_hand, as_of_date)
+        if row is None:
+            return (0, 0, 0, 0, 0, 0)
+        return (row[3], row[4], row[5], row[6], row[7], row[8])
+
+    def _venue_counts(self, venue: str, as_of_date) -> tuple:
+        row = self._venue_row(venue, as_of_date)
+        if row is None:
+            return (0, 0, 0, 0, 0, 0)
+        # row indices 14..19 are c0..cw after the venue row widening.
+        return (row[14], row[15], row[16], row[17], row[18], row[19])
+
+    def get_batter_outcome_dist(
+        self, player_id, as_of_date, k: float = 30.0,
+    ) -> Dict[str, float]:
+        p = self._shrink(self._batting_counts(player_id, as_of_date),
+                         self._prior, k)
+        return {
+            'batter_p0': p[0], 'batter_p1': p[1], 'batter_p2': p[2],
+            'batter_p4': p[3], 'batter_p6': p[4], 'batter_pw': p[5],
+        }
+
+    def get_bowler_outcome_dist(
+        self, player_id, as_of_date, k: float = 30.0,
+    ) -> Dict[str, float]:
+        p = self._shrink(self._bowling_counts(player_id, as_of_date),
+                         self._prior, k)
+        return {
+            'bowler_p0': p[0], 'bowler_p1': p[1], 'bowler_p2': p[2],
+            'bowler_p4': p[3], 'bowler_p6': p[4], 'bowler_pw': p[5],
+        }
+
+    def get_batter_vs_type_outcome_dist(
+        self, player_id, as_of_date, k: float = 30.0,
+        hierarchical: bool = True,
+    ) -> Dict[str, float]:
+        """Phase 5: when `hierarchical=True` (default), the vs-pace and
+        vs-spin cells shrink toward the batter's overall distribution
+        (which itself is shrunk toward π) instead of directly toward π.
+        For batters with sparse vs-type data but rich overall data, this
+        falls back to the player's own profile rather than the global
+        prior. `hierarchical=False` reproduces the legacy flat-shrink
+        behavior."""
+        if hierarchical:
+            parent = self._shrink(self._batting_counts(player_id, as_of_date),
+                                  self._prior, k)
+        else:
+            parent = self._prior
+        pp = self._shrink(self._batting_vs_type_counts(player_id, 0, as_of_date),
+                          parent, k)
+        ps = self._shrink(self._batting_vs_type_counts(player_id, 1, as_of_date),
+                          parent, k)
+        return {
+            'batter_p0_vs_pace': pp[0], 'batter_p1_vs_pace': pp[1],
+            'batter_p2_vs_pace': pp[2], 'batter_p4_vs_pace': pp[3],
+            'batter_p6_vs_pace': pp[4], 'batter_pw_vs_pace': pp[5],
+            'batter_p0_vs_spin': ps[0], 'batter_p1_vs_spin': ps[1],
+            'batter_p2_vs_spin': ps[2], 'batter_p4_vs_spin': ps[3],
+            'batter_p6_vs_spin': ps[4], 'batter_pw_vs_spin': ps[5],
+        }
+
+    def get_bowler_vs_hand_outcome_dist(
+        self, player_id, as_of_date, k: float = 30.0,
+        hierarchical: bool = True,
+    ) -> Dict[str, float]:
+        """Phase 5: when `hierarchical=True` (default), the vs-LHB and
+        vs-RHB cells shrink toward the bowler's overall distribution.
+        See `get_batter_vs_type_outcome_dist` for rationale."""
+        if hierarchical:
+            parent = self._shrink(self._bowling_counts(player_id, as_of_date),
+                                  self._prior, k)
+        else:
+            parent = self._prior
+        pl = self._shrink(self._bowling_vs_hand_counts(player_id, 0, as_of_date),
+                          parent, k)
+        pr = self._shrink(self._bowling_vs_hand_counts(player_id, 1, as_of_date),
+                          parent, k)
+        return {
+            'bowler_p0_vs_lhb': pl[0], 'bowler_p1_vs_lhb': pl[1],
+            'bowler_p2_vs_lhb': pl[2], 'bowler_p4_vs_lhb': pl[3],
+            'bowler_p6_vs_lhb': pl[4], 'bowler_pw_vs_lhb': pl[5],
+            'bowler_p0_vs_rhb': pr[0], 'bowler_p1_vs_rhb': pr[1],
+            'bowler_p2_vs_rhb': pr[2], 'bowler_p4_vs_rhb': pr[3],
+            'bowler_p6_vs_rhb': pr[4], 'bowler_pw_vs_rhb': pr[5],
+        }
+
+    def get_venue_outcome_dist(
+        self, venue: str, as_of_date, k: float = 200.0,
+    ) -> Dict[str, float]:
+        p = self._shrink(self._venue_counts(venue, as_of_date),
+                         self._prior, k)
+        return {
+            'venue_p0': p[0], 'venue_p1': p[1], 'venue_p2': p[2],
+            'venue_p4': p[3], 'venue_p6': p[4], 'venue_pw': p[5],
+        }
+
+    def get_phase_outcome_dist(self, balls_bowled: int) -> Dict[str, float]:
+        """Phase 3 phase prior. Returns 6 phase_p{0,1,2,4,6,w} features
+        based on the pre-ball phase (PP / mid / death). No shrinkage —
+        these are global constants over millions of balls. The
+        as_of_date arg is intentionally absent: phase priors are
+        match-date-independent."""
+        if self._phase_priors is None:
+            self._ensure_conn()
+        if balls_bowled < 36:
+            phase = 'powerplay'
+        elif balls_bowled < 96:
+            phase = 'middle'
+        else:
+            phase = 'death'
+        p = self._phase_priors.get(phase, self._prior)
+        return {
+            'phase_p0': p[0], 'phase_p1': p[1], 'phase_p2': p[2],
+            'phase_p4': p[3], 'phase_p6': p[4], 'phase_pw': p[5],
+        }
 
     # --- schema v3 match-log getters ------------------------------------
     # Result ordered newest-first (date_id DESC, intra_date_idx DESC).

@@ -423,6 +423,22 @@ with open('models/xgb_v3/feature_columns_v3.txt', 'w') as f:
     for feat in feature_cols:
         f.write(f"{feat}\n")
 
+# Phase 6: persist outcome_dist k values into a sidecar JSON so the sim
+# wrappers (sim_v1_2.XGBoostModelV2.__init__) can recover them at load
+# time. Without this, a model trained on k=10 features would be
+# evaluated with the default k=30 distributions — silent drift.
+import json as _odjson
+_od_cfg_out = {'k_player': 30.0, 'k_venue': 200.0}
+if args.config_json:
+    _od_yaml = _config.get('outcome_dist', {}) if '_config' in dir() else {}
+    if _od_yaml:
+        _od_cfg_out['k_player'] = float(_od_yaml.get('k_player', 30.0))
+        _od_cfg_out['k_venue']  = float(_od_yaml.get('k_venue', 200.0))
+with open('models/xgb_v3/outcome_dist_config_v3.json', 'w') as _f:
+    _odjson.dump(_od_cfg_out, _f, indent=2)
+print(f"  Saved outcome_dist_config_v3.json (k_player={_od_cfg_out['k_player']}, "
+      f"k_venue={_od_cfg_out['k_venue']})")
+
 print("Training complete!")
 print(f"Model saved as: models/xgb_v3/xgboost_model_v3.pkl")
 print(f"Final validation log loss: {val_logloss:.4f}")

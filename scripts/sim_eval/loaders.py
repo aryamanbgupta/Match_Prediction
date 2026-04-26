@@ -188,27 +188,47 @@ class TestMatchLoader:
     
 class BettingOddsLoader:
     """Loads and processes betting odds data"""
-    
+
     @staticmethod
-    def load_odds(file_path: str) -> Dict[str, Dict]:
-        """Load betting odds from JSON file
-        
+    def load_odds(file_path: str, min_volume: Optional[float] = None) -> Dict[str, Dict]:
+        """Load betting odds from JSON file.
+
+        Args:
+            file_path: Path to the odds JSON.
+            min_volume: If set, drop entries whose `polymarket_volume_usd` is
+                below the threshold. Entries without that field are also
+                dropped when `min_volume` is set (only liquidity-tagged odds
+                files such as betting_odds_polymarket.json carry the field).
+                When `min_volume is None`, no filtering — preserves the
+                non-polymarket odds files (betting_odds_v3.json etc).
+
         Returns:
-            Dict mapping match_id to odds data
+            Dict mapping match_id to odds data.
         """
         try:
             with open(file_path, 'r') as f:
                 data = json.load(f)
-            
-            # Create lookup dictionary
+
             odds_lookup = {}
+            kept = 0
+            dropped = 0
             for match in data.get('matches', []):
+                if min_volume is not None:
+                    vol = match.get('polymarket_volume_usd', 0) or 0
+                    if vol < min_volume:
+                        dropped += 1
+                        continue
                 match_id = match['match_id']
                 odds_lookup[match_id] = match
-            
-            print(f"Loaded odds for {len(odds_lookup)} matches")
+                kept += 1
+
+            if min_volume is not None:
+                print(f"Loaded odds for {kept} matches "
+                      f"(dropped {dropped} below ${min_volume:,.0f} volume)")
+            else:
+                print(f"Loaded odds for {kept} matches")
             return odds_lookup
-            
+
         except Exception as e:
             print(f"Error loading odds file: {e}")
             return {}

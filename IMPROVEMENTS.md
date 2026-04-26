@@ -146,34 +146,140 @@ Tier 1 features implemented in March 2026. 11 new features across 2 groups:
 
 Experiments: `xgb_v5_venue_context_20260322_143913`, `xgb_v5b_venue_pruned_20260322_182632`
 
-### Empirical Outcome Distributions (PLANNED — Next Priority)
-Replace lossy summary stats (avg, SR, econ) with full 6-class outcome distributions as features. This is **multi-class target encoding** — the most direct possible signal for the prediction target.
+### Empirical Outcome Distributions (IMPLEMENTED — schema v4, 2026-04-23)
+Direct multi-class target encoding for player/venue context. **42 new features across 5 hierarchies**, shipped as `xgb_v6_outcome_dist`. Replaces nothing — existing avg/SR/econ kept; feature importance sorts out redundancy in a follow-up ablation.
 
 **Why this is high-impact**:
-- Current summary stats (avg=35, SR=140) compress a player into 2 numbers, destroying the distribution shape. Two batters with identical avg/SR can have completely different outcome profiles (power hitter vs accumulator).
+- Summary stats (avg=35, SR=140) compress a player into 2 numbers, destroying the distribution shape. Two batters with identical avg/SR can have completely different outcome profiles (power hitter vs accumulator).
 - XGBoost **cannot learn** outcome distributions from label-encoded player IDs — trees can only split on "id > N", which groups arbitrary players together. Pre-computed distributions give the model exactly the signal it structurally can't extract.
-- Direct target alignment: the model predicts P(outcome class), and these features provide historical P(outcome class | context). The learning task becomes "blend these priors" instead of "reconstruct distributions from scratch."
-- Current player stats correlate r=0.06-0.11 with ball outcomes (<1.5% variance explained). Direct historical outcome rates (e.g., `batter_dot_pct`) should correlate much more strongly with the corresponding binary outcome.
+- Direct target alignment: the model predicts P(outcome class), and these features provide historical P(outcome class | context). The learning task becomes "blend these priors" instead of "reconstruct distributions from scratch".
+- Current player stats correlate r=0.06–0.11 with ball outcomes (<1.5% variance explained). Direct historical rates (e.g., `batter_p4`) carry stronger per-class signal.
 
-**Proposed feature hierarchy** (each level adds 6 features — one per outcome class):
+**Hierarchy shipped** (6 features per cell, 42 total):
 
-| Level | Features | ~Sample size | Sparsity risk |
-|-------|----------|-------------|---------------|
-| Batter overall | P(0,1,2,4,6,W \| batter) | 100+ balls | Low |
-| Bowler overall | P(0,1,2,4,6,W \| bowler) | 100+ balls | Low |
-| Batter vs pace/spin | P(0,1,2,4,6,W \| batter, type) | 50+ balls | Moderate |
-| Bowler vs LHB/RHB | P(0,1,2,4,6,W \| bowler, hand) | 50+ balls | Moderate |
-| Venue | P(0,1,2,4,6,W \| venue) | 100+ matches | Low |
-| Phase (global) | P(0,1,2,4,6,W \| PP/mid/death) | Millions | None |
+| Level | Features | k (shrinkage) |
+|-------|----------|---------------|
+| Batter overall | `batter_p{0,1,2,4,6,w}` | 30 |
+| Bowler overall | `bowler_p{0,1,2,4,6,w}` | 30 |
+| Batter vs pace/spin | `batter_p{...}_vs_{pace,spin}` (12) | 30 |
+| Bowler vs LHB/RHB | `bowler_p{...}_vs_{lhb,rhb}` (12) | 30 |
+| Venue | `venue_p{0,1,2,4,6,w}` | 200 |
 
-Total: ~36-48 new features. Manageable for XGBoost.
+**Sparsity handling — empirical Bayes shrinkage** (no hard thresholds):
 
-**Implementation notes**:
-- Expand `PlayerStatsTracker` to track `outcome_counts: {0: N, 1: N, 2: N, 4: N, 6: N, W: N}` instead of just `{runs, balls, dismissals}`
-- For sparse cross-cuts (< 30 balls), fall back to the broader distribution or apply shrinkage toward global prior
-- Temporal integrity already handled by stats cache — no target leakage
-- May allow dropping `batter_encoded` / `bowler_encoded` since distributions ARE the player representation
-- Keep existing avg/SR features initially — let feature importance sort out redundancy
+    p̂_c = (n_c + k · π_c) / (N + k),   N = Σ n_c
+
+- N → 0 ⇒ p̂ → π (full fallback to global prior)
+- N → ∞ ⇒ p̂ → n / N (data dominates)
+- N = k ⇒ half-and-half
+
+π is the corpus-wide outcome distribution computed during `build_stats_cache.py`'s walk and stored in SQLite `_meta.prior_p*`. Final π = (0.304, 0.411, 0.076, 0.108, 0.047, 0.054) on 2.19M balls.
+
+**Schema v4 changes**:
+- 6 new INTEGER count columns (`c0, c1, c2, c4, c6, cw`) on `batting`, `bowling`, `batting_vs_type`, `bowling_vs_hand`, `venue` tables. h2h unchanged (sparse 2D cell).
+- `_meta.prior_p{0,1,2,4,6,w}` rows store π.
+- 5 new getters on `_SQLiteBackend` and `PlayerStatsTracker`/`VenueStatsTracker` with shared `_shrink` helpers (one in `parsing_v2.py` for the live-tracker path, one on `_SQLiteBackend` for SQLite reads).
+- DB grew 46.5 MB → 56.8 MB (+10 MB). Build 396s → 440s.
+
+**Validation**:
+- Phase A parity harness: **9519/9519 matches bit-exact** including the 42 new columns (251s).
+- 7/7 unit tests on shrinkage math (`scripts/tests/test_outcome_dist_shrinkage.py`) — empty counts → π exactly, large N → MLE, Σp̂=1, half-weight check, tracker–backend equivalence.
+- Schema-v4 conservation + query-plan + getter sanity (`scripts/tests/test_schema_v4_outcome_dist.py`) on 1000-row samples per table — Σ(c0..cw) ≡ `balls`/`balls_bowled`/`total_balls`, planner still uses index on all 10 query shapes.
+- `_verify_outcome_count_conservation` runs at build time (sample 500 per table).
+
+**Eval results (261 polymarket × 100 sims, exp `xgb_v6_outcome_dist_20260423_182515_7d92bfc`)**:
+
+| Metric | v4 baseline (2026-04-21) | **v6 (outcome_dist)** | Δ |
+|---|---|---|---|
+| avg_log_loss | 0.7518 | **0.7122** | **−5.3%** |
+| avg_brier_score | 0.2728 | **0.2562** | **−6.1%** |
+| flat_roi_pct | +6.51% | −7.1% | −13.6 pp |
+| flat_win_rate_pct | 45.10% | 41.60% | −3.5 pp |
+| frac_kelly_roi_pct | +1.27% | +0.7% | −0.6 pp |
+
+Calibration improved (LL −5.3%, Brier −6.1%); flat-betting regressed. Same calibration-vs-ROI tension already documented in §"Calibration System (IMPLEMENTED & TESTED — March 2026)" — sharper probabilities near 50% compress betting edges. Per-slice (≥$50k / ≥$100k) eval not yet run; pending in follow-ups.
+
+**Files touched**: `scripts/{stats_sqlite_backend,parsing_v2,build_stats_cache,tracker_rehydration,materialize_features,sim_v1_2,feature_registry}.py`, `experiments/configs/xgb_v6_outcome_dist.yaml`, plus 2 new tests. Plan file: `~/.claude/plans/yes-let-s-go-with-cheerful-waffle.md`. Memory note: `project_outcome_dist_v6.md`.
+
+#### v6 follow-ups (LANDED 2026-04-24/25 — six-phase plan)
+
+Plan file: `~/.claude/plans/yes-let-s-go-with-cheerful-waffle.md`. Five of the six phases shipped over two days; Phase 4 (refactor) deferred per user direction.
+
+**Phase 1 — Per-slice eval infrastructure**: shipped. `--min-volume` flag on `run_sim_eval.py` filters polymarket odds by `polymarket_volume_usd`; bootstrap 95% CIs (1000 resamples, percentile method, seed=42) emitted for log loss + flat ROI; output JSON gains `slice` / `min_volume` / `n_matches_evaluated` / `*_ci_low|high`. `compare_slices.py` renders cross-model tables, `reslice_eval_json.py` post-hoc-slices legacy eval JSONs (no recompute), `run_sliced_eval.sh` runs all 3 slices in one shot. 16 unit tests pass. v4 baseline (post-fix) sliced via `reslice_eval_json.py` against `eval_out_postfix/xgboost_20260421_220541.json` — output to `eval_out_phase1_sliced_v4/`.
+
+| Slice | v4 LL | v6 LL | Δ |
+|---|---|---|---|
+| all (261) | 0.7518 [0.696, 0.814] | 0.7122 [0.659, 0.765] | −0.040 |
+| ≥$50k (170) | 0.7838 [0.711, 0.858] | 0.7370 [0.667, 0.807] | −0.047 |
+| ≥$100k (110) | 0.7776 [0.689, 0.869] | 0.7041 [0.624, 0.790] | −0.074 |
+
+v6's calibration win **grows with liquidity** — the outcome-dist features earn their keep on sharp markets. Flat-ROI CIs straddle zero on every model on every slice; no model clears the project's go/no-go bar (LL < market 0.6267 AND ROI CI excludes zero on ≥$50k). Memo: `project_v6_sliced_eval.md`.
+
+**Phase 2 — Drop-encodings ablation → KEEP encodings**. New config `xgb_v6_no_encodings.yaml` excludes `batter_encoded` / `bowler_encoded` (112-feature subset). Training results: top features shifted dramatically (is_powerplay gain 0.225 → 0.017; gain spreads across remaining features). Sliced eval verdict:
+
+| Slice | v6 LL | no_encodings LL | Δ |
+|---|---|---|---|
+| all (261) | 0.7122 | 0.7805 | **+0.068** |
+| ≥$50k (170) | 0.7370 | 0.8059 | **+0.069** |
+| ≥$100k (110) | 0.7041 | 0.8007 | **+0.097** |
+
+Plan threshold was Δ > 0.005 on ≥$50k → result is 14× threshold and consistent across slices. **Encoded IDs are NOT redundant** with the 42 outcome-dist features. Pre-train gain rank (53/54, gain 0.0064) understated their value — XGBoost importance can mask correlated-but-essential features. Memo: `project_phase2_drop_encodings.md`.
+
+**Phase 3 — Phase prior → DROP phase_p\***. End-to-end implementation landed: cache rebuild adds 18 `_meta` rows (`prior_{pp,mid,death}_p*`); per-phase priors land sane (PP dot 42% / death wicket 9.6% — distinct from global π). `parsing_v2._classify_phase_pre_ball` + `_phase_dist_from_priors` + 18 inn_agg keys + per-innings conservation guard + `_SQLiteBackend.get_phase_outcome_dist` + `sim_v1_2._fill_outcome_dists(balls_bowled=)` all wired. 11 unit tests pass. But:
+
+| Slice | v6 LL | v7 (+phase prior) LL | Δ |
+|---|---|---|---|
+| all (261) | 0.7122 | 0.7346 | **+0.022** |
+| ≥$50k (170) | 0.7370 | 0.7599 | **+0.023** |
+| ≥$100k (110) | 0.7041 | 0.7398 | **+0.036** |
+
+**Why it failed**: 6 phase_p* features take only 3 unique values each (one per phase), collinear with the existing `is_powerplay` / `is_middle_overs` / `is_death_overs` binary indicators. Trees can't extract orthogonal information; the new features only add overfit noise. The plan's premise — "add 6 features per ball selected by which phase the ball is in" — missed that those 6 features collapse to 3 values modulo the existing phase indicators. Implementation kept inert in code; resurrect via `experiments/configs/xgb_v7_phase_prior.yaml`. Memo: `project_phase3_phase_prior.md`.
+
+**Phase 4 — `build_ball_features` refactor**: DEFERRED. Pure plumbing (consolidate the 5 `sim_v1_2.py` model wrappers' duplicated feature-build blocks at lines 578/978/1152/1620/2056/2547 into one helper). Plan estimate ~4h; must keep Phase A parity at 9519/9519 bit-exact. Not blocking subsequent phases.
+
+**Phase 5 — Hierarchical shrinkage → SHIP**. Two-stage shrinkage on the 4 narrow cells (`batter_vs_pace`, `batter_vs_spin`, `bowler_vs_lhb`, `bowler_vs_rhb`): instead of `shrink(counts, π, k)`, compute `shrink(counts, parent, k)` where `parent = shrink(counts_overall, π, k)`. For sparse-data players, the narrow cells now fall back to the *player's own overall distribution* instead of toward the global prior π. `hierarchical=True` is the new default on `_SQLiteBackend.get_{batter_vs_type,bowler_vs_hand}_outcome_dist` and the equivalent tracker getters; pass `hierarchical=False` to recover v6 flat-shrunk values. 5 unit tests pass.
+
+| Slice | v6 LL → v7 LL | v6 ROI → v7 ROI |
+|---|---|---|
+| all (261) | 0.7122 → 0.7158 | −7.08% → **+7.96%** |
+| ≥$50k (170) | 0.7370 → 0.7402 | −9.81% → **+6.11%** |
+| ≥$100k (110) | 0.7041 → 0.7311 | −4.80% → −2.86% |
+
+Calibration essentially flat (Δ LL +0.003 / +0.003 / +0.027), but flat ROI swings positive on all and ≥$50k slices. Win rate also jumped 41.6% → 49.4%. ROI CIs still straddle zero so not statistically significant — but the cross-slice consistency is encouraging. Hierarchical shrinkage produces meaningfully different predictions for sparse-data players' vs-type cells, which apparently lands the model on better bet decisions even when aggregate LL barely moves. Memo: `project_phase5_hierarchical_shrink.md`.
+
+**Phase 6 — k_player sweep → k=30 confirmed optimal**. Plumbed `k_player` / `k_venue` end-to-end: YAML `outcome_dist:` block → `materialize_features.materialize(k_player=, k_venue=)` → `parsing_v2.parse_match_data_v2(k_player=, k_venue=)` → `xgboost_v2.py` writes `models/xgb_v3/outcome_dist_config_v3.json` sidecar at train time → `sim_v1_2.XGBoostModelV2.__init__` reads sidecar → `_fill_outcome_dists` threads k to backend getters. `_check_parquet_cache` invalidates parquet on k change.
+
+| k_player | LL | flat ROI |
+|---|---|---|
+| 10 | 0.7719 [0.716, 0.830] | −9.73% [−27.8, +15.8] |
+| **30** | **0.7158 [0.661, 0.776]** | **+7.96% [−10.6, +29.1]** |
+| 100 | 0.7357 [0.672, 0.802] | −2.21% [−19.8, +19.2] |
+| 300 | 0.7562 [0.698, 0.818] | −2.35% [−21.0, +19.9] |
+
+k=10 (less shrinkage) → noisier from sparse-data players, hurts both metrics. k=100/300 (more shrinkage) → distributions collapse toward π, losing per-player signal. **k=30 hits the sweet spot**: enough shrinkage to denoise sparse players, but enough player-specific signal to find +ROI bet decisions. Sliced eval skipped on k=10/100/300 — all-slice was decisive. Memo: `project_phase6_k_sweep.md`.
+
+#### Final v7 = hierarchical shrinkage, k_player=30, k_venue=200
+
+Active config: `experiments/configs/xgb_v6_hierarchical_shrink.yaml` (despite "v6" in the filename, this is the v7 path-of-record). Parquet at `data/xgb_data_v3/`, 114 features, hash `c520a3ba08ae`. Active model `models/xgb_v3/` carries the Phase 5 model + sidecar declaring `k_player=30.0, k_venue=200.0`.
+
+**Backups in case of revert**:
+- `models/xgb_v3_v6_backup/` — v6 flat shrinkage (the `xgb_v6_outcome_dist` baseline)
+- `models/xgb_v3_phase5_k30/` — Phase 5 origin
+- `models/xgb_v3_phase6_k{10,100,300}/` — k-sweep variants
+
+**Open follow-ups from this wave**:
+
+1. **Match-level calibration layer** (TODO.md §"Blockers" P0). v7's ≥$50k LL is 0.7402 vs market's 0.6267. Calibration alone (isotonic + Platt LOOCV on the 255 outcome-matches) is expected to close most of that gap (the 74%→51%, 16%→40% calibration bins are symmetric over-dispersion, mechanically fixable). This blocks any honest "did this feature help?" claim — without calibration, every comparison is contaminated by miscalibration noise.
+
+2. **Per-player phase distributions**. Phase 3's natural successor: `P(outcome | phase, batter_id)` — a per-batter × 3 phases × 6 outcomes = 18-cell tensor, sparse, needs hierarchical shrinkage similar to Phase 5. These would NOT be collinear with `is_powerplay` because they vary across players — exactly the orthogonal signal Phase 3's global priors lacked.
+
+3. **Separate `k_narrow` sweep**. Phase 5/6 held `k_narrow = k_player = 30` throughout. An independent sweep on `k_narrow` could widen the hierarchical ROI win — or reveal that k=30 was just the right point for both knobs. Plumbing in place; needs a 3-way YAML grid.
+
+4. **Phase 4 build_ball_features refactor** (deferred). Worth doing before adding more features — the 5 wrappers are the future-proofing pain point.
+
+5. **Larger eval set / golden holdout**. 261 polymarket matches sits at the edge for ROI signal — bootstrap CIs span ~±20pp. The corpus has matches after `golden_start = 2026-04-17`; building a `betting_odds_golden.json` from genuine pre-match Polymarket snapshots is the cleanest way to add evaluation power without overfitting risk. See TODO.md §"Preserve a true holdout".
+
+6. **Benchmarks helper** (TODO.md §"Benchmark stack"). Wire coinflip / always-favorite / market into the standard eval output so every experiment has the same 4-row context.
 
 ### Tier 2 Features (PLANNED — Future)
 - Batting order position context (batting_position, remaining_batting_quality, top_order_wickets)

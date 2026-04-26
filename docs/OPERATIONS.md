@@ -29,12 +29,12 @@ uv run python scripts/materialize_features.py \
 # Step 2: Model training (~5-10 min with pinned hyperparameters; ~30-60 min with --tune).
 uv run python scripts/xgboost_v2.py
 
-# Step 3: Evaluation (~5-10 min for 45-match betting_test × 1000 sims; 
-# ~4 min for 261-match polymarket_test × 10 sims).
+# Step 3: Evaluation (~5-10 min for 45-match betting_test × 1000 sims;
+# ~40 min for 261-match polymarket_test × 100 sims).
 uv run python scripts/sim_eval/run_sim_eval.py \
-    --test-dir data/betting_test \
-    --odds betting_odds_v3.json \
-    --n-sims 1000
+    --test-dir data/polymarket_test \
+    --odds betting_odds_polymarket.json \
+    --n-sims 100
 ```
 
 > **Phase B note (2026-04-22)**: `scripts/parsing_v2.py` was split into `scripts/build_stats_cache.py` + `scripts/materialize_features.py`. The monolithic orchestrator `process_folder_v2_with_splits` is gone; the helper primitives (tracker classes, `parse_match_data_v2`, `deep_copy_stats`) remain in `parsing_v2.py` and are imported by the new scripts.
@@ -44,6 +44,48 @@ uv run python scripts/sim_eval/run_sim_eval.py \
 > serial; budget ~40 min for 261×100 sims, ~5–10 min for 45×1000. For long
 > runs, launch as a background task and wait for the completion notification
 > rather than polling.
+
+### Sliced eval (Phase 1, 2026-04-24)
+
+Use `--min-volume` to filter polymarket entries by `polymarket_volume_usd`. The plan's go/no-go gate is the **≥$50k slice** (170 matches); ≥$100k (110 matches) is a tighter sharp-market check.
+
+```bash
+# Single slice, with bootstrap 95% CIs on log loss + flat ROI.
+uv run python scripts/sim_eval/run_sim_eval.py \
+    --test-dir data/polymarket_test \
+    --odds betting_odds_polymarket.json \
+    --n-sims 100 --min-volume 50000 \
+    --bootstrap-resamples 1000 \
+    --output-dir eval_out_sliced
+
+# All 3 slices in one shot (all / >=$50k / >=$100k):
+bash scripts/run_sliced_eval.sh
+
+# Cross-model comparison table:
+uv run python scripts/sim_eval/compare_slices.py \
+    --group "v6" eval_out_phase1_sliced/xgboost_*_*.json \
+    --group "v7" eval_out_phase5_hier/*.json
+
+# Post-hoc reslice an existing eval JSON (avoids re-running sims):
+uv run python scripts/sim_eval/reslice_eval_json.py \
+    --in  eval_out_postfix/xgboost_20260421_220541.json \
+    --odds betting_odds_polymarket.json \
+    --out-dir eval_out_phase1_sliced_v4
+```
+
+YAML wiring: set `evaluation.min_volume` and `evaluation.bootstrap_resamples` in the experiment config to make the auto-eval inside `run_experiment.py` produce a single sliced result. To get all three slices, run `run_sliced_eval.sh` after training completes (use `--skip-training` or fresh `--only-eval` invocations).
+
+### Outcome-distribution k overrides (Phase 6, 2026-04-25)
+
+The shrinkage strength on the 42 outcome-dist features is controlled via a top-level `outcome_dist:` block in the experiment YAML:
+
+```yaml
+outcome_dist:
+  k_player: 30.0    # batter / bowler / vs-type / vs-hand cells
+  k_venue:  200.0   # venue cells (more data → larger prior weight)
+```
+
+Defaults (30 / 200) are the Phase 6 sweep optimum and match the Phase 5 hierarchical-shrinkage baseline. The values get baked into the parquet `.feature_hash` payload (so a k change invalidates the parquet cache) and written to `models/xgb_v3/outcome_dist_config_v3.json` at train time. `XGBoostModelV2.__init__` reads the sidecar at sim time, so training and inference always use matching k values.
 
 ### Training Pipeline (LSTM)
 ```bash
@@ -105,8 +147,8 @@ the multi-format `all_json.zip` / Tests / ODIs (out of scope).
 stats cache and training splits:
 
 ```bash
-uv run python scripts/build_stats_cache.py       # ~6 min; rebuilds models/player_stats_cache_v3.sqlite
-uv run python scripts/materialize_features.py    # ~3 min; rebuilds data/xgb_data_v3/
+uv run python scripts/build_stats_cache.py       # ~7 min; rebuilds models/player_stats_cache_v3.sqlite (schema v4, ~57 MB)
+uv run python scripts/materialize_features.py    # ~5 min; rebuilds data/xgb_data_v3/ (105 cols incl. 42 outcome-dist features)
 ```
 
 Or run everything (including training + eval) via:
@@ -183,14 +225,14 @@ those modules. Tracked in [TODO.md](../TODO.md).
 from scripts.sim_v1_2 import *
 from scripts.stats_provider import StatsProvider
 
-# Load model
-stats_provider = StatsProvider('models')
+# Load model (v3 / v6 paths)
+stats_provider = StatsProvider('models')   # auto-uses SQLite v4
 model = XGBoostModelV2(
-    'models/xgb/xgboost_model_v2.pkl',
-    'models/xgb/batter_encoder_v2.pkl',
-    'models/xgb/bowler_encoder_v2.pkl',
-    'models/xgb/feature_columns_v2.txt',
-    stats_provider=stats_provider
+    'models/xgb_v3/xgboost_model_v3.pkl',
+    'models/xgb_v3/batter_encoder_v3.pkl',
+    'models/xgb_v3/bowler_encoder_v3.pkl',
+    'models/xgb_v3/feature_columns_v3.txt',
+    stats_provider=stats_provider,
 )
 engine = SimulationEngine(model, T20Rules())
 
@@ -208,8 +250,8 @@ engine = SimulationEngine(model, T20Rules())
 **Input** (both scripts): `data/t20s_json/*.json` — 9,500+ raw match files.
 
 **Outputs**:
-- `models/player_stats_cache_v3.sqlite` (schema v3, ~46 MB) — from `build_stats_cache.py`.
-- `data/xgb_data_v3/{train,validation,test,golden_test}.parquet` + `.feature_hash` — from `materialize_features.py`.
+- `models/player_stats_cache_v3.sqlite` (schema v4, ~57 MB) — from `build_stats_cache.py`. Filename retained for backwards compatibility; `_meta.schema_version` is the source of truth.
+- `data/xgb_data_v3/{train,validation,test,golden_test}.parquet` + `.feature_hash` — from `materialize_features.py`. Includes 42 empirical-Bayes-shrunk outcome-distribution features under schema v4.
 
 **Commands**:
 ```bash
@@ -226,64 +268,77 @@ uv run python scripts/materialize_features.py \
 # Ships serial; per-date ProcessPoolExecutor parallelism is a follow-up TODO.
 ```
 
-**Performance (full corpus, 2026-04-22)**:
-- `build_stats_cache.py`: **~6 min**, ~4–8 GB RAM, 9,519 matches → 46.5 MB SQLite.
-- `materialize_features.py`: **~3 min**, ~2 GB RAM, 9,519 matches → 2.2M ball records across 4 parquets. **3.5× faster than the old monolith** because the tracker walk is skipped.
+**Performance (full corpus, schema v4, 2026-04-23)**:
+- `build_stats_cache.py`: **~7 min**, ~4–8 GB RAM, 9,519 matches → 56.8 MB SQLite. Includes a one-pass global empirical-outcome-prior computation written to `_meta.prior_p*`.
+- `materialize_features.py`: **~5 min**, ~2 GB RAM, 9,519 matches → 2.2M ball records across 4 parquets, 105 columns (63 + 42 outcome-dist). **~3× faster than the old monolith** because the tracker walk is skipped.
 
 **What it does**:
-1. **`build_stats_cache.py`**: Loads matches chronologically, runs `PlayerStatsTracker` + `PlayerEloTracker` + `VenueStatsTracker`, takes first-write-wins snapshots per date, emits delta-compressed rows to SQLite, and writes one `batting_match_log` / `bowling_match_log` row per (player, match) for schema-v3 recent-form reconstruction.
-2. **`materialize_features.py`**: Groups matches by date, rehydrates trackers from SQLite once per date using the union of same-day players + venues, replays same-day matches in monolith order so within-date drift matches, calls `parse_match_data_v2` per match, and writes per-split parquets. Splits come from the YAML `data.splits` block (falls back to the hardcoded defaults).
+1. **`build_stats_cache.py`**: Loads matches chronologically, runs `PlayerStatsTracker` + `PlayerEloTracker` + `VenueStatsTracker`, takes first-write-wins snapshots per date, emits delta-compressed rows to SQLite, and writes one `batting_match_log` / `bowling_match_log` row per (player, match) for recent-form reconstruction. Schema v4 also writes 6 outcome-count columns (`c0..cw`) per row on `batting`, `bowling`, `batting_vs_type`, `bowling_vs_hand`, `venue`, plus the global prior π in `_meta`. Two integrity checks run before close: `_verify_log_denormalized_consistency` (deque-vs-sum) and `_verify_outcome_count_conservation` (Σ cX ≡ balls).
+2. **`materialize_features.py`**: Groups matches by date, rehydrates trackers from SQLite once per date using the union of same-day players + venues, loads π from `_meta` once at startup, replays same-day matches in monolith order so within-date drift matches, calls `parse_match_data_v2(..., prior=π)` per match, and writes per-split parquets. Splits come from the YAML `data.splits` block (falls back to the hardcoded defaults).
 
-**Parity guarantee**: `scripts/tests/test_phase_a_parity.py` validates that this two-step pipeline produces bit-exact parquet output vs the original monolith across all 9,519 matches, 63/63 columns. Run it after any change to either script.
+**Parity guarantee**: `scripts/tests/test_phase_a_parity.py` validates that this two-step pipeline produces bit-exact parquet output vs the original monolith across all 9,519 matches. The harness now also passes π into both reference and candidate paths so the 42 outcome-distribution columns are checked column-by-column.
 
-**Temporal Splits**:
-- Train: Matches before 2023
-- Validation: Matches 2022-2024
-- Test: Matches 2024
-- Golden test: Matches Oct 2024+
+**Temporal Splits** (`scripts/loaders_common.py:DEFAULT_SPLITS`, override via
+YAML `data.splits`):
+- Train: matches with date < `train_end` (default `2024-12-31`)
+- Validation: `train_end ≤ date < val_end` (default `< 2025-06-30`)
+- Test: `val_end ≤ date < golden_start` (default `< 2026-04-17`)
+- Golden test: `date ≥ golden_start` (default `≥ 2026-04-17`, currently sparse;
+  it's the post-iteration holdout — see [TODO.md](../TODO.md) "Preserve a true
+  holdout").
 
 ---
 
 ### 2. Model Training (`xgboost_v2.py`)
 
-**Purpose**: Train XGBoost classifier with Optuna hyperparameter tuning.
+**Purpose**: Train XGBoost classifier with optional Optuna hyperparameter
+tuning.
 
 **Input**:
-- `data/xgb_data/cricket_data_v2_*.parquet`
+- `data/xgb_data_v3/cricket_data_v3_{train,validation,test,golden_test}.parquet`
 
-**Output**:
-- `models/xgb/xgboost_model_v2.pkl`
-- `models/xgb/xgboost_model_v2_optimized.pkl`
-- `models/xgb/batter_encoder_v2.pkl`
-- `models/xgb/bowler_encoder_v2.pkl`
-- `models/xgb/feature_columns_v2.txt`
-- `models/xgb/optuna_study_v2.pkl`
+**Output** (saved to `models/xgb_v3/`):
+- `xgboost_model_v3.pkl`            — trained model
+- `xgboost_model_v3_optimized.pkl`  — only when `--tune`
+- `batter_encoder_v3.pkl`, `bowler_encoder_v3.pkl`
+- `feature_columns_v3.txt`
+- `optuna_study_v3.pkl`             — only when `--tune`
 
 **Command**:
 ```bash
-python scripts/xgboost_v2.py
+uv run python scripts/xgboost_v2.py                       # pinned hyperparams (~5-10 min)
+uv run python scripts/xgboost_v2.py --tune --n-trials 50  # Optuna tune (~30-60 min)
 ```
 
 **Performance**:
-- Duration: ~30-60 minutes (with Optuna 50 trials)
-- Memory: ~8-16 GB
-- Results: ~55-60% ball-level accuracy
+- Pinned hyperparameters: ~5–10 min, ~4–8 GB.
+- With Optuna 50 trials: ~30–60 min, ~8–16 GB.
+- Ball-level accuracy: ~55–60 % (6-class).
 
 **What It Does**:
-1. Loads parquet files
-2. Encodes player IDs (fit LabelEncoders)
-3. Filters and remaps outcome classes
-4. Calculates balanced class weights
-5. Runs Optuna hyperparameter search (50 trials)
-6. Trains final model with best parameters
-7. Evaluates on test set
-8. Saves all artifacts
+1. Loads the four parquet splits.
+2. Resolves the feature list from `--config-json` (set by
+   `run_experiment.py`) or falls back to `V6_GROUPS` defaults.
+3. Encodes player IDs (fit LabelEncoders on union of all splits).
+4. Remaps outcomes to 6 classes (`{0,1,2,4,6,-1} → {0,1,2,3,4,5}`).
+5. Computes balanced class weights via `compute_class_weight('balanced')`.
+6. Optionally: Optuna TPE sampler over 7 hyperparameters, optimize val log loss.
+7. Trains final model with best params + early stopping (100 rounds).
+8. Evaluates on test split and saves artifacts.
 
 **Model Configuration**:
 - 6-class classifier (dot, 1, 2, 4, 6, wicket)
-- 29 input features
+- **114 input features** under `V6_GROUPS` (V3's 72 + 42 outcome-distribution).
+  Trainers automatically filter to columns present in the parquet
+  (`feature_cols = [c for c in features if c in df.columns]`).
 - Balanced class weights
 - Early stopping (100 rounds)
+
+---
+
+> **Note on legacy `data/xgb_data/` (v2)**: the older 29-feature parquet path
+> is unmaintained. All current experiments use `data/xgb_data_v3/`.
+> See [docs/archive/](archive/) for the v2 history.
 
 ---
 
@@ -422,14 +477,14 @@ from scripts.sim_v1_2 import *
 from scripts.stats_provider import StatsProvider
 from datetime import datetime
 
-# Step 1: Load model components
-stats_provider = StatsProvider('models')
+# Step 1: Load model components (v3 / v6)
+stats_provider = StatsProvider('models')   # auto-uses SQLite v4
 model = XGBoostModelV2(
-    'models/xgb/xgboost_model_v2.pkl',
-    'models/xgb/batter_encoder_v2.pkl',
-    'models/xgb/bowler_encoder_v2.pkl',
-    'models/xgb/feature_columns_v2.txt',
-    stats_provider=stats_provider
+    'models/xgb_v3/xgboost_model_v3.pkl',
+    'models/xgb_v3/batter_encoder_v3.pkl',
+    'models/xgb_v3/bowler_encoder_v3.pkl',
+    'models/xgb_v3/feature_columns_v3.txt',
+    stats_provider=stats_provider,
 )
 engine = SimulationEngine(model, T20Rules())
 
@@ -949,29 +1004,37 @@ print(f"  Actual Winner: {result.actual_winner}")
 ```python
 from scripts.stats_provider import StatsProvider
 
-provider = StatsProvider('models')
+provider = StatsProvider('models')          # SQLite v4 backend
 
-# Cache metadata
-print(f"Cache Info:")
-print(f"  Chunks: {provider.metadata['num_chunks']}")
-print(f"  Dates: {provider.metadata['num_dates']}")
-print(f"  Date range: {provider.dates[0]} to {provider.dates[-1]}")
-print(f"  Batting players: {provider.metadata['num_players_batting']:,}")
-print(f"  Bowling players: {provider.metadata['num_players_bowling']:,}")
+# Backend info
+print(f"Backend: {provider.backend_name}, version: {provider.version}")
+print(f"Date range: {provider.dates[0]} to {provider.dates[-1]}")
+print(f"Snapshots: {len(provider.dates):,}")
+
+# Inspect _meta (schema_version, build_timestamp, prior π, etc.)
+meta = provider._backend.get_meta()
+for k in sorted(meta):
+    print(f"  {k}: {meta[k]}")
 
 # Query specific player
-player_id = "253802"  # Example
+player_id = "253802"  # Rohit Sharma
 date = "2024-06-15"
 
 batting = provider.get_batting_stats(player_id, date)
 bowling = provider.get_bowling_stats(player_id, date)
+recent  = provider.get_batting_recent(player_id, date)
 
 print(f"\nPlayer {player_id} stats as of {date}:")
-print(f"  Batting: Avg={batting['avg']:.1f}, SR={batting['sr']:.1f}")
+print(f"  Career: Avg={batting['avg']:.1f}, SR={batting['sr']:.1f}")
+print(f"  Last 5: Avg={recent['avg']:.1f},  SR={recent['sr']:.1f}")
 print(f"  Bowling: Avg={bowling['avg']:.1f}, Econ={bowling['econ']:.1f}")
 
+# Schema-v4 outcome distributions
+dist = provider.get_batter_outcome_dist(player_id, date)
+print(f"  Outcome dist (shrunk): {dist}")
+
 # H2H matchup
-bowler_id = "290630"  # Example
+bowler_id = "290630"
 h2h = provider.get_h2h_stats(player_id, bowler_id, date)
 print(f"  H2H vs {bowler_id}: Avg={h2h['avg']:.1f}, SR={h2h['sr']:.1f}")
 ```
@@ -1026,7 +1089,7 @@ except Exception as e:
 | XGBoost Training | 30-60 min | 8-16 GB | With Optuna (50 trials) |
 | LSTM Training | 30-60 min | 4-8 GB | Full dataset, 50 epochs |
 | LSTM Training (quick) | ~2 min | 2-4 GB | 5% data, 2 epochs |
-| Stats Cache Load | 1-2 sec | 300-550 MB | Lazy loading (5 chunks max) |
+| Stats Cache Load | <100 ms | <50 MB resident | SQLite mmap, ~3 µs p50 query |
 | Single Match Sim (XGBoost) | 0.01-0.1 sec | ~2 GB | 1000 simulations, parallel |
 | Single Match Sim (LSTM) | ~35 sec | ~2 GB | 100 simulations, sequential |
 | Full Evaluation (45 matches) | 5-10 min | ~2-3 GB | XGBoost, 1000 sims/match |
@@ -1049,7 +1112,7 @@ except Exception as e:
 ```python
 # Check if player exists in training data
 import joblib
-encoder = joblib.load('models/xgb/batter_encoder_v2.pkl')
+encoder = joblib.load('models/xgb_v3/batter_encoder_v3.pkl')
 print(f"Known players: {len(encoder.classes_)}")
 print(f"Sample IDs: {encoder.classes_[:10]}")
 
@@ -1107,19 +1170,17 @@ model = XGBoostModelV2(..., stats_provider=stats_provider)
 
 **Solutions**:
 ```python
-# In xgboost_v2.py, use chunked loading:
+# Quick mitigation: subsample for iteration
 import pandas as pd
-
-# Load in chunks
-chunksize = 500000
-chunks = []
-for chunk in pd.read_parquet('data/xgb_data/cricket_data_v2_train.parquet', chunksize=chunksize):
-    # Process chunk
-    chunks.append(chunk)
-
-# Or reduce data size for testing
-df_train = pd.read_parquet('...').sample(frac=0.1)  # Use 10% of data
+df_train = pd.read_parquet(
+    'data/xgb_data_v3/cricket_data_v3_train.parquet'
+).sample(frac=0.1, random_state=0)
 ```
+
+For chunked loading you'd swap pandas → pyarrow's `iter_batches`. The full
+training parquet is ~1.7 M rows × 105 cols (~600 MB in memory) and fits
+comfortably in 8 GB. If you OOM, the more likely culprit is XGBoost's
+internal DMatrix doubling memory during training rather than parquet load.
 
 ---
 
@@ -1159,4 +1220,5 @@ uv pip install -r requirements.txt
 
 ---
 
-**For detailed implementation information, see [CLAUDE_REFERENCE.md](../CLAUDE_REFERENCE.md).**
+**For architecture, key classes, data formats, and design rationale, see [ARCHITECTURE.md](ARCHITECTURE.md).**
+**For adding a new model type, see [ADDING_NEW_MODELS.md](ADDING_NEW_MODELS.md).**

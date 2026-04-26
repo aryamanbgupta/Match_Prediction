@@ -157,6 +157,11 @@ def rehydrate_stats_tracker(
                 "runs": int(raw["runs"]),
                 "balls": int(raw["balls"]),
                 "dismissals": int(raw["dismissals"]),
+                # Schema v4: seed outcome buckets so same-day mutations
+                # (update_stats) accumulate onto the right base counts.
+                "c0": int(raw["c0"]), "c1": int(raw["c1"]),
+                "c2": int(raw["c2"]), "c4": int(raw["c4"]),
+                "c6": int(raw["c6"]), "cw": int(raw["cw"]),
             }
             # Schema v3: seed the deque with up to 5 individual match
             # aggregates from `batting_match_log`. This reproduces the
@@ -177,6 +182,9 @@ def rehydrate_stats_tracker(
                 "runs_given": int(raw["runs_given"]),
                 "balls_bowled": int(raw["balls_bowled"]),
                 "wickets": int(raw["wickets"]),
+                "c0": int(raw["c0"]), "c1": int(raw["c1"]),
+                "c2": int(raw["c2"]), "c4": int(raw["c4"]),
+                "c6": int(raw["c6"]), "cw": int(raw["cw"]),
             }
             # Schema v3: same treatment for bowling recent-form.
             log = backend.get_bowling_match_log_recent(pid, as_of, limit=5)
@@ -187,43 +195,55 @@ def rehydrate_stats_tracker(
                     "wickets": int(entry["wickets"]),
                 })
 
-        # pace=0, spin=1
+        # pace=0, spin=1. Row is now 9-tuple:
+        #   (runs, balls, dismissals, c0, c1, c2, c4, c6, cw)
         pace = _get_raw_batting_vs_type(backend, pid, 0, as_of)
         spin = _get_raw_batting_vs_type(backend, pid, 1, as_of)
         if pace is not None or spin is not None:
-            entry = {
-                "pace": {"runs": 0, "balls": 0, "dismissals": 0},
-                "spin": {"runs": 0, "balls": 0, "dismissals": 0},
-            }
+            zero = {"runs": 0, "balls": 0, "dismissals": 0,
+                    "c0": 0, "c1": 0, "c2": 0, "c4": 0, "c6": 0, "cw": 0}
+            entry = {"pace": dict(zero), "spin": dict(zero)}
             if pace is not None:
                 entry["pace"] = {
                     "runs": int(pace[0]), "balls": int(pace[1]),
                     "dismissals": int(pace[2]),
+                    "c0": int(pace[3]), "c1": int(pace[4]),
+                    "c2": int(pace[5]), "c4": int(pace[6]),
+                    "c6": int(pace[7]), "cw": int(pace[8]),
                 }
             if spin is not None:
                 entry["spin"] = {
                     "runs": int(spin[0]), "balls": int(spin[1]),
                     "dismissals": int(spin[2]),
+                    "c0": int(spin[3]), "c1": int(spin[4]),
+                    "c2": int(spin[5]), "c4": int(spin[6]),
+                    "c6": int(spin[7]), "cw": int(spin[8]),
                 }
             tracker.batting_vs_type[pid] = entry
 
-        # left=0, right=1
+        # left=0, right=1. Row is now 9-tuple:
+        #   (runs_given, balls_bowled, wickets, c0, c1, c2, c4, c6, cw)
         lhb = _get_raw_bowling_vs_hand(backend, pid, 0, as_of)
         rhb = _get_raw_bowling_vs_hand(backend, pid, 1, as_of)
         if lhb is not None or rhb is not None:
-            entry = {
-                "left":  {"runs_given": 0, "balls_bowled": 0, "wickets": 0},
-                "right": {"runs_given": 0, "balls_bowled": 0, "wickets": 0},
-            }
+            zero = {"runs_given": 0, "balls_bowled": 0, "wickets": 0,
+                    "c0": 0, "c1": 0, "c2": 0, "c4": 0, "c6": 0, "cw": 0}
+            entry = {"left": dict(zero), "right": dict(zero)}
             if lhb is not None:
                 entry["left"] = {
                     "runs_given": int(lhb[0]), "balls_bowled": int(lhb[1]),
                     "wickets": int(lhb[2]),
+                    "c0": int(lhb[3]), "c1": int(lhb[4]),
+                    "c2": int(lhb[5]), "c4": int(lhb[6]),
+                    "c6": int(lhb[7]), "cw": int(lhb[8]),
                 }
             if rhb is not None:
                 entry["right"] = {
                     "runs_given": int(rhb[0]), "balls_bowled": int(rhb[1]),
                     "wickets": int(rhb[2]),
+                    "c0": int(rhb[3]), "c1": int(rhb[4]),
+                    "c2": int(rhb[5]), "c4": int(rhb[6]),
+                    "c6": int(rhb[7]), "cw": int(rhb[8]),
                 }
             tracker.bowling_vs_hand[pid] = entry
 
@@ -291,10 +311,12 @@ def rehydrate_venue_tracker(
         row = _get_raw_venue(backend, venue, as_of)
         if row is None:
             continue
+        # Row columns 0..13 are the v3 payload; 14..19 are c0..cw (v4).
         (total_runs, innings_count, total_balls, total_boundaries,
          total_dots, total_wickets, pp_runs, pp_balls,
          death_runs, death_balls, fi_sum, fi_count,
-         matches_total, chase_wins) = row
+         matches_total, chase_wins) = row[:14]
+        c0, c1, c2, c4, c6, cw = row[14:20]
 
         tracker.venue_stats[venue] = {
             "total_runs": int(total_runs),
@@ -311,6 +333,8 @@ def rehydrate_venue_tracker(
                 int(fi_sum), int(fi_count)),
             "matches_total": int(matches_total),
             "chase_wins": int(chase_wins),
+            "c0": int(c0), "c1": int(c1), "c2": int(c2),
+            "c4": int(c4), "c6": int(c6), "cw": int(cw),
         }
     return tracker
 

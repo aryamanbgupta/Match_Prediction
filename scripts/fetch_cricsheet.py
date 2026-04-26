@@ -417,8 +417,9 @@ def main() -> None:
     if updated or total_new:
         log.info("")
         log.info("NEXT STEP (manual):")
-        log.info("  uv run python scripts/parsing_v2.py")
-        log.info("  (regenerates data/xgb_data_v3/ and models/cache_chunks_v3/ — destructive, 10-15 min)")
+        log.info("  uv run python scripts/build_stats_cache.py    # JSON → SQLite (~7 min)")
+        log.info("  uv run python scripts/materialize_features.py # SQLite + JSON → parquet (~5 min)")
+        log.info("  (or `run_experiment.py <config.yaml>` to chain cache → parquet → train → eval)")
 
     if failed:
         sys.exit(1)

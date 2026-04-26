@@ -103,6 +103,49 @@ FEATURE_GROUPS: Dict[str, List[str]] = {
         'is_international',
         'competition_tier',
     ],
+
+    # Schema v4: empirical-Bayes-shrunk outcome distributions.
+    # Each bucket emits P(0,1,2,4,6,W) shrunk toward the global corpus
+    # prior π via Dirichlet-posterior-mean shrinkage:
+    #     p̂_c = (n_c + k · π_c) / (N + k)
+    # k=30 for per-player cells, k=200 for venue. See
+    # IMPROVEMENTS.md §"Empirical Outcome Distributions".
+    'batter_outcome_dist': [
+        'batter_p0', 'batter_p1', 'batter_p2',
+        'batter_p4', 'batter_p6', 'batter_pw',
+    ],
+    'bowler_outcome_dist': [
+        'bowler_p0', 'bowler_p1', 'bowler_p2',
+        'bowler_p4', 'bowler_p6', 'bowler_pw',
+    ],
+    'batter_vs_type_dist': [
+        'batter_p0_vs_pace', 'batter_p1_vs_pace', 'batter_p2_vs_pace',
+        'batter_p4_vs_pace', 'batter_p6_vs_pace', 'batter_pw_vs_pace',
+        'batter_p0_vs_spin', 'batter_p1_vs_spin', 'batter_p2_vs_spin',
+        'batter_p4_vs_spin', 'batter_p6_vs_spin', 'batter_pw_vs_spin',
+    ],
+    'bowler_vs_hand_dist': [
+        'bowler_p0_vs_lhb', 'bowler_p1_vs_lhb', 'bowler_p2_vs_lhb',
+        'bowler_p4_vs_lhb', 'bowler_p6_vs_lhb', 'bowler_pw_vs_lhb',
+        'bowler_p0_vs_rhb', 'bowler_p1_vs_rhb', 'bowler_p2_vs_rhb',
+        'bowler_p4_vs_rhb', 'bowler_p6_vs_rhb', 'bowler_pw_vs_rhb',
+    ],
+    'venue_outcome_dist': [
+        'venue_p0', 'venue_p1', 'venue_p2',
+        'venue_p4', 'venue_p6', 'venue_pw',
+    ],
+
+    # Phase 3 of outcome-dist follow-ups: phase prior. Per ball, emit 6
+    # features sourced from the phase prior matching the ball's phase
+    # (powerplay / middle / death). The phase boundaries match
+    # parsing_v2.calculate_basic_features (PP: balls<36, mid: 36..<96,
+    # death: balls>=96). Phase priors are global constants over millions
+    # of balls — no per-cell shrinkage needed; loaded from _meta at
+    # runtime by stats_sqlite_backend.
+    'phase_outcome_dist': [
+        'phase_p0', 'phase_p1', 'phase_p2',
+        'phase_p4', 'phase_p6', 'phase_pw',
+    ],
 }
 
 
@@ -177,3 +220,19 @@ V2_GROUPS = ['basic', 'player_stats', 'h2h', 'momentum', 'pressure', 'chase', 'm
 
 # Convenience: v5 groups (all groups including venue_profile + match_context)
 V5_GROUPS = list(FEATURE_GROUPS.keys())
+
+# Convenience: v6 groups — V3 baseline + 5 new empirical-outcome-distribution
+# groups (42 new features). Does NOT include venue_profile / match_context
+# (IMPROVEMENTS.md §"Venue Profile + Match Context Features" — those hurt
+# all metrics; kept disabled since the March 2026 experiments).
+V6_GROUPS = V3_GROUPS + [
+    'batter_outcome_dist',
+    'bowler_outcome_dist',
+    'batter_vs_type_dist',
+    'bowler_vs_hand_dist',
+    'venue_outcome_dist',
+]
+
+# Convenience: v7 groups — V6 + Phase 3 phase prior (6 features dispatched
+# by ball-phase). Strictly additive over V6.
+V7_GROUPS = V6_GROUPS + ['phase_outcome_dist']

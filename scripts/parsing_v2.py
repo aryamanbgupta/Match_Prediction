@@ -151,6 +151,98 @@ class PlayerEloTracker:
         return sum(self.get_bowling_elo(pid) for pid in player_ids)
 
 
+_OUTCOME_COUNT_KEYS = ('c0', 'c1', 'c2', 'c4', 'c6', 'cw')
+
+# Zero-valued fallbacks for outcome distribution features. Used when
+# parse_match_data_v2 is invoked without a prior (legacy pre-v4 path).
+# Names MUST match the feature_registry dist-group columns exactly — the
+# parquet schema is built from these keys.
+_ZERO_BATTER_DIST = {f'batter_p{c}': 0.0 for c in ('0', '1', '2', '4', '6', 'w')}
+_ZERO_BOWLER_DIST = {f'bowler_p{c}': 0.0 for c in ('0', '1', '2', '4', '6', 'w')}
+_ZERO_BATTER_VS_TYPE_DIST = {
+    **{f'batter_p{c}_vs_pace': 0.0 for c in ('0', '1', '2', '4', '6', 'w')},
+    **{f'batter_p{c}_vs_spin': 0.0 for c in ('0', '1', '2', '4', '6', 'w')},
+}
+_ZERO_BOWLER_VS_HAND_DIST = {
+    **{f'bowler_p{c}_vs_lhb': 0.0 for c in ('0', '1', '2', '4', '6', 'w')},
+    **{f'bowler_p{c}_vs_rhb': 0.0 for c in ('0', '1', '2', '4', '6', 'w')},
+}
+_ZERO_VENUE_DIST = {f'venue_p{c}': 0.0 for c in ('0', '1', '2', '4', '6', 'w')}
+# Phase 3: phase prior — 6 features per ball, dispatched by phase.
+# `phase_priors` is a dict {'powerplay'|'middle'|'death': (p0,p1,p2,p4,p6,pw)}.
+# When absent, all 6 phase features fall back to zero.
+_ZERO_PHASE_DIST = {f'phase_p{c}': 0.0 for c in ('0', '1', '2', '4', '6', 'w')}
+_PHASE_OUTCOME_KEYS = ('c0', 'c1', 'c2', 'c4', 'c6', 'cw')
+
+
+def _classify_phase_pre_ball(balls_bowled: int) -> str:
+    """Return 'powerplay' / 'middle' / 'death' for the phase the *next*
+    ball is in, given pre-ball legal-ball count. Boundaries match
+    calculate_basic_features (`is_powerplay = balls_bowled < 36`,
+    `is_middle_overs = 36 <= balls_bowled < 96`,
+    `is_death_overs = balls_bowled >= 96`). Used by both the live-emit
+    path (parse_match_data_v2 ball loop) and the SQLite hot path in
+    sim_v1_2._fill_outcome_dists, so the model sees the same phase tag
+    at training and inference time."""
+    if balls_bowled < 36:
+        return 'powerplay'
+    if balls_bowled < 96:
+        return 'middle'
+    return 'death'
+
+
+def _phase_dist_from_priors(phase_priors, balls_bowled):
+    """Look up the 6-tuple for this ball's phase and return a
+    feature-named dict. Defensive: returns zeros if priors are missing
+    or malformed."""
+    if not phase_priors:
+        return _ZERO_PHASE_DIST
+    phase = _classify_phase_pre_ball(int(balls_bowled))
+    p = phase_priors.get(phase)
+    if p is None or len(p) != 6:
+        return _ZERO_PHASE_DIST
+    return {
+        'phase_p0': p[0], 'phase_p1': p[1], 'phase_p2': p[2],
+        'phase_p4': p[3], 'phase_p6': p[4], 'phase_pw': p[5],
+    }
+
+
+def _outcome_bucket_key(runs, is_wicket):
+    """Collapse a delivery to its normalized-outcome count-bucket key.
+
+    Aligns with `normalize_ball_outcome` (3→2, 5→4, 7+→6) and the XGBoost
+    training target, so Σ cX always equals total balls in the same tracker
+    dict.
+    """
+    if is_wicket:
+        return 'cw'
+    oc = normalize_ball_outcome(runs, False)
+    # oc ∈ {0, 1, 2, 4, 6} after normalization.
+    return f'c{oc}'
+
+
+def _shrink_counts(counts, prior, k):
+    """Dirichlet-posterior-mean shrinkage — mirrors
+    stats_sqlite_backend._SQLiteBackend._shrink. Kept here so the live-
+    tracker path (materializer, parity harness) doesn't depend on the
+    backend module."""
+    n = sum(counts)
+    denom = n + k
+    return tuple(
+        (counts[i] + k * prior[i]) / denom for i in range(6)
+    )
+
+
+def _empty_batting_counts():
+    return {'runs': 0, 'balls': 0, 'dismissals': 0,
+            'c0': 0, 'c1': 0, 'c2': 0, 'c4': 0, 'c6': 0, 'cw': 0}
+
+
+def _empty_bowling_counts():
+    return {'runs_given': 0, 'balls_bowled': 0, 'wickets': 0,
+            'c0': 0, 'c1': 0, 'c2': 0, 'c4': 0, 'c6': 0, 'cw': 0}
+
+
 class PlayerStatsTracker:
     """
     DESIGN DECISION: Separate class for player stats to maintain state across matches.
@@ -158,22 +250,25 @@ class PlayerStatsTracker:
     This makes it easy to add new stats without cluttering the main parsing code.
     """
     def __init__(self):
-        # Career stats - accumulate over time
-        self.batting_stats = defaultdict(lambda: {'runs': 0, 'balls': 0, 'dismissals': 0})
-        self.bowling_stats = defaultdict(lambda: {'runs_given': 0, 'balls_bowled': 0, 'wickets': 0})
+        # Career stats - accumulate over time. Schema v4: each row also
+        # carries c0/c1/c2/c4/c6/cw outcome counts so the model can read
+        # empirical P(0,1,2,4,6,W | context) directly (no reconstruction
+        # from avg/SR scalars).
+        self.batting_stats = defaultdict(_empty_batting_counts)
+        self.bowling_stats = defaultdict(_empty_bowling_counts)
 
         # NEW: Type-based batting stats (batter_id -> {pace/spin -> stats})
         # Tracks batter performance against pace vs spin bowlers
         self.batting_vs_type = defaultdict(lambda: {
-            'pace': {'runs': 0, 'balls': 0, 'dismissals': 0},
-            'spin': {'runs': 0, 'balls': 0, 'dismissals': 0},
+            'pace': _empty_batting_counts(),
+            'spin': _empty_batting_counts(),
         })
 
         # NEW: Type-based bowling stats (bowler_id -> {lhb/rhb -> stats})
         # Tracks bowler performance against left vs right hand batters
         self.bowling_vs_hand = defaultdict(lambda: {
-            'left': {'runs_given': 0, 'balls_bowled': 0, 'wickets': 0},
-            'right': {'runs_given': 0, 'balls_bowled': 0, 'wickets': 0},
+            'left': _empty_bowling_counts(),
+            'right': _empty_bowling_counts(),
         })
 
         # Head-to-head records
@@ -337,19 +432,25 @@ class PlayerStatsTracker:
             batter_hand: 'left', 'right', or None (for type-based bowling stats)
             is_pace: True/False/None (for type-based batting stats)
         """
+        ck = _outcome_bucket_key(runs, is_wicket)
+
         # Update batting stats
-        self.batting_stats[batter_id]['runs'] += runs
-        self.batting_stats[batter_id]['balls'] += 1
+        bs = self.batting_stats[batter_id]
+        bs['runs'] += runs
+        bs['balls'] += 1
         if is_wicket:
-            self.batting_stats[batter_id]['dismissals'] += 1
+            bs['dismissals'] += 1
+        bs[ck] += 1
 
         # Update bowling stats
-        self.bowling_stats[bowler_id]['runs_given'] += runs
-        self.bowling_stats[bowler_id]['balls_bowled'] += 1
+        bw = self.bowling_stats[bowler_id]
+        bw['runs_given'] += runs
+        bw['balls_bowled'] += 1
         if is_wicket:
-            self.bowling_stats[bowler_id]['wickets'] += 1
+            bw['wickets'] += 1
+        bw[ck] += 1
 
-        # Update h2h
+        # Update h2h (no outcome counts — sparse 2D cell, stays scalar-only)
         self.h2h_stats[(batter_id, bowler_id)]['runs'] += runs
         self.h2h_stats[(batter_id, bowler_id)]['balls'] += 1
         if is_wicket:
@@ -358,17 +459,21 @@ class PlayerStatsTracker:
         # NEW: Update type-based batting stats (batter vs pace/spin)
         if is_pace is not None:
             type_key = 'pace' if is_pace else 'spin'
-            self.batting_vs_type[batter_id][type_key]['runs'] += runs
-            self.batting_vs_type[batter_id][type_key]['balls'] += 1
+            bvt = self.batting_vs_type[batter_id][type_key]
+            bvt['runs'] += runs
+            bvt['balls'] += 1
             if is_wicket:
-                self.batting_vs_type[batter_id][type_key]['dismissals'] += 1
+                bvt['dismissals'] += 1
+            bvt[ck] += 1
 
         # NEW: Update hand-based bowling stats (bowler vs LHB/RHB)
         if batter_hand in ('left', 'right'):
-            self.bowling_vs_hand[bowler_id][batter_hand]['runs_given'] += runs
-            self.bowling_vs_hand[bowler_id][batter_hand]['balls_bowled'] += 1
+            bvh = self.bowling_vs_hand[bowler_id][batter_hand]
+            bvh['runs_given'] += runs
+            bvh['balls_bowled'] += 1
             if is_wicket:
-                self.bowling_vs_hand[bowler_id][batter_hand]['wickets'] += 1
+                bvh['wickets'] += 1
+            bvh[ck] += 1
 
         # Update current match stats
         self.current_match_batting[batter_id]['runs'] += runs
@@ -380,6 +485,82 @@ class PlayerStatsTracker:
         self.current_match_bowling[bowler_id]['balls_bowled'] += 1
         if is_wicket:
             self.current_match_bowling[bowler_id]['wickets'] += 1
+
+    # --- Schema v4: empirical outcome distribution getters ------------------
+
+    def _batting_counts_vec(self, batter_id):
+        s = self.batting_stats[batter_id]
+        return (s['c0'], s['c1'], s['c2'], s['c4'], s['c6'], s['cw'])
+
+    def _bowling_counts_vec(self, bowler_id):
+        s = self.bowling_stats[bowler_id]
+        return (s['c0'], s['c1'], s['c2'], s['c4'], s['c6'], s['cw'])
+
+    def get_batter_outcome_dist(self, batter_id, prior, k=30.0):
+        p = _shrink_counts(self._batting_counts_vec(batter_id), prior, k)
+        return {
+            'batter_p0': p[0], 'batter_p1': p[1], 'batter_p2': p[2],
+            'batter_p4': p[3], 'batter_p6': p[4], 'batter_pw': p[5],
+        }
+
+    def get_bowler_outcome_dist(self, bowler_id, prior, k=30.0):
+        p = _shrink_counts(self._bowling_counts_vec(bowler_id), prior, k)
+        return {
+            'bowler_p0': p[0], 'bowler_p1': p[1], 'bowler_p2': p[2],
+            'bowler_p4': p[3], 'bowler_p6': p[4], 'bowler_pw': p[5],
+        }
+
+    def get_batter_vs_type_outcome_dist(self, batter_id, prior, k=30.0,
+                                        hierarchical=True):
+        """Phase 5 hierarchical shrinkage: vs-pace and vs-spin cells
+        shrink toward the batter's overall distribution (already shrunk
+        toward π) instead of directly toward π. Mirrors
+        `_SQLiteBackend.get_batter_vs_type_outcome_dist`. Set
+        `hierarchical=False` for the legacy flat-shrink behavior."""
+        def _vec(stats):
+            return (stats['c0'], stats['c1'], stats['c2'],
+                    stats['c4'], stats['c6'], stats['cw'])
+        if hierarchical:
+            parent = _shrink_counts(self._batting_counts_vec(batter_id),
+                                    prior, k)
+        else:
+            parent = prior
+        entry = self.batting_vs_type[batter_id]
+        pp = _shrink_counts(_vec(entry['pace']), parent, k)
+        ps = _shrink_counts(_vec(entry['spin']), parent, k)
+        return {
+            'batter_p0_vs_pace': pp[0], 'batter_p1_vs_pace': pp[1],
+            'batter_p2_vs_pace': pp[2], 'batter_p4_vs_pace': pp[3],
+            'batter_p6_vs_pace': pp[4], 'batter_pw_vs_pace': pp[5],
+            'batter_p0_vs_spin': ps[0], 'batter_p1_vs_spin': ps[1],
+            'batter_p2_vs_spin': ps[2], 'batter_p4_vs_spin': ps[3],
+            'batter_p6_vs_spin': ps[4], 'batter_pw_vs_spin': ps[5],
+        }
+
+    def get_bowler_vs_hand_outcome_dist(self, bowler_id, prior, k=30.0,
+                                        hierarchical=True):
+        """Phase 5 hierarchical shrinkage: vs-LHB and vs-RHB cells shrink
+        toward the bowler's overall distribution. Mirrors
+        `_SQLiteBackend.get_bowler_vs_hand_outcome_dist`."""
+        def _vec(stats):
+            return (stats['c0'], stats['c1'], stats['c2'],
+                    stats['c4'], stats['c6'], stats['cw'])
+        if hierarchical:
+            parent = _shrink_counts(self._bowling_counts_vec(bowler_id),
+                                    prior, k)
+        else:
+            parent = prior
+        entry = self.bowling_vs_hand[bowler_id]
+        pl = _shrink_counts(_vec(entry['left']), parent, k)
+        pr = _shrink_counts(_vec(entry['right']), parent, k)
+        return {
+            'bowler_p0_vs_lhb': pl[0], 'bowler_p1_vs_lhb': pl[1],
+            'bowler_p2_vs_lhb': pl[2], 'bowler_p4_vs_lhb': pl[3],
+            'bowler_p6_vs_lhb': pl[4], 'bowler_pw_vs_lhb': pl[5],
+            'bowler_p0_vs_rhb': pr[0], 'bowler_p1_vs_rhb': pr[1],
+            'bowler_p2_vs_rhb': pr[2], 'bowler_p4_vs_rhb': pr[3],
+            'bowler_p6_vs_rhb': pr[4], 'bowler_pw_vs_rhb': pr[5],
+        }
 
 
 class VenueStatsTracker:
@@ -403,6 +584,8 @@ class VenueStatsTracker:
             'first_innings_totals': [],
             'matches_total': 0,
             'chase_wins': 0,
+            # Schema v4: 6-class outcome count bucket.
+            'c0': 0, 'c1': 0, 'c2': 0, 'c4': 0, 'c6': 0, 'cw': 0,
         })
 
     def get_venue_avg_score(self, venue: str) -> float:
@@ -457,7 +640,8 @@ class VenueStatsTracker:
         Args:
             innings_data: dict with keys: total_runs, total_balls, boundaries, dots,
                           wickets, powerplay_runs, powerplay_balls, death_runs, death_balls,
-                          is_first_innings, is_chase_win (bool or None)
+                          is_first_innings, is_chase_win (bool or None),
+                          c0, c1, c2, c4, c6, cw  (schema v4 — optional; default to 0)
         """
         stats = self.venue_stats[venue]
         stats['total_runs'] += innings_data['total_runs']
@@ -470,6 +654,8 @@ class VenueStatsTracker:
         stats['powerplay_balls'] += innings_data['powerplay_balls']
         stats['death_runs'] += innings_data['death_runs']
         stats['death_balls'] += innings_data['death_balls']
+        for ck in _OUTCOME_COUNT_KEYS:
+            stats[ck] += innings_data.get(ck, 0)
 
         if innings_data['is_first_innings']:
             stats['first_innings_totals'].append(innings_data['total_runs'])
@@ -490,6 +676,16 @@ class VenueStatsTracker:
             result[venue] = s
         return result
 
+    def get_venue_outcome_dist(self, venue: str, prior, k=200.0):
+        """Return empirical-Bayes-shrunk P(0,1,2,4,6,W | venue)."""
+        s = self.venue_stats[venue]
+        counts = (s['c0'], s['c1'], s['c2'], s['c4'], s['c6'], s['cw'])
+        p = _shrink_counts(counts, prior, k)
+        return {
+            'venue_p0': p[0], 'venue_p1': p[1], 'venue_p2': p[2],
+            'venue_p4': p[3], 'venue_p6': p[4], 'venue_pw': p[5],
+        }
+
 
 def deep_copy_stats(tracker, venue_tracker=None, elo_tracker=None):
     """
@@ -502,7 +698,18 @@ def deep_copy_stats(tracker, venue_tracker=None, elo_tracker=None):
     # Pre-sum last-5-match recent totals once per player so consumers
     # (SQLite cache, StatsProvider) don't need to carry the raw deques.
     def _batting_row(pid, stats):
-        row = dict(stats)
+        row = dict(stats)  # Copies c0..cw keys too (schema v4).
+        # Conservation guard: Σ outcome-bucket == balls. An off-by-one
+        # in update_stats or a schema migration that missed a bucket
+        # would silently poison every distribution feature downstream.
+        cs = sum(row[k] for k in _OUTCOME_COUNT_KEYS)
+        if cs != row['balls']:
+            raise AssertionError(
+                f"batting outcome-count drift: player={pid} "
+                f"balls={row['balls']} sum_c={cs} counts="
+                f"{{c0:{row['c0']},c1:{row['c1']},c2:{row['c2']},"
+                f"c4:{row['c4']},c6:{row['c6']},cw:{row['cw']}}}"
+            )
         dq = tracker.recent_batting.get(pid)
         if dq:
             row['recent_runs'] = sum(m['runs'] for m in dq)
@@ -516,6 +723,12 @@ def deep_copy_stats(tracker, venue_tracker=None, elo_tracker=None):
 
     def _bowling_row(pid, stats):
         row = dict(stats)
+        cs = sum(row[k] for k in _OUTCOME_COUNT_KEYS)
+        if cs != row['balls_bowled']:
+            raise AssertionError(
+                f"bowling outcome-count drift: player={pid} "
+                f"balls_bowled={row['balls_bowled']} sum_c={cs}"
+            )
         dq = tracker.recent_bowling.get(pid)
         if dq:
             row['recent_runs_given'] = sum(m['runs_given'] for m in dq)
@@ -769,7 +982,10 @@ def calculate_pressure_features(state, innings_calc):
     return features
 
 
-def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None, player_metadata=None, elo_tracker=None, match_k_factor=None):
+def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None,
+                        player_metadata=None, elo_tracker=None, match_k_factor=None,
+                        prior=None, phase_priors=None,
+                        k_player=30.0, k_venue=200.0):
     """
     DESIGN DECISION: Pass tracker as parameter rather than global.
     REASONING: Makes dependencies explicit, easier to test, allows multiple trackers
@@ -780,6 +996,14 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None, pla
         player_stats_tracker: PlayerStatsTracker for player statistics
         venue_tracker: Optional VenueStatsTracker for venue statistics
         player_metadata: Optional PlayerMetadataProvider for player attributes
+        prior: Optional 6-tuple (p0,p1,p2,p4,p6,pw) — global empirical prior
+               for outcome-distribution features (schema v4). If None, all
+               42 dist features are emitted as 0.0 (legacy pre-v4 behavior).
+        phase_priors: Optional dict
+               {'powerplay'|'middle'|'death': (p0,p1,p2,p4,p6,pw)}. When
+               provided, 6 phase_p{0,1,2,4,6,w} features are emitted per
+               ball, dispatched by pre-ball phase. Phase 3 of the
+               outcome-dist follow-up plan; loaded from SQLite _meta.
 
     Returns:
         Tuple of (all_balls list, innings_totals list for venue update)
@@ -816,6 +1040,14 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None, pla
     if venue_tracker is not None:
         venue_avg_score = venue_tracker.get_venue_avg_score(match_info['venue'])
         venue_profile = venue_tracker.get_venue_profile(match_info['venue'])
+
+    # Schema v4: venue outcome distribution (constant across the match).
+    if prior is not None and venue_tracker is not None:
+        venue_dist = venue_tracker.get_venue_outcome_dist(
+            match_info['venue'], prior, k=k_venue
+        )
+    else:
+        venue_dist = _ZERO_VENUE_DIST
 
     # Match context features (constant for all balls in this match)
     event_info = data['info'].get('event', {})
@@ -883,6 +1115,18 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None, pla
             'total_balls': 0, 'total_runs': 0,
             'powerplay_runs': 0, 'powerplay_balls': 0,
             'death_runs': 0, 'death_balls': 0,
+            # Schema v4: 6-class outcome counts for venue aggregation.
+            'c0': 0, 'c1': 0, 'c2': 0, 'c4': 0, 'c6': 0, 'cw': 0,
+            # Phase 3: phase-split outcome counts for per-phase prior
+            # accumulation. Boundaries: pre-ball balls_bowled < 36 → PP,
+            # 36..<96 → middle, ≥96 → death (matches
+            # calculate_basic_features). Σ over all phases ≡ Σ cX.
+            'c0_powerplay': 0, 'c1_powerplay': 0, 'c2_powerplay': 0,
+            'c4_powerplay': 0, 'c6_powerplay': 0, 'cw_powerplay': 0,
+            'c0_middle': 0, 'c1_middle': 0, 'c2_middle': 0,
+            'c4_middle': 0, 'c6_middle': 0, 'cw_middle': 0,
+            'c0_death': 0, 'c1_death': 0, 'c2_death': 0,
+            'c4_death': 0, 'c6_death': 0, 'cw_death': 0,
         }
 
         # NEW: Calculate target for 2nd innings
@@ -922,6 +1166,26 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None, pla
                 # NEW: Get type-based stats (BEFORE this ball)
                 batting_vs_type_features = player_stats_tracker.get_batting_vs_type_features(state['batter_id'])
                 bowling_vs_hand_features = player_stats_tracker.get_bowling_vs_hand_features(state['bowler_id'])
+
+                # Schema v4: empirical outcome distributions, pre-ball state.
+                if prior is not None:
+                    batter_dist = player_stats_tracker.get_batter_outcome_dist(
+                        state['batter_id'], prior, k=k_player)
+                    bowler_dist = player_stats_tracker.get_bowler_outcome_dist(
+                        state['bowler_id'], prior, k=k_player)
+                    batter_vs_type_dist = player_stats_tracker.get_batter_vs_type_outcome_dist(
+                        state['batter_id'], prior, k=k_player)
+                    bowler_vs_hand_dist = player_stats_tracker.get_bowler_vs_hand_outcome_dist(
+                        state['bowler_id'], prior, k=k_player)
+                else:
+                    batter_dist = _ZERO_BATTER_DIST
+                    bowler_dist = _ZERO_BOWLER_DIST
+                    batter_vs_type_dist = _ZERO_BATTER_VS_TYPE_DIST
+                    bowler_vs_hand_dist = _ZERO_BOWLER_VS_HAND_DIST
+
+                # Phase 3: phase prior (6 features, dispatched by ball phase).
+                phase_dist = _phase_dist_from_priors(
+                    phase_priors, state['balls_bowled'])
 
                 # Calculate all features
                 basic_features = calculate_basic_features(state)
@@ -1009,6 +1273,14 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None, pla
                     # NEW: Type-based stats (Tier 3)
                     **batting_vs_type_features,
                     **bowling_vs_hand_features,
+                    # Schema v4: empirical outcome distributions.
+                    **batter_dist,
+                    **bowler_dist,
+                    **batter_vs_type_dist,
+                    **bowler_vs_hand_dist,
+                    **venue_dist,
+                    # Phase 3: phase prior (6 features for this ball's phase).
+                    **phase_dist,
                     # NEW: Chase features
                     'chase_target': target,  # Renamed from 'target' to avoid collision with prediction target
                     'run_rate_required': run_rate_required,
@@ -1103,6 +1375,19 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None, pla
                         inn_agg['boundaries'] += 1
                     if state['is_wicket']:
                         inn_agg['wickets'] += 1
+                    # Schema v4: 6-class outcome bucket. Gated on is_legal so
+                    # venue total_balls == Σ venue cX; wides/noballs are
+                    # already excluded from venue ball counts.
+                    bucket = _outcome_bucket_key(state['runs'], state['is_wicket'])
+                    inn_agg[bucket] += 1
+                    # Phase 3: phase-split bucket using PRE-ball phase
+                    # boundaries (state['balls_bowled']). This intentionally
+                    # uses a different convention than the venue PP/death
+                    # accumulators below (which use post-ball `balls`) so
+                    # the per-ball phase emitted to the model at training
+                    # time matches the inference-time `_classify_phase_pre_ball`.
+                    pre_phase = _classify_phase_pre_ball(state['balls_bowled'])
+                    inn_agg[f"{bucket}_{pre_phase}"] += 1
                     # Phase stats (balls is already incremented)
                     if balls <= 36:  # powerplay: first 6 overs
                         inn_agg['powerplay_runs'] += state['runs']

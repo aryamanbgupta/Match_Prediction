@@ -120,6 +120,8 @@ def materialize(
     gender: str,
     metadata_csv: Path,
     feature_hash_info: Optional[dict] = None,
+    k_player: float = 30.0,
+    k_venue: float = 200.0,
 ) -> Tuple[int, dict]:
     """Walk the corpus per-date; for each date, rehydrate temp trackers
     from SQLite and replay same-day matches in monolith order.
@@ -133,6 +135,17 @@ def materialize(
             f"{provider.backend_name!r}"
         )
     metadata = PlayerMetadataProvider(str(metadata_csv))
+
+    # Schema v4: empirical outcome prior π loaded from SQLite _meta.
+    # parse_match_data_v2 receives it as `prior=` and emits the 42
+    # distribution features; without it, those columns are zeros.
+    # Trigger lookup-load before reading _prior so the attribute exists.
+    provider._backend._ensure_conn()
+    prior = provider._backend._prior
+    # Phase 3: per-phase priors loaded from SQLite _meta. On pre-Phase-3
+    # caches, _phase_priors collapses to {phase: π} for every phase, so
+    # phase_p* features still emit (just with degenerate values).
+    phase_priors = provider._backend._phase_priors
 
     split_rows: dict[str, List[dict]] = {
         "train": [], "validation": [], "test": [], "golden_test": [],
@@ -161,6 +174,8 @@ def materialize(
                 parse_match_data_v2(
                     json_text, temp_stats, temp_venue, metadata,
                     elo_tracker=temp_elo, match_k_factor=k_factor,
+                    prior=prior, phase_priors=phase_priors,
+                    k_player=k_player, k_venue=k_venue,
                 )
             )
             # Advance temp_venue so the NEXT same-day match sees it.
@@ -246,6 +261,13 @@ def main() -> int:
     out_dir = args.out_dir or Path(
         "data/xgb_data" if version == "v2" else f"data/xgb_data_{version}"
     )
+    # Phase 6: outcome-dist k overrides from YAML.
+    od_cfg = config.get("outcome_dist", {}) if config else {}
+    k_player = float(od_cfg.get("k_player", 30.0))
+    k_venue  = float(od_cfg.get("k_venue", 200.0))
+    if k_player != 30.0 or k_venue != 200.0:
+        print(f"  outcome_dist overrides: k_player={k_player}, "
+              f"k_venue={k_venue}")
 
     # Compute feature hash via feature_registry so the .feature_hash
     # marker matches parsing_v2.py's output for cache-hit detection.
@@ -280,6 +302,14 @@ def main() -> int:
         pass  # feature_registry unavailable — skip the marker
 
     t0 = time.time()
+    # Bake k_player into the .feature_hash payload so the smart cache in
+    # run_experiment.py invalidates the parquet on a k change. Without
+    # this, a k-sweep config would inherit the previous run's parquet.
+    if feature_hash_info is not None:
+        feature_hash_info = dict(feature_hash_info)
+        feature_hash_info["k_player"] = k_player
+        feature_hash_info["k_venue"] = k_venue
+
     n_matches, counts = materialize(
         source_dir=args.source_dir,
         sqlite_dir=args.sqlite_dir,
@@ -289,6 +319,8 @@ def main() -> int:
         gender=gender,
         metadata_csv=args.metadata_csv,
         feature_hash_info=feature_hash_info,
+        k_player=k_player,
+        k_venue=k_venue,
     )
     dt = time.time() - t0
 

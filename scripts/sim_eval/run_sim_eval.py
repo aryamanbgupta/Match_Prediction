@@ -93,6 +93,12 @@ def main():
                        help='Directory to save detailed results JSON (auto-saves if provided)')
     parser.add_argument('--mlx', action='store_true',
                        help='Use MLX backend for transformer model (Apple Silicon only, faster on Mac)')
+    parser.add_argument('--min-volume', type=float, default=None,
+                       help='Drop matches whose polymarket_volume_usd is below this threshold. '
+                            'Use for liquidity-sliced eval (e.g., 50000 / 100000). '
+                            'Default: None (no filter; preserves non-polymarket odds files).')
+    parser.add_argument('--bootstrap-resamples', type=int, default=1000,
+                       help='Number of bootstrap resamples for ROI / log-loss CIs (default: 1000)')
 
     # Calibration arguments
     parser.add_argument('--calibrate', action='store_true',
@@ -384,18 +390,19 @@ def main():
 
     # Load betting odds
     print("\nLoading betting odds...")
-    odds_lookup = BettingOddsLoader.load_odds(args.odds)
-    
+    odds_lookup = BettingOddsLoader.load_odds(args.odds, min_volume=args.min_volume)
+
     if not odds_lookup:
         print("No odds loaded!")
         return
-    
+
     # Create evaluator
     evaluator = MatchLevelEvaluator(
         model=model,
         simulation_engine=engine,
         n_simulations=args.n_sims,
-        parallel=args.parallel
+        parallel=args.parallel,
+        bootstrap_resamples=args.bootstrap_resamples,
     )
     
     # Run evaluation (with or without match-level calibration)
@@ -420,13 +427,21 @@ def main():
     from datetime import datetime as _dt
     _timestamp = _dt.now().strftime('%Y%m%d_%H%M%S')
 
+    # Slice tag for sliced-eval workflows; encoded into both the saved
+    # filename and the JSON payload so downstream comparison tools can
+    # group runs by liquidity bucket without parsing filenames.
+    if args.min_volume is None:
+        slice_tag = "all"
+    else:
+        slice_tag = f"min_volume_{int(args.min_volume)}"
+
     if args.output_dir:
         # Auto-save to specified directory with timestamp
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-        output_path = f"{args.output_dir}/{args.model_type}_{_timestamp}.json"
+        output_path = f"{args.output_dir}/{args.model_type}_{slice_tag}_{_timestamp}.json"
     else:
         # Auto-save to default path with timestamp
-        output_path = f"match_evaluation_results_{args.model_type}_{_timestamp}.json"
+        output_path = f"match_evaluation_results_{args.model_type}_{slice_tag}_{_timestamp}.json"
     
     if save_results:
         import json
@@ -435,14 +450,21 @@ def main():
         results_dict = {
             'summary': {
                 'model_type': args.model_type,
+                'slice': slice_tag,
+                'min_volume': args.min_volume,
+                'n_matches_evaluated': results.n_matches,
                 'n_matches': results.n_matches,
                 'avg_log_loss': results.avg_log_loss,
+                'avg_log_loss_ci_low': results.avg_log_loss_ci_low,
+                'avg_log_loss_ci_high': results.avg_log_loss_ci_high,
                 'avg_brier_score': results.avg_brier_score,
                 'avg_edge': results.avg_edge,
                 'avg_signed_edge': results.avg_signed_edge,
                 # Flat staking
                 'flat_betting_total_pnl': results.total_pnl,
                 'flat_betting_roi_pct': results.roi,
+                'flat_betting_roi_ci_low': results.flat_roi_ci_low,
+                'flat_betting_roi_ci_high': results.flat_roi_ci_high,
                 'flat_betting_win_rate': results.win_rate,
                 'flat_betting_bets_placed': results.bets_placed,
                 'flat_betting_sharpe': results.sharpe_ratio_flat,

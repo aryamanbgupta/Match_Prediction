@@ -20,7 +20,7 @@ Sequential. Each step unblocks the next; the ultimate goal is a 500+ match betti
 
 1. [ ] **Update hardcoded date splits in `parsing_v2.py`** (lines ~1180-1188). Current splits stop at 2024-09-30 / betting 2024-06-01..2024-06-29, but data now runs to 2026-04-16. Proposed: `train_end=2024-12-31`, `val_end=2025-06-30`, `test_end=2025-12-31`, `golden_start=2026-01-01`, `betting_start=2026-01-01`, `betting_end=2026-04-16`. That betting window is what becomes the expanded eval set.
 2. [ ] **Parse-time gender filter in `parsing_v2.py`** — skip matches where `info.gender != 'male'`. Today only ELO is gender-segregated; women's ball outcomes still leak into training.
-3. [ ] **Rebuild features + stats cache**: `uv run python scripts/parsing_v2.py` (~10-15 min, destructive — regenerates `data/xgb_data_v3/` and `models/cache_chunks_v3/`).
+3. [x] **Rebuild features + stats cache**: now `uv run python scripts/build_stats_cache.py` (~7 min, JSON → SQLite) followed by `uv run python scripts/materialize_features.py` (~5 min, SQLite + JSON → parquet). The legacy `models/cache_chunks_v3/` chunked format was removed in the Phase B / Phase 5 cleanup (2026-04-22, IMPROVEMENTS.md §"Parsing Pipeline Split").
 4. [ ] **Retrain XGBoost v3 baseline** on the expanded corpus: `uv run python scripts/run_experiment.py experiments/configs/xgb_v3_baseline.yaml --skip-parsing`. Expect team-strength and ELO features to sharpen now that we have ~33% more matches.
 5. [ ] **Polymarket odds ingestion** — wire `/Users/aryamangupta/Projects/polymarket-cricket/data/polymarket_prematch_odds.json` (1,161 resolved markets) into `scripts/sim_eval/loaders.py::BettingOddsLoader`. Use the team-name mapping table in `docs/DATA_REFRESH_HANDOFF.md`. This is the step that actually moves the eval set from 44 → 500+.
 6. [ ] **Re-run sim eval** on the expanded test + Polymarket odds: `uv run python scripts/sim_eval/run_sim_eval.py --test-dir data/betting_test --odds <new-odds-file>.json --n-sims 1000`. Compare log loss / Brier / ROI against the old 44-match baseline.
@@ -47,10 +47,10 @@ Gate items before any new modeling work. Baseline is frozen at XGBoost v3 / clea
   Reject any experiment that improves model ROI but not model log loss vs market — that's counterparty noise, not skill.
 
 ### Reporting template (three slices, every time)
-- [ ] All 261 matches — maximum n, noisy markets
-- [ ] ≥$50K volume subset (170) — honest liquidity gate
-- [ ] ≥$100K volume subset (110) — tighter, market is sharp
-- [ ] Bootstrap 95% CIs on ROI (≥1,000 resamples). Point estimates without CIs at n≤300 are meaningless — current flat-ROI CI spans ±20 pp.
+- [x] All 261 matches — maximum n, noisy markets
+- [x] ≥$50K volume subset (170) — honest liquidity gate (`--min-volume 50000`)
+- [x] ≥$100K volume subset (110) — tighter, market is sharp (`--min-volume 100000`)
+- [x] Bootstrap 95% CIs on ROI (≥1,000 resamples) — landed Phase 1 (2026-04-24): `MatchLevelEvaluator._bootstrap_ci` emits to `OverallEvaluationResults.{avg_log_loss,flat_roi}_ci_{low,high}` and saved JSON. `scripts/sim_eval/compare_slices.py` for cross-model tables; `scripts/sim_eval/reslice_eval_json.py` for post-hoc reslicing. `scripts/run_sliced_eval.sh` runs all 3 slices in one shot.
 
 ### Go / no-go rule for any "we can bet this" claim
 Both conditions required:
@@ -65,7 +65,26 @@ Nothing weaker ships.
 
 ### Odds-build hardening (post clean-dedup)
 - [ ] Log the 7 residual winner-disagreements + 23 remaining `top_p > 0.92` entries as warnings in `scripts/build_polymarket_odds.py`, not just in the unmatched audit file. Make them grep-visible in eval runs so regressions in upstream Polymarket data are caught immediately.
-- [ ] Add `--min-volume` flag to `scripts/sim_eval/run_sim_eval.py` so liquidity-sliced runs don't need the ad-hoc filter script from `docs/POLYMARKET_INTEGRATION.md` lines 206–212.
+- [x] Add `--min-volume` flag to `scripts/sim_eval/run_sim_eval.py` — landed Phase 1 (2026-04-24). Forwards from `BettingOddsLoader.load_odds(min_volume=...)`; null preserves non-polymarket odds files. Also threaded through `run_experiment.py` via YAML `evaluation.min_volume`.
+
+## v6→v7 outcome-distribution follow-ups (2026-04-24/25)
+
+The 6-phase plan to evaluate v6 + four feature/refactor experiments. Outcome:
+
+- [x] **Phase 1**: Per-slice eval infrastructure shipped. v6 sliced metrics: LL win over v4 grows with liquidity (Δ −0.040 → −0.074); ROI noisy on both, all CIs straddle zero. See `project_v6_sliced_eval.md`.
+- [x] **Phase 2**: Drop-encodings ablation → **KEEP** `batter_encoded`/`bowler_encoded`. Δ LL +0.069 on ≥$50k slice (14× threshold). See `project_phase2_drop_encodings.md`.
+- [x] **Phase 3**: Phase prior → **DROP** `phase_outcome_dist`. Δ LL +0.022/+0.023/+0.036 across slices; collinear with is_powerplay/middle/death. Implementation kept inert in code; resurrect via `experiments/configs/xgb_v7_phase_prior.yaml`. See `project_phase3_phase_prior.md`.
+- [ ] **Phase 4**: `build_ball_features` refactor — DEFERRED. Pure plumbing (consolidate the 5 sim wrappers' duplicated feature-build code into one helper); not a feature change. ~4h estimated; must keep Phase A parity at 9519/9519.
+- [x] **Phase 5**: Hierarchical shrinkage → **SHIP**. vs-type/vs-hand cells shrink toward player overall (not π directly). LL ~flat (Δ ~+0.003 on all/≥$50k), but flat ROI swings +15pp (all) / +16pp (≥$50k); CIs still straddle zero. See `project_phase5_hierarchical_shrink.md`.
+- [x] **Phase 6**: k_player sweep ∈ {10, 30, 100, 300} → **k=30 confirmed optimal**. k=10 noisier (worse on both LL and ROI); k=100/300 over-shrink toward π. v7 = Phase 5 hierarchical, k_player=30, k_venue=200. See `project_phase6_k_sweep.md`.
+
+**Active model**: v7 = `experiments/configs/xgb_v6_hierarchical_shrink.yaml` (despite "v6" in the name).
+**Sliced champion (≥$50k)**: v7 LL 0.7402, flat ROI +6.11% (CI [−10.7, +23.9]); v6 was 0.7370 / −9.81%; v4 was 0.7838 / +12.10%. All ROI CIs still straddle zero — none of these models clears the go/no-go bar above.
+
+### Open follow-ups from the outcome-dist plan
+- [ ] Phase 4 refactor (deferred above).
+- [ ] Separate `k_narrow` sweep (Phase 5/6 held k_narrow = k_player = 30 throughout; an independent sweep could widen the hierarchical ROI win).
+- [ ] Per-batter / per-bowler phase distributions (the Phase 3 plan's natural successor — those WOULDN'T be collinear with is_powerplay since they vary across players).
 
 ## Root Cause Analysis (Dec 2024)
 **Why both models predict ~50% for all matches:**
@@ -85,15 +104,11 @@ Nothing weaker ships.
 - [ ] **Expand test set to 200+ matches** — 44 matches is too small for statistical significance
 
 ## High Priority (P1)
-- [ ] **Empirical outcome distributions as features** — Replace lossy summary stats (avg/SR) with full 6-class outcome distributions P(0,1,2,4,6,W) for each context. This is multi-class target encoding — directly aligned with the prediction target. Current summary stats have r=0.06-0.11 with ball outcomes; direct historical rates should correlate much more strongly. Implementation: expand `PlayerStatsTracker` to track outcome counts per class instead of just `{runs, balls, dismissals}`. Hierarchy of distributions (each adds 6 features):
-  - **Batter overall**: P(0,1,2,4,6,W | this batter) — captures player shape (power hitter vs accumulator), not just mean
-  - **Bowler overall**: P(0,1,2,4,6,W | this bowler) — same idea, from bowler's perspective
-  - **Batter vs pace/spin**: P(0,1,2,4,6,W | batter, bowler type) — type-specific distributions (min 30 balls, fallback to overall)
-  - **Bowler vs LHB/RHB**: P(0,1,2,4,6,W | bowler, batter hand) — handedness-specific (min 30 balls, fallback to overall)
-  - **Venue**: P(0,1,2,4,6,W | venue) — venue-specific outcome rates
-  - **Phase (global)**: P(0,1,2,4,6,W | powerplay/middle/death) — phase-specific priors with massive sample sizes
-  - ~36-48 new features total. May allow dropping `batter_encoded`/`bowler_encoded` (XGBoost can't learn from label-encoded IDs anyway).
-  - Temporal integrity already handled by stats cache. Not target leakage — uses only pre-match historical data.
+- [x] **Empirical outcome distributions as features** — **LANDED 2026-04-23 as `xgb_v6_outcome_dist`** (schema v4 bump, 42 new features). Empirical-Bayes shrinkage toward global corpus prior π = (0.304, 0.411, 0.076, 0.108, 0.047, 0.054), k=30 for player cells / k=200 for venue. Five hierarchies live: batter overall, bowler overall, batter-vs-pace/spin, bowler-vs-LHB/RHB, venue. Phase-prior (global PP/mid/death) deferred — see follow-ups.
+  - **Files**: `scripts/stats_sqlite_backend.py` (SCHEMA_VERSION=4 + 5 new getters with `_shrink` helper), `scripts/parsing_v2.py` (tracker state + `update_stats` + 5 tracker getters + emission via `parse_match_data_v2`'s new `prior=` kwarg), `scripts/build_stats_cache.py` (count-tuple INSERTs + π computed from final tracker state, written to `_meta.prior_p*`), `scripts/tracker_rehydration.py` + `scripts/materialize_features.py` (count seeding + prior passthrough), `scripts/sim_v1_2.py` (`_fill_outcome_dists` helper wired into all 5 model wrappers), `scripts/feature_registry.py` (5 new groups + `V6_GROUPS`), `experiments/configs/xgb_v6_outcome_dist.yaml`. Plan file: `~/.claude/plans/yes-let-s-go-with-cheerful-waffle.md`.
+  - **Validation**: Phase A parity 9519/9519 matches bit-exact incl. 42 new cols (251s); 7/7 shrinkage unit tests (`scripts/tests/test_outcome_dist_shrinkage.py`); schema-v4 conservation + query-plan + getter checks (`scripts/tests/test_schema_v4_outcome_dist.py`). SQLite cache 46.5 MB → 56.8 MB (+10 MB for 6 count cols × 5 tables); rebuild 440s.
+  - **Eval (261 polymarket × 100 sims, exp `xgb_v6_outcome_dist_20260423_182515_7d92bfc`)**: log loss **0.7518 → 0.7122 (−5.3%)**, Brier **0.2728 → 0.2562 (−6.1%)**, flat ROI +6.51% → −7.1%, frac Kelly ROI +1.27% → +0.7%. Calibration improved; flat betting regressed (same calibration-vs-ROI tension as the 2026-03 Platt experiments). Per-slice liquidity eval not yet run.
+  - **Follow-ups (deferred)**: phase prior P(outcome|PP/mid/death); drop `batter_encoded`/`bowler_encoded` ablation; per-hierarchy k sweep {10, 30, 100, 300}; hierarchical shrinkage (vs-pace toward overall, not π); per-slice ≥$50k / ≥$100k eval to confirm log-loss win on sharp markets.
 - [ ] **Expand test set to 200+ matches** — 44 matches is too small for statistical significance
 - [ ] **Add evaluation baselines** — 50-50 random, market odds passthrough, home team always wins
 - [x] **Add team-level features** — ELO + aggregated team stats (9 features). 19% log loss improvement.

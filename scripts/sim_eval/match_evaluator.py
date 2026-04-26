@@ -106,22 +106,33 @@ class OverallEvaluationResults:
     pre_calibration_brier: Optional[float] = None
     post_calibration_brier: Optional[float] = None
 
+    # Bootstrap 95% CIs (percentile method) — populated by _aggregate_results.
+    avg_log_loss_ci_low: float = float('nan')
+    avg_log_loss_ci_high: float = float('nan')
+    flat_roi_ci_low: float = float('nan')
+    flat_roi_ci_high: float = float('nan')
+
 
 class MatchLevelEvaluator:
     """Evaluates match predictions against betting odds"""
     
-    def __init__(self, model, simulation_engine: SimulationEngine, n_simulations: int = 1000, parallel: bool = True):
+    def __init__(self, model, simulation_engine: SimulationEngine,
+                 n_simulations: int = 1000, parallel: bool = True,
+                 bootstrap_resamples: int = 1000):
         """
         Args:
             model: The prediction model (XGBoost, etc.)
             simulation_engine: Engine to run match simulations
             n_simulations: Number of simulations per match
             parallel: Enable parallel processing for simulations
+            bootstrap_resamples: Resamples used for percentile-method 95% CIs
+                on log-loss / flat-betting ROI.
         """
         self.model = model
         self.engine = simulation_engine
         self.n_simulations = n_simulations
         self.parallel = parallel
+        self.bootstrap_resamples = bootstrap_resamples
     
     def evaluate_all(self, matches: List[Tuple[str, MatchState]], 
                      odds_lookup: Dict[str, Dict]) -> OverallEvaluationResults:
@@ -706,6 +717,30 @@ class MatchLevelEvaluator:
             # Loss: lose the stake
             return -kelly_fraction
 
+    def _bootstrap_ci(self, values: List[float], n_resamples: int = None,
+                      ci: float = 0.95, seed: int = 42) -> Tuple[float, float]:
+        """Percentile-method bootstrap CI for the mean of `values`.
+
+        Returns (low, high). Returns (nan, nan) on empty input.
+        """
+        if not values:
+            return (float('nan'), float('nan'))
+        if n_resamples is None:
+            n_resamples = self.bootstrap_resamples
+        if n_resamples <= 0:
+            return (float('nan'), float('nan'))
+
+        arr = np.asarray(values, dtype=float)
+        n = len(arr)
+        rng = np.random.default_rng(seed)
+        idx = rng.integers(0, n, size=(n_resamples, n))
+        means = arr[idx].mean(axis=1)
+        alpha = (1 - ci) / 2
+        return (
+            float(np.quantile(means, alpha)),
+            float(np.quantile(means, 1 - alpha)),
+        )
+
     def _calculate_sharpe_ratio(self, returns: List[float]) -> float:
         """Calculate Sharpe ratio for a series of returns
 
@@ -930,6 +965,14 @@ class MatchLevelEvaluator:
         sharpe_full_kelly = self._calculate_sharpe_ratio(full_kelly_returns)
         sharpe_fractional_kelly = self._calculate_sharpe_ratio(fractional_kelly_returns)
 
+        # Bootstrap CIs on per-match log loss and per-bet flat P&L. ROI CI is
+        # the P&L-mean CI ×100 (ROI = mean(P&L) × 100 by definition). Resamples
+        # are seeded for reproducibility across the three liquidity slices.
+        ll_lo, ll_hi = self._bootstrap_ci(log_losses)
+        roi_lo, roi_hi = self._bootstrap_ci(flat_returns)
+        flat_roi_ci_low = roi_lo * 100 if not np.isnan(roi_lo) else float('nan')
+        flat_roi_ci_high = roi_hi * 100 if not np.isnan(roi_hi) else float('nan')
+
         # Split by favorite/underdog
         favorite_stats, underdog_stats = self._split_by_favorite_underdog(match_results)
 
@@ -960,7 +1003,11 @@ class MatchLevelEvaluator:
             favorite_stats=favorite_stats,
             underdog_stats=underdog_stats,
             match_results=match_results,
-            total_simulation_time=total_time
+            total_simulation_time=total_time,
+            avg_log_loss_ci_low=ll_lo,
+            avg_log_loss_ci_high=ll_hi,
+            flat_roi_ci_low=flat_roi_ci_low,
+            flat_roi_ci_high=flat_roi_ci_high,
         )
     
     def _calculate_calibration(self, match_results: List[MatchEvaluationResult],
@@ -1016,7 +1063,11 @@ def print_evaluation_summary(results: OverallEvaluationResults):
     print(f"Average time per match: {results.total_simulation_time/results.n_matches:.1f}s")
     
     print(f"\n--- Performance Metrics ---")
-    print(f"Average Log Loss: {results.avg_log_loss:.4f}")
+    if not np.isnan(results.avg_log_loss_ci_low):
+        print(f"Average Log Loss: {results.avg_log_loss:.4f}  "
+              f"[95% CI: {results.avg_log_loss_ci_low:.4f}, {results.avg_log_loss_ci_high:.4f}]")
+    else:
+        print(f"Average Log Loss: {results.avg_log_loss:.4f}")
     print(f"Average Brier Score: {results.avg_brier_score:.4f}")
     print(f"Average Edge (magnitude): {results.avg_edge:.1%}")
     print(f"Average Signed Edge: {results.avg_signed_edge:+.1%} ({'overconfident' if results.avg_signed_edge < 0 else 'underconfident' if results.avg_signed_edge > 0 else 'neutral'})")
@@ -1025,7 +1076,11 @@ def print_evaluation_summary(results: OverallEvaluationResults):
     print(f"\n--- Betting Strategy Comparison ---")
     print(f"\nFlat Staking (1 unit per bet):")
     print(f"  Total P&L: {results.total_pnl:+.2f} units")
-    print(f"  ROI: {results.roi:+.1f}%")
+    if not np.isnan(results.flat_roi_ci_low):
+        print(f"  ROI: {results.roi:+.1f}%  "
+              f"[95% CI: {results.flat_roi_ci_low:+.1f}%, {results.flat_roi_ci_high:+.1f}%]")
+    else:
+        print(f"  ROI: {results.roi:+.1f}%")
     print(f"  Sharpe Ratio: {results.sharpe_ratio_flat:.2f}")
     print(f"  Win Rate: {results.win_rate:.1%}")
     print(f"  Bets Placed: {results.bets_placed}")

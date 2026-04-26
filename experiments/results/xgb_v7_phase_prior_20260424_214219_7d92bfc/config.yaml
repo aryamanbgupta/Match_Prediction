@@ -1,0 +1,56 @@
+experiment:
+  name: xgb_v7_phase_prior
+  description: "v6 outcome-dist + Phase 3 phase prior. Adds 6 features per ball dispatched\
+    \ by phase (PP/mid/death). Phase priors are global constants over millions of\
+    \ balls \u2014 no per-cell shrinkage. Boundaries match parsing_v2.calculate_basic_features\
+    \ (PP: balls<36, mid: 36..<96, death: balls>=96)."
+  tags:
+  - xgboost
+  - v7
+  - outcome_dist
+  - phase_prior
+data:
+  version: v3
+  test_dir: data/polymarket_test
+  odds_file: betting_odds_polymarket.json
+features:
+  groups:
+  - basic
+  - player_stats
+  - h2h
+  - momentum
+  - pressure
+  - chase
+  - medium
+  - player_metadata
+  - matchup
+  - type_based
+  - team_strength
+  - batter_outcome_dist
+  - bowler_outcome_dist
+  - batter_vs_type_dist
+  - bowler_vs_hand_dist
+  - venue_outcome_dist
+  - phase_outcome_dist
+  exclude: []
+  include_extra: []
+model:
+  type: xgboost
+  hyperparameters:
+    n_estimators: 444
+    max_depth: 10
+    learning_rate: 0.24036372383981375
+    subsample: 0.8776663421127178
+    colsample_bytree: 0.7424085095268674
+    reg_alpha: 0.8503122682099661
+    reg_lambda: 0.18186045420525845
+  tune: false
+  tune_trials: 50
+evaluation:
+  n_sims: 100
+  parallel: false
+  bootstrap_resamples: 1000
+pipeline:
+  skip_parsing: false
+  skip_training: false
+  skip_evaluation: false

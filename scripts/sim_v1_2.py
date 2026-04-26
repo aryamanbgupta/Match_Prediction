@@ -22,6 +22,53 @@ from player_metadata import (
 from stats_provider import wrap_with_cache
 
 
+# Schema v4: empirical outcome distribution features (42 columns across 5
+# hierarchies). Used by every model wrapper; kept as a module constant
+# to minimize drift across the 5 near-identical feature-assembly blocks.
+# Fallback value is the zero-dict — emitted only when stats_provider is
+# absent (testing paths); when a provider exists, the backend's shrinkage
+# already returns the global prior for unseen entities.
+_OUTCOME_DIST_ZERO = {
+    **{f'batter_p{c}': 0.0 for c in ('0', '1', '2', '4', '6', 'w')},
+    **{f'bowler_p{c}': 0.0 for c in ('0', '1', '2', '4', '6', 'w')},
+    **{f'batter_p{c}_vs_pace': 0.0 for c in ('0', '1', '2', '4', '6', 'w')},
+    **{f'batter_p{c}_vs_spin': 0.0 for c in ('0', '1', '2', '4', '6', 'w')},
+    **{f'bowler_p{c}_vs_lhb': 0.0 for c in ('0', '1', '2', '4', '6', 'w')},
+    **{f'bowler_p{c}_vs_rhb': 0.0 for c in ('0', '1', '2', '4', '6', 'w')},
+    **{f'venue_p{c}': 0.0 for c in ('0', '1', '2', '4', '6', 'w')},
+    # Phase 3: phase prior (6 features dispatched by ball phase).
+    **{f'phase_p{c}': 0.0 for c in ('0', '1', '2', '4', '6', 'w')},
+}
+
+
+def _fill_outcome_dists(features, provider, striker_pid, bowler_pid,
+                        venue, match_date, balls_bowled=None,
+                        k_player=30.0, k_venue=200.0):
+    """Merge the empirical-Bayes-shrunk outcome distributions into
+    `features`. `k_player` controls shrinkage strength on
+    batter/bowler/vs-type/vs-hand cells; `k_venue` for venue. Both must
+    match the values used at materialize time, otherwise inference
+    distributions diverge from training.
+
+    Phase 6 addition: k_player / k_venue are loaded from the model
+    artifact's outcome_dist_config_v3.json by each wrapper at __init__,
+    then passed here per-ball."""
+    if hasattr(provider, 'get_batter_outcome_dist'):
+        features.update(provider.get_batter_outcome_dist(striker_pid, match_date, k=k_player))
+        features.update(provider.get_bowler_outcome_dist(bowler_pid, match_date, k=k_player))
+        features.update(provider.get_batter_vs_type_outcome_dist(striker_pid, match_date, k=k_player))
+        features.update(provider.get_bowler_vs_hand_outcome_dist(bowler_pid, match_date, k=k_player))
+        features.update(provider.get_venue_outcome_dist(venue, match_date, k=k_venue))
+        if balls_bowled is not None and hasattr(provider, 'get_phase_outcome_dist'):
+            features.update(provider.get_phase_outcome_dist(int(balls_bowled)))
+        else:
+            features.update({
+                f'phase_p{c}': 0.0 for c in ('0', '1', '2', '4', '6', 'w')
+            })
+    else:
+        features.update(_OUTCOME_DIST_ZERO)
+
+
 class Outcome(Enum):
     DOT = 0
     ONE = 1
@@ -504,6 +551,26 @@ class XGBoostModelV2(PredictionModel):
         with open(feature_columns_path, 'r') as f:
             self.feature_columns = [line.strip() for line in f.readlines()]
 
+        # Phase 6: load k_player / k_venue from a sidecar JSON next to
+        # the model. Missing file → use defaults (30 / 200), preserving
+        # behavior for v6 / Phase-5 artifacts that don't carry the file.
+        import json as _json
+        from pathlib import Path as _Path
+        self.k_player = 30.0
+        self.k_venue = 200.0
+        _od_path = _Path(model_path).parent / 'outcome_dist_config_v3.json'
+        if _od_path.exists():
+            try:
+                with open(_od_path) as _f:
+                    _od_cfg = _json.load(_f)
+                self.k_player = float(_od_cfg.get('k_player', 30.0))
+                self.k_venue = float(_od_cfg.get('k_venue', 200.0))
+                if self.k_player != 30.0 or self.k_venue != 200.0:
+                    print(f"  outcome_dist sidecar: k_player={self.k_player}, "
+                          f"k_venue={self.k_venue}")
+            except Exception as _e:
+                print(f"  Warning: failed to load {_od_path}: {_e}")
+
         # Preallocated float64 row for per-ball prediction. Skips XGBoost's
         # per-call pandas dtype introspection (the 57% hot spot profiled on
         # 2026-04-18). float64 matches training-time dtype (parquet default).
@@ -675,6 +742,16 @@ class XGBoostModelV2(PredictionModel):
             bowl_strength = self.stats_provider.get_team_bowling_strength(bowl_player_ids, state.match_date)
             features.update(bat_strength)
             features.update(bowl_strength)
+
+            # Schema v4: empirical outcome distributions (42 features) +
+            # Phase 3 phase prior (6 features dispatched by ball phase).
+            _fill_outcome_dists(
+                features, self.stats_provider,
+                striker.player_id, bowler.player_id,
+                state.venue, state.match_date,
+                balls_bowled=state.balls,
+                k_player=self.k_player, k_venue=self.k_venue,
+            )
         else:
             # Fallback to zeros if no stats provider
             features.update({
@@ -700,6 +777,8 @@ class XGBoostModelV2(PredictionModel):
                 'team_batting_avg': 0.0, 'team_batting_sr': 0.0,
                 'team_bowling_avg': 0.0, 'team_bowling_econ': 0.0,
             })
+            # Schema v4 outcome-dist fallbacks.
+            features.update(_OUTCOME_DIST_ZERO)
 
         # NEW: Player metadata features (Tier 1 and 2)
         if self.player_metadata:
@@ -1211,6 +1290,15 @@ class LSTMModelV1(PredictionModel):
                 features['bowler_econ_vs_lhb'] = 0.0
                 features['bowler_avg_vs_rhb'] = 0.0
                 features['bowler_econ_vs_rhb'] = 0.0
+
+            # Schema v4: empirical outcome distributions (42 features) +
+            # Phase 3 phase prior (6 features dispatched by ball phase).
+            _fill_outcome_dists(
+                features, self.stats_provider,
+                str(striker.player_id), str(bowler.player_id),
+                state.venue, match_date,
+                balls_bowled=state.balls,
+            )
         else:
             features['batsman_avg'] = 25.0
             features['batsman_sr'] = 125.0
@@ -1231,6 +1319,7 @@ class LSTMModelV1(PredictionModel):
             features['bowler_econ_vs_lhb'] = 0.0
             features['bowler_avg_vs_rhb'] = 0.0
             features['bowler_econ_vs_rhb'] = 0.0
+            features.update(_OUTCOME_DIST_ZERO)
 
         # Player metadata features (Tier 1 and 2)
         if self.player_metadata:
@@ -1660,6 +1749,14 @@ class MLPModelV1(PredictionModel):
             features['elo_diff'] = batting_team_elo - bowling_team_elo
             features.update(self.stats_provider.get_team_batting_strength(bat_player_ids, match_date))
             features.update(self.stats_provider.get_team_bowling_strength(bowl_player_ids, match_date))
+            # Schema v4: empirical outcome distributions (42 features) +
+            # Phase 3 phase prior (6 features dispatched by ball phase).
+            _fill_outcome_dists(
+                features, self.stats_provider,
+                str(striker.player_id), str(bowler.player_id),
+                state.venue, match_date,
+                balls_bowled=state.balls,
+            )
         else:
             features['batsman_avg'] = 25.0
             features['batsman_sr'] = 125.0
@@ -1685,6 +1782,7 @@ class MLPModelV1(PredictionModel):
             features['team_batting_sr'] = 0.0
             features['team_bowling_avg'] = 0.0
             features['team_bowling_econ'] = 0.0
+            features.update(_OUTCOME_DIST_ZERO)
 
         # Player metadata features
         if self.player_metadata:
@@ -2095,6 +2193,14 @@ class MLPModelV2(PredictionModel):
             features['elo_diff'] = batting_team_elo - bowling_team_elo
             features.update(self.stats_provider.get_team_batting_strength(bat_player_ids, match_date))
             features.update(self.stats_provider.get_team_bowling_strength(bowl_player_ids, match_date))
+            # Schema v4: empirical outcome distributions (42 features) +
+            # Phase 3 phase prior (6 features dispatched by ball phase).
+            _fill_outcome_dists(
+                features, self.stats_provider,
+                str(striker.player_id), str(bowler.player_id),
+                state.venue, match_date,
+                balls_bowled=state.balls,
+            )
         else:
             features['batsman_avg'] = 25.0
             features['batsman_sr'] = 125.0
@@ -2120,6 +2226,7 @@ class MLPModelV2(PredictionModel):
             features['team_batting_sr'] = 0.0
             features['team_bowling_avg'] = 0.0
             features['team_bowling_econ'] = 0.0
+            features.update(_OUTCOME_DIST_ZERO)
 
         # Player metadata
         if self.player_metadata:
@@ -2577,6 +2684,15 @@ class TransformerModelV1(PredictionModel):
                 features['bowler_econ_vs_lhb'] = 0.0
                 features['bowler_avg_vs_rhb'] = 0.0
                 features['bowler_econ_vs_rhb'] = 0.0
+
+            # Schema v4: empirical outcome distributions (42 features) +
+            # Phase 3 phase prior (6 features dispatched by ball phase).
+            _fill_outcome_dists(
+                features, self.stats_provider,
+                str(striker.player_id), str(bowler.player_id),
+                state.venue, match_date,
+                balls_bowled=state.balls,
+            )
         else:
             features['batsman_avg'] = 25.0
             features['batsman_sr'] = 125.0
@@ -2597,6 +2713,7 @@ class TransformerModelV1(PredictionModel):
             features['bowler_econ_vs_lhb'] = 0.0
             features['bowler_avg_vs_rhb'] = 0.0
             features['bowler_econ_vs_rhb'] = 0.0
+            features.update(_OUTCOME_DIST_ZERO)
 
         # Player metadata features
         if self.player_metadata:

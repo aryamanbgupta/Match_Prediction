@@ -196,6 +196,14 @@ def run_harness(
         )
         return 1
 
+    # Schema v4: pull global empirical outcome prior so both the
+    # reference and candidate parse paths emit the 42 dist columns.
+    # If the cache predates v4 (missing _meta.prior_*), the backend
+    # falls back to uniform 1/6 — still a valid prior; both sides
+    # will emit the same values and the parity check holds.
+    provider._backend._ensure_conn()
+    _harness_prior = provider._backend._prior
+
     player_metadata = PlayerMetadataProvider(
         str(ROOT / "data" / "all_players_enriched.csv")
     )
@@ -253,6 +261,7 @@ def run_harness(
                     player_metadata,
                     elo_tracker=live_elo,
                     match_k_factor=k_factor,
+                    prior=_harness_prior,
                 )
             except Exception as e:
                 print(
@@ -291,6 +300,7 @@ def run_harness(
                         player_metadata,
                         elo_tracker=temp_elo,
                         match_k_factor=k_factor,
+                        prior=_harness_prior,
                     )
                 )
             except Exception as e:

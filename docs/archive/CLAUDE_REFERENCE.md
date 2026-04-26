@@ -4,6 +4,14 @@
 **Branch**: feature/player-stats-cache
 **Purpose**: Portfolio project with potential as production analytics tool
 
+> ⚠️ **Stale-reference warning**: This file was last comprehensively updated in October 2024 and pre-dates the chunked→SQLite migration (April 2026), the Phase B parsing split (April 22, 2026), and the schema-v4 outcome-distribution feature pass (April 23, 2026). Feature counts (29), file paths (`models/cache_chunks/`), and design notes below describe the legacy chunk-based system — many are obsolete. **For current state see**:
+> - [CLAUDE.md](CLAUDE.md) — concise overview, kept in sync with HEAD
+> - [docs/OPERATIONS.md](docs/OPERATIONS.md) — pipelines + commands
+> - [IMPROVEMENTS.md](IMPROVEMENTS.md) — feature roadmap, current results, deferred work
+> - [TODO.md](TODO.md) — open items
+>
+> A full rewrite of this reference is tracked but not scoped. Treat sections below as historical context unless cross-checked against the live code.
+
 ---
 
 ## Executive Summary

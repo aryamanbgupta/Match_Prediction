@@ -1,0 +1,52 @@
+experiment:
+  name: "xgb_v6_outcome_dist"
+  description: "XGBoost v6 — V3 baseline + 42 empirical-Bayes-shrunk outcome distributions (batter / bowler / batter-vs-type / bowler-vs-hand / venue)."
+  tags: ["xgboost", "v6", "outcome_dist"]
+
+data:
+  version: "v3"
+  test_dir: "data/polymarket_test"
+  odds_file: "betting_odds_polymarket.json"
+
+features:
+  groups:
+    - basic
+    - player_stats
+    - h2h
+    - momentum
+    - pressure
+    - chase
+    - medium
+    - player_metadata
+    - matchup
+    - type_based
+    - team_strength
+    - batter_outcome_dist
+    - bowler_outcome_dist
+    - batter_vs_type_dist
+    - bowler_vs_hand_dist
+    - venue_outcome_dist
+  exclude: []
+  include_extra: []
+
+model:
+  type: "xgboost"
+  hyperparameters:
+    n_estimators: 444
+    max_depth: 10
+    learning_rate: 0.24036372383981375
+    subsample: 0.8776663421127178
+    colsample_bytree: 0.7424085095268674
+    reg_alpha: 0.8503122682099661
+    reg_lambda: 0.18186045420525845
+  tune: false
+  tune_trials: 50
+
+evaluation:
+  n_sims: 100
+  parallel: false
+
+pipeline:
+  skip_parsing: false
+  skip_training: false
+  skip_evaluation: false
