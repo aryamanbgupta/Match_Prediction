@@ -2,8 +2,10 @@
 
 Comprehensive technical reference for CricML. This is the canonical doc for how
 the system is built, how data flows through it, and why each major decision was
-made. Updated to reflect schema v4 + the v6 outcome-distribution feature pass
-(2026-04-23) and the Phase B parsing split (2026-04-22).
+made. Reflects the Phase B parsing split (2026-04-22), the v6 outcome-
+distribution feature pass under schema v4 (2026-04-23), and the Phase 5
+(hierarchical shrinkage, 2026-04-25) + Phase 6 (k-sweep, k=30 won) work that
+together produced the active **v7** XGBoost model.
 
 For day-to-day commands see [OPERATIONS.md](OPERATIONS.md). For adding new model
 types see [ADDING_NEW_MODELS.md](ADDING_NEW_MODELS.md).
@@ -299,7 +301,10 @@ probabilities for `'wide'` and `'no_ball'` *after* the model output and
 re-normalize — this happens in `predict_next_ball` itself, not the model.
 
 Concrete implementations in `scripts/sim_v1_2.py`:
-- `XGBoostModelV2` — production. 114 features (V6_GROUPS).
+- `XGBoostModelV2` — production (active **v7**). 114 features (V6_GROUPS feature
+  list; v7 keeps the same column names and uses hierarchical shrinkage on the
+  vs-type / vs-hand cells — see § 6.7). Reads `outcome_dist_config_v3.json`
+  sidecar at init for `k_player` / `k_venue` overrides.
 - `LSTMModelV1` — sliding 10-ball window, embeddings.
 - `MLPModelV1` / `MLPModelV2` — baseline + tuned MLP.
 - `TransformerModelV1` — full 120-ball context, PyTorch + MLX.
@@ -767,7 +772,7 @@ semantic meaning and reduces the rare-class problem dramatically.
 re-normalize. Extras have high variance and small signal; we don't try to
 predict them.
 
-### 6.7 Empirical-Bayes outcome distributions (v6, schema v4)
+### 6.7 Empirical-Bayes outcome distributions (v6 → v7, schema v4)
 
 XGBoost can't learn outcome distributions from label-encoded player IDs —
 trees split on "id > N", which groups arbitrary players. Career averages
@@ -790,11 +795,53 @@ p̂_c = (n_c + k · π_c) / (N + k)     where N = Σ n_c
 and stored in `_meta.prior_p{0,1,2,4,6,w}`. Final π =
 (0.304, 0.411, 0.076, 0.108, 0.047, 0.054).
 
-**Result** (261-match Polymarket × 100 sims): log loss 0.7518 → 0.7122
+**v6 result** (261-match Polymarket × 100 sims): log loss 0.7518 → 0.7122
 (−5.3%); Brier 0.2728 → 0.2562 (−6.1%); flat ROI +6.5% → −7.1% (calibration-vs-
-ROI tension — sharper probabilities compress betting edges). Per-slice
-liquidity eval still pending. See `IMPROVEMENTS.md` § "Empirical Outcome
-Distributions" for the five deferred follow-ups.
+ROI tension — sharper probabilities compress betting edges). The Phase 1
+sliced eval (2026-04-24) showed the LL win **grows with liquidity**
+(Δ LL −0.040 / −0.047 / −0.074 across all / ≥$50K / ≥$100K).
+
+**v7 — hierarchical shrinkage (Phase 5, 2026-04-25)**: the four narrow cells
+(`batter_p*_vs_pace`, `batter_p*_vs_spin`, `bowler_p*_vs_lhb`,
+`bowler_p*_vs_rhb`) now shrink toward the player's *overall* distribution
+rather than toward the global prior π directly. Closed-form, two-stage:
+
+```
+p̂_overall  = (n_overall + k · π) / (N_overall + k)         # stage 1
+p̂_vs_pace  = (n_vs_pace + k · p̂_overall) / (N_vs_pace + k) # stage 2
+```
+
+This is mechanically more accurate than flat shrinkage when the player has
+substantial overall data but limited cell data — e.g. a fringe spinner with
+500 deliveries overall but only 80 vs LHB shrinks toward the 500-ball signal,
+not the global average. Phase 6 swept `k_player ∈ {10, 30, 100, 300}`; **k=30
+won on both LL and flat ROI**. Active config: `k_player=30`, `k_venue=200`,
+written to `models/xgb_v3/outcome_dist_config_v3.json` and re-read by
+`XGBoostModelV2.__init__` at sim time so training and inference always agree.
+
+The hierarchical/flat switch is the `hierarchical=True` default kwarg on
+`_SQLiteBackend.get_{batter_vs_type,bowler_vs_hand}_outcome_dist` and the
+equivalent tracker getters; pass `hierarchical=False` to recover v6 flat-
+shrunk values for ablations.
+
+**Phase 3 negative result (2026-04-24)**: phase prior
+P(outcome | PP / mid / death) was implemented end-to-end —
+`prior_{pp,mid,death}_p*` are written to SQLite `_meta` and the per-phase
+distribution is reachable via `_SQLiteBackend.get_phase_outcome_dist` — but
+including the resulting `phase_outcome_dist` feature group **regresses** LL
+(Δ +0.022 / +0.023 / +0.036 across all / ≥$50K / ≥$100K slices), almost
+certainly because the phase signal is collinear with the existing
+`is_powerplay` / `is_middle_overs` / `is_death_overs` indicators. The code
+stays inert; resurrect via `experiments/configs/xgb_v7_phase_prior.yaml` if
+you want to re-test.
+
+**Phase 2 negative result (2026-04-24)**: dropping `batter_encoded` /
+`bowler_encoded` (on the assumption XGBoost can't learn from label-encoded
+IDs anyway, given outcome distributions are now first-class features)
+*degrades* LL by +0.069 on the ≥$50K slice — 14× the threshold. Keep them.
+
+See `IMPROVEMENTS.md` § "Empirical Outcome Distributions" and § "Phase 5 /
+Phase 6" for the full per-experiment breakdowns.
 
 ### 6.8 Per-match memoization (`StatsProviderCache`)
 

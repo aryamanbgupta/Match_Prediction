@@ -10,7 +10,7 @@ This document outlines the feature sets used in the model and tracks implementat
 | v6 | 114 (V3 + 42 outcome-dist, flat shrinkage) | `data/xgb_data_v3/` | `models/xgb_v3_v6_backup/` | Prior baseline (2026-04-23) |
 | v4 (team strength) | 72 | `data/xgb_data_v3/` | (retrain to recover) | Prior baseline (March 2026) |
 | v3 | 46+ | `data/xgb_data_v3/` | (retrain to recover) | With player metadata, no team strength |
-| v2 | 29 | `data/xgb_data/` | `models/xgb/` | Legacy |
+| v2 | 29 | ~~`data/xgb_data/`~~ | ~~`models/xgb/`~~ | Legacy — artifacts deleted 2026-04-26 cleanup |
 
 > Filename note: `models/xgb_v3/` and `data/xgb_data_v3/` paths are retained across versions; the SQLite cache is `models/player_stats_cache_v3.sqlite`. The actual schema/feature contract is governed by `_meta.schema_version` (currently 4) and `feature_registry.V6_GROUPS`. v7 has the same feature names as v6 but the *computed values* differ (shrinkage composition).
 >

@@ -237,15 +237,21 @@ Match_Prediction/
 │   └── results/                   # Auto-generated per-run artifacts
 │
 └── docs/                          # Detailed reference documentation
+    ├── ARCHITECTURE.md            # ★ canonical technical reference (modules,
+    │                              #   data flow, classes, formats, design)
     ├── OPERATIONS.md              # How to run every pipeline
-    ├── DATA_FORMATS.md            # Parquet / SQLite / odds schemas
-    ├── DESIGN_DECISIONS.md        # Architectural rationale
     ├── ADDING_NEW_MODELS.md       # Model-plugin guide
     ├── feature_roadmap.md         # Feature set + status
-    ├── SQLITE_MIGRATION_PROFILE.md    # Chunks → SQLite migration notes
-    ├── POLYMARKET_INTEGRATION.md  # Test-set expansion + odds build
-    └── EVAL_PROFILING.md          # Eval hot-path analysis
+    ├── CLOUD_GPU_TESTING.md       # LLM cloud GPU notes
+    └── archive/                   # historical design docs + one-time memos
+                                   # (DATA_FORMATS, DESIGN_DECISIONS,
+                                   #  CLAUDE_REFERENCE, SQLITE_MIGRATION_PROFILE,
+                                   #  POLYMARKET_INTEGRATION, EVAL_PROFILING, ...)
 ```
+
+`archive/` (top level, not shown above) is a separate, gitignored local
+archive for non-doc artifacts (old logs, historical eval JSONs, superseded
+scripts). See [archive/README.md](archive/README.md).
 
 ---
 

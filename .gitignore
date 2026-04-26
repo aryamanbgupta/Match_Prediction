@@ -45,3 +45,13 @@ logs/
 results.tsv
 
 docs/CLOUD_GPU_TESTING.md
+
+# macOS
+**/.DS_Store
+
+# Local archive (logs, eval results, legacy scripts kept off main paths).
+# Only the data-heavy subdirs are gitignored. README.md, scripts/, and
+# notebooks/ inside archive/ ARE tracked so a fresh clone gets the
+# explanation + the historical code.
+archive/logs/
+archive/eval_results/

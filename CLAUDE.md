@@ -103,8 +103,13 @@ Match_Prediction/
 │   └── tests/                                            # parity harness + benches
 ├── experiments/configs/  # YAML experiment definitions
 ├── experiments/results/  # per-run artifacts (auto-generated)
-└── docs/                 # ARCHITECTURE / OPERATIONS / ADDING_NEW_MODELS / archive
+├── docs/                 # ARCHITECTURE / OPERATIONS / ADDING_NEW_MODELS / archive
+└── archive/              # local-only; gitignored. Old logs / eval JSONs / superseded scripts
 ```
+
+`archive/` is gitignored and **not** load-bearing for the current pipeline.
+Use it for "I remember we had a script that did X" reference. Documentation
+history lives in `docs/archive/` (tracked).
 
 ---
 
