@@ -94,8 +94,14 @@ def _build_fixture_db(tmp_path: Path) -> Path:
     #   runs:        20+30+40+50+60 = 200
     #   balls:       18+22+26+30+34 = 130
     #   dismissals:   0+ 1+ 0+ 0+ 1 =   2
+    # Use named columns so this test is robust to additive schema changes
+    # (e.g. schema v4 added c0..cw outcome-count columns; the recent_*
+    # assertions don't depend on those, and the schema's NOT NULL defaults
+    # cover unset columns).
     conn.execute(
-        "INSERT INTO batting VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO batting (player_id, date_id, runs, balls, dismissals, "
+        "recent_runs, recent_balls, recent_dismissals) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (0, 5, 210, 142, 2, 200, 130, 2),
     )
     # Denormalized recent_* on bowling row for p1 on 2024-01-06.
@@ -104,7 +110,9 @@ def _build_fixture_db(tmp_path: Path) -> Path:
     #   balls_bowled:  24*5            = 120
     #   wickets:        0+ 2+ 1+ 0+ 1  =   4
     conn.execute(
-        "INSERT INTO bowling VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO bowling (player_id, date_id, runs_given, balls_bowled, wickets, "
+        "recent_runs_given, recent_balls_bowled, recent_wickets) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (1, 5, 203, 144, 5, 173, 120, 4),
     )
 
@@ -122,10 +130,13 @@ def _build_fixture_db(tmp_path: Path) -> Path:
 # ---------------------------------------------------------------------------
 # Assertions
 
-def test_schema_version_is_3():
-    """SCHEMA_VERSION must have been bumped from 2 to 3."""
-    assert SCHEMA_VERSION == 3, (
-        f"SCHEMA_VERSION is {SCHEMA_VERSION}, expected 3 for Phase B"
+def test_schema_version_at_least_3():
+    """The match_log tables were introduced in schema v3 (Phase B). Any
+    future schema bump (v4 added outcome-count columns; v5 etc.) must
+    keep the match_log surface, so this asserts >= 3, not == 3."""
+    assert SCHEMA_VERSION >= 3, (
+        f"SCHEMA_VERSION is {SCHEMA_VERSION}, expected >= 3 (match_log "
+        "introduced in Phase B / schema v3)"
     )
 
 
@@ -270,7 +281,7 @@ if __name__ == "__main__":
     # Allow standalone runs for fast dev iteration.
     import traceback
     tests = [
-        test_schema_version_is_3,
+        test_schema_version_at_least_3,
         test_log_returns_newest_first,
         test_limit_parameter_honored,
         test_strict_date_exclusion,
