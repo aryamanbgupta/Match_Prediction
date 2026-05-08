@@ -110,28 +110,56 @@ class StatsProvider:
 
 
 class StatsProviderCache:
-    """Per-instance memo layer over a StatsProvider for team/venue lookups.
+    """Per-instance memo layer over a StatsProvider.
 
-    The 5 memoized methods are pure functions of (lineup_ids, date) or
-    (venue, date) — both constant across every sim of a single match.
-    Without this wrapper, each of the ~240 balls × 100 sims re-runs
-    11-player loops inside the provider; with it, each match computes
-    them once and the remaining ~24,000 calls are dict hits.
+    Two tiers of memoization:
+
+      1. Team-level methods (5 originals): keyed on `(tuple(lineup_ids), date)`
+         or `(venue, date)`. Constant across every ball of a single match.
+      2. Per-player getters (12 added 2026-05-08): keyed on `(player_id, date)`
+         or `(p1, p2, date)` for h2h. Within an innings the striker stays
+         many balls; the bowler stays for 6. Cache locality is enormous.
+
+    The cProfile of v7's 41-min eval showed 1.4 M SQLite queries — most of
+    them per-player getters re-fetching the same `(pid, date)` row. With
+    tier 2 in place the post-warmup hot path is dict hits.
 
     Thin by design: non-cached methods are forwarded via __getattr__,
     so callers use the wrapped instance exactly like a StatsProvider.
     Wrap once at model construction; the wrapper is picklable (memos
     hold only immutable keys and scalar/dict outputs) and survives the
     multiprocessing.Pool.starmap hand-off to workers.
+
+    Memory: across a 261-match eval each memo holds ≤ 261 × ~30 = ~8K
+    entries (one per unique `(player, date)` pair). Twelve memos × ~16 KB
+    each ≈ 200 KB. No invalidation needed at production scale.
     """
 
     def __init__(self, provider):
         self._provider = provider
+        # Tier 1: team-level (originals).
         self._team_batting_elo: Dict = {}
         self._team_bowling_elo: Dict = {}
         self._team_batting_strength: Dict = {}
         self._team_bowling_strength: Dict = {}
         self._venue_profile: Dict = {}
+        # Tier 2: per-player getters keyed on (pid, date) or
+        # (bid, bowler_id, date) for h2h.
+        self._batting_stats: Dict = {}
+        self._bowling_stats: Dict = {}
+        self._h2h_stats: Dict = {}
+        self._batting_recent: Dict = {}
+        self._bowling_recent: Dict = {}
+        self._batting_vs_type_stats: Dict = {}
+        self._bowling_vs_hand_stats: Dict = {}
+        # Outcome-dist getters take a `k` (and `hierarchical` for vs-cells)
+        # kwarg; in production the values are constant per run, but include
+        # them in the key so a non-default call can't return a stale entry.
+        self._batter_outcome_dist: Dict = {}
+        self._bowler_outcome_dist: Dict = {}
+        self._batter_vs_type_outcome_dist: Dict = {}
+        self._bowler_vs_hand_outcome_dist: Dict = {}
+        self._venue_outcome_dist: Dict = {}
 
     def __getattr__(self, name):
         # __getattr__ runs only when normal lookup misses. During pickle
@@ -193,12 +221,139 @@ class StatsProviderCache:
             self._venue_profile[key] = cached
         return cached
 
+    # --- Tier 2: per-player getters --------------------------------------
+
+    def _player_key(self, player_id, as_of_date):
+        return (player_id, self._norm_date(as_of_date))
+
+    def get_batting_stats(self, player_id, as_of_date) -> Dict[str, float]:
+        key = self._player_key(player_id, as_of_date)
+        cached = self._batting_stats.get(key)
+        if cached is None:
+            cached = self._provider.get_batting_stats(player_id, as_of_date)
+            self._batting_stats[key] = cached
+        return cached
+
+    def get_bowling_stats(self, player_id, as_of_date) -> Dict[str, float]:
+        key = self._player_key(player_id, as_of_date)
+        cached = self._bowling_stats.get(key)
+        if cached is None:
+            cached = self._provider.get_bowling_stats(player_id, as_of_date)
+            self._bowling_stats[key] = cached
+        return cached
+
+    def get_h2h_stats(self, batter_id, bowler_id, as_of_date) -> Dict[str, float]:
+        key = (batter_id, bowler_id, self._norm_date(as_of_date))
+        cached = self._h2h_stats.get(key)
+        if cached is None:
+            cached = self._provider.get_h2h_stats(batter_id, bowler_id, as_of_date)
+            self._h2h_stats[key] = cached
+        return cached
+
+    def get_batting_recent(self, player_id, as_of_date) -> Dict[str, float]:
+        key = self._player_key(player_id, as_of_date)
+        cached = self._batting_recent.get(key)
+        if cached is None:
+            cached = self._provider.get_batting_recent(player_id, as_of_date)
+            self._batting_recent[key] = cached
+        return cached
+
+    def get_bowling_recent(self, player_id, as_of_date) -> Dict[str, float]:
+        key = self._player_key(player_id, as_of_date)
+        cached = self._bowling_recent.get(key)
+        if cached is None:
+            cached = self._provider.get_bowling_recent(player_id, as_of_date)
+            self._bowling_recent[key] = cached
+        return cached
+
+    def get_batting_vs_type_stats(self, player_id, as_of_date) -> Dict[str, float]:
+        key = self._player_key(player_id, as_of_date)
+        cached = self._batting_vs_type_stats.get(key)
+        if cached is None:
+            cached = self._provider.get_batting_vs_type_stats(player_id, as_of_date)
+            self._batting_vs_type_stats[key] = cached
+        return cached
+
+    def get_bowling_vs_hand_stats(self, player_id, as_of_date) -> Dict[str, float]:
+        key = self._player_key(player_id, as_of_date)
+        cached = self._bowling_vs_hand_stats.get(key)
+        if cached is None:
+            cached = self._provider.get_bowling_vs_hand_stats(player_id, as_of_date)
+            self._bowling_vs_hand_stats[key] = cached
+        return cached
+
+    # Outcome-dist getters (Phase 5/6). `k` and `hierarchical` are part of
+    # the key so a non-default call doesn't poison the default-arg cache.
+
+    def get_batter_outcome_dist(self, player_id, as_of_date,
+                                k: float = 30.0) -> Dict[str, float]:
+        key = (player_id, self._norm_date(as_of_date), k)
+        cached = self._batter_outcome_dist.get(key)
+        if cached is None:
+            cached = self._provider.get_batter_outcome_dist(player_id, as_of_date, k=k)
+            self._batter_outcome_dist[key] = cached
+        return cached
+
+    def get_bowler_outcome_dist(self, player_id, as_of_date,
+                                k: float = 30.0) -> Dict[str, float]:
+        key = (player_id, self._norm_date(as_of_date), k)
+        cached = self._bowler_outcome_dist.get(key)
+        if cached is None:
+            cached = self._provider.get_bowler_outcome_dist(player_id, as_of_date, k=k)
+            self._bowler_outcome_dist[key] = cached
+        return cached
+
+    def get_batter_vs_type_outcome_dist(self, player_id, as_of_date,
+                                        k: float = 30.0,
+                                        hierarchical: bool = True) -> Dict[str, float]:
+        key = (player_id, self._norm_date(as_of_date), k, hierarchical)
+        cached = self._batter_vs_type_outcome_dist.get(key)
+        if cached is None:
+            cached = self._provider.get_batter_vs_type_outcome_dist(
+                player_id, as_of_date, k=k, hierarchical=hierarchical)
+            self._batter_vs_type_outcome_dist[key] = cached
+        return cached
+
+    def get_bowler_vs_hand_outcome_dist(self, player_id, as_of_date,
+                                        k: float = 30.0,
+                                        hierarchical: bool = True) -> Dict[str, float]:
+        key = (player_id, self._norm_date(as_of_date), k, hierarchical)
+        cached = self._bowler_vs_hand_outcome_dist.get(key)
+        if cached is None:
+            cached = self._provider.get_bowler_vs_hand_outcome_dist(
+                player_id, as_of_date, k=k, hierarchical=hierarchical)
+            self._bowler_vs_hand_outcome_dist[key] = cached
+        return cached
+
+    def get_venue_outcome_dist(self, venue: str, as_of_date,
+                               k: float = 200.0) -> Dict[str, float]:
+        key = (venue, self._norm_date(as_of_date), k)
+        cached = self._venue_outcome_dist.get(key)
+        if cached is None:
+            cached = self._provider.get_venue_outcome_dist(venue, as_of_date, k=k)
+            self._venue_outcome_dist[key] = cached
+        return cached
+
     def clear_memo(self) -> None:
+        # Tier 1
         self._team_batting_elo.clear()
         self._team_bowling_elo.clear()
         self._team_batting_strength.clear()
         self._team_bowling_strength.clear()
         self._venue_profile.clear()
+        # Tier 2
+        self._batting_stats.clear()
+        self._bowling_stats.clear()
+        self._h2h_stats.clear()
+        self._batting_recent.clear()
+        self._bowling_recent.clear()
+        self._batting_vs_type_stats.clear()
+        self._bowling_vs_hand_stats.clear()
+        self._batter_outcome_dist.clear()
+        self._bowler_outcome_dist.clear()
+        self._batter_vs_type_outcome_dist.clear()
+        self._bowler_vs_hand_outcome_dist.clear()
+        self._venue_outcome_dist.clear()
 
 
 def wrap_with_cache(provider):
