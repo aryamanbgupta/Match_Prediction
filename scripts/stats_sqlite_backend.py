@@ -341,6 +341,15 @@ class _SQLiteBackend:
         # phase rows are absent (pre-Phase-3 cache). The per-phase getter
         # is the only consumer; outcome-dist features unchanged.
         self._phase_priors: Optional[Dict[str, tuple]] = None
+        # Memo for `_norm_date`. The hot path calls `_norm_date(state.match_date)`
+        # via `_resolve_date_id` on every getter — ~1.4 M times in a typical
+        # 261×100 eval. The underlying `datetime.strftime` is ~1 µs each;
+        # caching collapses the post-warmup cost to a dict lookup. Capped at
+        # _DATE_NORM_CACHE_MAX so a misuse (e.g. dynamic dates) can't grow
+        # the dict unboundedly. Stripped on pickle so workers start clean.
+        self._date_norm_cache: Dict = {}
+
+    _DATE_NORM_CACHE_MAX = 16
 
     # --- pickle: strip PID-bound connection so workers re-open ----------
 
@@ -348,6 +357,8 @@ class _SQLiteBackend:
         state = self.__dict__.copy()
         state['_conn'] = None
         state['_conn_pid'] = None
+        # Don't drag the date-norm memo across fork; tiny but principled.
+        state['_date_norm_cache'] = {}
         return state
 
     # --- connection & lookups -------------------------------------------
@@ -427,11 +438,19 @@ class _SQLiteBackend:
                 phase_priors[phase] = self._prior
         self._phase_priors = phase_priors
 
-    @staticmethod
-    def _norm_date(as_of_date) -> str:
-        if isinstance(as_of_date, datetime):
-            return as_of_date.strftime('%Y-%m-%d')
-        return as_of_date
+    def _norm_date(self, as_of_date) -> str:
+        # Fast path: caller already passed a string (common in rehydration
+        # and test-fixture code). Skip cache + strftime.
+        if not isinstance(as_of_date, datetime):
+            return as_of_date
+        cache = self._date_norm_cache
+        cached = cache.get(as_of_date)
+        if cached is not None:
+            return cached
+        s = as_of_date.strftime('%Y-%m-%d')
+        if len(cache) < self._DATE_NORM_CACHE_MAX:
+            cache[as_of_date] = s
+        return s
 
     def _resolve_date_id(self, as_of_date) -> int:
         """Largest date_id whose date ≤ as_of_date, or -1 if none."""
