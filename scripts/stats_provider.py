@@ -102,11 +102,22 @@ class StatsProvider:
 
     def __getattr__(self, name):
         # Only hit when the attribute isn't set on `self` directly.
+        # Short-circuit dunders so pickle doesn't pull __setstate__ / etc.
+        # from the wrapped backend during deserialisation (which would
+        # restore the wrong shape onto this instance).
+        if name.startswith('__'):
+            raise AttributeError(name)
         try:
             backend = self.__dict__['_backend']
         except KeyError:
             raise AttributeError(name)
         return getattr(backend, name)
+
+    def __getstate__(self):
+        return self.__dict__.copy()
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
 
 
 class StatsProviderCache:
@@ -166,11 +177,26 @@ class StatsProviderCache:
         # restore, `_provider` itself hasn't been set yet — calling
         # `self._provider` here would recurse. Use __dict__ directly and
         # surface the miss as AttributeError so pickle can proceed.
+        # Dunder names short-circuit straight to AttributeError: pickle
+        # probes for `__setstate__` / `__reduce_ex__` etc. during restore,
+        # and forwarding those to the (not-yet-restored) provider would
+        # return inappropriate methods that corrupt the deserialised state.
+        if name.startswith('__'):
+            raise AttributeError(name)
         try:
             provider = self.__dict__['_provider']
         except KeyError:
             raise AttributeError(name)
         return getattr(provider, name)
+
+    def __getstate__(self):
+        # Explicit so pickle uses __dict__ verbatim instead of probing
+        # through __getattr__ (which forwards to the wrapped provider and
+        # confuses the deserialiser).
+        return self.__dict__.copy()
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
 
     @staticmethod
     def _norm_date(as_of_date) -> str:
