@@ -4,11 +4,26 @@ T20 cricket match prediction. Predict ball outcomes
 (`{0:dot, 1:one, 2:two, 3:four, 4:six, 5:wicket}`), simulate matches via
 Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
 
-**Active model**: XGBoost v7 — 114 features (V3 + 42 outcome-distribution),
-**hierarchical shrinkage** on the 4 vs-type/vs-hand cells (Phase 5,
-2026-04-25); k_player=30, k_venue=200 (Phase 6 swept k ∈ {10, 30, 100, 300},
-k=30 won on both LL and flat ROI). Config:
-`experiments/configs/xgb_v6_hierarchical_shrink.yaml`.
+**Active models** (two production models with complementary roles):
+
+1. **Match-level direct (winner-market predictor)** — XGBoost binary classifier
+   on ~47 match-level features (team strength, position-split ELOs, recent
+   form, H2H, home/away, lineup mix). Trained on `team1_wins`. Variant of
+   record: `models/xgb_match_v2_frozen/` (no-leakage diagnostic; see
+   `reports/no_leakage_diagnostic.md`). Config:
+   `experiments/configs/xgb_match_v1_baseline.yaml`. **Headline 2026-05-09**:
+   ≥$50k slice LL **0.5004** (CI [0.45, 0.56]) vs market 0.6267, flat ROI
+   **+53.67%** (CI [+36%, +74%]) — both go/no-go conditions cleared by wide
+   margins; conservative early-test floor +33.5% on 124 bets. Use this for
+   match-winner predictions.
+
+2. **Ball-level sim** — XGBoost v7, 114 features (V3 + 42 outcome-dist),
+   hierarchical shrinkage on the 4 vs-type/vs-hand cells (Phase 5
+   2026-04-25); k_player=30, k_venue=200 (Phase 6 sweep). Config:
+   `experiments/configs/xgb_v6_hierarchical_shrink.yaml`. v7 lost the
+   winner-market race to the direct model by ~0.24 LL. **Use this for prop
+   bets, score distributions, in-play scenarios** — anywhere ball-level
+   resolution matters and match-level supervision can't help.
 
 Schema-v4 SQLite stats cache at `models/player_stats_cache_v3.sqlite` —
 schema unchanged from v6; v7 differs only in the shrinkage *composition*
@@ -18,7 +33,8 @@ priors (`prior_{pp,mid,death}_p*`) are written to `_meta` but the
 ablation showed it regresses LL (collinear with is_powerplay/middle/death).
 
 Eval set: `data/polymarket_test/` + `betting_odds_polymarket.json`
-(261 matches). Use `--min-volume {50000,100000}` to slice for sharp markets.
+(261 matches; 255 join to the direct model after team-name aliasing).
+Use `--min-volume {50000,100000}` to slice for sharp markets.
 
 ---
 
@@ -32,21 +48,43 @@ The `.venv` shipped with the repo is the source of truth.
 ## Quick start
 
 ```bash
+# === Match-level direct model (active winner-market predictor) ===
+# Materialize one-row-per-match parquet, train, predict on test:
+uv run python scripts/materialize_match_features.py \
+    --out-dir data/xgb_match_data_v2_frozen \
+    --freeze-trackers-after 2025-06-30
+uv run python scripts/xgboost_match_v1.py \
+    --cmd both \
+    --data-dir data/xgb_match_data_v2_frozen \
+    --model-dir models/xgb_match_v2_frozen
+# Blend with v7 sim eval JSON + reslice + report:
+uv run python scripts/sim_eval/blend_eval_json.py \
+    --sim-json eval_out_phase5_hier/hier_all_20260425_165622.json \
+    --direct-json models/xgb_match_v2_frozen/test_predictions.json \
+    --w 0.0 0.2 0.5 0.8 1.0 \
+    --out-dir eval_out_blend_a2_frozen
+for w in w0p00 w0p20 w0p50 w0p80 w1p00; do
+  uv run python scripts/sim_eval/reslice_eval_json.py \
+    --in eval_out_blend_a2_frozen/hier_all_20260425_165622_${w}.json \
+    --odds betting_odds_polymarket.json \
+    --out-dir eval_out_blend_a2_frozen/sliced
+done
+uv run python scripts/sim_eval/blend_report.py \
+    --sliced-dir eval_out_blend_a2_frozen/sliced \
+    --direct-json models/xgb_match_v2_frozen/test_predictions.json \
+    --out reports/blend_a2_frozen_report.md
+
+# === Ball-level sim (v7 — for props / scores / in-play) ===
 # One command: cache → parquet → train → eval. Each step skipped if its
 # artifact is already current (via _meta.schema_version + .feature_hash).
-# v7 baseline (hierarchical shrinkage):
 uv run python scripts/run_experiment.py \
     experiments/configs/xgb_v6_hierarchical_shrink.yaml
-
-# v6 baseline (flat shrinkage, retained for reference):
-uv run python scripts/run_experiment.py \
-    experiments/configs/xgb_v6_outcome_dist.yaml
 
 # Sliced eval (after eval has produced match_evaluation_results JSON):
 bash scripts/run_sliced_eval.sh   # all / >=$50k / >=$100k
 ```
 
-Step-by-step equivalent: `build_stats_cache.py` → `materialize_features.py`
+Step-by-step v7 sim equivalent: `build_stats_cache.py` → `materialize_features.py`
 → `xgboost_v2.py` → `sim_eval/run_sim_eval.py`. See `docs/OPERATIONS.md`.
 
 ---

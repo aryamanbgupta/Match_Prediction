@@ -874,6 +874,90 @@ Critical path complete for Phase A+B. Phase C remains the next opportunity.
 
 ---
 
+## Match-Level Direct + Sim Ensemble (LANDED 2026-05-09)
+
+The v7 ball-level simulator was hitting LL 0.7402 on the ≥$50k polymarket slice — 0.114 above market 0.6267, and worse than coinflip 0.6931 on the sharpest matches. Six phases of outcome-distribution work moved this only marginally on sharp markets. Diagnosed as a **resolution problem, not calibration** (see "Calibration vs. Resolution" above).
+
+Architectural hypothesis: the sim estimates `P(team1 wins)` by aggregating 240 stochastic per-ball events at ~30% per-class accuracy; variance compounding swamps the marginal signal even at infinite sims. A direct match-level model is supervised on the binary `team1_wins` target with no aggregation noise — fewer training examples (~9.2k matches vs 4M balls), but each example provides supervision on the metric that actually matters.
+
+Plan file: `~/.claude/plans/okay-let-s-go-ahead-reflective-sunrise.md`.
+
+### Architecture
+Direct XGBoost binary classifier on match-level features (`models/xgb_match_v2_frozen/`), blended post-hoc with v7 sim outputs in logit space:
+```
+logit(P_final) = w · logit(P_sim) + (1 − w) · logit(P_direct)
+```
+The blend is post-hoc — existing v7 eval JSONs are reweighted by `w` and resliced via `reslice_eval_json.py`; no need to re-run sim. New scripts: `scripts/sim_eval/blend_eval_json.py`, `scripts/sim_eval/blend_report.py`.
+
+### Phase A1 — cheap-subset features (~26 features)
+- **Files**: `scripts/materialize_match_features.py` (one-row-per-match parquet at `data/xgb_match_data_v1/`), `scripts/xgboost_match_v1.py` (binary trainer with auto-feature-detection + `--predict-test` subcommand), `experiments/configs/xgb_match_v1_baseline.yaml`.
+- Features: per-team batting/bowling ELO, batting avg / SR, bowling avg / econ, ELO and stat differentials, venue (encoded + avg score / chase win pct / dot pct / boundary pct), match context (toss, batting first, competition tier, is_international).
+- Target: `team1_wins` derived from cricsheet `info.outcome.winner`. 291 no-result/abandoned matches dropped.
+- **Result**: direct alone LL **0.6568** on polymarket-overlap subset (255 of 261 matches; 6 missing due to team-name aliasing across cricsheet vs polymarket). v7 sim was 0.7158. LL-vs-w curve **monotone increasing** — sim adds no LL value at any weight. Direct beats sim per-match on 119/261 matches (45.6%).
+- Per-slice: gate not yet cleared (LL 0.6644 on ≥$50k still > market 0.6267).
+- Report: `reports/blend_a1_report.md`.
+
+### Phase A2 — richer features (~47 features)
+- Added in-process trackers in `materialize_match_features.py`:
+  - `TeamFormTracker`: last-N win rate per team, queried strictly before match date
+  - `H2HTracker`: pairwise head-to-head win rate, Beta(1,1) shrunk toward 0.5 (k=2 prior)
+  - `HomeVenueTracker`: 3+ matches in prior 730 days at venue
+- Lineup features via `PlayerMetadataProvider`: `team{1,2}_{lhb,pace,spinner}_count`.
+- ELO splits via squad-list ordering: `team{1,2}_top6_batting_elo_avg`, `team{1,2}_bottom5_bowling_elo_avg`, plus diffs.
+- **Top feature importances**: `bottom5_bowling_elo_diff` (0.084), `top6_batting_elo_diff` (0.075). Position-split ELOs do more work than v7 sim's lineup-wide aggregates — the sim sees `batting_team_elo` but not "batting unit's strength concentrated in the top 6".
+- **Standalone polymarket-overlap LL: 0.5226** (vs A1 0.6568, vs market 0.6267, vs v7 0.7158). Below market by 0.10 — first time the model has cleared LL parity.
+- Report: `reports/blend_a2_report.md`. Caveats first reported in `reports/blend_a2_caveats.md` (since superseded by the no-leakage diagnostic).
+
+### No-leakage diagnostic (added 2026-05-09)
+A2's headline was suspicious — +47% ROI is far above realistic 1-3% market edges. Two diagnostic findings prompted a deeper audit:
+- **Temporal split** (early test 2025-09→2026-01 vs late test 2026-01→2026-04): late ROI was ~3× early ROI. Initial hypothesis: tracker contamination during test period (form/H2H/home trackers accumulate state as we walk the corpus chronologically).
+- **Outlier sensitivity**: stripping France @ 20.0 + Zimbabwe @ 11.76 wins drops all-slice ROI from +43% to +32%.
+
+Implemented `--freeze-trackers-after DATE` in `materialize_match_features.py`:
+- For matches with `date > freeze_date`: per-match fresh SQLite rehydration as-of `freeze_date + 1 day`. Prevents within-test cross-match contamination.
+- For matches with `date > freeze_date`: A2 trackers (form / H2H / home) are read-only — no updates from this match's outcome flow back into the trackers.
+
+**Counter-intuitive finding: FROZEN is BETTER than unfrozen across every slice.** The tracker contamination hypothesis is ruled out — if anything, unfrozen mode hurt by drifting test features past the temporal scope the model trained on (test trackers had ~9 months of test-period data; train trackers only had data prior to each train match).
+
+| Variant | ≥$50k LL | ≥$50k ROI | ≥$100k LL | ≥$100k ROI |
+|---|---|---|---|---|
+| A2 unfrozen | 0.5135 | +47.35% | 0.4554 | +51.04% |
+| **A2 frozen** | **0.5004** | **+53.67%** | **0.4361** | **+58.03%** |
+
+The temporal divergence persists in frozen mode (early ROI +33.54% vs late +67.01%, gap +33.46pp) — but Phase A1 has the SAME ~33pp gap with no A2 trackers at all. **Composition explains it**: late test has 47 T20 World Cup 2026 qualifying matches (India vs Namibia, France vs Portugal, etc.) where strength differentials are extreme and the model's confidence is well-justified.
+
+Audit pass clean across every temporal data path: SQLite rehydration uses `date_id < as_of` semantics; `_meta` priors are global but only consumed by v7 sim; train-target correlations are modest (max 0.33); binary features show physically plausible effects (3.6pp home advantage, no toss-winner effect).
+
+Full report: `reports/no_leakage_diagnostic.md`.
+
+### Headline (active model: A2 frozen, w=0.0)
+
+| Slice | LL (95% CI) | Flat ROI (95% CI) | n |
+|---|---|---|---|
+| all | 0.4944 [0.45, 0.53] | +50.73% [+32.4, +74.4] | 255 |
+| ≥$50k | **0.5004** [0.45, 0.56] | **+53.67%** [+36.0, +73.8] | 168 |
+| ≥$100k | **0.4361** [0.37, 0.50] | **+58.03%** [+33.4, +86.6] | 110 |
+| IPL 2026 only | 0.5817 [0.44, 0.73] | +43.44% [+0.85, +83.3] | 22 |
+| Reference: market | 0.6267 | — | — |
+| Reference: coinflip | 0.6931 | — | — |
+| Reference: v7 sim ≥$50k | 0.7402 | +6.11% [-10.7, +23.9] | — |
+
+**Both go/no-go conditions cleared by wide margins on every ≥$50k / ≥$100k slice** — first time any model on this project has done so.
+
+Conservative no-tail floor (early-test only, frozen, no late-WC concentration): ROI **+33.54%** on 124 bets. The IPL slice CI lower bound just barely clears zero on n=22, suggesting domestic-league edge is real but tighter than international-tournament edge.
+
+### Caveats remaining
+1. **Eval composition** leans on lopsided WC matches in late test. Domestic-league betting may show a smaller edge.
+2. **Outlier sensitivity** persists independently of freezing: 2 long-shot wins account for ~30 of +110 PnL on the all-slice.
+3. **No live forward test yet** — strongest validation would be 30-60 polymarket pre-match snapshots from this week onward, evaluated in a month.
+
+### Implications for the project
+- **Direct match model is now the production winner-market predictor.** v7 sim is best reserved for prop bets, score distributions, in-play scenarios where match-level supervision can't help.
+- A logistic-regression stacker (the originally-deferred Phase B) is **no longer obviously valuable** — the LL-vs-w curve is monotone increasing in w (sim weight), so there's no complementarity for the stacker to exploit. Revisit only if future feature work changes the curve shape.
+- The "calibration vs resolution" framing from the prior research note is empirically vindicated: the LL gap to market closed via direct supervision (resolution), not via calibrating the existing under-resolving sim.
+
+---
+
 ## What NOT To Do
 
 - Don't chase ball-level accuracy beyond ~60% — individual balls are inherently noisy.

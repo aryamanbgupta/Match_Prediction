@@ -90,6 +90,45 @@ The 6-phase plan to evaluate v6 + four feature/refactor experiments. Outcome:
 - [ ] Separate `k_narrow` sweep (Phase 5/6 held k_narrow = k_player = 30 throughout; an independent sweep could widen the hierarchical ROI win).
 - [ ] Per-batter / per-bowler phase distributions (the Phase 3 plan's natural successor — those WOULDN'T be collinear with is_powerplay since they vary across players).
 
+## Match-level direct + sim ensemble (LANDED 2026-05-09)
+
+The v7 sim was hitting LL 0.7402 on the ≥$50k polymarket slice — 0.114 above market, and *worse than coinflip* on the sharpest matches. Diagnosed as a **resolution problem** (not calibration; see IMPROVEMENTS.md §"Calibration vs. Resolution"). Architectural fix: a direct match-level XGBoost binary classifier supervised on `team1_wins`, blended post-hoc with v7 sim outputs in logit space `logit(P_final) = w·logit(P_sim) + (1−w)·logit(P_direct)`. Plan: `~/.claude/plans/okay-let-s-go-ahead-reflective-sunrise.md`.
+
+### Phase A1 — cheap-subset features (~26 features)
+- Files: `scripts/materialize_match_features.py`, `scripts/xgboost_match_v1.py`, `scripts/sim_eval/blend_eval_json.py`, `scripts/sim_eval/blend_report.py`, `experiments/configs/xgb_match_v1_baseline.yaml`.
+- Direct alone LL 0.6568 on the polymarket-overlap subset (255 of 261); v7 sim was 0.7158. LL-vs-w curve **monotone increasing** — sim adds no LL value. Direct beat sim on 119/261 matches per-match.
+- Per-slice gate: NOT cleared (LL still > market 0.6267). Report: `reports/blend_a1_report.md`.
+
+### Phase A2 — richer features (~47 features)
+- Added `TeamFormTracker` (last-10 win rate), `H2HTracker` (Beta(1,1)-shrunk), `HomeVenueTracker` (3+ matches in 730d), lineup mix (LHB/pace/spinner counts), **top-6 batting / bottom-5 bowling ELO splits**.
+- Top importance: `bottom5_bowling_elo_diff` (0.084), `top6_batting_elo_diff` (0.075). Position-split ELOs do more work than v7 sim's lineup-wide aggregates.
+- Standalone polymarket-overlap LL: **0.5226** (vs A1 0.6568, vs market 0.6267, vs v7 0.7158).
+
+### No-leakage diagnostic (added 2026-05-09)
+- New `--freeze-trackers-after DATE` flag: per-match fresh SQLite rehydration as-of `freeze_date+1` in test period; A2 trackers stop updating past freeze. Prevents within-test cross-match contamination.
+- **Counter-intuitive finding: FROZEN is BETTER than unfrozen** across every slice. Tracker contamination ruled out — unfrozen mode hurt by drifting test features past the temporal scope the model trained on.
+- Temporal split (early vs late test) shows +33pp ROI gap in BOTH Phase A1 and A2-frozen → not contamination, **composition effect** from late-test T20 World Cup mismatch concentration (47/131 late matches are India/WI/Pakistan vs Namibia/Italy/Netherlands qualifiers).
+- Audit pass clean: SQLite `_meta` priors used only by v7 sim, train-target correlations modest (max 0.33), binary-feature effects physically plausible (3.6pp home advantage, no toss-winner effect). Full report: `reports/no_leakage_diagnostic.md`.
+
+### Headline (active model: A2 frozen, w=0.0)
+
+| Slice | LL (95% CI) | Flat ROI (95% CI) | n |
+|---|---|---|---|
+| all | 0.4944 [0.45, 0.53] | +50.73% [+32.4, +74.4] | 255 |
+| ≥$50k | 0.5004 [0.45, 0.56] | +53.67% [+36.0, +73.8] | 168 |
+| ≥$100k | 0.4361 [0.37, 0.50] | +58.03% [+33.4, +86.6] | 110 |
+| IPL 2026 only | 0.5817 [0.44, 0.73] | +43.44% [+0.85, +83.3] | 22 |
+| Reference: market | 0.6267 | — | — |
+
+**Both go/no-go conditions cleared on every ≥$50k / ≥$100k slice.** Conservative no-tail floor (early-test only, frozen, no late-WC concentration): ROI **+33.54%** on 124 bets. IPL slice CI lower bound just barely clears zero (n=22 too small for tight inference).
+
+### Open follow-ups
+- [ ] **Forward test**: capture polymarket pre-match snapshots for new T20s starting now; in 30-60 days evaluate on 30-60 fresh matches with no possibility of leakage.
+- [ ] **Wait for IPL 2026 to complete (late May)**, re-evaluate on full ~70-match IPL-only slice for a sharper domestic-league sanity check (current n=22 has CI lower bound at +0.85%).
+- [ ] **Logistic-regression stacker** (deferred Phase B from the plan) — A1/A2 LL-vs-w curves are monotone increasing in w (sim weight), so no complementarity for the stacker to exploit. Skip unless future feature work changes the curve shape.
+- [ ] **Reframe v7 sim's role**: with direct dominating winner-market LL by ~0.24, v7 sim should likely be reserved for prop bets, score distributions, in-play scenarios — not winner-market predictions.
+- [ ] **Address outlier sensitivity**: France @ 20.0 + Zimbabwe @ 11.76 wins account for ~30 of +110 PnL on all-slice. Consider an edge-cap or position-size rule (max-stake when implied edge > X) before live deployment.
+
 ## Root Cause Analysis (Dec 2024)
 **Why both models predict ~50% for all matches:**
 1. **Weak correlation**: Player stats have r=0.06-0.11 with ball outcomes (explains <1.5% of variance)
@@ -130,8 +169,7 @@ The 6-phase plan to evaluate v6 + four feature/refactor experiments. Outcome:
   - `bowler_spell_balls`, `bowler_overs_left` (max 4 per T20), `new_bowler` (first ball of spell)
 - [ ] **Enhanced momentum features**:
   - `scoring_acceleration` (last 10 vs last 30 run rate), `wicket_cluster` (wickets in last 10 balls), `boundaries_in_last_over`
-- [ ] **Home advantage (explicit)**:
-  - `is_home_team` (3+ matches at venue in last 2 years), `team_venue_win_pct`
+- [x] **Home advantage (explicit)** — landed 2026-05-09 in the match-level direct model: `is_team1_home`, `is_team2_home` features (3+ matches at venue in last 730d) shipped via `HomeVenueTracker` in `materialize_match_features.py`. Modest signal — P(win | team1 home) = 0.509 vs 0.473 in train. See "Match-level direct + sim ensemble" section below.
 - [ ] **Include The Hundred** (`hnd_json.zip`) in `scripts/fetch_cricsheet.py` once the pipeline supports variable innings length. Current 120-ball hardcodes live in `parsing_v2.py`, `sim_v1_2.py` (`T20Rules`), and `transformer_v1.py` (`max_seq_len=120`).
 - [ ] Phase-aware bowler selection (pace in powerplay/death, spin in middle overs)
 - [ ] Second-innings aggression adjustment based on required run rate
@@ -159,7 +197,7 @@ The 6-phase plan to evaluate v6 + four feature/refactor experiments. Outcome:
 - [ ] Ensemble stacking: 3-7 diverse models + logistic regression meta-learner
 - [ ] Add time decay to features
 - [ ] Consider regression model (predict E[runs]) instead of classification
-- [ ] Match-level model: predict P(team1 wins) directly from lineups
+- [x] **Match-level model: predict P(team1 wins) directly from lineups** — **LANDED 2026-05-09**. XGBoost binary classifier on ~47 match-level features dominates v7 sim on winner-market LL across every liquidity slice. See "Match-level direct + sim ensemble" section below.
 
 ## Research Notes
 See [IMPROVEMENTS.md](IMPROVEMENTS.md) for detailed research findings:

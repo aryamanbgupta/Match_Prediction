@@ -1,0 +1,36 @@
+# Match-level direct model — Phase A1 of the direct + sim ensemble plan
+# (~/.claude/plans/okay-let-s-go-ahead-reflective-sunrise.md).
+#
+# This config is not wired into scripts/run_experiment.py — the per-ball
+# runner expects features.groups + the per-ball parquet cache, neither of
+# which apply here. Run directly:
+#
+#   uv run python scripts/materialize_match_features.py
+#   uv run python scripts/xgboost_match_v1.py --cmd both
+#
+# Hyperparameters below mirror the trainer's CLI defaults; this YAML is
+# the source of truth for the recorded baseline.
+experiment:
+  name: "xgb_match_v1_baseline"
+  description: "Match-level direct XGBoost binary classifier on the cheap-subset (~26 features incl. encoded venue + competition_tier). Phase A1 of the match-level direct + sim ensemble plan. Trains team1_wins prediction supervised on cricsheet outcome.winner; output predictions are blended post-hoc with v7 sim outputs via scripts/sim_eval/blend_eval_json.py."
+  tags: ["xgboost", "match_level", "direct", "ensemble_a1"]
+
+data:
+  version: "match_v1"
+  parquet_dir: "data/xgb_match_data_v1"
+
+model:
+  type: "xgboost_match"
+  hyperparameters:
+    n_estimators: 300
+    max_depth: 4
+    learning_rate: 0.1
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_alpha: 0.1
+    reg_lambda: 1.0
+    early_stopping_rounds: 30
+
+artifacts:
+  model_dir: "models/xgb_match_v1"
+  predictions_json: "models/xgb_match_v1/test_predictions.json"

@@ -6,7 +6,9 @@ This document outlines the feature sets used in the model and tracks implementat
 
 | Version | Features | Data Path | Model Path | Status |
 |---------|----------|-----------|------------|--------|
-| **v7** | **114** (V6 + hierarchical shrinkage on vs-type/vs-hand) | `data/xgb_data_v3/` | `models/xgb_v3/` | **Current (Phase 5 hier shrink + Phase 6 k=30, 2026-04-25)** |
+| **xgb_match_v2 (frozen)** | **47** (match-level: team strength, position-split ELOs, recent form, H2H, home/away, lineup mix) | `data/xgb_match_data_v2_frozen/` | `models/xgb_match_v2_frozen/` | **Active winner-market predictor (2026-05-09). One row per match; binary `team1_wins` target. Blended post-hoc with v7 sim via `scripts/sim_eval/blend_eval_json.py`. Headline ≥$50k LL 0.5004 vs market 0.6267; both go/no-go conditions cleared. See IMPROVEMENTS.md §"Match-Level Direct + Sim Ensemble".** |
+| xgb_match_v1 | 26 | `data/xgb_match_data_v1/` | `models/xgb_match_v1/` | Phase A1 baseline (cheap-subset features only). Direct alone LL 0.6568 on polymarket-overlap. Superseded by xgb_match_v2. |
+| **v7 (sim)** | **114** (V6 + hierarchical shrinkage on vs-type/vs-hand) | `data/xgb_data_v3/` | `models/xgb_v3/` | **Active for ball-level prop bets / score distributions / in-play scenarios** (Phase 5 hier shrink + Phase 6 k=30, 2026-04-25). Lost the winner-market race to xgb_match_v2. |
 | v6 | 114 (V3 + 42 outcome-dist, flat shrinkage) | `data/xgb_data_v3/` | `models/xgb_v3_v6_backup/` | Prior baseline (2026-04-23) |
 | v4 (team strength) | 72 | `data/xgb_data_v3/` | (retrain to recover) | Prior baseline (March 2026) |
 | v3 | 46+ | `data/xgb_data_v3/` | (retrain to recover) | With player metadata, no team strength |
