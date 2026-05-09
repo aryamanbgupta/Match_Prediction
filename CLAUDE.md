@@ -9,12 +9,17 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
 1. **Match-level direct (winner-market predictor)** — XGBoost binary classifier
    on ~45 match-level features (team strength, position-split ELOs, recent
    form, H2H, home/away, lineup mix). Trained on `team1_wins`. Variant of
-   record: **`models/xgb_match_v2_clean/`** — retrained 2026-05-09 after a
-   feature-leakage fix (see `reports/leakage_fix_comparison.md`). The earlier
-   `xgb_match_v2_clean` was reading per-player ELOs *after*
-   `parse_match_data_v2` had updated them ball-by-ball with this match's own
-   outcomes; that path is now patched in `materialize_match_features.py`.
-   Config: `experiments/configs/xgb_match_v1_baseline.yaml`.
+   record: **`models/xgb_match_v2_clean_unfrozen/`** — booster bytes
+   bit-identical to the earlier `xgb_match_v2_clean` (train+val parquets
+   are identical between frozen and unfrozen builds, so retraining
+   produces the same model). Named for inference semantics: per-fixture
+   unfrozen rehydration is the production path. The model was retrained
+   2026-05-09 after a feature-leakage fix
+   (see `reports/leakage_fix_comparison.md`); pre-fix `_build_match_record`
+   was reading per-player ELOs *after* `parse_match_data_v2` had updated
+   them ball-by-ball with this match's own outcomes. Patched in
+   `materialize_match_features.py`. Config:
+   `experiments/configs/xgb_match_v1_baseline.yaml`.
    **Honest headline (golden eval, 2026-05-07 cutoff, n=55 polymarket overlap)**:
    ≥$50k slice (n=50) LL **0.6747** (CI [0.64, 0.72]) vs market 0.6267 — does
    *not* beat market on log loss; flat ROI **+32.6%** (CI [-0.2%, +63.6%]) —
@@ -24,13 +29,29 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
    and is retracted. Use this for match-winner predictions; treat the edge as
    modest, not dominant.
 
+   **Frozen vs unfrozen tracker semantics**: previous diagnostic claimed
+   frozen-mode trackers (snapshot at val/test boundary, no within-test
+   updates) outperformed unfrozen on every slice. After the leakage fix
+   that finding compressed roughly 2× and split: frozen still wins LL on
+   the polymarket-overlap subset by ~0.01–0.02; unfrozen wins on the full
+   782-match standalone test by 0.016 LL and wins ROI on the ≥$100k
+   slice. Conclusion: the gap is small enough that picking either is
+   defensible. We default to unfrozen — it matches real deployment
+   semantics (each prediction sees state through the fixture date, just
+   like a live bookmaker) without leaning on an empirical artifact. See
+   `reports/no_leakage_diagnostic_clean.md`.
+
 2. **Ball-level sim** — XGBoost v7, 114 features (V3 + 42 outcome-dist),
    hierarchical shrinkage on the 4 vs-type/vs-hand cells (Phase 5
    2026-04-25); k_player=30, k_venue=200 (Phase 6 sweep). Config:
    `experiments/configs/xgb_v6_hierarchical_shrink.yaml`. v7 lost the
-   winner-market race to the direct model by ~0.24 LL. **Use this for prop
-   bets, score distributions, in-play scenarios** — anywhere ball-level
-   resolution matters and match-level supervision can't help.
+   winner-market race to the clean direct model by ~0.07 LL on ≥$50k
+   (v7 0.7402 vs clean direct golden 0.6747). Audited 2026-05-09 for
+   the analogous leakage that hit the match-level model — clean
+   structurally and empirically (`reports/v7_leakage_audit.md`). **Use
+   this for prop bets, score distributions, in-play scenarios** —
+   anywhere ball-level resolution matters and match-level supervision
+   can't help.
 
 Schema-v4 SQLite stats cache at `models/player_stats_cache_v3.sqlite` —
 schema unchanged from v6; v7 differs only in the shrinkage *composition*
@@ -95,7 +116,11 @@ uv run python scripts/sim_eval/blend_report.py \
 # === Predict an upcoming fixture ===
 # Hand-write fixtures/<match>.json (see fixtures/_template.json), then:
 uv run python scripts/predict_fixture.py --fixture fixtures/<match>.json
-# First run takes ~7s (builds Phase A2 tracker pickle); subsequent sub-second.
+# First run takes ~7s (builds tracker_snapshot_test_end.pkl from t20s_json
+# only — golden data NOT included). Subsequent sub-second. Per-fixture
+# unfrozen rehydration: SQLite + tracker queries use as-of fixture_date,
+# falling back to test_end (2026-04-16) for fixtures past that. Pass
+# --rebuild-snapshot if data/t20s_json grows.
 
 # === Golden eval refresh (after new polymarket capture + cricsheet refresh) ===
 # 1. Pull new T20 cricsheet JSONs from stat-generator (date >= 2026-04-17):

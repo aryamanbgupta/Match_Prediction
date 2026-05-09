@@ -1008,13 +1008,18 @@ Roughly two-thirds of the previously reported ROI was leakage-driven.
 
 ### Caveats remaining
 1. **No live forward test yet** — golden set is "fresh polymarket capture but model could still be slightly tuned to artifacts of the iteration set". The truly clean signal is 30-60 days of capture-then-evaluate.
-2. **xgboost_v2.py (v7 ball-level sim) not yet audited for analogous leakage.** Same parser, possibly similar issues. Highest priority before any v7 follow-up.
-3. **Eval composition** still leans on tournament-international + IPL — no PSL/SA20/domestic-league representation in golden.
+2. **Eval composition** still leans on tournament-international + IPL — no PSL/SA20/domestic-league representation in golden.
 
 Full audit and comparison: `reports/leakage_fix_comparison.md`.
 
+### Stage-1 audit follow-ups landed (2026-05-09)
+
+**v7 ball-level sim audited for analogous leakage — clean.** Same parser as the match-level path, but the bug pattern doesn't apply: per-ball features are computed before per-ball `update_stats` / `elo_tracker.update`; team-level constants (lines 1061-1098 of `parsing_v2.py`) are computed at match start before any ball-loop mutation; SQLite snapshot per date is first-write-wins (pre-D state); there is no second-pass equivalent of `_build_match_record`. Empirical check: 10/10 solo-date first-of-day matches show bit-exact match between parquet `striker_elo` / `batting_team_elo` and SQLite pre-D rehydration. v7 also doesn't compute top-6/bottom-5 ELO splits at all, so the specific bug pattern can't symmetrically apply. The honest LL gap (v7 0.7402 ≥$50k vs clean direct golden 0.6747) reflects a real resolution problem in v7, not a fixable measurement artifact. Full report: `reports/v7_leakage_audit.md`.
+
+**No-leakage diagnostic re-run on clean model — finding compressed, not flipped.** Frozen still beats unfrozen on polymarket-overlap LL across every slice (Δ −0.014 / −0.010 / −0.016 on all/≥$50k/≥$100k), but margins are roughly half what they were under the leaky regime. ROI: frozen wins on `all` and `≥$50k`; unfrozen narrowly wins `≥$100k` (+27.53 vs +25.31). On the full 782-match standalone test, unfrozen is slightly better (LL 0.6027 vs 0.6180) — the freeze advantage is specific to the polymarket-overlap subset. Late-vs-early temporal gap (~0.07 LL) persists in both variants, consistent with the original composition-effect explanation (T20 WC mismatches concentrated late). Take-aways: tracker contamination is not the dominant driver in either direction; frozen is the safer iteration-eval framing; unfrozen is the correct semantics for live deployment. Full report: `reports/no_leakage_diagnostic_clean.md`.
+
 ### Implications for prior conclusions
-- **No-leakage diagnostic** ("frozen better than unfrozen"): may flip with the dominant feature drift removed. Re-run is open.
+- **No-leakage diagnostic** ("frozen better than unfrozen"): SURVIVES on polymarket-overlap with halved magnitude (see Stage-1 follow-ups above). Reverses on the broader full-test standalone — frozen advantage is specific to high-liquidity matches.
 - **Logistic-regression stacker still skip**: clean direct still beats clean sim on LL. The qualitative ranking holds even if the magnitudes shifted.
 - **"Calibration vs resolution" framing**: still vindicated qualitatively — direct supervision adds resolution that calibrating the sim couldn't. The clean numbers are smaller but the directional story holds.
 

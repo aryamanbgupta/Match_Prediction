@@ -142,8 +142,8 @@ Truly out-of-sample: 2026-04-17 → 2026-05-07, never seen by training/selection
 **Soft go/no-go (ROI CI alone): clears only on ≥$100k slice.**
 
 ### Open follow-ups
-- [ ] **Audit `xgboost_v2.py` (v7 ball-level sim) for analogous leakage** — same parser, possibly similar mid-match-state-as-feature issues. Highest priority before any v7 follow-up.
-- [ ] **Re-run no-leakage diagnostic with the clean model** — the previous "frozen is BETTER than unfrozen" finding may flip with the dominant drift removed.
+- [x] **Audit `xgboost_v2.py` (v7 ball-level sim) for analogous leakage** (2026-05-09) — clean. Per-ball features computed before per-ball update_stats / elo_tracker.update; team-level constants computed at match start before any ball-loop mutation; SQLite snapshot per date is first-write-wins (pre-D state); no second-pass `_build_match_record` equivalent. Empirical pass: 10/10 solo-date first-of-day matches show bit-exact match between parquet `striker_elo` / `batting_team_elo` and SQLite pre-D rehydration. v7 also doesn't compute top-6/bottom-5 ELO splits, so the specific bug pattern can't apply. Full report: `reports/v7_leakage_audit.md`.
+- [x] **Re-run no-leakage diagnostic with the clean model** (2026-05-09) — frozen-better-than-unfrozen finding survives, magnitude compressed roughly 2×. On polymarket-overlap clean: frozen LL 0.6271 / 0.6339 / 0.5877 vs unfrozen 0.6409 / 0.6437 / 0.6036 (all/≥$50k/≥$100k). On standalone full 782-match test, unfrozen now slightly better (0.6027 vs 0.6180). Late-vs-early temporal gap (~0.07 LL) persists in both variants — composition-effect explanation still holds. Full report: `reports/no_leakage_diagnostic_clean.md`.
 - [ ] **Forward test**: capture polymarket pre-match snapshots starting now; in 30-60 days evaluate on 30-60 fresh matches.
 - [ ] **Wait for IPL 2026 to complete (late May)**, re-evaluate on full ~70-match IPL-only slice for a sharper domestic-league sanity check.
 - [ ] **Reframe v7 sim's role**: even with the inflated number retracted, direct still beat sim on golden LL (0.67 vs ~0.74 on ≥$50k). Reserve v7 sim for prop bets, score distributions, in-play scenarios.

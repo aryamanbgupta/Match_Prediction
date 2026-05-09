@@ -1,23 +1,24 @@
 """Predict a single upcoming fixture without going through the full
 materialization pipeline.
 
-Uses xgb_match_v2_clean — the post-leakage-fix model. The earlier
-xgb_match_v2_frozen had ~0.5 ELO of post-match drift in its top6/bottom5
-features (parsing_v2.py mutates the ELO tracker ball-by-ball, and
-_build_match_record was reading it AFTER parse). That's been fixed in
-materialize_match_features.py by snapshotting temp_elo before parse;
-xgb_match_v2_clean was trained on the cleaned parquet and is the
-production model now.
+Uses xgb_match_v2_clean_unfrozen — the post-leakage-fix model trained
+on unfrozen-tracker test rows (booster bytes bit-identical to
+xgb_match_v2_clean, since train+val parquets are identical between the
+two builds; named for semantic clarity). Unfrozen-style inference: per
+fixture, rehydrate SQLite + tracker queries as-of the fixture date,
+not a fixed freeze boundary. Golden-test data (2026-04-17+) is NOT
+included in the SQLite cache or tracker snapshot — that's reserved for
+final eval. The corpus consequently covers data through 2026-04-16
+(the test_end date), so for fixtures dated after that, predictions
+reflect the most recent NON-golden state.
 
-The clean model expects ~45 features per match. Most are derived from
-the SQLite snapshot we already have (frozen at 2025-07-01) and the
-Phase A2 trackers (frozen at 2025-06-30). For a future match we:
+For a future match we:
 
   1. Read a hand-written fixture JSON (date, teams, venue, lineups, toss).
-  2. Rehydrate per-player ELO + venue trackers from SQLite at the freeze
-     date for this fixture's players + venue.
-  3. Load the pickled Phase A2 tracker snapshot (one-time built on first
-     run; auto-rebuilt if missing).
+  2. Rehydrate per-player ELO + venue trackers from SQLite as-of the
+     fixture date (not a fixed freeze).
+  3. Load the pickled Phase A2 tracker snapshot built through the
+     latest non-golden data; queries filter by fixture date internally.
   4. Compute the same 47 features that materialize_match_features.py
      would compute for this match (no ball data needed — we use the
      same StatsProvider getters parse_match_data_v2 ultimately calls).
@@ -61,18 +62,19 @@ from tracker_rehydration import (  # noqa: E402
     rehydrate_venue_tracker,
 )
 
-MODEL_DIR = REPO / "models" / "xgb_match_v2_clean"
-TRACKER_SNAPSHOT = REPO / "data" / "tracker_snapshot_2025-06-30.pkl"
-FREEZE_BOUNDARY = datetime(2025, 6, 30)
-FREEZE_AS_OF = datetime(2025, 7, 1)
+MODEL_DIR = REPO / "models" / "xgb_match_v2_clean_unfrozen"
+TRACKER_SNAPSHOT = REPO / "data" / "tracker_snapshot_test_end.pkl"
 EDGE_THRESHOLD = 0.0
 
 
 def build_tracker_snapshot(source_dir: Path = REPO / "data" / "t20s_json") -> dict:
-    """Walk all matches with date <= 2025-06-30 and snapshot the three
-    Phase A2 trackers. Idempotent: writes pickle to TRACKER_SNAPSHOT.
+    """Walk every match in the corpus and snapshot the three Phase A2
+    trackers. The corpus excludes golden data (2026-04-17+) by design —
+    that's reserved for final eval. Records are stored chronologically
+    and filtered by query date at lookup time, so a single snapshot
+    serves all fixture-date queries.
     """
-    print(f"Building Phase A2 tracker snapshot at {FREEZE_BOUNDARY.date()} "
+    print(f"Building Phase A2 tracker snapshot from {source_dir} "
           f"(one-time, ~30s)...")
     t0 = time.time()
     form = TeamFormTracker()
@@ -80,11 +82,11 @@ def build_tracker_snapshot(source_dir: Path = REPO / "data" / "t20s_json") -> di
     home = HomeVenueTracker(lookback_days=730)
 
     n = 0
+    latest = None
     for mid, json_text, match_date in iter_matches_chronological(
             str(source_dir), gender="male"):
-        if match_date > FREEZE_BOUNDARY:
-            break
         n += 1
+        latest = match_date if latest is None or match_date > latest else latest
         data = json.loads(json_text)
         info = data.get("info") or {}
         teams = info.get("teams") or []
@@ -110,7 +112,7 @@ def build_tracker_snapshot(source_dir: Path = REPO / "data" / "t20s_json") -> di
         home.update(t2, venue, match_date)
 
     snapshot = {
-        "as_of": FREEZE_BOUNDARY.strftime("%Y-%m-%d"),
+        "as_of": latest.strftime("%Y-%m-%d") if latest else None,
         "form_records": dict(form.records),
         "h2h_records": {tuple(sorted(k)): v for k, v in h2h.records.items()},
         "home_records": dict(home.records),
@@ -123,6 +125,14 @@ def build_tracker_snapshot(source_dir: Path = REPO / "data" / "t20s_json") -> di
     dt = time.time() - t0
     print(f"  walked {n} matches in {dt:.1f}s -> {TRACKER_SNAPSHOT}")
     return snapshot
+
+
+def _peek_snapshot_as_of() -> str | None:
+    """Return the tracker snapshot's `as_of` field for diagnostics."""
+    if not TRACKER_SNAPSHOT.exists():
+        return None
+    with open(TRACKER_SNAPSHOT, "rb") as f:
+        return pickle.load(f).get("as_of")
 
 
 def load_trackers() -> tuple[TeamFormTracker, H2HTracker, HomeVenueTracker]:
@@ -227,20 +237,25 @@ def compute_features(fixture: dict,
         # to team1 chasing (modal in IPL recent seasons).
         team1_batting_first = False
 
-    # Rehydrate per-player ELO + venue trackers as-of the freeze date.
+    # Rehydrate per-player ELO + venue trackers as-of the fixture date.
+    # SQLite returns state strictly before this date (first-write-wins),
+    # so for any fixture_date past test_end (2026-04-16), this falls back
+    # to the latest non-golden state. Within-corpus dates get full
+    # pre-fixture history.
+    rehydrate_as_of = match_date
     union_pids = set(team1_lineup) | set(team2_lineup)
-    elo_tracker = rehydrate_elo_tracker(provider, FREEZE_AS_OF, union_pids)
-    venue_tracker = rehydrate_venue_tracker(provider, FREEZE_AS_OF, {venue})
+    elo_tracker = rehydrate_elo_tracker(provider, rehydrate_as_of, union_pids)
+    venue_tracker = rehydrate_venue_tracker(provider, rehydrate_as_of, {venue})
 
     # Team-level batting/bowling aggregates (per StatsProvider).
-    t1_bat_strength = provider.get_team_batting_strength(team1_lineup, FREEZE_AS_OF)
-    t1_bow_strength = provider.get_team_bowling_strength(team1_lineup, FREEZE_AS_OF)
-    t2_bat_strength = provider.get_team_batting_strength(team2_lineup, FREEZE_AS_OF)
-    t2_bow_strength = provider.get_team_bowling_strength(team2_lineup, FREEZE_AS_OF)
-    t1_bat_elo = provider.get_team_batting_elo(team1_lineup, FREEZE_AS_OF)
-    t1_bow_elo = provider.get_team_bowling_elo(team1_lineup, FREEZE_AS_OF)
-    t2_bat_elo = provider.get_team_batting_elo(team2_lineup, FREEZE_AS_OF)
-    t2_bow_elo = provider.get_team_bowling_elo(team2_lineup, FREEZE_AS_OF)
+    t1_bat_strength = provider.get_team_batting_strength(team1_lineup, rehydrate_as_of)
+    t1_bow_strength = provider.get_team_bowling_strength(team1_lineup, rehydrate_as_of)
+    t2_bat_strength = provider.get_team_batting_strength(team2_lineup, rehydrate_as_of)
+    t2_bow_strength = provider.get_team_bowling_strength(team2_lineup, rehydrate_as_of)
+    t1_bat_elo = provider.get_team_batting_elo(team1_lineup, rehydrate_as_of)
+    t1_bow_elo = provider.get_team_bowling_elo(team1_lineup, rehydrate_as_of)
+    t2_bat_elo = provider.get_team_batting_elo(team2_lineup, rehydrate_as_of)
+    t2_bow_elo = provider.get_team_bowling_elo(team2_lineup, rehydrate_as_of)
 
     # Venue features — use the rehydrated tracker so semantics match the
     # parser exactly (venue_avg_score = total_runs/innings_count, not
@@ -430,8 +445,8 @@ def main() -> int:
         "bet": bet_info,
         "diagnostics": {
             "model": str(MODEL_DIR),
-            "freeze_as_of": FREEZE_AS_OF.strftime("%Y-%m-%d"),
-            "tracker_snapshot_as_of": FREEZE_BOUNDARY.strftime("%Y-%m-%d"),
+            "rehydrate_as_of": fixture["date"],
+            "tracker_snapshot_as_of": _peek_snapshot_as_of(),
             "encoder_warnings": debug["encoder_warnings"],
             "h2h_n_meetings": record["h2h_n_meetings"],
             "is_team1_home": record["is_team1_home"],
