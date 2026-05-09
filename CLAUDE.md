@@ -7,15 +7,22 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
 **Active models** (two production models with complementary roles):
 
 1. **Match-level direct (winner-market predictor)** — XGBoost binary classifier
-   on ~47 match-level features (team strength, position-split ELOs, recent
+   on ~45 match-level features (team strength, position-split ELOs, recent
    form, H2H, home/away, lineup mix). Trained on `team1_wins`. Variant of
-   record: `models/xgb_match_v2_frozen/` (no-leakage diagnostic; see
-   `reports/no_leakage_diagnostic.md`). Config:
-   `experiments/configs/xgb_match_v1_baseline.yaml`. **Headline 2026-05-09**:
-   ≥$50k slice LL **0.5004** (CI [0.45, 0.56]) vs market 0.6267, flat ROI
-   **+53.67%** (CI [+36%, +74%]) — both go/no-go conditions cleared by wide
-   margins; conservative early-test floor +33.5% on 124 bets. Use this for
-   match-winner predictions.
+   record: **`models/xgb_match_v2_clean/`** — retrained 2026-05-09 after a
+   feature-leakage fix (see `reports/leakage_fix_comparison.md`). The earlier
+   `xgb_match_v2_clean` was reading per-player ELOs *after*
+   `parse_match_data_v2` had updated them ball-by-ball with this match's own
+   outcomes; that path is now patched in `materialize_match_features.py`.
+   Config: `experiments/configs/xgb_match_v1_baseline.yaml`.
+   **Honest headline (golden eval, 2026-05-07 cutoff, n=55 polymarket overlap)**:
+   ≥$50k slice (n=50) LL **0.6747** (CI [0.64, 0.72]) vs market 0.6267 — does
+   *not* beat market on log loss; flat ROI **+32.6%** (CI [-0.2%, +63.6%]) —
+   ROI CI just barely includes zero. ≥$100k slice (n=45) LL 0.6698,
+   flat ROI **+34.8%** (CI [+3.79%, +65.5%]) — narrowly clears the soft
+   ROI-only gate. The earlier "+47-58% ROI" claim was inflated by the leakage
+   and is retracted. Use this for match-winner predictions; treat the edge as
+   modest, not dominant.
 
 2. **Ball-level sim** — XGBoost v7, 114 features (V3 + 42 outcome-dist),
    hierarchical shrinkage on the 4 vs-type/vs-hand cells (Phase 5
@@ -32,9 +39,20 @@ priors (`prior_{pp,mid,death}_p*`) are written to `_meta` but the
 `phase_outcome_dist` feature group is NOT in v7's feature list — Phase 3
 ablation showed it regresses LL (collinear with is_powerplay/middle/death).
 
-Eval set: `data/polymarket_test/` + `betting_odds_polymarket.json`
-(261 matches; 255 join to the direct model after team-name aliasing).
-Use `--min-volume {50000,100000}` to slice for sharp markets.
+Eval sets:
+- **Iteration set**: `data/polymarket_test/` + `betting_odds_polymarket.json`
+  (261 matches, 2025-07-01 → 2026-04-16). Used during model selection; not
+  strictly out-of-sample.
+- **Golden set** (2026-05-09): `data/golden/polymarket_test/` +
+  `data/golden/betting_odds_golden.json` (55 matches, 2026-04-17 → 2026-05-07).
+  Truly out-of-sample — never seen by training, validation, or selection.
+  Built by `extract_golden_cricsheet.py` (cricsheet from
+  `/Users/aryamangupta/Projects/stat-generator/data/cricsheet/`) and
+  `build_polymarket_odds_golden.py` (polymarket from
+  `/Users/aryamangupta/Projects/polymarket-cricket/data/polymarket_prematch_odds_<date>.json`).
+  Per-match dashboard: `reports/ipl_2026_dashboard_clean.html`.
+
+Use `--min-volume {50000,100000}` to slice either set for sharp markets.
 
 ---
 
@@ -51,28 +69,59 @@ The `.venv` shipped with the repo is the source of truth.
 # === Match-level direct model (active winner-market predictor) ===
 # Materialize one-row-per-match parquet, train, predict on test:
 uv run python scripts/materialize_match_features.py \
-    --out-dir data/xgb_match_data_v2_frozen \
+    --out-dir data/xgb_match_data_v2_clean \
     --freeze-trackers-after 2025-06-30
 uv run python scripts/xgboost_match_v1.py \
     --cmd both \
-    --data-dir data/xgb_match_data_v2_frozen \
-    --model-dir models/xgb_match_v2_frozen
+    --data-dir data/xgb_match_data_v2_clean \
+    --model-dir models/xgb_match_v2_clean
 # Blend with v7 sim eval JSON + reslice + report:
 uv run python scripts/sim_eval/blend_eval_json.py \
     --sim-json eval_out_phase5_hier/hier_all_20260425_165622.json \
-    --direct-json models/xgb_match_v2_frozen/test_predictions.json \
+    --direct-json models/xgb_match_v2_clean/test_predictions.json \
     --w 0.0 0.2 0.5 0.8 1.0 \
-    --out-dir eval_out_blend_a2_frozen
+    --out-dir eval_out_blend_a2_clean
 for w in w0p00 w0p20 w0p50 w0p80 w1p00; do
   uv run python scripts/sim_eval/reslice_eval_json.py \
-    --in eval_out_blend_a2_frozen/hier_all_20260425_165622_${w}.json \
+    --in eval_out_blend_a2_clean/hier_all_20260425_165622_${w}.json \
     --odds betting_odds_polymarket.json \
-    --out-dir eval_out_blend_a2_frozen/sliced
+    --out-dir eval_out_blend_a2_clean/sliced
 done
 uv run python scripts/sim_eval/blend_report.py \
-    --sliced-dir eval_out_blend_a2_frozen/sliced \
-    --direct-json models/xgb_match_v2_frozen/test_predictions.json \
-    --out reports/blend_a2_frozen_report.md
+    --sliced-dir eval_out_blend_a2_clean/sliced \
+    --direct-json models/xgb_match_v2_clean/test_predictions.json \
+    --out reports/blend_a2_clean_report.md
+
+# === Predict an upcoming fixture ===
+# Hand-write fixtures/<match>.json (see fixtures/_template.json), then:
+uv run python scripts/predict_fixture.py --fixture fixtures/<match>.json
+# First run takes ~7s (builds Phase A2 tracker pickle); subsequent sub-second.
+
+# === Golden eval refresh (after new polymarket capture + cricsheet refresh) ===
+# 1. Pull new T20 cricsheet JSONs from stat-generator (date >= 2026-04-17):
+uv run python scripts/extract_golden_cricsheet.py
+# 2. Build golden polymarket odds (set GOLDEN_POLYMARKET_PATH to latest file):
+uv run python scripts/build_polymarket_odds_golden.py
+# 3. Re-materialize parquet (clean, no leakage):
+uv run python scripts/materialize_match_features.py \
+    --source-dir data/t20s_json --extra-source-dir data/golden/t20s_json \
+    --out-dir data/xgb_match_data_v2_clean --freeze-trackers-after 2025-06-30
+# 4. Predict golden + reslice:
+uv run python scripts/predict_golden.py \
+    --model-dir models/xgb_match_v2_clean \
+    --parquet data/xgb_match_data_v2_clean/golden_test.parquet \
+    --out-json models/xgb_match_v2_clean/golden_predictions.json
+uv run python scripts/synthesize_golden_envelope.py
+uv run python scripts/sim_eval/blend_eval_json.py \
+    --sim-json data/golden/golden_sim_envelope.json \
+    --direct-json models/xgb_match_v2_clean/golden_predictions.json \
+    --w 0.0 --out-dir data/golden/blended_clean_retrained
+uv run python scripts/sim_eval/reslice_eval_json.py \
+    --in data/golden/blended_clean_retrained/golden_sim_envelope_w0p00.json \
+    --odds data/golden/betting_odds_golden.json \
+    --out-dir data/golden/sliced_clean_retrained
+# 5. Per-match audit:
+uv run python scripts/build_ipl_dashboard.py
 
 # === Ball-level sim (v7 — for props / scores / in-play) ===
 # One command: cache → parquet → train → eval. Each step skipped if its

@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>IPL 2026 — model dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  body { font-family: -apple-system, system-ui, Segoe UI, sans-serif;
+         margin: 0; padding: 24px; background: #fafbfc; color: #222; }
+  h1 { margin: 0 0 4px 0; }
+  .sub { color: #666; margin-bottom: 24px; }
+  .panels { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;
+             margin-bottom: 24px; }
+  .panel { background: white; border: 1px solid #e1e4e8; border-radius: 8px;
+            padding: 16px; }
+  .panel h2 { margin: 0 0 12px 0; font-size: 14px; color: #586069;
+               text-transform: uppercase; letter-spacing: 0.06em; }
+  .big { font-size: 32px; font-weight: 600; }
+  .big-pos { color: #28a745; }
+  .big-neg { color: #d73a49; }
+  .stat-row { display: flex; justify-content: space-between; margin: 4px 0;
+               font-size: 14px; }
+  .stat-row .lbl { color: #666; }
+  .chart-wrap { background: white; border: 1px solid #e1e4e8; border-radius: 8px;
+                 padding: 16px; margin-bottom: 24px; height: 320px; }
+  table { width: 100%; border-collapse: collapse; background: white;
+           border: 1px solid #e1e4e8; border-radius: 8px; overflow: hidden; }
+  th, td { padding: 10px 12px; text-align: left; vertical-align: top;
+            border-bottom: 1px solid #eaecef; font-size: 13px; }
+  th { background: #f6f8fa; font-weight: 600; color: #24292e;
+        position: sticky; top: 0; z-index: 1; cursor: pointer;
+        user-select: none; }
+  th:hover { background: #e1e4e8; }
+  tr.row-win { background: #f0fff4; }
+  tr.row-loss { background: #fff5f5; }
+  .matchup { font-size: 13px; line-height: 1.4; }
+  .toss { font-size: 11px; margin-top: 4px; }
+  .dim { color: #959da5; font-size: 11px; }
+  .pred-source, .vol, .edge, .note { color: #6a737d; font-size: 11px;
+                                       margin-top: 3px; font-style: italic; }
+  .result-line { font-weight: 600; margin-bottom: 4px; }
+  .score { color: #586069; font-size: 11px; font-family: SF Mono, monospace; }
+  .pnl-win { color: #28a745; font-weight: 600; }
+  .pnl-loss { color: #d73a49; font-weight: 600; }
+  .pnl-cell, .cum-cell { font-family: SF Mono, monospace; font-size: 13px; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px;
+          font-size: 10px; font-weight: 600; text-transform: uppercase;
+          margin-top: 3px; }
+  .tag-live { background: #fff5b1; color: #735c0f; }
+  .tag-golden { background: #c9e8c8; color: #24523f; }
+  .filter-bar { margin-bottom: 12px; }
+  .filter-bar label { margin-right: 16px; font-size: 13px; cursor: pointer; }
+  .footnote { color: #586069; font-size: 12px; margin-top: 24px;
+               border-top: 1px solid #eaecef; padding-top: 16px; }
+</style>
+</head>
+<body>
+<h1>IPL 2026 — model dashboard</h1>
+<div class="sub">
+  Per-match audit of <code>xgb_match_v2_frozen</code> on every IPL 2026 fixture
+  we have data for. Bet rule: 1 unit flat on the team with the largest positive edge
+  (edge = model_prob − market_prob), no bet if best edge ≤ 0.
+  Generated 2026-05-09 19:29Z.
+</div>
+
+<div class="panels">
+  <div class="panel">
+    <h2>Total return</h2>
+    <div class="big big-pos">+21.55 units</div>
+    <div class="stat-row"><span class="lbl">Bets placed</span><span>47</span></div>
+    <div class="stat-row"><span class="lbl">Wins</span><span>33</span></div>
+    <div class="stat-row"><span class="lbl">Win rate</span><span>70.2%</span></div>
+    <div class="stat-row"><span class="lbl">Flat ROI</span><span>+45.8%</span></div>
+  </div>
+  <div class="panel">
+    <h2>Coverage</h2>
+    <div class="big">50</div>
+    <div class="stat-row"><span class="lbl">IPL 2026 matches found</span><span>50</span></div>
+    <div class="stat-row"><span class="lbl">With polymarket odds</span><span>48</span></div>
+    <div class="stat-row"><span class="lbl">With model prediction</span><span>48</span></div>
+    <div class="stat-row"><span class="lbl">No-bet (edge ≤ 0)</span><span>1</span></div>
+  </div>
+  <div class="panel">
+    <h2>By prediction set</h2>
+    <table style="width:100%; font-size:12px;">
+      <thead><tr><th>set</th><th>n</th><th>w</th><th>wr</th><th>pnl</th><th>roi</th></tr></thead>
+      <tbody><tr><td>golden</td><td>25</td><td>18</td><td>72.0%</td><td>+11.99</td><td>+47.9%</td></tr>
+<tr><td>iteration</td><td>22</td><td>15</td><td>68.2%</td><td>+9.56</td><td>+43.4%</td></tr></tbody>
+    </table>
+    <div style="font-size:11px; color:#586069; margin-top:8px;">
+      <span class='tag tag-live'>iteration</span> = test split, model evaluated during selection<br>
+      <span class='tag tag-golden'>golden</span> = post-2026-04-17, never seen by tuning
+    </div>
+  </div>
+</div>
+
+<div class="chart-wrap">
+  <canvas id="cumChart"></canvas>
+</div>
+
+<div class="filter-bar">
+  <label><input type="checkbox" id="f-bets" checked> Show only matches we bet on</label>
+  <label><input type="checkbox" id="f-golden"> Show only golden set</label>
+  <label><input type="checkbox" id="f-loss"> Show only losing bets</label>
+</div>
+
+<table id="matchTable">
+<thead>
+  <tr>
+    <th>#</th>
+    <th>Date / venue</th>
+    <th>Match</th>
+    <th>Result</th>
+    <th>Polymarket odds</th>
+    <th>Our prediction</th>
+    <th>Bet placed</th>
+    <th>PnL</th>
+    <th>Cumulative</th>
+  </tr>
+</thead>
+<tbody>
+  
+        <tr class=''>
+          <td>1</td>
+          <td>2026-03-28<br><span class='dim'>M Chinnaswamy Stadium</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Sunrisers Hyderabad</b><br>vs<br><b>Royal Challengers Bengaluru</b></div>
+            <div class='dim toss'>Royal Challengers Bengaluru elected to field</div>
+          </td>
+          <td><div class='result-line'>Royal Challengers Bengaluru won by 6 wickets</div><div class='score'>Sunrisers Hyderabad 201/9 (20.0)</div><div class='score'>Royal Challengers Bengaluru 203/4 (15.4)</div></td>
+          <td><span class='dim'>—</span></td>
+          <td><div><b>Sunrisers Hyderabad</b>: 79.8%</div><div><b>Royal Challengers Bengaluru</b>: 20.2%</div><div class='pred-source'>iteration</div></td>
+          <td><span class='dim'>—</span><div class='note'>no prediction or odds</div></td>
+          <td class='pnl-cell'><span class='dim'>0</span></td>
+          <td class='cum-cell'><div>+0.00</div><div class='dim'>ROI +0.0%</div><div class='dim'>0/0</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>2</td>
+          <td>2026-03-29<br><span class='dim'>Wankhede Stadium</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Kolkata Knight Riders</b><br>vs<br><b>Mumbai Indians</b></div>
+            <div class='dim toss'>Mumbai Indians elected to field</div>
+          </td>
+          <td><div class='result-line'>Mumbai Indians won by 6 wickets</div><div class='score'>Kolkata Knight Riders 220/4 (20.0)</div><div class='score'>Mumbai Indians 224/4 (19.1)</div></td>
+          <td><div><b>Kolkata Knight Riders</b>: 2.90 (34.5%)</div><div><b>Mumbai Indians</b>: 1.53 (65.5%)</div><div class='vol'>vol $1,711,383</div></td>
+          <td><div><b>Kolkata Knight Riders</b>: 75.9%</div><div><b>Mumbai Indians</b>: 24.1%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Kolkata Knight Riders</b></div><div class='edge'>edge +41.4pp @ 2.90</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-1.00</div><div class='dim'>ROI -100.0%</div><div class='dim'>0/1</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>3</td>
+          <td>2026-03-30<br><span class='dim'>Barsapara Cricket Stadium</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Chennai Super Kings</b><br>vs<br><b>Rajasthan Royals</b></div>
+            <div class='dim toss'>Rajasthan Royals elected to field</div>
+          </td>
+          <td><div class='result-line'>Rajasthan Royals won by 8 wickets</div><div class='score'>Chennai Super Kings 127/10 (19.4)</div><div class='score'>Rajasthan Royals 128/2 (12.1)</div></td>
+          <td><div><b>Chennai Super Kings</b>: 2.06 (48.5%)</div><div><b>Rajasthan Royals</b>: 1.94 (51.5%)</div><div class='vol'>vol $1,589,680</div></td>
+          <td><div><b>Chennai Super Kings</b>: 22.5%</div><div><b>Rajasthan Royals</b>: 77.5%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Rajasthan Royals</b></div><div class='edge'>edge +26.0pp @ 1.94</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+0.942</span></td>
+          <td class='cum-cell'><div>-0.06</div><div class='dim'>ROI -2.9%</div><div class='dim'>1/2</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>4</td>
+          <td>2026-03-31<br><span class='dim'>Maharaja Yadavindra Singh International Cricket Stadium</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Gujarat Titans</b><br>vs<br><b>Punjab Kings</b></div>
+            <div class='dim toss'>Punjab Kings elected to field</div>
+          </td>
+          <td><div class='result-line'>Punjab Kings won by 3 wickets</div><div class='score'>Gujarat Titans 162/6 (20.0)</div><div class='score'>Punjab Kings 165/7 (19.1)</div></td>
+          <td><div><b>Gujarat Titans</b>: 1.94 (51.5%)</div><div><b>Punjab Kings</b>: 2.06 (48.5%)</div><div class='vol'>vol $1,380,342</div></td>
+          <td><div><b>Gujarat Titans</b>: 35.1%</div><div><b>Punjab Kings</b>: 64.9%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Punjab Kings</b></div><div class='edge'>edge +16.4pp @ 2.06</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.062</span></td>
+          <td class='cum-cell'><div>+1.00</div><div class='dim'>ROI +33.5%</div><div class='dim'>2/3</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>5</td>
+          <td>2026-04-01<br><span class='dim'>Bharat Ratna Shri Atal Bihari Vajpayee Ekana Cricket Stadium</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Lucknow Super Giants</b><br>vs<br><b>Delhi Capitals</b></div>
+            <div class='dim toss'>Delhi Capitals elected to field</div>
+          </td>
+          <td><div class='result-line'>Delhi Capitals won by 6 wickets</div><div class='score'>Lucknow Super Giants 141/10 (18.4)</div><div class='score'>Delhi Capitals 145/4 (17.1)</div></td>
+          <td><div><b>Lucknow Super Giants</b>: 1.98 (50.5%)</div><div><b>Delhi Capitals</b>: 2.02 (49.5%)</div><div class='vol'>vol $832,420</div></td>
+          <td><div><b>Lucknow Super Giants</b>: 55.3%</div><div><b>Delhi Capitals</b>: 44.7%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Lucknow Super Giants</b></div><div class='edge'>edge +4.8pp @ 1.98</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>+0.00</div><div class='dim'>ROI +0.1%</div><div class='dim'>2/4</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>6</td>
+          <td>2026-04-02<br><span class='dim'>Eden Gardens</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Sunrisers Hyderabad</b><br>vs<br><b>Kolkata Knight Riders</b></div>
+            <div class='dim toss'>Kolkata Knight Riders elected to field</div>
+          </td>
+          <td><div class='result-line'>Sunrisers Hyderabad won by 65 runs</div><div class='score'>Sunrisers Hyderabad 226/8 (20.0)</div><div class='score'>Kolkata Knight Riders 161/10 (16.0)</div></td>
+          <td><div><b>Sunrisers Hyderabad</b>: 2.11 (47.5%)</div><div><b>Kolkata Knight Riders</b>: 1.90 (52.5%)</div><div class='vol'>vol $1,519,785</div></td>
+          <td><div><b>Sunrisers Hyderabad</b>: 70.1%</div><div><b>Kolkata Knight Riders</b>: 29.9%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Sunrisers Hyderabad</b></div><div class='edge'>edge +22.6pp @ 2.11</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.105</span></td>
+          <td class='cum-cell'><div>+1.11</div><div class='dim'>ROI +22.2%</div><div class='dim'>3/5</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>7</td>
+          <td>2026-04-03<br><span class='dim'>MA Chidambaram Stadium</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Chennai Super Kings</b><br>vs<br><b>Punjab Kings</b></div>
+            <div class='dim toss'>Punjab Kings elected to field</div>
+          </td>
+          <td><div class='result-line'>Punjab Kings won by 5 wickets</div><div class='score'>Chennai Super Kings 209/5 (20.0)</div><div class='score'>Punjab Kings 210/5 (18.4)</div></td>
+          <td><div><b>Chennai Super Kings</b>: 2.20 (45.5%)</div><div><b>Punjab Kings</b>: 1.83 (54.5%)</div><div class='vol'>vol $1,649,676</div></td>
+          <td><div><b>Chennai Super Kings</b>: 46.0%</div><div><b>Punjab Kings</b>: 54.0%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Chennai Super Kings</b></div><div class='edge'>edge +0.5pp @ 2.20</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>+0.11</div><div class='dim'>ROI +1.8%</div><div class='dim'>3/6</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>8</td>
+          <td>2026-04-04<br><span class='dim'>Arun Jaitley Stadium</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Mumbai Indians</b><br>vs<br><b>Delhi Capitals</b></div>
+            <div class='dim toss'>Delhi Capitals elected to field</div>
+          </td>
+          <td><div class='result-line'>Delhi Capitals won by 6 wickets</div><div class='score'>Mumbai Indians 162/6 (20.0)</div><div class='score'>Delhi Capitals 164/4 (18.1)</div></td>
+          <td><div><b>Mumbai Indians</b>: 1.57 (63.5%)</div><div><b>Delhi Capitals</b>: 2.74 (36.5%)</div><div class='vol'>vol $1,533,051</div></td>
+          <td><div><b>Mumbai Indians</b>: 62.2%</div><div><b>Delhi Capitals</b>: 37.8%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Delhi Capitals</b></div><div class='edge'>edge +1.3pp @ 2.74</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.740</span></td>
+          <td class='cum-cell'><div>+1.85</div><div class='dim'>ROI +26.4%</div><div class='dim'>4/7</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>9</td>
+          <td>2026-04-04<br><span class='dim'>Narendra Modi Stadium</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Rajasthan Royals</b><br>vs<br><b>Gujarat Titans</b></div>
+            <div class='dim toss'>Rajasthan Royals elected to bat</div>
+          </td>
+          <td><div class='result-line'>Rajasthan Royals won by 6 runs</div><div class='score'>Rajasthan Royals 210/6 (20.0)</div><div class='score'>Gujarat Titans 204/8 (20.0)</div></td>
+          <td><div><b>Rajasthan Royals</b>: 2.02 (49.5%)</div><div><b>Gujarat Titans</b>: 1.98 (50.5%)</div><div class='vol'>vol $1,460,004</div></td>
+          <td><div><b>Rajasthan Royals</b>: 82.1%</div><div><b>Gujarat Titans</b>: 17.9%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Rajasthan Royals</b></div><div class='edge'>edge +32.6pp @ 2.02</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.020</span></td>
+          <td class='cum-cell'><div>+2.87</div><div class='dim'>ROI +35.9%</div><div class='dim'>5/8</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>10</td>
+          <td>2026-04-05<br><span class='dim'>Rajiv Gandhi International Stadium</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Sunrisers Hyderabad</b><br>vs<br><b>Lucknow Super Giants</b></div>
+            <div class='dim toss'>Lucknow Super Giants elected to field</div>
+          </td>
+          <td><div class='result-line'>Lucknow Super Giants won by 5 wickets</div><div class='score'>Sunrisers Hyderabad 156/9 (20.0)</div><div class='score'>Lucknow Super Giants 160/5 (19.5)</div></td>
+          <td><div><b>Sunrisers Hyderabad</b>: 1.77 (56.5%)</div><div><b>Lucknow Super Giants</b>: 2.30 (43.5%)</div><div class='vol'>vol $1,837,773</div></td>
+          <td><div><b>Sunrisers Hyderabad</b>: 67.1%</div><div><b>Lucknow Super Giants</b>: 32.9%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Sunrisers Hyderabad</b></div><div class='edge'>edge +10.6pp @ 1.77</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>+1.87</div><div class='dim'>ROI +20.8%</div><div class='dim'>5/9</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>11</td>
+          <td>2026-04-05<br><span class='dim'>M Chinnaswamy Stadium</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Royal Challengers Bengaluru</b><br>vs<br><b>Chennai Super Kings</b></div>
+            <div class='dim toss'>Chennai Super Kings elected to field</div>
+          </td>
+          <td><div class='result-line'>Royal Challengers Bengaluru won by 43 runs</div><div class='score'>Royal Challengers Bengaluru 250/3 (20.0)</div><div class='score'>Chennai Super Kings 207/10 (19.4)</div></td>
+          <td><div><b>Royal Challengers Bengaluru</b>: 1.67 (60.0%)</div><div><b>Chennai Super Kings</b>: 2.50 (40.0%)</div><div class='vol'>vol $1,606,311</div></td>
+          <td><div><b>Royal Challengers Bengaluru</b>: 89.0%</div><div><b>Chennai Super Kings</b>: 11.0%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Royal Challengers Bengaluru</b></div><div class='edge'>edge +29.0pp @ 1.67</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+0.667</span></td>
+          <td class='cum-cell'><div>+2.54</div><div class='dim'>ROI +25.4%</div><div class='dim'>6/10</div></td>
+        </tr>
+        <tr class=''>
+          <td>12</td>
+          <td>2026-04-06<br><span class='dim'>Eden Gardens</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Kolkata Knight Riders</b><br>vs<br><b>Punjab Kings</b></div>
+            <div class='dim toss'>Kolkata Knight Riders elected to bat</div>
+          </td>
+          <td><div class='result-line'>No result</div><div class='score'>Kolkata Knight Riders 25/2 (3.4)</div></td>
+          <td><span class='dim'>—</span></td>
+          <td><span class='dim'>—</span></td>
+          <td><span class='dim'>—</span><div class='note'>no prediction or odds</div></td>
+          <td class='pnl-cell'><span class='dim'>0</span></td>
+          <td class='cum-cell'><div>+2.54</div><div class='dim'>ROI +25.4%</div><div class='dim'>6/10</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>13</td>
+          <td>2026-04-07<br><span class='dim'>Barsapara Cricket Stadium</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Rajasthan Royals</b><br>vs<br><b>Mumbai Indians</b></div>
+            <div class='dim toss'>Mumbai Indians elected to field</div>
+          </td>
+          <td><div class='result-line'>Rajasthan Royals won by 27 runs</div><div class='score'>Rajasthan Royals 150/3 (11.0)</div><div class='score'>Mumbai Indians 123/9 (11.0)</div></td>
+          <td><div><b>Rajasthan Royals</b>: 2.30 (43.5%)</div><div><b>Mumbai Indians</b>: 1.77 (56.5%)</div><div class='vol'>vol $2,198,722</div></td>
+          <td><div><b>Rajasthan Royals</b>: 72.3%</div><div><b>Mumbai Indians</b>: 27.7%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Rajasthan Royals</b></div><div class='edge'>edge +28.8pp @ 2.30</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.299</span></td>
+          <td class='cum-cell'><div>+3.83</div><div class='dim'>ROI +34.9%</div><div class='dim'>7/11</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>14</td>
+          <td>2026-04-08<br><span class='dim'>Arun Jaitley Stadium</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Gujarat Titans</b><br>vs<br><b>Delhi Capitals</b></div>
+            <div class='dim toss'>Delhi Capitals elected to field</div>
+          </td>
+          <td><div class='result-line'>Gujarat Titans won by 1 runs</div><div class='score'>Gujarat Titans 210/4 (20.0)</div><div class='score'>Delhi Capitals 209/8 (20.0)</div></td>
+          <td><div><b>Gujarat Titans</b>: 2.11 (47.5%)</div><div><b>Delhi Capitals</b>: 1.90 (52.5%)</div><div class='vol'>vol $2,338,069</div></td>
+          <td><div><b>Gujarat Titans</b>: 62.8%</div><div><b>Delhi Capitals</b>: 37.2%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Gujarat Titans</b></div><div class='edge'>edge +15.3pp @ 2.11</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.105</span></td>
+          <td class='cum-cell'><div>+4.94</div><div class='dim'>ROI +41.2%</div><div class='dim'>8/12</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>15</td>
+          <td>2026-04-09<br><span class='dim'>Eden Gardens</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Kolkata Knight Riders</b><br>vs<br><b>Lucknow Super Giants</b></div>
+            <div class='dim toss'>Lucknow Super Giants elected to field</div>
+          </td>
+          <td><div class='result-line'>Lucknow Super Giants won by 3 wickets</div><div class='score'>Kolkata Knight Riders 181/4 (20.0)</div><div class='score'>Lucknow Super Giants 182/7 (20.0)</div></td>
+          <td><div><b>Kolkata Knight Riders</b>: 2.06 (48.5%)</div><div><b>Lucknow Super Giants</b>: 1.94 (51.5%)</div><div class='vol'>vol $3,047,467</div></td>
+          <td><div><b>Kolkata Knight Riders</b>: 45.7%</div><div><b>Lucknow Super Giants</b>: 54.3%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Lucknow Super Giants</b></div><div class='edge'>edge +2.8pp @ 1.94</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+0.942</span></td>
+          <td class='cum-cell'><div>+5.88</div><div class='dim'>ROI +45.2%</div><div class='dim'>9/13</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>16</td>
+          <td>2026-04-10<br><span class='dim'>Barsapara Cricket Stadium</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Royal Challengers Bengaluru</b><br>vs<br><b>Rajasthan Royals</b></div>
+            <div class='dim toss'>Rajasthan Royals elected to field</div>
+          </td>
+          <td><div class='result-line'>Rajasthan Royals won by 6 wickets</div><div class='score'>Royal Challengers Bengaluru 201/8 (20.0)</div><div class='score'>Rajasthan Royals 202/4 (18.0)</div></td>
+          <td><div><b>Royal Challengers Bengaluru</b>: 2.02 (49.5%)</div><div><b>Rajasthan Royals</b>: 1.98 (50.5%)</div><div class='vol'>vol $2,842,386</div></td>
+          <td><div><b>Royal Challengers Bengaluru</b>: 28.1%</div><div><b>Rajasthan Royals</b>: 71.9%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Rajasthan Royals</b></div><div class='edge'>edge +21.4pp @ 1.98</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+0.980</span></td>
+          <td class='cum-cell'><div>+6.86</div><div class='dim'>ROI +49.0%</div><div class='dim'>10/14</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>17</td>
+          <td>2026-04-11<br><span class='dim'>Maharaja Yadavindra Singh International Cricket Stadium</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Sunrisers Hyderabad</b><br>vs<br><b>Punjab Kings</b></div>
+            <div class='dim toss'>Punjab Kings elected to field</div>
+          </td>
+          <td><div class='result-line'>Punjab Kings won by 6 wickets</div><div class='score'>Sunrisers Hyderabad 219/6 (20.0)</div><div class='score'>Punjab Kings 223/4 (18.5)</div></td>
+          <td><div><b>Sunrisers Hyderabad</b>: 2.20 (45.5%)</div><div><b>Punjab Kings</b>: 1.83 (54.5%)</div><div class='vol'>vol $1,498,415</div></td>
+          <td><div><b>Sunrisers Hyderabad</b>: 69.5%</div><div><b>Punjab Kings</b>: 30.5%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Sunrisers Hyderabad</b></div><div class='edge'>edge +24.0pp @ 2.20</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>+5.86</div><div class='dim'>ROI +39.1%</div><div class='dim'>10/15</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>18</td>
+          <td>2026-04-11<br><span class='dim'>MA Chidambaram Stadium</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Chennai Super Kings</b><br>vs<br><b>Delhi Capitals</b></div>
+            <div class='dim toss'>Delhi Capitals elected to field</div>
+          </td>
+          <td><div class='result-line'>Chennai Super Kings won by 23 runs</div><div class='score'>Chennai Super Kings 212/2 (20.0)</div><div class='score'>Delhi Capitals 189/10 (20.0)</div></td>
+          <td><div><b>Chennai Super Kings</b>: 2.15 (46.5%)</div><div><b>Delhi Capitals</b>: 1.87 (53.5%)</div><div class='vol'>vol $1,597,338</div></td>
+          <td><div><b>Chennai Super Kings</b>: 71.2%</div><div><b>Delhi Capitals</b>: 28.8%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Chennai Super Kings</b></div><div class='edge'>edge +24.7pp @ 2.15</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.151</span></td>
+          <td class='cum-cell'><div>+7.01</div><div class='dim'>ROI +43.8%</div><div class='dim'>11/16</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>19</td>
+          <td>2026-04-12<br><span class='dim'>Bharat Ratna Shri Atal Bihari Vajpayee Ekana Cricket Stadium</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Lucknow Super Giants</b><br>vs<br><b>Gujarat Titans</b></div>
+            <div class='dim toss'>Gujarat Titans elected to field</div>
+          </td>
+          <td><div class='result-line'>Gujarat Titans won by 7 wickets</div><div class='score'>Lucknow Super Giants 164/8 (20.0)</div><div class='score'>Gujarat Titans 165/3 (18.4)</div></td>
+          <td><div><b>Lucknow Super Giants</b>: 2.11 (47.5%)</div><div><b>Gujarat Titans</b>: 1.90 (52.5%)</div><div class='vol'>vol $1,380,081</div></td>
+          <td><div><b>Lucknow Super Giants</b>: 69.1%</div><div><b>Gujarat Titans</b>: 30.9%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Lucknow Super Giants</b></div><div class='edge'>edge +21.6pp @ 2.11</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>+6.01</div><div class='dim'>ROI +35.4%</div><div class='dim'>11/17</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>20</td>
+          <td>2026-04-12<br><span class='dim'>Wankhede Stadium</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Royal Challengers Bengaluru</b><br>vs<br><b>Mumbai Indians</b></div>
+            <div class='dim toss'>Mumbai Indians elected to field</div>
+          </td>
+          <td><div class='result-line'>Royal Challengers Bengaluru won by 18 runs</div><div class='score'>Royal Challengers Bengaluru 240/4 (20.0)</div><div class='score'>Mumbai Indians 222/6 (20.0)</div></td>
+          <td><div><b>Royal Challengers Bengaluru</b>: 2.30 (43.5%)</div><div><b>Mumbai Indians</b>: 1.77 (56.5%)</div><div class='vol'>vol $2,879,926</div></td>
+          <td><div><b>Royal Challengers Bengaluru</b>: 58.9%</div><div><b>Mumbai Indians</b>: 41.1%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Royal Challengers Bengaluru</b></div><div class='edge'>edge +15.4pp @ 2.30</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.299</span></td>
+          <td class='cum-cell'><div>+7.31</div><div class='dim'>ROI +40.6%</div><div class='dim'>12/18</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>21</td>
+          <td>2026-04-13<br><span class='dim'>Rajiv Gandhi International Stadium</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Sunrisers Hyderabad</b><br>vs<br><b>Rajasthan Royals</b></div>
+            <div class='dim toss'>Rajasthan Royals elected to field</div>
+          </td>
+          <td><div class='result-line'>Sunrisers Hyderabad won by 57 runs</div><div class='score'>Sunrisers Hyderabad 216/6 (20.0)</div><div class='score'>Rajasthan Royals 159/10 (19.0)</div></td>
+          <td><div><b>Sunrisers Hyderabad</b>: 2.25 (44.5%)</div><div><b>Rajasthan Royals</b>: 1.80 (55.5%)</div><div class='vol'>vol $3,048,886</div></td>
+          <td><div><b>Sunrisers Hyderabad</b>: 66.8%</div><div><b>Rajasthan Royals</b>: 33.2%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Sunrisers Hyderabad</b></div><div class='edge'>edge +22.3pp @ 2.25</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.247</span></td>
+          <td class='cum-cell'><div>+8.56</div><div class='dim'>ROI +45.0%</div><div class='dim'>13/19</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>22</td>
+          <td>2026-04-14<br><span class='dim'>MA Chidambaram Stadium</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Chennai Super Kings</b><br>vs<br><b>Kolkata Knight Riders</b></div>
+            <div class='dim toss'>Kolkata Knight Riders elected to field</div>
+          </td>
+          <td><div class='result-line'>Chennai Super Kings won by 32 runs</div><div class='score'>Chennai Super Kings 192/5 (20.0)</div><div class='score'>Kolkata Knight Riders 160/7 (20.0)</div></td>
+          <td><div><b>Chennai Super Kings</b>: 1.80 (55.5%)</div><div><b>Kolkata Knight Riders</b>: 2.25 (44.5%)</div><div class='vol'>vol $2,976,367</div></td>
+          <td><div><b>Chennai Super Kings</b>: 68.8%</div><div><b>Kolkata Knight Riders</b>: 31.2%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Chennai Super Kings</b></div><div class='edge'>edge +13.3pp @ 1.80</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+0.802</span></td>
+          <td class='cum-cell'><div>+9.36</div><div class='dim'>ROI +46.8%</div><div class='dim'>14/20</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>23</td>
+          <td>2026-04-15<br><span class='dim'>M Chinnaswamy Stadium</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Lucknow Super Giants</b><br>vs<br><b>Royal Challengers Bengaluru</b></div>
+            <div class='dim toss'>Royal Challengers Bengaluru elected to field</div>
+          </td>
+          <td><div class='result-line'>Royal Challengers Bengaluru won by 5 wickets</div><div class='score'>Lucknow Super Giants 146/10 (20.0)</div><div class='score'>Royal Challengers Bengaluru 149/5 (15.1)</div></td>
+          <td><div><b>Lucknow Super Giants</b>: 2.67 (37.5%)</div><div><b>Royal Challengers Bengaluru</b>: 1.60 (62.5%)</div><div class='vol'>vol $2,459,156</div></td>
+          <td><div><b>Lucknow Super Giants</b>: 43.4%</div><div><b>Royal Challengers Bengaluru</b>: 56.6%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Lucknow Super Giants</b></div><div class='edge'>edge +5.9pp @ 2.67</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>+8.36</div><div class='dim'>ROI +39.8%</div><div class='dim'>14/21</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>24</td>
+          <td>2026-04-16<br><span class='dim'>Wankhede Stadium</span><br><span class='tag tag-live'>live</span></td>
+          <td>
+            <div class='matchup'><b>Mumbai Indians</b><br>vs<br><b>Punjab Kings</b></div>
+            <div class='dim toss'>Punjab Kings elected to field</div>
+          </td>
+          <td><div class='result-line'>Punjab Kings won by 7 wickets</div><div class='score'>Mumbai Indians 195/6 (20.0)</div><div class='score'>Punjab Kings 198/3 (16.3)</div></td>
+          <td><div><b>Mumbai Indians</b>: 1.83 (54.5%)</div><div><b>Punjab Kings</b>: 2.20 (45.5%)</div><div class='vol'>vol $2,590,996</div></td>
+          <td><div><b>Mumbai Indians</b>: 18.3%</div><div><b>Punjab Kings</b>: 81.7%</div><div class='pred-source'>iteration</div></td>
+          <td><div><b>Punjab Kings</b></div><div class='edge'>edge +36.2pp @ 2.20</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.198</span></td>
+          <td class='cum-cell'><div>+9.56</div><div class='dim'>ROI +43.4%</div><div class='dim'>15/22</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>25</td>
+          <td>2026-04-17<br><span class='dim'>Narendra Modi Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Kolkata Knight Riders</b><br>vs<br><b>Gujarat Titans</b></div>
+            <div class='dim toss'>Kolkata Knight Riders elected to bat</div>
+          </td>
+          <td><div class='result-line'>Gujarat Titans won by 5 wickets</div><div class='score'>Kolkata Knight Riders 180/10 (20.0)</div><div class='score'>Gujarat Titans 181/5 (19.4)</div></td>
+          <td><div><b>Kolkata Knight Riders</b>: 2.35 (42.5%)</div><div><b>Gujarat Titans</b>: 1.74 (57.5%)</div><div class='vol'>vol $2,505,777</div></td>
+          <td><div><b>Kolkata Knight Riders</b>: 42.7%</div><div><b>Gujarat Titans</b>: 57.3%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Kolkata Knight Riders</b></div><div class='edge'>edge +0.2pp @ 2.35</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>+8.56</div><div class='dim'>ROI +37.2%</div><div class='dim'>15/23</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>26</td>
+          <td>2026-04-18<br><span class='dim'>M Chinnaswamy Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Royal Challengers Bengaluru</b><br>vs<br><b>Delhi Capitals</b></div>
+            <div class='dim toss'>Delhi Capitals elected to field</div>
+          </td>
+          <td><div class='result-line'>Delhi Capitals won by 6 wickets</div><div class='score'>Royal Challengers Bengaluru 175/8 (20.0)</div><div class='score'>Delhi Capitals 179/5 (19.5)</div></td>
+          <td><div><b>Royal Challengers Bengaluru</b>: 1.63 (61.5%)</div><div><b>Delhi Capitals</b>: 2.60 (38.5%)</div><div class='vol'>vol $1,873,933</div></td>
+          <td><div><b>Royal Challengers Bengaluru</b>: 74.1%</div><div><b>Delhi Capitals</b>: 25.9%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Royal Challengers Bengaluru</b></div><div class='edge'>edge +12.6pp @ 1.63</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>+7.56</div><div class='dim'>ROI +31.5%</div><div class='dim'>15/24</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>27</td>
+          <td>2026-04-18<br><span class='dim'>Rajiv Gandhi International Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Sunrisers Hyderabad</b><br>vs<br><b>Chennai Super Kings</b></div>
+            <div class='dim toss'>Chennai Super Kings elected to field</div>
+          </td>
+          <td><div class='result-line'>Sunrisers Hyderabad won by 10 runs</div><div class='score'>Sunrisers Hyderabad 194/9 (20.0)</div><div class='score'>Chennai Super Kings 184/8 (20.0)</div></td>
+          <td><div><b>Sunrisers Hyderabad</b>: 1.87 (53.5%)</div><div><b>Chennai Super Kings</b>: 2.15 (46.5%)</div><div class='vol'>vol $2,117,654</div></td>
+          <td><div><b>Sunrisers Hyderabad</b>: 76.7%</div><div><b>Chennai Super Kings</b>: 23.3%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Sunrisers Hyderabad</b></div><div class='edge'>edge +23.2pp @ 1.87</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+0.869</span></td>
+          <td class='cum-cell'><div>+8.43</div><div class='dim'>ROI +33.7%</div><div class='dim'>16/25</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>28</td>
+          <td>2026-04-19<br><span class='dim'>Eden Gardens</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Rajasthan Royals</b><br>vs<br><b>Kolkata Knight Riders</b></div>
+            <div class='dim toss'>Rajasthan Royals elected to bat</div>
+          </td>
+          <td><div class='result-line'>Kolkata Knight Riders won by 4 wickets</div><div class='score'>Rajasthan Royals 155/9 (20.0)</div><div class='score'>Kolkata Knight Riders 161/6 (19.4)</div></td>
+          <td><div><b>Rajasthan Royals</b>: 1.68 (59.5%)</div><div><b>Kolkata Knight Riders</b>: 2.47 (40.5%)</div><div class='vol'>vol $2,502,812</div></td>
+          <td><div><b>Rajasthan Royals</b>: 66.5%</div><div><b>Kolkata Knight Riders</b>: 33.5%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Rajasthan Royals</b></div><div class='edge'>edge +7.0pp @ 1.68</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>+7.43</div><div class='dim'>ROI +28.6%</div><div class='dim'>16/26</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>29</td>
+          <td>2026-04-19<br><span class='dim'>Maharaja Yadavindra Singh International Cricket Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Punjab Kings</b><br>vs<br><b>Lucknow Super Giants</b></div>
+            <div class='dim toss'>Lucknow Super Giants elected to field</div>
+          </td>
+          <td><div class='result-line'>Punjab Kings won by 54 runs</div><div class='score'>Punjab Kings 254/7 (20.0)</div><div class='score'>Lucknow Super Giants 200/5 (20.0)</div></td>
+          <td><div><b>Punjab Kings</b>: 1.60 (62.5%)</div><div><b>Lucknow Super Giants</b>: 2.67 (37.5%)</div><div class='vol'>vol $1,479,414</div></td>
+          <td><div><b>Punjab Kings</b>: 67.6%</div><div><b>Lucknow Super Giants</b>: 32.4%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Punjab Kings</b></div><div class='edge'>edge +5.1pp @ 1.60</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+0.600</span></td>
+          <td class='cum-cell'><div>+8.03</div><div class='dim'>ROI +29.7%</div><div class='dim'>17/27</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>30</td>
+          <td>2026-04-20<br><span class='dim'>Narendra Modi Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Mumbai Indians</b><br>vs<br><b>Gujarat Titans</b></div>
+            <div class='dim toss'>Gujarat Titans elected to field</div>
+          </td>
+          <td><div class='result-line'>Mumbai Indians won by 99 runs</div><div class='score'>Mumbai Indians 199/5 (20.0)</div><div class='score'>Gujarat Titans 100/10 (15.5)</div></td>
+          <td><div><b>Mumbai Indians</b>: 1.87 (53.5%)</div><div><b>Gujarat Titans</b>: 2.15 (46.5%)</div><div class='vol'>vol $1,710,189</div></td>
+          <td><div><b>Mumbai Indians</b>: 86.9%</div><div><b>Gujarat Titans</b>: 13.1%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Mumbai Indians</b></div><div class='edge'>edge +33.4pp @ 1.87</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+0.869</span></td>
+          <td class='cum-cell'><div>+8.90</div><div class='dim'>ROI +31.8%</div><div class='dim'>18/28</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>31</td>
+          <td>2026-04-21<br><span class='dim'>Rajiv Gandhi International Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Sunrisers Hyderabad</b><br>vs<br><b>Delhi Capitals</b></div>
+            <div class='dim toss'>Delhi Capitals elected to field</div>
+          </td>
+          <td><div class='result-line'>Sunrisers Hyderabad won by 47 runs</div><div class='score'>Sunrisers Hyderabad 242/2 (20.0)</div><div class='score'>Delhi Capitals 195/9 (20.0)</div></td>
+          <td><div><b>Sunrisers Hyderabad</b>: 1.87 (53.5%)</div><div><b>Delhi Capitals</b>: 2.15 (46.5%)</div><div class='vol'>vol $2,651,647</div></td>
+          <td><div><b>Sunrisers Hyderabad</b>: 65.4%</div><div><b>Delhi Capitals</b>: 34.6%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Sunrisers Hyderabad</b></div><div class='edge'>edge +11.9pp @ 1.87</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+0.869</span></td>
+          <td class='cum-cell'><div>+9.77</div><div class='dim'>ROI +33.7%</div><div class='dim'>19/29</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>32</td>
+          <td>2026-04-22<br><span class='dim'>Bharat Ratna Shri Atal Bihari Vajpayee Ekana Cricket Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Rajasthan Royals</b><br>vs<br><b>Lucknow Super Giants</b></div>
+            <div class='dim toss'>Lucknow Super Giants elected to field</div>
+          </td>
+          <td><div class='result-line'>Rajasthan Royals won by 40 runs</div><div class='score'>Rajasthan Royals 159/6 (20.0)</div><div class='score'>Lucknow Super Giants 119/10 (18.0)</div></td>
+          <td><div><b>Rajasthan Royals</b>: 1.74 (57.5%)</div><div><b>Lucknow Super Giants</b>: 2.35 (42.5%)</div><div class='vol'>vol $2,195,366</div></td>
+          <td><div><b>Rajasthan Royals</b>: 74.5%</div><div><b>Lucknow Super Giants</b>: 25.5%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Rajasthan Royals</b></div><div class='edge'>edge +17.0pp @ 1.74</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+0.739</span></td>
+          <td class='cum-cell'><div>+10.50</div><div class='dim'>ROI +35.0%</div><div class='dim'>20/30</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>33</td>
+          <td>2026-04-23<br><span class='dim'>Wankhede Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Chennai Super Kings</b><br>vs<br><b>Mumbai Indians</b></div>
+            <div class='dim toss'>Mumbai Indians elected to field</div>
+          </td>
+          <td><div class='result-line'>Chennai Super Kings won by 103 runs</div><div class='score'>Chennai Super Kings 207/6 (20.0)</div><div class='score'>Mumbai Indians 104/10 (19.0)</div></td>
+          <td><div><b>Chennai Super Kings</b>: 2.67 (37.5%)</div><div><b>Mumbai Indians</b>: 1.60 (62.5%)</div><div class='vol'>vol $1,975,239</div></td>
+          <td><div><b>Chennai Super Kings</b>: 87.1%</div><div><b>Mumbai Indians</b>: 12.9%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Chennai Super Kings</b></div><div class='edge'>edge +49.6pp @ 2.67</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.667</span></td>
+          <td class='cum-cell'><div>+12.17</div><div class='dim'>ROI +39.3%</div><div class='dim'>21/31</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>34</td>
+          <td>2026-04-24<br><span class='dim'>M Chinnaswamy Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Gujarat Titans</b><br>vs<br><b>Royal Challengers Bengaluru</b></div>
+            <div class='dim toss'>Royal Challengers Bengaluru elected to field</div>
+          </td>
+          <td><div class='result-line'>Royal Challengers Bengaluru won by 5 wickets</div><div class='score'>Gujarat Titans 205/3 (20.0)</div><div class='score'>Royal Challengers Bengaluru 206/5 (18.5)</div></td>
+          <td><div><b>Gujarat Titans</b>: 2.41 (41.5%)</div><div><b>Royal Challengers Bengaluru</b>: 1.71 (58.5%)</div><div class='vol'>vol $1,767,649</div></td>
+          <td><div><b>Gujarat Titans</b>: 50.5%</div><div><b>Royal Challengers Bengaluru</b>: 49.5%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Gujarat Titans</b></div><div class='edge'>edge +9.0pp @ 2.41</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>+11.17</div><div class='dim'>ROI +34.9%</div><div class='dim'>21/32</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>35</td>
+          <td>2026-04-25<br><span class='dim'>Arun Jaitley Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Delhi Capitals</b><br>vs<br><b>Punjab Kings</b></div>
+            <div class='dim toss'>Delhi Capitals elected to bat</div>
+          </td>
+          <td><div class='result-line'>Punjab Kings won by 6 wickets</div><div class='score'>Delhi Capitals 264/2 (20.0)</div><div class='score'>Punjab Kings 265/4 (18.5)</div></td>
+          <td><div><b>Delhi Capitals</b>: 2.25 (44.5%)</div><div><b>Punjab Kings</b>: 1.80 (55.5%)</div><div class='vol'>vol $3,211,985</div></td>
+          <td><div><b>Delhi Capitals</b>: 25.6%</div><div><b>Punjab Kings</b>: 74.4%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Punjab Kings</b></div><div class='edge'>edge +18.9pp @ 1.80</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+0.802</span></td>
+          <td class='cum-cell'><div>+11.97</div><div class='dim'>ROI +36.3%</div><div class='dim'>22/33</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>36</td>
+          <td>2026-04-25<br><span class='dim'>Sawai Mansingh Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Rajasthan Royals</b><br>vs<br><b>Sunrisers Hyderabad</b></div>
+            <div class='dim toss'>Sunrisers Hyderabad elected to field</div>
+          </td>
+          <td><div class='result-line'>Sunrisers Hyderabad won by 5 wickets</div><div class='score'>Rajasthan Royals 228/6 (20.0)</div><div class='score'>Sunrisers Hyderabad 229/5 (18.3)</div></td>
+          <td><div><b>Rajasthan Royals</b>: 1.90 (52.5%)</div><div><b>Sunrisers Hyderabad</b>: 2.11 (47.5%)</div><div class='vol'>vol $1,656,789</div></td>
+          <td><div><b>Rajasthan Royals</b>: 27.8%</div><div><b>Sunrisers Hyderabad</b>: 72.2%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Sunrisers Hyderabad</b></div><div class='edge'>edge +24.7pp @ 2.11</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.105</span></td>
+          <td class='cum-cell'><div>+13.08</div><div class='dim'>ROI +38.5%</div><div class='dim'>23/34</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>37</td>
+          <td>2026-04-26<br><span class='dim'>MA Chidambaram Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Chennai Super Kings</b><br>vs<br><b>Gujarat Titans</b></div>
+            <div class='dim toss'>Gujarat Titans elected to field</div>
+          </td>
+          <td><div class='result-line'>Gujarat Titans won by 8 wickets</div><div class='score'>Chennai Super Kings 158/7 (20.0)</div><div class='score'>Gujarat Titans 162/2 (16.4)</div></td>
+          <td><div><b>Chennai Super Kings</b>: 1.94 (51.5%)</div><div><b>Gujarat Titans</b>: 2.06 (48.5%)</div><div class='vol'>vol $1,180,064</div></td>
+          <td><div><b>Chennai Super Kings</b>: 23.8%</div><div><b>Gujarat Titans</b>: 76.2%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Gujarat Titans</b></div><div class='edge'>edge +27.7pp @ 2.06</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.062</span></td>
+          <td class='cum-cell'><div>+14.14</div><div class='dim'>ROI +40.4%</div><div class='dim'>24/35</div></td>
+        </tr>
+        <tr class=''>
+          <td>38</td>
+          <td>2026-04-26<br><span class='dim'>Bharat Ratna Shri Atal Bihari Vajpayee Ekana Cricket Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Kolkata Knight Riders</b><br>vs<br><b>Lucknow Super Giants</b></div>
+            <div class='dim toss'>Lucknow Super Giants elected to field</div>
+          </td>
+          <td><div class='result-line'>Tied — Kolkata Knight Riders won super over</div><div class='score'>Kolkata Knight Riders 155/7 (20.0)</div><div class='score'>Lucknow Super Giants 155/8 (20.0)</div></td>
+          <td><div><b>Kolkata Knight Riders</b>: 2.06 (48.5%)</div><div><b>Lucknow Super Giants</b>: 1.94 (51.5%)</div><div class='vol'>vol $2,543,782</div></td>
+          <td><span class='dim'>—</span></td>
+          <td><span class='dim'>—</span><div class='note'>no prediction or odds</div></td>
+          <td class='pnl-cell'><span class='dim'>0</span></td>
+          <td class='cum-cell'><div>+14.14</div><div class='dim'>ROI +40.4%</div><div class='dim'>24/35</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>39</td>
+          <td>2026-04-27<br><span class='dim'>Arun Jaitley Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Delhi Capitals</b><br>vs<br><b>Royal Challengers Bengaluru</b></div>
+            <div class='dim toss'>Royal Challengers Bengaluru elected to field</div>
+          </td>
+          <td><div class='result-line'>Royal Challengers Bengaluru won by 9 wickets</div><div class='score'>Delhi Capitals 75/10 (16.3)</div><div class='score'>Royal Challengers Bengaluru 77/1 (6.3)</div></td>
+          <td><div><b>Delhi Capitals</b>: 2.30 (43.5%)</div><div><b>Royal Challengers Bengaluru</b>: 1.77 (56.5%)</div><div class='vol'>vol $2,038,836</div></td>
+          <td><div><b>Delhi Capitals</b>: 25.5%</div><div><b>Royal Challengers Bengaluru</b>: 74.5%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Royal Challengers Bengaluru</b></div><div class='edge'>edge +18.0pp @ 1.77</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+0.770</span></td>
+          <td class='cum-cell'><div>+14.91</div><div class='dim'>ROI +41.4%</div><div class='dim'>25/36</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>40</td>
+          <td>2026-04-28<br><span class='dim'>Maharaja Yadavindra Singh International Cricket Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Punjab Kings</b><br>vs<br><b>Rajasthan Royals</b></div>
+            <div class='dim toss'>Rajasthan Royals elected to field</div>
+          </td>
+          <td><div class='result-line'>Rajasthan Royals won by 6 wickets</div><div class='score'>Punjab Kings 222/4 (20.0)</div><div class='score'>Rajasthan Royals 228/4 (19.2)</div></td>
+          <td><div><b>Punjab Kings</b>: 1.77 (56.5%)</div><div><b>Rajasthan Royals</b>: 2.30 (43.5%)</div><div class='vol'>vol $2,174,727</div></td>
+          <td><div><b>Punjab Kings</b>: 41.3%</div><div><b>Rajasthan Royals</b>: 58.7%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Rajasthan Royals</b></div><div class='edge'>edge +15.2pp @ 2.30</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.299</span></td>
+          <td class='cum-cell'><div>+16.21</div><div class='dim'>ROI +43.8%</div><div class='dim'>26/37</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>41</td>
+          <td>2026-04-29<br><span class='dim'>Wankhede Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Mumbai Indians</b><br>vs<br><b>Sunrisers Hyderabad</b></div>
+            <div class='dim toss'>Mumbai Indians elected to bat</div>
+          </td>
+          <td><div class='result-line'>Sunrisers Hyderabad won by 6 wickets</div><div class='score'>Mumbai Indians 243/5 (20.0)</div><div class='score'>Sunrisers Hyderabad 249/4 (18.4)</div></td>
+          <td><div><b>Mumbai Indians</b>: 1.90 (52.5%)</div><div><b>Sunrisers Hyderabad</b>: 2.11 (47.5%)</div><div class='vol'>vol $5,735,251</div></td>
+          <td><div><b>Mumbai Indians</b>: 33.7%</div><div><b>Sunrisers Hyderabad</b>: 66.3%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Sunrisers Hyderabad</b></div><div class='edge'>edge +18.8pp @ 2.11</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.105</span></td>
+          <td class='cum-cell'><div>+17.31</div><div class='dim'>ROI +45.6%</div><div class='dim'>27/38</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>42</td>
+          <td>2026-04-30<br><span class='dim'>Narendra Modi Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Royal Challengers Bengaluru</b><br>vs<br><b>Gujarat Titans</b></div>
+            <div class='dim toss'>Gujarat Titans elected to field</div>
+          </td>
+          <td><div class='result-line'>Gujarat Titans won by 4 wickets</div><div class='score'>Royal Challengers Bengaluru 155/10 (19.2)</div><div class='score'>Gujarat Titans 158/6 (15.5)</div></td>
+          <td><div><b>Royal Challengers Bengaluru</b>: 1.71 (58.5%)</div><div><b>Gujarat Titans</b>: 2.41 (41.5%)</div><div class='vol'>vol $1,640,055</div></td>
+          <td><div><b>Royal Challengers Bengaluru</b>: 81.3%</div><div><b>Gujarat Titans</b>: 18.7%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Royal Challengers Bengaluru</b></div><div class='edge'>edge +22.8pp @ 1.71</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>+16.31</div><div class='dim'>ROI +41.8%</div><div class='dim'>27/39</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>43</td>
+          <td>2026-05-01<br><span class='dim'>Sawai Mansingh Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Rajasthan Royals</b><br>vs<br><b>Delhi Capitals</b></div>
+            <div class='dim toss'>Rajasthan Royals elected to bat</div>
+          </td>
+          <td><div class='result-line'>Delhi Capitals won by 7 wickets</div><div class='score'>Rajasthan Royals 225/6 (20.0)</div><div class='score'>Delhi Capitals 226/3 (19.1)</div></td>
+          <td><div><b>Rajasthan Royals</b>: 1.74 (57.5%)</div><div><b>Delhi Capitals</b>: 2.35 (42.5%)</div><div class='vol'>vol $2,843,121</div></td>
+          <td><div><b>Rajasthan Royals</b>: 17.3%</div><div><b>Delhi Capitals</b>: 82.7%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Delhi Capitals</b></div><div class='edge'>edge +40.2pp @ 2.35</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.353</span></td>
+          <td class='cum-cell'><div>+17.67</div><div class='dim'>ROI +44.2%</div><div class='dim'>28/40</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>44</td>
+          <td>2026-05-02<br><span class='dim'>MA Chidambaram Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Mumbai Indians</b><br>vs<br><b>Chennai Super Kings</b></div>
+            <div class='dim toss'>Mumbai Indians elected to bat</div>
+          </td>
+          <td><div class='result-line'>Chennai Super Kings won by 8 wickets</div><div class='score'>Mumbai Indians 159/7 (20.0)</div><div class='score'>Chennai Super Kings 160/2 (18.1)</div></td>
+          <td><div><b>Mumbai Indians</b>: 1.80 (55.5%)</div><div><b>Chennai Super Kings</b>: 2.25 (44.5%)</div><div class='vol'>vol $1,922,603</div></td>
+          <td><div><b>Mumbai Indians</b>: 47.3%</div><div><b>Chennai Super Kings</b>: 52.7%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Chennai Super Kings</b></div><div class='edge'>edge +8.2pp @ 2.25</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.247</span></td>
+          <td class='cum-cell'><div>+18.91</div><div class='dim'>ROI +46.1%</div><div class='dim'>29/41</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>45</td>
+          <td>2026-05-03<br><span class='dim'>Rajiv Gandhi International Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Sunrisers Hyderabad</b><br>vs<br><b>Kolkata Knight Riders</b></div>
+            <div class='dim toss'>Sunrisers Hyderabad elected to bat</div>
+          </td>
+          <td><div class='result-line'>Kolkata Knight Riders won by 7 wickets</div><div class='score'>Sunrisers Hyderabad 165/10 (19.0)</div><div class='score'>Kolkata Knight Riders 169/3 (18.2)</div></td>
+          <td><div><b>Sunrisers Hyderabad</b>: 1.68 (59.5%)</div><div><b>Kolkata Knight Riders</b>: 2.47 (40.5%)</div><div class='vol'>vol $1,874,097</div></td>
+          <td><div><b>Sunrisers Hyderabad</b>: 64.6%</div><div><b>Kolkata Knight Riders</b>: 35.4%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Sunrisers Hyderabad</b></div><div class='edge'>edge +5.1pp @ 1.68</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>+17.91</div><div class='dim'>ROI +42.7%</div><div class='dim'>29/42</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>46</td>
+          <td>2026-05-03<br><span class='dim'>Narendra Modi Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Punjab Kings</b><br>vs<br><b>Gujarat Titans</b></div>
+            <div class='dim toss'>Gujarat Titans elected to field</div>
+          </td>
+          <td><div class='result-line'>Gujarat Titans won by 4 wickets</div><div class='score'>Punjab Kings 163/9 (20.0)</div><div class='score'>Gujarat Titans 167/6 (19.5)</div></td>
+          <td><div><b>Punjab Kings</b>: 1.77 (56.5%)</div><div><b>Gujarat Titans</b>: 2.30 (43.5%)</div><div class='vol'>vol $2,035,253</div></td>
+          <td><div><b>Punjab Kings</b>: 82.0%</div><div><b>Gujarat Titans</b>: 18.0%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Punjab Kings</b></div><div class='edge'>edge +25.5pp @ 1.77</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>+16.91</div><div class='dim'>ROI +39.3%</div><div class='dim'>29/43</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>47</td>
+          <td>2026-05-04<br><span class='dim'>Wankhede Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Lucknow Super Giants</b><br>vs<br><b>Mumbai Indians</b></div>
+            <div class='dim toss'>Mumbai Indians elected to field</div>
+          </td>
+          <td><div class='result-line'>Mumbai Indians won by 6 wickets</div><div class='score'>Lucknow Super Giants 228/5 (20.0)</div><div class='score'>Mumbai Indians 229/4 (18.4)</div></td>
+          <td><div><b>Lucknow Super Giants</b>: 2.47 (40.5%)</div><div><b>Mumbai Indians</b>: 1.68 (59.5%)</div><div class='vol'>vol $2,337,988</div></td>
+          <td><div><b>Lucknow Super Giants</b>: 26.3%</div><div><b>Mumbai Indians</b>: 73.7%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Mumbai Indians</b></div><div class='edge'>edge +14.2pp @ 1.68</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+0.681</span></td>
+          <td class='cum-cell'><div>+17.60</div><div class='dim'>ROI +40.0%</div><div class='dim'>30/44</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>48</td>
+          <td>2026-05-05<br><span class='dim'>Arun Jaitley Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Delhi Capitals</b><br>vs<br><b>Chennai Super Kings</b></div>
+            <div class='dim toss'>Delhi Capitals elected to bat</div>
+          </td>
+          <td><div class='result-line'>Chennai Super Kings won by 8 wickets</div><div class='score'>Delhi Capitals 155/7 (20.0)</div><div class='score'>Chennai Super Kings 159/2 (17.3)</div></td>
+          <td><div><b>Delhi Capitals</b>: 1.80 (55.5%)</div><div><b>Chennai Super Kings</b>: 2.25 (44.5%)</div><div class='vol'>vol $2,136,124</div></td>
+          <td><div><b>Delhi Capitals</b>: 18.7%</div><div><b>Chennai Super Kings</b>: 81.3%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Chennai Super Kings</b></div><div class='edge'>edge +36.8pp @ 2.25</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.247</span></td>
+          <td class='cum-cell'><div>+18.84</div><div class='dim'>ROI +41.9%</div><div class='dim'>31/45</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>49</td>
+          <td>2026-05-06<br><span class='dim'>Rajiv Gandhi International Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Sunrisers Hyderabad</b><br>vs<br><b>Punjab Kings</b></div>
+            <div class='dim toss'>Punjab Kings elected to field</div>
+          </td>
+          <td><div class='result-line'>Sunrisers Hyderabad won by 33 runs</div><div class='score'>Sunrisers Hyderabad 235/4 (20.0)</div><div class='score'>Punjab Kings 202/7 (20.0)</div></td>
+          <td><div><b>Sunrisers Hyderabad</b>: 2.11 (47.5%)</div><div><b>Punjab Kings</b>: 1.90 (52.5%)</div><div class='vol'>vol $2,026,524</div></td>
+          <td><div><b>Sunrisers Hyderabad</b>: 71.7%</div><div><b>Punjab Kings</b>: 28.3%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Sunrisers Hyderabad</b></div><div class='edge'>edge +24.2pp @ 2.11</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.105</span></td>
+          <td class='cum-cell'><div>+19.95</div><div class='dim'>ROI +43.4%</div><div class='dim'>32/46</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>50</td>
+          <td>2026-05-07<br><span class='dim'>Bharat Ratna Shri Atal Bihari Vajpayee Ekana Cricket Stadium</span><br><span class='tag tag-golden'>golden</span></td>
+          <td>
+            <div class='matchup'><b>Lucknow Super Giants</b><br>vs<br><b>Royal Challengers Bengaluru</b></div>
+            <div class='dim toss'>Royal Challengers Bengaluru elected to field</div>
+          </td>
+          <td><div class='result-line'>Lucknow Super Giants won by 9 runs</div><div class='score'>Lucknow Super Giants 209/3 (19.0)</div><div class='score'>Royal Challengers Bengaluru 203/6 (19.0)</div></td>
+          <td><div><b>Lucknow Super Giants</b>: 2.60 (38.5%)</div><div><b>Royal Challengers Bengaluru</b>: 1.63 (61.5%)</div><div class='vol'>vol $2,584,758</div></td>
+          <td><div><b>Lucknow Super Giants</b>: 47.6%</div><div><b>Royal Challengers Bengaluru</b>: 52.4%</div><div class='pred-source'>golden</div></td>
+          <td><div><b>Lucknow Super Giants</b></div><div class='edge'>edge +9.1pp @ 2.60</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.597</span></td>
+          <td class='cum-cell'><div>+21.55</div><div class='dim'>ROI +45.8%</div><div class='dim'>33/47</div></td>
+        </tr>
+</tbody>
+</table>
+
+<div class="footnote">
+  <b>How to read this</b>: rows are chronological. Green-tinted rows are matches
+  we bet on and won; red-tinted rows are bets we lost. "Cumulative" tracks total
+  PnL and ROI across only resolved bets — unbet matches don't move the line.
+  Predictions and market probs always sum to ~100%; the difference is our edge.
+  Bet decimal odds are what we'd be paid per unit staked (PnL = decimal − 1 on win).
+  <br><br>
+  <b>Caveat</b>: iteration-set IPL matches were part of the test split that
+  drove model selection — those numbers are not strictly out-of-sample. Golden-set
+  matches never touched any tuning. Compare the two rows in the "By prediction set"
+  panel for the cleanest read.
+</div>
+
+<script>
+// Cumulative chart
+const ctx = document.getElementById('cumChart');
+new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: ["2026-03-28", "2026-03-29", "2026-03-30", "2026-03-31", "2026-04-01", "2026-04-02", "2026-04-03", "2026-04-04", "2026-04-04", "2026-04-05", "2026-04-05", "2026-04-06", "2026-04-07", "2026-04-08", "2026-04-09", "2026-04-10", "2026-04-11", "2026-04-11", "2026-04-12", "2026-04-12", "2026-04-13", "2026-04-14", "2026-04-15", "2026-04-16", "2026-04-17", "2026-04-18", "2026-04-18", "2026-04-19", "2026-04-19", "2026-04-20", "2026-04-21", "2026-04-22", "2026-04-23", "2026-04-24", "2026-04-25", "2026-04-25", "2026-04-26", "2026-04-26", "2026-04-27", "2026-04-28", "2026-04-29", "2026-04-30", "2026-05-01", "2026-05-02", "2026-05-03", "2026-05-03", "2026-05-04", "2026-05-05", "2026-05-06", "2026-05-07"],
+    datasets: [
+      { label: 'Cumulative PnL (units)', data: [0.0, -1.0, -0.058, 1.004, 0.004, 1.109, 0.109, 1.849, 2.869, 1.869, 2.536, 2.536, 3.834, 4.94, 5.881, 6.862, 5.862, 7.012, 6.012, 7.311, 8.558, 9.36, 8.36, 9.558, 8.558, 7.558, 8.427, 7.427, 8.027, 8.896, 9.765, 10.504, 12.171, 11.171, 11.973, 13.078, 14.14, 14.14, 14.91, 16.209, 17.314, 16.314, 17.667, 18.914, 17.914, 16.914, 17.595, 18.842, 19.948, 21.545],
+         borderColor: '#0366d6', backgroundColor: 'rgba(3,102,214,0.10)',
+         tension: 0.1, yAxisID: 'y' },
+      { label: 'Cumulative ROI (%)', data: [0.0, -100.0, -2.92, 33.45, 0.09, 22.18, 1.82, 26.41, 35.86, 20.76, 25.36, 25.36, 34.86, 41.16, 45.24, 49.01, 39.08, 43.83, 35.37, 40.62, 45.04, 46.8, 39.81, 43.44, 37.21, 31.49, 33.71, 28.57, 29.73, 31.77, 33.67, 35.01, 39.26, 34.91, 36.28, 38.47, 40.4, 40.4, 41.42, 43.81, 45.56, 41.83, 44.17, 46.13, 42.65, 39.34, 39.99, 41.87, 43.36, 45.84],
+         borderColor: '#28a745', backgroundColor: 'rgba(40,167,69,0.10)',
+         tension: 0.1, yAxisID: 'y1', borderDash: [5,5] },
+    ],
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    scales: {
+      y:  { position: 'left',  title: { display: true, text: 'PnL (units)' } },
+      y1: { position: 'right', title: { display: true, text: 'ROI (%)' },
+             grid: { drawOnChartArea: false } },
+    },
+  },
+});
+
+// Sortable table
+document.querySelectorAll('#matchTable th').forEach((th, idx) => {
+  let asc = true;
+  th.addEventListener('click', () => {
+    const tbody = document.querySelector('#matchTable tbody');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    rows.sort((a, b) => {
+      const av = a.cells[idx].innerText.trim();
+      const bv = b.cells[idx].innerText.trim();
+      const an = parseFloat(av.replace(/[^\d.\-+]/g, ''));
+      const bn = parseFloat(bv.replace(/[^\d.\-+]/g, ''));
+      if (!isNaN(an) && !isNaN(bn)) return asc ? an - bn : bn - an;
+      return asc ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
+    tbody.innerHTML = '';
+    rows.forEach(r => tbody.appendChild(r));
+    asc = !asc;
+  });
+});
+
+// Filters
+function applyFilters() {
+  const onlyBets = document.getElementById('f-bets').checked;
+  const onlyGolden = document.getElementById('f-golden').checked;
+  const onlyLoss = document.getElementById('f-loss').checked;
+  document.querySelectorAll('#matchTable tbody tr').forEach(tr => {
+    let show = true;
+    const cls = tr.className;
+    const isBet = cls.includes('row-win') || cls.includes('row-loss');
+    const isGolden = tr.innerHTML.includes('tag-golden');
+    const isLoss = cls.includes('row-loss');
+    if (onlyBets && !isBet) show = false;
+    if (onlyGolden && !isGolden) show = false;
+    if (onlyLoss && !isLoss) show = false;
+    tr.style.display = show ? '' : 'none';
+  });
+}
+['f-bets','f-golden','f-loss'].forEach(id =>
+  document.getElementById(id).addEventListener('change', applyFilters));
+applyFilters();
+</script>
+</body>
+</html>

@@ -110,24 +110,45 @@ The v7 sim was hitting LL 0.7402 on the ≥$50k polymarket slice — 0.114 above
 - Temporal split (early vs late test) shows +33pp ROI gap in BOTH Phase A1 and A2-frozen → not contamination, **composition effect** from late-test T20 World Cup mismatch concentration (47/131 late matches are India/WI/Pakistan vs Namibia/Italy/Netherlands qualifiers).
 - Audit pass clean: SQLite `_meta` priors used only by v7 sim, train-target correlations modest (max 0.33), binary-feature effects physically plausible (3.6pp home advantage, no toss-winner effect). Full report: `reports/no_leakage_diagnostic.md`.
 
-### Headline (active model: A2 frozen, w=0.0)
+### Headline ON ITERATION TEST (A2 frozen, w=0.0) — pre-leakage-fix, *retracted as inflated*
 
 | Slice | LL (95% CI) | Flat ROI (95% CI) | n |
 |---|---|---|---|
 | all | 0.4944 [0.45, 0.53] | +50.73% [+32.4, +74.4] | 255 |
 | ≥$50k | 0.5004 [0.45, 0.56] | +53.67% [+36.0, +73.8] | 168 |
 | ≥$100k | 0.4361 [0.37, 0.50] | +58.03% [+33.4, +86.6] | 110 |
-| IPL 2026 only | 0.5817 [0.44, 0.73] | +43.44% [+0.85, +83.3] | 22 |
-| Reference: market | 0.6267 | — | — |
 
-**Both go/no-go conditions cleared on every ≥$50k / ≥$100k slice.** Conservative no-tail floor (early-test only, frozen, no late-WC concentration): ROI **+33.54%** on 124 bets. IPL slice CI lower bound just barely clears zero (n=22 too small for tight inference).
+These were reported on 2026-05-09 and are **inflated by ~21-30pp ROI of feature leakage** discovered immediately after — see "ELO leakage discovered" subsection below.
+
+### ELO leakage discovered + fixed (2026-05-09)
+
+`materialize_match_features._build_match_record` was reading `temp_elo` AFTER `parse_match_data_v2` updated it with this match's own ball-by-ball outcomes. The `_split_elo` call produced post-match ELOs as features for predicting that same match. The 6 affected features include the model's two highest-importance features (`bottom5_bowling_elo_diff`, `top6_batting_elo_diff`).
+
+Fixed by snapshotting `temp_elo` before parse runs (one-line patch in materialize_match_features.py:519). Retrained as `models/xgb_match_v2_clean/`. Full audit + comparison: `reports/leakage_fix_comparison.md`.
+
+### HONEST headline ON GOLDEN SET (xgb_match_v2_clean, w=0.0)
+
+Truly out-of-sample: 2026-04-17 → 2026-05-07, never seen by training/selection.
+
+| Slice | LL (95% CI) | Flat ROI (95% CI) | n / win-rate |
+|---|---|---|---|
+| all | 0.6416 [0.59, 0.70] | +20.33% [-12, +49] | 55 / 53.7% |
+| ≥$50k | 0.6747 [0.64, 0.72] | +32.61% [-0.20, +63.6] | 50 / 59.2% |
+| ≥$100k | 0.6698 [0.63, 0.72] | **+34.75%** [+3.79, +65.5] | 45 / 61.4% |
+| Reference: market | 0.6267 | — | — |
+| Reference: coinflip | 0.6931 | — | — |
+
+**Strict go/no-go (LL beats market AND ROI CI excludes 0): FAILS on every slice.** LL is approximately market-level on every slice; LL on ≥$50k/$100k is 0.04 *worse* than market.
+**Soft go/no-go (ROI CI alone): clears only on ≥$100k slice.**
 
 ### Open follow-ups
-- [ ] **Forward test**: capture polymarket pre-match snapshots for new T20s starting now; in 30-60 days evaluate on 30-60 fresh matches with no possibility of leakage.
-- [ ] **Wait for IPL 2026 to complete (late May)**, re-evaluate on full ~70-match IPL-only slice for a sharper domestic-league sanity check (current n=22 has CI lower bound at +0.85%).
-- [ ] **Logistic-regression stacker** (deferred Phase B from the plan) — A1/A2 LL-vs-w curves are monotone increasing in w (sim weight), so no complementarity for the stacker to exploit. Skip unless future feature work changes the curve shape.
-- [ ] **Reframe v7 sim's role**: with direct dominating winner-market LL by ~0.24, v7 sim should likely be reserved for prop bets, score distributions, in-play scenarios — not winner-market predictions.
-- [ ] **Address outlier sensitivity**: France @ 20.0 + Zimbabwe @ 11.76 wins account for ~30 of +110 PnL on all-slice. Consider an edge-cap or position-size rule (max-stake when implied edge > X) before live deployment.
+- [ ] **Audit `xgboost_v2.py` (v7 ball-level sim) for analogous leakage** — same parser, possibly similar mid-match-state-as-feature issues. Highest priority before any v7 follow-up.
+- [ ] **Re-run no-leakage diagnostic with the clean model** — the previous "frozen is BETTER than unfrozen" finding may flip with the dominant drift removed.
+- [ ] **Forward test**: capture polymarket pre-match snapshots starting now; in 30-60 days evaluate on 30-60 fresh matches.
+- [ ] **Wait for IPL 2026 to complete (late May)**, re-evaluate on full ~70-match IPL-only slice for a sharper domestic-league sanity check.
+- [ ] **Reframe v7 sim's role**: even with the inflated number retracted, direct still beat sim on golden LL (0.67 vs ~0.74 on ≥$50k). Reserve v7 sim for prop bets, score distributions, in-play scenarios.
+- [ ] **Address outlier sensitivity**: long-shot wins still have outsized PnL impact at small n. Consider an edge-cap or position-size rule before live deployment.
+- [ ] **Feature work**: with leakage removed, the clean model is borderline-skilful. Real improvement likely requires features that capture intra-season form / current-IPL performance — the 2025-06-30 frozen state for A2 trackers is now visibly stale.
 
 ## Root Cause Analysis (Dec 2024)
 **Why both models predict ~50% for all matches:**

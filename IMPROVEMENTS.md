@@ -930,31 +930,93 @@ Audit pass clean across every temporal data path: SQLite rehydration uses `date_
 
 Full report: `reports/no_leakage_diagnostic.md`.
 
-### Headline (active model: A2 frozen, w=0.0)
+### Headline as initially reported (A2 frozen, w=0.0) — INFLATED, retracted 2026-05-09
 
 | Slice | LL (95% CI) | Flat ROI (95% CI) | n |
 |---|---|---|---|
 | all | 0.4944 [0.45, 0.53] | +50.73% [+32.4, +74.4] | 255 |
 | ≥$50k | **0.5004** [0.45, 0.56] | **+53.67%** [+36.0, +73.8] | 168 |
 | ≥$100k | **0.4361** [0.37, 0.50] | **+58.03%** [+33.4, +86.6] | 110 |
-| IPL 2026 only | 0.5817 [0.44, 0.73] | +43.44% [+0.85, +83.3] | 22 |
+
+⚠️ **These numbers are leakage-inflated. See "ELO leakage discovered" subsection below for the honest replacement.**
+
+### ELO leakage discovered + fixed (2026-05-09)
+
+Within hours of reporting the "+47-58% ROI" headline above, an audit
+discovered a feature-engineering leak. `materialize_match_features._build_match_record`
+calls `_split_elo(team1_lineup_ids, elo_tracker)` to compute the
+top-6 batting / bottom-5 bowling ELO splits. The `elo_tracker` it
+receives has been mutated by `parse_match_data_v2` ball-by-ball with
+this match's own outcomes — so the resulting ELO averages reflect
+**post-match** state, not pre-match. The 6 affected features include
+the model's two highest-importance features:
+
+- `bottom5_bowling_elo_diff` (importance 0.084 — #1)
+- `top6_batting_elo_diff` (importance 0.075 — #2)
+
+**Empirical audit** across all 62 golden matches confirmed only those
+6 features drift on every match. Other features — `team_*_elo` sums,
+`team_*_avg/sr/econ`, venue stats, A2 trackers, lineup mix — are clean
+because parsing_v2.py:1063-1098 computes team aggregates ONCE before
+the ball loop, and the materializer updates A2 trackers AFTER
+`_build_match_record` returns.
+
+**Fix**: snapshot `temp_elo` BEFORE `parse_match_data_v2` mutates it,
+pass the snapshot to `_build_match_record`. Live tracker is still
+mutated so subsequent same-day matches see post-this-match state
+(maintains monolith chronological semantics for cross-match features).
+Patch: `materialize_match_features.py:519-526`.
+
+**Retrained model**: `models/xgb_match_v2_clean/` — same hyperparameters
+as `xgb_match_v2_frozen`, trained from scratch on the cleaned parquet
+(`data/xgb_match_data_v2_clean/`).
+
+### Honest headline on golden set (xgb_match_v2_clean, w=0.0)
+
+Golden set is truly out-of-sample: 2026-04-17 → 2026-05-07, 55 matches
+matched against polymarket. Never seen by training, validation, or
+selection.
+
+| Slice | LL (95% CI) | Flat ROI (95% CI) | n / win-rate |
+|---|---|---|---|
+| all | 0.6416 [0.59, 0.70] | +20.33% [-12, +49] | 55 / 53.7% |
+| ≥$50k | 0.6747 [0.64, 0.72] | +32.61% [-0.20, +63.6] | 50 / 59.2% |
+| ≥$100k | **0.6698** [0.63, 0.72] | **+34.75%** [+3.79, +65.5] | 45 / 61.4% |
 | Reference: market | 0.6267 | — | — |
 | Reference: coinflip | 0.6931 | — | — |
-| Reference: v7 sim ≥$50k | 0.7402 | +6.11% [-10.7, +23.9] | — |
 
-**Both go/no-go conditions cleared by wide margins on every ≥$50k / ≥$100k slice** — first time any model on this project has done so.
+Strict gate (LL beats market AND ROI CI excludes 0): **fails on every slice**.
+LL is approximately market-level — even a touch worse — on every liquidity slice.
+Soft gate (ROI CI alone): clears only on ≥$100k.
 
-Conservative no-tail floor (early-test only, frozen, no late-WC concentration): ROI **+33.54%** on 124 bets. The IPL slice CI lower bound just barely clears zero on n=22, suggesting domestic-league edge is real but tighter than international-tournament edge.
+### Diff: leaky vs clean (golden ≥$50k)
 
-### Caveats remaining
-1. **Eval composition** leans on lopsided WC matches in late test. Domestic-league betting may show a smaller edge.
-2. **Outlier sensitivity** persists independently of freezing: 2 long-shot wins account for ~30 of +110 PnL on the all-slice.
-3. **No live forward test yet** — strongest validation would be 30-60 polymarket pre-match snapshots from this week onward, evaluated in a month.
+| Metric | Leaky | Clean | Δ |
+|---|---|---|---|
+| LL | 0.5004 | 0.6747 | +0.17 (worse) |
+| Flat ROI | +53.67% | +32.61% | -21pp |
+| Win rate | 71.4% | 59.2% | -12pp |
+| ROI CI lower bound | +36.0% | -0.20% | excludes ↦ includes 0 |
+
+Roughly two-thirds of the previously reported ROI was leakage-driven.
 
 ### Implications for the project
-- **Direct match model is now the production winner-market predictor.** v7 sim is best reserved for prop bets, score distributions, in-play scenarios where match-level supervision can't help.
-- A logistic-regression stacker (the originally-deferred Phase B) is **no longer obviously valuable** — the LL-vs-w curve is monotone increasing in w (sim weight), so there's no complementarity for the stacker to exploit. Revisit only if future feature work changes the curve shape.
-- The "calibration vs resolution" framing from the prior research note is empirically vindicated: the LL gap to market closed via direct supervision (resolution), not via calibrating the existing under-resolving sim.
+- **`xgb_match_v2_clean` is now the production winner-market predictor.** `xgb_match_v2_frozen` is preserved on disk for reference only.
+- **`predict_fixture.py` and `build_ipl_dashboard.py`** were switched to the clean model. predict_fixture's predictions now match the clean parquet bit-exactly (validated KKR-GT 2026-04-17: 41.6% on both paths).
+- The **direct vs sim story still holds qualitatively**: clean direct model still beats v7 sim on LL (0.67 vs 0.74 on ≥$50k), just by less. Position-split ELOs are still the top features even pre-match — they carry real signal, just less than with the post-match drift on top.
+- **Honest production pitch**: the model is borderline-skilful. Modest positive ROI on the most liquid slice with a CI lower bound around +4%. Don't claim more than that until a clean forward test confirms it.
+
+### Caveats remaining
+1. **No live forward test yet** — golden set is "fresh polymarket capture but model could still be slightly tuned to artifacts of the iteration set". The truly clean signal is 30-60 days of capture-then-evaluate.
+2. **xgboost_v2.py (v7 ball-level sim) not yet audited for analogous leakage.** Same parser, possibly similar issues. Highest priority before any v7 follow-up.
+3. **Eval composition** still leans on tournament-international + IPL — no PSL/SA20/domestic-league representation in golden.
+
+Full audit and comparison: `reports/leakage_fix_comparison.md`.
+
+### Implications for prior conclusions
+- **No-leakage diagnostic** ("frozen better than unfrozen"): may flip with the dominant feature drift removed. Re-run is open.
+- **Logistic-regression stacker still skip**: clean direct still beats clean sim on LL. The qualitative ranking holds even if the magnitudes shifted.
+- **"Calibration vs resolution" framing**: still vindicated qualitatively — direct supervision adds resolution that calibrating the sim couldn't. The clean numbers are smaller but the directional story holds.
 
 ---
 

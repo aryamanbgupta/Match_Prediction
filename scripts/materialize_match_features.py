@@ -36,6 +36,21 @@ from loaders_common import (
     iter_matches_chronological,
 )
 from materialize_features import classify_split, group_by_date
+
+
+def iter_matches_chronological_multi(folders, gender="male"):
+    """Walk multiple cricsheet pools and yield merged in date order.
+
+    Re-uses iter_matches_chronological per folder, materializes each into a
+    list, then merge-sorts by (date, match_id) for a deterministic global
+    chronology. No dedupe — caller ensures pools don't overlap (cricsheet
+    filenames are unique stems, so this is safe with our golden / live split).
+    """
+    streams = [iter_matches_chronological(f, gender=gender) for f in folders]
+    tagged = [((d, mid), (mid, txt, d)) for s in streams for (mid, txt, d) in s]
+    tagged.sort(key=lambda t: t[0])
+    for _, entry in tagged:
+        yield entry
 from parsing_v2 import parse_match_data_v2
 from player_metadata import PlayerMetadataProvider
 from stats_provider import StatsProvider
@@ -402,7 +417,7 @@ def _build_match_record(
 
 
 def materialize(
-    source_dir: Path,
+    source_dir,  # Path or list[Path]
     sqlite_dir: Path,
     out_dir: Path,
     version: str,
@@ -451,9 +466,11 @@ def materialize(
               f"{freeze_as_of.strftime('%Y-%m-%d')} for matches with date > "
               f"{freeze_dt.strftime('%Y-%m-%d')}")
 
-    for match_date, batch in group_by_date(
-        iter_matches_chronological(source_dir, gender=gender)
-    ):
+    source_dirs = source_dir if isinstance(source_dir, (list, tuple)) else [source_dir]
+    iter_fn = (iter_matches_chronological_multi(source_dirs, gender=gender)
+               if len(source_dirs) > 1
+               else iter_matches_chronological(source_dirs[0], gender=gender))
+    for match_date, batch in group_by_date(iter_fn):
         is_frozen_date = freeze_dt is not None and match_date > freeze_dt
 
         if not is_frozen_date:
@@ -484,6 +501,16 @@ def materialize(
                 temp_venue = rehydrate_venue_tracker(
                     provider, freeze_as_of, one_match_venues)
 
+            # SNAPSHOT temp_elo BEFORE parse_match_data_v2 mutates it. The
+            # snapshot is passed to _build_match_record so the top6/bottom5
+            # ELO splits reflect truly pre-match state. parse still mutates
+            # the live temp_elo so subsequent same-day matches get the
+            # post-this-match ELO (matches monolith chronological semantics).
+            from parsing_v2 import PlayerEloTracker  # local import; cheap
+            pre_match_elo = PlayerEloTracker()
+            pre_match_elo.batting_elo = dict(temp_elo.batting_elo)
+            pre_match_elo.bowling_elo = dict(temp_elo.bowling_elo)
+
             rows, _it, vname, innings_details, chase_won = (
                 parse_match_data_v2(
                     json_text, temp_stats, temp_venue, metadata,
@@ -501,7 +528,7 @@ def materialize(
 
             record = _build_match_record(
                 match_id, match_date, data, rows,
-                metadata, temp_elo, form_tracker, h2h_tracker, home_tracker,
+                metadata, pre_match_elo, form_tracker, h2h_tracker, home_tracker,
             )
             if record is None:
                 n_dropped += 1
@@ -552,6 +579,11 @@ def materialize(
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--source-dir", type=Path, default=Path("data/t20s_json"))
+    ap.add_argument("--extra-source-dir", type=Path, action="append",
+                    default=[], help="Additional cricsheet pool(s) merged "
+                    "chronologically with --source-dir. Use for the golden "
+                    "pool: --extra-source-dir data/golden/t20s_json. May be "
+                    "repeated.")
     ap.add_argument("--sqlite-dir", type=Path, default=Path("models"))
     ap.add_argument("--out-dir", type=Path,
                     default=Path("data/xgb_match_data_v1"))
@@ -569,9 +601,11 @@ def main() -> int:
     args = ap.parse_args()
 
     splits = dict(DEFAULT_SPLITS)
+    source_dirs = [args.source_dir] + list(args.extra_source_dir)
+    print(f"Source dir(s): {source_dirs}")
     t0 = time.time()
     n_matches, counts = materialize(
-        source_dir=args.source_dir,
+        source_dir=source_dirs,
         sqlite_dir=args.sqlite_dir,
         out_dir=args.out_dir,
         version=args.version,

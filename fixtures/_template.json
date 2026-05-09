@@ -1,0 +1,41 @@
+{
+  "_comment": "Template for a single-fixture prediction input. Lineup entries can be cricsheet 8-char IDs (e.g. 'fc2fffb5') or display names (e.g. 'Virat Kohli'). Names are resolved against data/all_players_enriched.csv. polymarket_odds is optional — provide decimal odds for both teams to get an edge + bet recommendation.",
+  "date": "2026-05-10",
+  "team1": "Chennai Super Kings",
+  "team2": "Royal Challengers Bengaluru",
+  "venue": "MA Chidambaram Stadium, Chepauk, Chennai",
+  "competition_tier": "Indian Premier League",
+  "team_type": "club",
+  "team1_lineup": [
+    "Ruturaj Gaikwad",
+    "Devon Conway",
+    "Rachin Ravindra",
+    "Shivam Dube",
+    "MS Dhoni",
+    "Ravindra Jadeja",
+    "Sam Curran",
+    "R Ashwin",
+    "Matheesha Pathirana",
+    "Tushar Deshpande",
+    "Khaleel Ahmed"
+  ],
+  "team2_lineup": [
+    "Virat Kohli",
+    "Faf du Plessis",
+    "Rajat Patidar",
+    "Glenn Maxwell",
+    "Cameron Green",
+    "Dinesh Karthik",
+    "Mahipal Lomror",
+    "Karn Sharma",
+    "Mohammed Siraj",
+    "Yash Dayal",
+    "Lockie Ferguson"
+  ],
+  "toss_winner": null,
+  "toss_decision": null,
+  "polymarket_odds": {
+    "Chennai Super Kings": 1.95,
+    "Royal Challengers Bengaluru": 1.88
+  }
+}
