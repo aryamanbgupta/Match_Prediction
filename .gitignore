@@ -55,3 +55,11 @@ docs/CLOUD_GPU_TESTING.md
 # explanation + the historical code.
 archive/logs/
 archive/eval_results/
+
+# Perf benchmarking scratch space. Only the reusable .py drivers are
+# tracked (gated by category rules above + explicit !exception). Run
+# logs, intermediate eval JSONs, profiles, and split-symlink dirs stay
+# local-only.
+perf_runs/*
+!perf_runs/*.py
+!perf_runs/README.md

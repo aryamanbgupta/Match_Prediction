@@ -39,11 +39,58 @@ uv run python scripts/sim_eval/run_sim_eval.py \
 
 > **Phase B note (2026-04-22)**: `scripts/parsing_v2.py` was split into `scripts/build_stats_cache.py` + `scripts/materialize_features.py`. The monolithic orchestrator `process_folder_v2_with_splits` is gone; the helper primitives (tracker classes, `parse_match_data_v2`, `deep_copy_stats`) remain in `parsing_v2.py` and are imported by the new scripts.
 
-> **WARNING — do not use `--parallel` on `run_sim_eval.py`.** The parallel
-> code path has been observed to crash this machine (2026-04-19). Always run
-> serial; budget ~40 min for 261×100 sims, ~5–10 min for 45×1000. For long
-> runs, launch as a background task and wait for the completion notification
-> rather than polling.
+> **`--parallel` on `run_sim_eval.py` works but isn't faster.** As of the
+> 2026-05-08 perf pass it produces correct output (the pickle bug was
+> fixed by `e4b97cc`), but multiprocessing.Pool over a single match's sims
+> is dominated by IPC cost — 5×100 takes 76 s vs 44 s serial. The
+> SQLite-unlocked parallelism the user wants is **multiple eval processes
+> on disjoint match subsets**; see "Multi-process parallel eval" below.
+> Budget for serial runs: ~34 min for 261×100 (post-perf-pass), ~5–10 min
+> for 45×1000. Launch long runs as background tasks rather than polling.
+
+### Multi-process parallel eval (2026-05-09)
+
+The SQLite stats cache supports N concurrent readers via mmap (proven in
+the Phase 1+2 migration with 1.7 GB combined RSS). The 2026-05-08 perf
+pass added per-player memoization to `StatsProviderCache` that survives
+fork/pickle, and a one-time `__getstate__` / `__setstate__` fix that
+unblocked the multiprocessing path. Result: a 4-proc parallel eval on
+disjoint match subsets gives **~2.3× throughput** at ~1.6 GB combined RSS
+(per-process ~440 MB).
+
+**Critical**: cap each child's BLAS/OMP threads or processes will
+oversubscribe and serialize. Without the cap, 2 procs on 10 logical
+cores took *longer* than serial.
+
+```bash
+# Driver + RSS sampling:
+uv run python perf_runs/run_n_parallel.py <N_PROCS> <MATCHES_PER_PROC> <N_SIMS>
+
+# Examples — 10 logical cores on the dev box:
+uv run python perf_runs/run_n_parallel.py 2 -1 100   # 2 procs, full 261, OMP=5
+uv run python perf_runs/run_n_parallel.py 4 -1 100   # 4 procs, full 261, OMP=2
+# matches_per_proc == -1 splits the test set evenly; last proc takes the
+# remainder.
+```
+
+Measured throughput (10 matches × 100 sims per proc, 10 logical cores):
+
+| Config                  | Wall    | Throughput | Combined RSS |
+|-------------------------|--------:|-----------:|-------------:|
+| 1 proc, default OMP     | 86.3 s  | 1.00×      | 887 MB       |
+| 2 procs, OMP=4 (no cap) | 173.7 s | **0.99×** (oversub!) | 1.1 GB |
+| **2 procs, OMP=2**      | 96.3 s  | **1.79×**  | 890 MB       |
+| **4 procs, OMP=2**      | 148 s   | **2.33×**  | 1.6 GB       |
+
+End-to-end, full 261×100 eval (2026-05-09): 4 procs × OMP=2 ran in
+**16.6 min** vs **41.9 min serial = 2.52× speedup**. Numerics within
+Monte Carlo noise of the serial baseline (LL 0.7150 vs 0.7155).
+
+The 16 GB box has comfortable headroom past 4 procs, but compute-bound
+diminishing returns kick in (memory bandwidth, perf vs efficiency cores).
+**Recommended**: 2 procs for routine ablation iteration, 4 procs for
+biggest-experiment final runs. Do NOT mix `--parallel` (intra-match) with
+multiprocess parallelism — the `OMP_NUM_THREADS` cap is the only safe knob.
 
 ### Sliced eval (Phase 1, 2026-04-24)
 

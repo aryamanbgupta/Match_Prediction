@@ -843,17 +843,47 @@ IDs anyway, given outcome distributions are now first-class features)
 See `IMPROVEMENTS.md` § "Empirical Outcome Distributions" and § "Phase 5 /
 Phase 6" for the full per-experiment breakdowns.
 
-### 6.8 Per-match memoization (`StatsProviderCache`)
+### 6.8 Memoization in `StatsProviderCache`
 
-Five getters are constant across every ball of a match: team batting/bowling
-ELO, team batting/bowling strength, venue profile. Without memoization, each
-ball re-runs an 11-player loop inside the provider. With memoization, each
-match computes them once and the remaining ~24,000 calls (240 balls × 100
-sims) are dict hits.
+Two tiers of memo on the wrapper:
 
-**Result**: 1.20× sim speedup (XGBoost v3, warm-chunk bench, 100 sims).
-Bit-identical sim outputs. Wrapper is pickle-safe for `multiprocessing.Pool`.
-All model classes apply it automatically in `__init__`.
+**Tier 1 — team-level (5 methods)**: `get_team_batting_elo`,
+`get_team_bowling_elo`, `get_team_batting_strength`,
+`get_team_bowling_strength`, `get_venue_profile`. Constant across every
+ball of a match. Without this, each ball re-runs an 11-player loop. Adds
+~1.2× sim speedup on its own.
+
+**Tier 2 — per-player getters (12 methods, added 2026-05-08)**:
+`get_batting_stats`, `get_bowling_stats`, `get_h2h_stats`,
+`get_*_recent`, `get_*_vs_type/hand_stats`, plus the 5 outcome-dist getters.
+Within an innings the striker stays at the crease for many balls and the
+bowler stays for 6, so cache locality is enormous and was entirely unused
+before this addition. cProfile of v7's pre-perf eval showed 1.4 M SQLite
+queries dominated by repeated `(player, date)` reads; the memo collapses
+them to dict hits.
+
+**Combined result** (5 matches × 100 sims, polymarket eval shape):
+- Wall: 53.1 s → 43.6 s (**−17.9%**)
+- Per-ball `extract_features`: 0.13 ms → 0.06 ms (**−54%**)
+- `_fill_outcome_dists` cumtime: 4.47 s → 0.90 s (**−80%**)
+- RSS overhead: ~13 MB total memo footprint
+- Bit-identical output
+
+**Memory bound**: across a 261-match eval each memo holds ≤ ~8K entries
+(unique `(player, date)` pairs). 12 memos × ~16 KB ≈ 200 KB. No
+invalidation needed at production scale.
+
+**Pickle safety** is non-trivial. The wrapper uses `__getattr__` to forward
+unknown methods to the underlying provider; pickle's deserialiser probes
+for `__setstate__` etc. via attribute access, and a naive forwarder would
+return the *backend's* dunder methods and corrupt the wrapper's
+`__dict__` shape on restore. The class therefore defines `__getstate__` /
+`__setstate__` explicitly (use `__dict__` verbatim) and short-circuits
+dunder-named attributes in `__getattr__` to `AttributeError` immediately.
+Both `StatsProvider` and `StatsProviderCache` carry this guard.
+
+All five model classes apply `wrap_with_cache(provider)` automatically in
+`__init__`.
 
 ### 6.9 Margin-free betting edge
 
@@ -899,14 +929,35 @@ behind `--calibrate` / `--ball-calibrate` flags; enable when the model has
 better resolution. See `IMPROVEMENTS.md` § "Calibration System" for the full
 A/B and root-cause discussion.
 
-### 6.12 No `--parallel` on `run_sim_eval.py`
+### 6.12 Parallelism story (updated 2026-05-09)
 
-`SimulationConfig.parallel=True` works for in-process simulation but the
-parallel eval path has crashed the 16 GB development box (RSS blowup;
-multiple model + cache copies per worker). The migration to SQLite fixed
-the underlying memory issue (1.7 GB combined for 2 workers), but the eval
-parallelism path hasn't been re-validated end-to-end. **Default and
-recommended: serial**. For long runs, schedule as a background task.
+Two flavours of parallelism, only one is useful:
+
+**`run_sim_eval.py --parallel`** — `multiprocessing.Pool` over the sims
+of a *single match*. Was historically broken (`Error evaluating match:
+_batting_stats` due to a pickle/`__getattr__` interaction; fixed in
+`e4b97cc`). Now correct, but slower than serial because IPC/pickle of
+the model + cache memos exceeds the gain when sims/match is small
+(76 s vs 44 s on 5×100). Don't use it.
+
+**Multi-process eval on disjoint match subsets** — N independent
+`run_sim_eval.py` invocations on different `--test-dir` shards, sharing
+the SQLite mmap. This is what the chunked-→-SQLite migration unlocked
+(Phase 1+2: 1.7 GB combined RSS for 2 readers, no crashes). Per-process
+RSS post-perf-pass is ~440 MB. On 10 logical cores:
+
+| Config              | Throughput vs 1 proc | Combined RSS |
+|---------------------|---------------------:|-------------:|
+| 2 procs, OMP=2      | 1.79×                | 890 MB       |
+| 4 procs, OMP=2      | 2.33×                | 1.6 GB       |
+
+End-to-end, full 261×100 eval (2026-05-09): **41.9 min serial → 16.6 min
+with 4 procs × OMP=2** (2.52× speedup). Numerics within MC noise.
+
+**Critical**: cap `OMP_NUM_THREADS` per process. Without the cap, BLAS
+threads from each XGBoost worker oversubscribe the cores and serialize.
+Driver script: `perf_runs/run_n_parallel.py`. Ops recipe in
+[OPERATIONS.md](OPERATIONS.md) §"Multi-process parallel eval".
 
 ### 6.13 Strict same-day-stateful contract
 

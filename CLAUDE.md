@@ -76,8 +76,15 @@ Step-by-step equivalent: `build_stats_cache.py` → `materialize_features.py`
 3. **Schema bumps**: any change to `_SQLiteBackend` table layout requires
    bumping `SCHEMA_VERSION` in `scripts/stats_sqlite_backend.py`. The
    provider refuses to open a file with the wrong version.
-4. **No `--parallel`** on `run_sim_eval.py` — it has crashed the 16 GB box.
-   Default is serial; budget ~40 min for 261×100 sims, ~5–10 min for 45×1000.
+4. **`--parallel` on `run_sim_eval.py` is correct but slower than serial**
+   (intra-match `multiprocessing.Pool` is dominated by IPC cost). Use it
+   only if you really mean it. For real parallelism, run N independent
+   evals on disjoint match shards via `perf_runs/run_n_parallel.py`.
+   Measured 2026-05-09: 4 procs at OMP=2 took **16.6 min for full 261×100
+   eval vs 41.9 min serial = 2.52× speedup**, 1.5 GB combined RSS,
+   numerics within MC noise of serial. Cap `OMP_NUM_THREADS` per process
+   or BLAS oversubscribes and you serialize. See
+   `docs/OPERATIONS.md` § "Multi-process parallel eval".
 5. **Same-day match order matters** in `materialize_features.py`. Within-date
    trackers carry state across same-day siblings; reordering changes features
    for every match in the batch.

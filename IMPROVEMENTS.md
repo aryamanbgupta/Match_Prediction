@@ -61,6 +61,22 @@ XGBoost v4 with player-level ELO + aggregated team strength (9 new features, 72 
 - Target ECE (Expected Calibration Error) < 0.015.
 - Methods: Isotonic regression, temperature scaling, Platt scaling.
 
+### Calibration vs. Resolution — what the Walsh & Joshi finding does NOT say (added 2026-05-08)
+A common misread of Walsh & Joshi is "always calibrate, calibration generates returns." That is not what their result shows, and applying it naively has hurt this project twice.
+
+**The mechanical claim.** Calibration (isotonic, Platt) is a *monotone* mapping: it preserves the ranking of predictions and only redistributes probability mass to make per-bin frequencies match empirical rates. It cannot create resolution — it can only honour the resolution the underlying model already has.
+
+**Why this hurts flat ROI on an under-resolving model.** When the underlying model is over-dispersed (predictions of 16% where events happen 40% of the time, predictions of 74% where events happen 51% of the time), calibration pulls those bins toward the empirical rate, which is closer to the base rate (50%). LL/Brier improve because per-bin frequencies match better. But our flat-betting decision rule (`model_prob > market_prob`) only cares about being on the correct side of the market line — and an over-confident-but-correctly-ranked prediction at 75% vs market 50% becomes a calibrated 60% vs market 50% (still bets), or worse, a 60% vs market 65% (no longer bets). At the margins, predictions that *barely* cleared the market line lose their edge as soon as they collapse toward 50%.
+
+**The Walsh & Joshi finding holds when the underlying model has resolution and miscalibration is the binding constraint.** Ours doesn't — coinflip beats v7 on LL on the ≥$50k slice (0.6931 < 0.7402), which is the textbook signature of an under-resolving model rather than a miscalibrated one. A perfectly calibrated coinflip is trivially achievable and generates zero edge over market.
+
+**Empirical evidence on this project.**
+- 2026-03 Platt LOOCV experiments: LL improved, flat ROI dropped.
+- 2026-04-23 v6 outcome-dist (which is implicitly a calibration improvement at the ball level): LL 0.7518 → 0.7122 (−5.3%), flat ROI +6.5% → −7.1%.
+- Phase 5 hierarchical shrinkage walked some of that back (LL ~flat, flat ROI swung +15pp on all-261, +16pp on ≥$50k) — by adding *resolution* to the narrow cells, not by recalibrating.
+
+**Implication for the go/no-go gate.** The gate (`model LL < market LL on ≥$50k AND ROI CI > 0`) is a resolution problem. Closing the 0.114 LL gap to market requires features or architecture that discriminate strong vs weak teams better; a calibration layer alone cannot move it and may anti-correlate with ROI. Use calibration as measurement infrastructure (clean ablations, Kelly correctness, edge-threshold rules) — not as a feature work prerequisite.
+
 ### Realistic Edge Sizes
 - Market-beating edge is typically **1-3% ROI** (not 29%).
 - Kuo 2021 achieved ~2-3% edge over Bet365 using ball-by-ball simulation.
@@ -403,6 +419,135 @@ Experiments: `xgb_v4_no_calibration_20260321_215322`, `xgb_v4_ball_calibration_2
 3. **Bootstrap confidence intervals**: 1000 resamples on all metrics.
 4. **CLV tracking**: Compare model predictions to closing line (not opening odds).
 5. **Minimum edge threshold**: Only "bet" when model edge > 3-5%.
+
+---
+
+## Performance Pass (LANDED 2026-05-08 → 2026-05-09)
+
+Three-phase optimization driven by a cProfile of the v7 production eval
+(41.9 min for 261 matches × 100 sims). The cProfile showed 55 % of wall
+in XGBoost C-side `inplace_predict` (mostly unrecoverable) and 41 % in
+feature extraction (very compressible).
+
+### Phase 1 — `strftime` cache on `_SQLiteBackend._norm_date` (commit `85d67bf`)
+
+1.77 M `strftime` calls in 38 s, all converting the same `match_date`.
+Replaced the `@staticmethod` with an instance method backed by a tiny
+dict cache (cap 16 entries, keyed on the datetime object). Strings hit
+a passthrough fast path. Cache stripped on `__getstate__` for fork-safe
+pickling.
+
+| Metric | Δ |
+|---|---:|
+| 5×100 wall | 53.1 s → 50.1 s (**−5.6 %**) |
+| `strftime` calls | 1.77 M → 340 K (−81 %) |
+| `strftime` tottime | 2.12 s → 0.46 s (−78 %) |
+| RSS | flat |
+| Output | bit-identical |
+
+### Phase 2 — per-player memoization on `StatsProviderCache` (commit `135514a`)
+
+The wrapper memoized only 5 team-level methods. Extended with a tier-2
+memo on the 12 per-ball getters: `get_batting_stats`, `get_bowling_stats`,
+`get_h2h_stats`, the two `*_recent` and two `*_vs_type/hand_stats`, and
+all 5 outcome-dist getters. Keys are `(player_id, date_str)` (or
+`(p1, p2, date_str)` for h2h, with optional `k`/`hierarchical` for
+outcome-dist). Within an innings the striker stays for many balls and
+the bowler for 6 — cache locality was previously entirely unused.
+
+| Metric | Δ |
+|---|---:|
+| **5×100 wall** | 53.1 s → **43.6 s** (**−17.9 %** total vs baseline) |
+| Per-ball `extract_features` | 0.13 ms → 0.06 ms (**−54 %**) |
+| `_fill_outcome_dists` cumtime | 4.47 s → 0.90 s (**−80 %**) |
+| RSS overhead | +13 MB (memo footprint) |
+| Output | bit-identical |
+
+Memory bound is small: ~8K unique `(player, date)` pairs across 261
+matches × 12 memos × ~16 KB ≈ 200 KB total. No invalidation needed.
+
+### Phase 3 — multi-process parallel eval unlocked (commit `e4b97cc`)
+
+Pickle round-trip on the wrapper was broken: pickle's `__setstate__`
+probe fell through to `__getattr__` and returned the *backend's*
+`__setstate__`, restoring the wrong `__dict__` shape on workers. Failed
+silently with `Error evaluating match: _batting_stats`.
+
+Fix: explicit `__getstate__`/`__setstate__` on both `StatsProvider` and
+`StatsProviderCache`, plus a dunder short-circuit in `__getattr__` so
+pickle/copy/etc. never get forwarded to the wrapped object.
+
+With pickle correct, ran the experiment the SQLite migration was
+intended to enable: N independent eval processes on disjoint match
+shards, sharing the SQLite mmap. **Critical**: cap `OMP_NUM_THREADS`
+per process or BLAS threads oversubscribe the cores and the parallel
+runs serialize.
+
+Measured throughput on 10 matches × 100 sims per process (10 logical
+cores on the dev box):
+
+| Config | Wall | Throughput | Combined RSS |
+|---|---:|---:|---:|
+| 1 proc, default OMP | 86.3 s | 1.00× | 887 MB |
+| 2 procs, OMP=4 (no cap) | 173.7 s | **0.99×** (oversub!) | 1.1 GB |
+| **2 procs, OMP=2** | 96.3 s | **1.79×** | 890 MB |
+| **4 procs, OMP=2** | 148 s | **2.33×** | 1.6 GB |
+
+Per-process RSS is ~440 MB; the 16 GB box has headroom for ~16 procs
+if compute scaling didn't tail off (memory bandwidth, perf vs efficiency
+cores limit usable N to ~4–5 in practice).
+
+Driver: `perf_runs/run_n_parallel.py`. Operational recipe in
+`docs/OPERATIONS.md` § "Multi-process parallel eval".
+
+### End-to-end full-eval result (2026-05-09 — measured)
+
+| Configuration | 261×100 wall | Speedup vs baseline |
+|---|---:|---:|
+| Pre-perf serial (2026-05-08) | 41.9 min | 1.00× |
+| **Phase 1+2 + 4-proc parallel (OMP=2, 2026-05-09)** | **16.6 min** | **2.52×** |
+
+Decomposition: ≈ 1.18× from Phase 1+2 single-proc gains + ≈ 2.1× from
+4-process parallelism on top.
+
+Numerics on the parallel run are within Monte Carlo noise of the serial
+baseline (per-worker RNG seeds differ by construction, not a regression):
+
+| Metric | Serial baseline (2026-05-08) | 4-proc parallel (2026-05-09) | Δ |
+|---|---:|---:|---:|
+| avg log loss | 0.7155 | 0.7150 | −0.0005 |
+| avg Brier | 0.2530 | 0.2526 | −0.0004 |
+| flat ROI | +8.0 % | +7.96 % | −0.04 pp |
+| flat win rate | 49.4 % | 49.4 % | flat |
+
+Per-shard balance (4 shards × ~65 matches × 100 sims):
+
+| Shard | Matches | LL | Brier | flat ROI | Time |
+|---|---:|---:|---:|---:|---:|
+| 0 | 65 | 0.7552 | 0.2660 | +7.20 % | 16.6 min |
+| 1 | 65 | 0.6675 | 0.2355 | +11.41 % | 16.4 min |
+| 2 | 65 | 0.6903 | 0.2385 | −9.85 % | 16.5 min |
+| 3 | 66 | 0.7466 | 0.2702 | +23.13 % | 16.4 min |
+
+Per-shard variation in LL/ROI is the natural per-tournament-slice
+difference (chronological splitting puts T20Is in one shard, BBL in
+another, etc.); the n-weighted average over all 261 matches recovers
+the serial baseline.
+
+Bit-identical numerics across Phase 1 and Phase 2 verified by JSON diff
+on 5 matches × 6 fields prior to this run.
+
+### What was NOT promising
+
+- `--parallel` on `run_sim_eval.py` (intra-match `multiprocessing.Pool`):
+  now correct after `e4b97cc`, but slower than serial because IPC cost
+  of the model+memos exceeds the gain at small sims/match. Documented
+  as "do not use" in OPERATIONS.md.
+- XGBoost batch prediction (vectorising all 240 balls of a sim): ~50 %
+  predict-side savings possible, but each ball's features depend on the
+  previous ball's outcome, so vectorising requires rewriting the sim
+  loop. Architectural lift, ~2 days, easy to break temporal-integrity
+  invariants. Not pursued.
 
 ---
 
