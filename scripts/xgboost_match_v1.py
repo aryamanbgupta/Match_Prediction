@@ -77,6 +77,13 @@ _MONOTONE_SIGNS = {
     "bowling_econ_recent_diff": -1,  # higher team1 recent econ = leaks more = worse
     "inform_batters_diff": 1,        # more in-form team1 batters = better
     "outofform_batters_diff": -1,    # more out-of-form team1 batters = worse
+    # M4 (2026-05-10) within-tournament / scheduling diffs.
+    "win_rate_last_60d_diff": 1,     # team1 winning recently = good
+    "competition_win_rate_diff": 1,  # team1 winning IN-COMPETITION recently = good
+    # days_since_diff and back-to-back diffs are NOT monotone in the
+    # P(team1_wins) direction — fatigue (negative for too short gap) and
+    # rust (negative for too long gap) effects can co-exist; leave
+    # unconstrained so the tree can learn the U-shape if it exists.
 }
 
 

@@ -111,6 +111,19 @@ FEATURE_COLUMNS = [
     "p4_bowling_diff", "p6_bowling_diff", "pw_bowling_diff",
     # Venue outcome distribution (k_venue=200, shrunk to corpus prior π).
     "venue_p4", "venue_p6", "venue_pw",
+    # === M4 (2026-05-10): within-tournament / scheduling features ===
+    # Date-windowed form (last 60d, Beta(1,1)-shrunk on team win rate).
+    "team1_win_rate_last_60d", "team1_n_matches_last_60d",
+    "team2_win_rate_last_60d", "team2_n_matches_last_60d",
+    "win_rate_last_60d_diff",
+    # Competition-filtered form (last 365d, same competition_tier).
+    "team1_competition_win_rate", "team1_competition_n_matches",
+    "team2_competition_win_rate", "team2_competition_n_matches",
+    "competition_win_rate_diff",
+    # Scheduling proxies. days_since_*_last_match capped at 365.
+    "days_since_team1_last_match", "days_since_team2_last_match",
+    "is_team1_back_to_back", "is_team2_back_to_back",
+    "days_since_diff",
     # === M3 (2026-05-10): player-level rolling form (last-5-matches) ===
     # Top-6 mean recent batting avg/SR; pairwise diff. Lineup members
     # whose recent_batting deque is empty are excluded from the mean.
@@ -143,10 +156,16 @@ class TeamFormTracker:
     return the team's win rate over its last `n` matches with date strictly
     before `as_of_date`. Same-day prior matches are excluded so that
     same-day siblings don't see each other's outcomes.
+
+    Each record carries (date, won, competition_tier) so window-by-tier
+    queries (M4) can filter by the competition the upcoming match falls
+    in.
     """
 
     def __init__(self) -> None:
-        self.records: Dict[str, List[Tuple[datetime, bool]]] = defaultdict(list)
+        # Each entry: (date, won, competition_tier_int). competition_tier
+        # may be None for legacy records that pre-date the M4 schema.
+        self.records: Dict[str, List[Tuple]] = defaultdict(list)
 
     def get_last_n_win_rate(self, team: str, as_of_date: datetime,
                             n: int = 10) -> Tuple[float, int]:
@@ -155,11 +174,60 @@ class TeamFormTracker:
         last_n = prior[-n:]
         if not last_n:
             return 0.5, 0  # neutral prior
-        wins = sum(1 for _, won in last_n if won)
+        wins = sum(1 for r in last_n if r[1])
         return wins / len(last_n), len(last_n)
 
-    def update(self, team: str, match_date: datetime, won: bool) -> None:
-        self.records[team].append((match_date, won))
+    def get_last_days_win_rate(self, team: str, as_of_date: datetime,
+                                days: int = 60,
+                                k: float = 2.0) -> Tuple[float, int]:
+        """Beta(k/2, k/2)-shrunk win rate over matches in the last
+        `days` days. Returns (shrunk_rate, n_prior_matches). With k=2,
+        n=0 → 0.5 (neutral); n→∞ → empirical rate.
+        """
+        recs = self.records.get(team, [])
+        cutoff = as_of_date - timedelta(days=days)
+        window = [r for r in recs if cutoff <= r[0] < as_of_date]
+        n = len(window)
+        wins = sum(1 for r in window if r[1])
+        return (wins + k / 2) / (n + k), n
+
+    def get_competition_win_rate(self, team: str,
+                                  competition_tier,
+                                  as_of_date: datetime,
+                                  days: int = 365,
+                                  k: float = 2.0) -> Tuple[float, int]:
+        """Beta-shrunk win rate over the team's matches in the same
+        competition_tier within the last `days` days. competition_tier
+        can be int (numeric encoding) or string (raw label); equality
+        check is exact.
+        """
+        recs = self.records.get(team, [])
+        cutoff = as_of_date - timedelta(days=days)
+        window = [r for r in recs
+                  if cutoff <= r[0] < as_of_date
+                  and len(r) >= 3
+                  and r[2] == competition_tier]
+        n = len(window)
+        wins = sum(1 for r in window if r[1])
+        return (wins + k / 2) / (n + k), n
+
+    def get_days_since_last(self, team: str, as_of_date: datetime,
+                             cap: int = 365) -> int:
+        """Days between the team's last prior match and as_of_date.
+        Returns `cap` if no prior matches (cold start) or gap exceeds
+        cap. Strict less-than: same-day prior matches don't count.
+        """
+        recs = self.records.get(team, [])
+        prior = [r for r in recs if r[0] < as_of_date]
+        if not prior:
+            return cap
+        last_date = prior[-1][0]
+        gap = (as_of_date - last_date).days
+        return min(gap, cap)
+
+    def update(self, team: str, match_date: datetime, won: bool,
+                competition_tier=None) -> None:
+        self.records[team].append((match_date, won, competition_tier))
 
 
 class H2HTracker:
@@ -330,6 +398,51 @@ def _expected_outcome_features(
         "venue_p4": venue_dist["venue_p4"],
         "venue_p6": venue_dist["venue_p6"],
         "venue_pw": venue_dist["venue_pw"],
+    }
+
+
+def _within_tournament_features(
+    team1: str, team2: str, match_date: datetime,
+    competition_tier,
+    form_tracker: "TeamFormTracker",
+) -> Dict[str, float]:
+    """M4 (2026-05-10). Within-tournament / scheduling features.
+
+    Date-windowed form: Beta(1,1)-shrunk win rate over the last 60d.
+    Competition-filtered form: Beta(1,1)-shrunk win rate over the last
+    365d in the same competition_tier (so IPL form sums only across
+    IPL fixtures, internationals only across internationals, etc.).
+    Scheduling: days since last match per team (cap 365), back-to-back
+    flag (≤ 1 day gap).
+
+    Form_tracker must have been updated with this match's competition
+    tier at .update() time for the competition-filter to work.
+    """
+    t1_60d, t1_60d_n = form_tracker.get_last_days_win_rate(team1, match_date, days=60)
+    t2_60d, t2_60d_n = form_tracker.get_last_days_win_rate(team2, match_date, days=60)
+    t1_comp, t1_comp_n = form_tracker.get_competition_win_rate(
+        team1, competition_tier, match_date, days=365)
+    t2_comp, t2_comp_n = form_tracker.get_competition_win_rate(
+        team2, competition_tier, match_date, days=365)
+    t1_days = form_tracker.get_days_since_last(team1, match_date)
+    t2_days = form_tracker.get_days_since_last(team2, match_date)
+
+    return {
+        "team1_win_rate_last_60d": float(t1_60d),
+        "team1_n_matches_last_60d": float(t1_60d_n),
+        "team2_win_rate_last_60d": float(t2_60d),
+        "team2_n_matches_last_60d": float(t2_60d_n),
+        "win_rate_last_60d_diff": float(t1_60d - t2_60d),
+        "team1_competition_win_rate": float(t1_comp),
+        "team1_competition_n_matches": float(t1_comp_n),
+        "team2_competition_win_rate": float(t2_comp),
+        "team2_competition_n_matches": float(t2_comp_n),
+        "competition_win_rate_diff": float(t1_comp - t2_comp),
+        "days_since_team1_last_match": float(t1_days),
+        "days_since_team2_last_match": float(t2_days),
+        "is_team1_back_to_back": float(1 if t1_days <= 1 else 0),
+        "is_team2_back_to_back": float(1 if t2_days <= 1 else 0),
+        "days_since_diff": float(t1_days - t2_days),
     }
 
 
@@ -662,6 +775,15 @@ def _build_match_record(
     }
     record.update({k: float(v) for k, v in outcome_features.items()})
 
+    # === M4 within-tournament / scheduling features ===
+    # form_tracker has been updated with all prior matches only — this
+    # match's own outcome is appended by the caller AFTER this function
+    # returns. So queries here reflect pre-match state.
+    m4_features = _within_tournament_features(
+        team1, team2, match_date, competition_tier, form_tracker,
+    )
+    record.update({k: float(v) for k, v in m4_features.items()})
+
     if rolling_features is None:
         rolling_features = {k: float("nan") for k in [
             "team1_top6_batting_avg_recent", "team1_top6_batting_sr_recent",
@@ -839,8 +961,11 @@ def materialize(
             # match's features. Same-day later matches will see this
             # match's outcome.
             t1_won = record["team1_wins"] == 1
-            form_tracker.update(record["team1"], match_date, t1_won)
-            form_tracker.update(record["team2"], match_date, not t1_won)
+            tier_for_record = record.get("competition_tier")
+            form_tracker.update(record["team1"], match_date, t1_won,
+                                competition_tier=tier_for_record)
+            form_tracker.update(record["team2"], match_date, not t1_won,
+                                competition_tier=tier_for_record)
             winner = record["team1"] if t1_won else record["team2"]
             h2h_tracker.update(record["team1"], record["team2"],
                                match_date, winner)

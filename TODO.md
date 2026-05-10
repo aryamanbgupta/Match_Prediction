@@ -195,12 +195,23 @@ Mixed outcome. Full reference: `reports/m3_rolling_form_eval.md`.
 
 **Materialization mode going forward**: unfrozen (no `--freeze-trackers-after` flag). Frozen kept for diagnostic reference. Bowler-unit identification remains broken; revisit in M5 with metadata-based `is_pace` filter.
 
-### M4 — Within-tournament features
-Cheap, derivable from match data + competition_tier.
-- [ ] Add `team1_tournament_win_rate`, `team1_tournament_n_matches`, `team1_tournament_run_rate_for/against` (NRR proxy), `days_since_team_last_match`, `is_back_to_back`. Symmetric for team2.
-- [ ] Train + ablate against post-M3 model.
+### M4 — Within-tournament features ❌ DROPPED 2026-05-10
+Full reference: `reports/m4_within_tournament_eval.md`.
+- [x] Added 15 features in `_within_tournament_features`: date-windowed form (60d), competition-filtered form (365d, same tier), scheduling proxies (days_since, back_to_back). Parquet at `data/xgb_match_data_v3_m4_unfrozen/`.
+- [x] TeamFormTracker extended with `get_last_days_win_rate`, `get_competition_win_rate`, `get_days_since_last` queries; records now carry competition_tier.
+- [x] Drop-one ablation: scheduling group HURTS test LL (Δ -0.0095 when dropped); competition-filter neutral; date-window slightly helps standalone test but doesn't translate to iteration ROI.
+- [~] All variants regress on iteration ≥$50k. M4 full Platt ROI CI now includes 0; M4 window-only and M4-no-scheduling don't recover M2 v.o.'s ROI lower bound.
 
-Exit criterion: any LL improvement *or* a clear ROI lift on the IPL-only adversarial slice (D3). Else drop.
+**Why M4 failed** (three converging problems, full data in report):
+1. Form features (`win_rate_last_60d_diff`, `competition_win_rate_diff`) are 0.68-0.79 correlated with M1's `win_rate_diff`. All three diffs have target r ≈ 0.155 (same signal in 3 features).
+2. Scheduling features have ~zero train target correlation (r = -0.001 to -0.024) but XGBoost still uses them at importance 0.011-0.014 via interactions → fits noise.
+3. Net: M4 predictions ~10% more confident, LESS accurate at the tail (|p−0.5|>0.20: M2 89.6% acc → M4 86.0% acc).
+
+**Discipline added** (memory file `feedback_correlation_check_before_features.md`): all M5+ feature groups must correlation-check vs M1+M2 baseline before training; |r|>0.5 against existing requires demonstrating orthogonal target signal. This check would have caught both M3 and M4.
+
+**Discipline added** (memory file `feedback_iteration_only_decisions.md`): iteration test is the only set used for M-phase landing decisions; golden is held out for audit. Golden only re-enters the decision process at M7 / production-launch.
+
+**M4 features stay in materializer code** (`_within_tournament_features`, TeamFormTracker extensions, FEATURE_COLUMNS entries) but excluded from production via `--drop-features` substring filter.
 
 ### M5 — Player × opposition / player × venue affinity
 - [ ] Player × opposition (today, no schema work): aggregate per-batter h2h stats over the opposing XI's bowlers; symmetric for bowlers vs the opposing batting lineup. Shrunk to overall with empirical Bayes (k≈10).
