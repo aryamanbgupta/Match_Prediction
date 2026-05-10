@@ -226,11 +226,17 @@ Full reference: `reports/m5_player_affinity_eval.md`.
 
 **Discipline win**: the M4 ablation report committed to a pre-training correlation check; this was its first application. Caught structural redundancy in minutes instead of after a full training+ablation cycle.
 
-### M6 — Conditions / captain
-Light additions, half-day each.
-- [ ] **Conditions** (A5): `is_day_match`, `month_of_year`, `month × venue` interaction (proxy for seasonal dew/heat), `toss_winner_chase_propensity` derived from venue chase win pct.
-- [ ] **Captain** (A6): per-team captain identity from `info.toss.winner` + lineup metadata; `captain_win_rate_as_captain` last-N matches; pairwise diffs.
-- [ ] Train + ablate. Drop if neither group moves LL or ROI.
+### M6 — Conditions / captain ❌ DROPPED 2026-05-10
+Full reference: `reports/m6_conditions_captain_eval.md`.
+- [x] Added 3 date-derived condition features in `_match_conditions_features`: `month_of_year`, `day_of_week`, `is_dew_prone_month`. Match-level scalars (no lineup aggregation).
+- [~] **Captain features SKIPPED**: cricsheet doesn't tag captains; "first in lineup" heuristic too noisy. Defer until reliable identification source exists.
+- [~] **`is_day_match` SKIPPED**: cricsheet has no start-time field.
+- [x] Pre-training correlation check passed redundancy (clean orthogonality vs baseline) but **failed (newly-added) target-correlation-floor check** — all 3 features have |target r| ≤ 0.011, well below the new 0.03 floor.
+- [x] Trained anyway to confirm M4-style over-confidence pattern. Confirmed: M6 month-only's standalone test LL improved -0.007 BUT iteration Platt ROI dropped to +15.14% [-4.19, +37.22] (M2 v.o. was +26.69% [+6.26, +48.65]); tail accuracy regressed -3.2pp at |p-0.5|>0.15.
+
+**Discipline upgrade**: dual-condition correlation check now required (redundancy AND target-floor). Memory file `feedback_correlation_check_before_features.md` updated.
+
+**5 of 5 named v3 feature phases now DROPPED**. The match-level model at M2 v.o. (49 features) is at a local LL optimum given the pre-match signal available. Feature-engineering frontier exhausted; M7 should be ARCHITECTURE work.
 
 ### M7 — Architecture sweep on the stabilized feature set
 Run only after the feature set is fixed (post-M6).

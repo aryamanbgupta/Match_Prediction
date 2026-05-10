@@ -111,6 +111,13 @@ FEATURE_COLUMNS = [
     "p4_bowling_diff", "p6_bowling_diff", "pw_bowling_diff",
     # Venue outcome distribution (k_venue=200, shrunk to corpus prior π).
     "venue_p4", "venue_p6", "venue_pw",
+    # === M6 (2026-05-10): match-level conditions (date-derived) ===
+    # All three are per-match scalars not subject to lineup-aggregation
+    # collapse. month_of_year captures seasonal effects (dew in
+    # subcontinent April-May, autumn in AU/NZ/SA), day_of_week captures
+    # weekend tournament rhythm, is_dew_prone_month is a hard-coded
+    # binary for the subcontinent dew window.
+    "month_of_year", "day_of_week", "is_dew_prone_month",
     # === M5 (2026-05-10): player × opposition affinity ===
     # Top-6 batters' aggregate runs/balls/dismissals across the opposing
     # XI's bowlers (h2h matrix sums), shrunk to each batter's career
@@ -408,6 +415,27 @@ def _expected_outcome_features(
         "venue_p4": venue_dist["venue_p4"],
         "venue_p6": venue_dist["venue_p6"],
         "venue_pw": venue_dist["venue_pw"],
+    }
+
+
+def _match_conditions_features(match_date: datetime) -> Dict[str, float]:
+    """M6 (2026-05-10) date-derived match-level conditions.
+
+    No lineup aggregation, no per-player tracking — these are scalars
+    per match drawn from the match_date alone. Per the M3/M4/M5 failure
+    pattern, match-level-by-nature features avoid the aggregation
+    collapse that killed those phases.
+    """
+    month = match_date.month  # 1-12
+    weekday = match_date.weekday()  # Mon=0 .. Sun=6
+    # Dew is most pronounced at subcontinent grounds in evening matches
+    # during the cool/transitional months. Hard-coded list reflects
+    # commonly cited dew windows; XGBoost can refine via month interactions.
+    is_dew = 1 if month in {3, 4, 5, 9, 10, 11} else 0
+    return {
+        "month_of_year": float(month),
+        "day_of_week": float(weekday),
+        "is_dew_prone_month": float(is_dew),
     }
 
 
@@ -895,6 +923,10 @@ def _build_match_record(
             "team1_h2h_balls_total", "team2_h2h_balls_total",
         ]}
     record.update({k: float(v) for k, v in affinity_features.items()})
+
+    # === M6 conditions === purely match_date-derived; compute here.
+    record.update({k: float(v) for k, v in
+                   _match_conditions_features(match_date).items()})
     return record
 
 
