@@ -1,0 +1,1381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>CricML — Project Overview</title>
+<style>
+  :root {
+    --bg: #f8fafc;
+    --surface: #ffffff;
+    --surface-2: #f1f5f9;
+    --border: #e2e8f0;
+    --border-strong: #cbd5e1;
+    --text: #0f172a;
+    --text-2: #475569;
+    --muted: #64748b;
+    --accent: #2563eb;
+    --accent-soft: #dbeafe;
+    --teal: #0d9488;
+    --teal-soft: #ccfbf1;
+    --good: #16a34a;
+    --good-soft: #dcfce7;
+    --bad: #dc2626;
+    --bad-soft: #fee2e2;
+    --warn: #d97706;
+    --warn-soft: #fef3c7;
+    --indigo: #4f46e5;
+    --indigo-soft: #e0e7ff;
+    --shadow-sm: 0 1px 2px rgba(15,23,42,0.04);
+    --shadow: 0 1px 3px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04);
+    --shadow-lg: 0 10px 25px -5px rgba(15,23,42,0.08), 0 4px 6px -2px rgba(15,23,42,0.04);
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    line-height: 1.55;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+  code, pre, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  code { background: var(--surface-2); padding: 1px 6px; border-radius: 4px; font-size: 12.5px; color: var(--text); }
+  pre {
+    background: #0f172a; color: #e2e8f0;
+    padding: 16px 20px; border-radius: 10px; overflow-x: auto;
+    font-size: 12.5px; line-height: 1.6;
+  }
+  pre code { background: transparent; color: inherit; padding: 0; }
+  h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.015em; color: var(--text); }
+  h1 { font-size: 36px; margin: 0 0 6px; line-height: 1.15; }
+  h2 { font-size: 24px; margin: 56px 0 6px; }
+  h2 + .section-sub { color: var(--text-2); margin: 0 0 24px; max-width: 780px; }
+  h3 { font-size: 17px; margin: 26px 0 12px; }
+  h4 { font-size: 12px; margin: 18px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ==== TOP NAV ==== */
+  .topnav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: saturate(180%) blur(12px);
+    -webkit-backdrop-filter: saturate(180%) blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  .topnav-inner {
+    max-width: 1280px; margin: 0 auto;
+    padding: 14px 32px;
+    display: flex; align-items: center; gap: 28px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand-mark {
+    width: 26px; height: 26px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--indigo) 100%);
+    display: grid; place-items: center; color: white; font-weight: 700; font-size: 13px;
+  }
+  .brand-text { font-weight: 700; letter-spacing: -0.01em; }
+  .nav-links { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
+  .nav-links a {
+    padding: 6px 12px; border-radius: 6px;
+    color: var(--text-2); font-size: 13.5px; font-weight: 500;
+  }
+  .nav-links a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+  .nav-meta { color: var(--muted); font-size: 12px; }
+
+  main { max-width: 1280px; margin: 0 auto; padding: 24px 32px 80px; }
+
+  /* ==== HERO ==== */
+  .hero {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 36px 40px;
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: ''; position: absolute; top: 0; right: 0;
+    width: 380px; height: 100%;
+    background: radial-gradient(ellipse at top right, var(--accent-soft) 0%, transparent 65%);
+    pointer-events: none;
+  }
+  .hero-content { position: relative; }
+  .hero h1 { max-width: 740px; }
+  .hero .lede { color: var(--text-2); font-size: 16px; max-width: 720px; margin: 12px 0 20px; }
+
+  .pill-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pill {
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--text-2); padding: 5px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 500;
+  }
+  .pill.accent { background: var(--accent-soft); border-color: rgba(37,99,235,0.2); color: var(--accent); }
+  .pill.good { background: var(--good-soft); border-color: rgba(22,163,74,0.2); color: var(--good); }
+  .pill.warn { background: var(--warn-soft); border-color: rgba(217,119,6,0.2); color: var(--warn); }
+  .pill.teal { background: var(--teal-soft); border-color: rgba(13,148,136,0.2); color: var(--teal); }
+
+  /* ==== KPI cards ==== */
+  .grid { display: grid; gap: 14px; }
+  .grid-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .grid-4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
+  .grid-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  @media (max-width: 980px) { .grid-3, .grid-4, .grid-2 { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 22px;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 120ms ease, transform 120ms ease;
+  }
+  .card.hover-lift:hover { box-shadow: var(--shadow); }
+
+  .kpi { display: flex; flex-direction: column; gap: 4px; }
+  .kpi .label { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .kpi .value { font-size: 30px; font-weight: 600; line-height: 1.1; letter-spacing: -0.02em; }
+  .kpi .value.good { color: var(--good); }
+  .kpi .value.bad { color: var(--bad); }
+  .kpi .ci { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .kpi .delta { font-size: 12px; font-weight: 500; margin-top: 2px; }
+  .kpi .delta.up { color: var(--good); }
+  .kpi .delta.down { color: var(--bad); }
+
+  /* ==== Tabs ==== */
+  .tabs {
+    display: inline-flex; background: var(--surface-2); border-radius: 8px;
+    padding: 4px; border: 1px solid var(--border); gap: 2px;
+  }
+  .tab-btn {
+    background: transparent; border: 0; color: var(--text-2);
+    font: inherit; font-size: 13px; font-weight: 500;
+    padding: 6px 14px; border-radius: 6px; cursor: pointer;
+    transition: background 120ms, color 120ms;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+  .tab-panel { display: none; margin-top: 16px; }
+  .tab-panel.active { display: block; animation: fade 240ms ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+
+  /* ==== Tables ==== */
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; background: var(--surface-2); }
+  th:first-child { border-top-left-radius: 8px; }
+  th:last-child { border-top-right-radius: 8px; }
+  tr:last-child td { border-bottom: 0; }
+  tr:hover td { background: var(--surface-2); }
+  td.num { font-family: ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; }
+  td.pos { color: var(--good); font-weight: 500; }
+  td.neg { color: var(--bad); font-weight: 500; }
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-sm); }
+
+  /* ==== Badges ==== */
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 11.5px; font-weight: 600; }
+  .badge.ship { background: var(--good-soft); color: var(--good); }
+  .badge.drop { background: var(--bad-soft); color: var(--bad); }
+  .badge.mid { background: var(--warn-soft); color: var(--warn); }
+  .badge.info { background: var(--accent-soft); color: var(--accent); }
+
+  /* ==== Filter chips ==== */
+  .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .chip {
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text-2); padding: 6px 14px; border-radius: 999px;
+    font-size: 13px; cursor: pointer; user-select: none;
+    transition: all 120ms;
+  }
+  .chip:hover { border-color: var(--border-strong); color: var(--text); }
+  .chip.active { background: var(--text); color: white; border-color: var(--text); }
+
+  /* ==== Bar chart ==== */
+  .barchart { padding: 8px 4px; }
+  .bar-row {
+    display: grid; grid-template-columns: 220px 1fr 96px;
+    align-items: center; gap: 14px; padding: 7px 0;
+    border-bottom: 1px dashed transparent;
+    transition: background 120ms;
+  }
+  .bar-row:hover { background: var(--surface-2); border-radius: 6px; }
+  .bar-row .lab { color: var(--text); font-size: 13px; padding-left: 8px; }
+  .bar-track { background: var(--surface-2); height: 22px; border-radius: 6px; position: relative; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 6px; transition: width 600ms cubic-bezier(0.4, 0, 0.2, 1); }
+  .bar-row .num { font-family: ui-monospace, Menlo, monospace; color: var(--text-2); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* ==== Legend ==== */
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin: 10px 0 4px; font-size: 12px; color: var(--muted); }
+  .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+  /* ==== Architecture diagram ==== */
+  .arch-diagram { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 28px; box-shadow: var(--shadow-sm); }
+  .arch-stage {
+    display: grid; grid-template-columns: 130px 1fr;
+    gap: 18px; padding: 16px 0;
+    border-top: 1px dashed var(--border);
+  }
+  .arch-stage:first-child { border-top: 0; padding-top: 0; }
+  .arch-stage:last-child { padding-bottom: 0; }
+  .arch-stage-label {
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .arch-stage-label .pip {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+    padding: 4px 10px; border-radius: 6px; align-self: flex-start;
+  }
+  .arch-stage-label.train .pip { background: var(--accent-soft); color: var(--accent); }
+  .arch-stage-label.sim .pip { background: var(--indigo-soft); color: var(--indigo); }
+  .arch-stage-label.eval .pip { background: var(--teal-soft); color: var(--teal); }
+  .arch-stage-label .meta { color: var(--muted); font-size: 11.5px; margin-top: 6px; }
+  .arch-flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .node {
+    background: var(--surface); border: 1.5px solid var(--border);
+    border-radius: 10px; padding: 10px 14px;
+    min-width: 140px;
+    transition: all 160ms;
+    cursor: default;
+    box-shadow: var(--shadow-sm);
+  }
+  .node:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: var(--shadow); }
+  .node .n-title { font-size: 12.5px; font-weight: 600; color: var(--text); }
+  .node .n-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .node.data { border-color: var(--teal); background: var(--teal-soft); }
+  .node.data:hover { border-color: var(--teal); background: white; }
+  .node.model { border-color: var(--indigo); background: var(--indigo-soft); }
+  .node.model:hover { border-color: var(--indigo); background: white; }
+  .arrow-svg { color: var(--border-strong); flex-shrink: 0; }
+
+  /* ==== Flow steps ==== */
+  .flow-list { counter-reset: step; }
+  .flow-step {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px 22px 18px 70px;
+    margin-bottom: 12px; position: relative;
+    box-shadow: var(--shadow-sm);
+    transition: all 160ms;
+  }
+  .flow-step:hover { box-shadow: var(--shadow); border-color: var(--border-strong); }
+  .flow-step::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: 22px; top: 50%; transform: translateY(-50%);
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--accent); color: white;
+    display: grid; place-items: center; font-weight: 700; font-size: 14px;
+  }
+  .flow-step .ftitle { font-weight: 600; color: var(--text); font-size: 14px; }
+  .flow-step .fmeta { color: var(--text-2); font-size: 12.5px; margin-top: 3px; }
+  .flow-step .farr {
+    display: block; text-align: center; color: var(--muted);
+    font-family: ui-monospace; font-size: 11px;
+    margin: -4px 0 6px 22px;
+  }
+
+  /* ==== Feature treemap ==== */
+  .feature-grid {
+    display: grid; gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
+  .feat-tile {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px; cursor: pointer;
+    transition: all 160ms; box-shadow: var(--shadow-sm);
+    position: relative; overflow: hidden;
+  }
+  .feat-tile:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+  .feat-tile::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+    background: var(--accent);
+  }
+  .feat-tile.classical::before { background: var(--accent); }
+  .feat-tile.outcome::before { background: var(--teal); }
+  .feat-tile.team::before { background: var(--warn); }
+  .feat-tile.meta::before { background: var(--indigo); }
+  .feat-tile .gname { font-weight: 600; font-size: 13.5px; color: var(--text); }
+  .feat-tile .gcount { display: inline-block; margin-left: 6px; background: var(--surface-2); color: var(--muted); padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .feat-tile .gdesc { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+
+  details.collapse { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; box-shadow: var(--shadow-sm); }
+  details.collapse > summary {
+    cursor: pointer; user-select: none;
+    padding: 12px 18px;
+    font-weight: 500; color: var(--text); font-size: 14px;
+    list-style: none; display: flex; justify-content: space-between; align-items: center;
+  }
+  details.collapse > summary::-webkit-details-marker { display: none; }
+  details.collapse > summary::after { content: '+'; color: var(--muted); font-size: 18px; line-height: 1; }
+  details.collapse[open] > summary::after { content: '−'; }
+  details.collapse > summary:hover { background: var(--surface-2); border-radius: 10px; }
+  details.collapse > .body { padding: 4px 18px 16px; border-top: 1px solid var(--border); }
+  ul.feats { list-style: none; padding: 0; margin: 10px 0 0; columns: 3; column-gap: 22px; font-size: 12.5px; }
+  ul.feats li { padding: 2px 0; break-inside: avoid; color: var(--text-2); }
+  ul.feats li code { background: var(--surface-2); padding: 1px 6px; border-radius: 4px; font-size: 11.5px; }
+  @media (max-width: 720px) { ul.feats { columns: 2; } }
+
+  /* ==== Process bar (3 betting strategies) ==== */
+  .strat-row {
+    display: grid; grid-template-columns: 200px 1fr 100px;
+    gap: 16px; align-items: center; padding: 10px 0;
+  }
+  .strat-row .name { font-weight: 500; }
+  .strat-row .desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .strat-bar { background: var(--surface-2); height: 28px; border-radius: 6px; position: relative; overflow: hidden; }
+  .strat-fill { height: 100%; background: linear-gradient(90deg, var(--good) 0%, var(--teal) 100%); border-radius: 6px; }
+  .strat-row .roi { font-family: ui-monospace; font-weight: 600; text-align: right; }
+
+  /* ==== gate visualization ==== */
+  .gate-card {
+    background: linear-gradient(135deg, #fef3c7 0%, #fef9e7 100%);
+    border: 1px solid rgba(217,119,6,0.25);
+    border-radius: 12px; padding: 22px 26px;
+    box-shadow: var(--shadow-sm);
+  }
+  .gate-card h4 { color: var(--warn); margin-top: 0; }
+  .gate-cond {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 0; border-bottom: 1px dashed rgba(217,119,6,0.25);
+  }
+  .gate-cond:last-child { border-bottom: 0; }
+  .gate-status {
+    width: 22px; height: 22px; border-radius: 50%;
+    display: grid; place-items: center; flex-shrink: 0;
+    font-size: 12px; font-weight: 700; color: white;
+  }
+  .gate-status.fail { background: var(--bad); }
+  .gate-status.pass { background: var(--good); }
+
+  /* ==== CI bar SVG ==== */
+  .ci-svg { width: 100%; height: 110px; }
+
+  .footer { margin-top: 70px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
+
+  .info-banner {
+    background: var(--accent-soft); border-left: 3px solid var(--accent);
+    padding: 14px 18px; border-radius: 8px;
+    color: var(--text); font-size: 13.5px;
+  }
+  .info-banner.warn { background: var(--warn-soft); border-color: var(--warn); }
+
+  /* ==== Selectable timeline ==== */
+  .timeline { position: relative; padding-left: 30px; }
+  .timeline::before {
+    content: ''; position: absolute; left: 9px; top: 6px; bottom: 6px; width: 2px;
+    background: var(--border);
+  }
+  .tl-item { position: relative; padding: 10px 0 12px; }
+  .tl-item::before {
+    content: ''; position: absolute; left: -27px; top: 18px;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--surface); border: 2px solid var(--border-strong);
+  }
+  .tl-item.ship::before { background: var(--good); border-color: var(--good); }
+  .tl-item.drop::before { background: var(--bad); border-color: var(--bad); }
+  .tl-item.info::before { background: var(--accent); border-color: var(--accent); }
+  .tl-item.warn::before { background: var(--warn); border-color: var(--warn); }
+  .tl-date { font-size: 11.5px; color: var(--muted); font-family: ui-monospace; }
+  .tl-title { font-weight: 600; font-size: 14px; margin: 1px 0; }
+  .tl-meta { font-size: 12.5px; color: var(--text-2); }
+
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <div class="topnav-inner">
+    <div class="brand">
+      <div class="brand-mark">C</div>
+      <div class="brand-text">CricML</div>
+    </div>
+    <div class="nav-links">
+      <a href="#perf">Performance</a>
+      <a href="#runs">Runs</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#flow">Flow</a>
+      <a href="#data">Data</a>
+      <a href="#features">Features</a>
+      <a href="#evaluation">Evaluation</a>
+      <a href="#decisions">Decisions</a>
+    </div>
+    <div class="nav-meta">v7 · 2026-05-09</div>
+  </div>
+</div>
+
+<main>
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <div class="hero-content">
+    <h1>T20 Match Prediction — at a glance</h1>
+    <p class="lede">
+      Ball-level XGBoost classifier (114 features) feeding a Monte-Carlo simulator. Win
+      probabilities are evaluated against Polymarket prediction-market odds. Active model
+      is <strong>v7</strong>: hierarchical empirical-Bayes shrinkage on outcome distributions,
+      shipped 2026-04-25.
+    </p>
+    <div class="pill-row">
+      <span class="pill accent">XGBoost v7 active</span>
+      <span class="pill">114 features · 16 groups</span>
+      <span class="pill">11 265 cricsheet matches</span>
+      <span class="pill">261-match Polymarket eval</span>
+      <span class="pill">100 sims / match</span>
+      <span class="pill good">Flat ROI +7.96 % (all 261)</span>
+      <span class="pill warn">Market still 0.114 LL ahead on ≥$50K</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ HEADLINE PERF ============ -->
+<section id="perf">
+  <h2>1. Headline performance</h2>
+  <p class="section-sub">
+    261 Polymarket matches × 100 sims, evaluated 2026-05-08. Bootstrap 95 % CIs (1 000 resamples).
+    Switch slices to see how the gap to market moves with liquidity.
+  </p>
+
+  <div class="tabs" role="tablist" id="slice-tabs">
+    <button class="tab-btn" role="tab" aria-selected="true" data-target="slice-all">All matches (261)</button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-target="slice-50k">≥ $50K volume (170)</button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-target="slice-100k">≥ $100K volume (110)</button>
+  </div>
+
+  <!-- Slice: ALL -->
+  <div class="tab-panel active" id="slice-all">
+    <div class="grid grid-4" style="margin-top: 6px;">
+      <div class="card kpi hover-lift">
+        <span class="label">Avg log loss</span>
+        <span class="value">0.7158</span>
+        <span class="ci">95 % CI [0.661, 0.776]</span>
+        <span class="delta down">Market 0.6267 — gap 0.089</span>
+      </div>
+      <div class="card kpi hover-lift">
+        <span class="label">Avg Brier</span>
+        <span class="value">0.2529</span>
+        <span class="delta up">−1.3 % vs v6 (0.2562)</span>
+      </div>
+      <div class="card kpi hover-lift">
+        <span class="label">Flat ROI</span>
+        <span class="value good">+7.96 %</span>
+        <span class="ci">CI [−10.6 %, +29.1 %]</span>
+        <span class="delta">255 bets · 49.4 % WR</span>
+      </div>
+      <div class="card kpi hover-lift">
+        <span class="label">Frac-Kelly ROI</span>
+        <span class="value good">+0.83 %</span>
+        <span class="ci">Sharpe 0.64</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slice: 50K -->
+  <div class="tab-panel" id="slice-50k">
+    <div class="grid grid-4" style="margin-top: 6px;">
+      <div class="card kpi hover-lift">
+        <span class="label">Avg log loss</span>
+        <span class="value">0.7402</span>
+        <span class="ci">95 % CI [0.663, 0.817]</span>
+        <span class="delta down">Market 0.6267 — gap 0.114</span>
+      </div>
+      <div class="card kpi hover-lift">
+        <span class="label">Avg Brier</span>
+        <span class="value">0.2634</span>
+      </div>
+      <div class="card kpi hover-lift">
+        <span class="label">Flat ROI</span>
+        <span class="value good">+6.11 %</span>
+        <span class="ci">CI [−10.7 %, +23.9 %]</span>
+        <span class="delta">168 bets · 50.6 % WR</span>
+      </div>
+      <div class="card kpi hover-lift">
+        <span class="label">Always-favourite (no model)</span>
+        <span class="value">+4.15 %</span>
+        <span class="ci">honest baseline ROI</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slice: 100K -->
+  <div class="tab-panel" id="slice-100k">
+    <div class="grid grid-4" style="margin-top: 6px;">
+      <div class="card kpi hover-lift">
+        <span class="label">Avg log loss</span>
+        <span class="value">0.7311</span>
+        <span class="ci">95 % CI [0.637, 0.834]</span>
+      </div>
+      <div class="card kpi hover-lift">
+        <span class="label">Avg Brier</span>
+        <span class="value">0.2595</span>
+      </div>
+      <div class="card kpi hover-lift">
+        <span class="label">Polymarket (sharp)</span>
+        <span class="value">0.6267</span>
+        <span class="ci">market log-loss ceiling</span>
+      </div>
+      <div class="card kpi hover-lift">
+        <span class="label">Coinflip floor</span>
+        <span class="value">0.6931</span>
+        <span class="ci">v7 above floor — under-resolution</span>
+      </div>
+    </div>
+  </div>
+
+  <h3>v7 vs the benchmark stack — log loss (lower is better)</h3>
+  <div class="card barchart">
+    <div class="bar-row">
+      <span class="lab">Polymarket market</span>
+      <div class="bar-track"><div class="bar-fill" style="width: 75%; background: var(--accent);"></div></div>
+      <span class="num">0.6267</span>
+    </div>
+    <div class="bar-row">
+      <span class="lab">Coinflip 50/50 floor</span>
+      <div class="bar-track"><div class="bar-fill" style="width: 83%; background: var(--good);"></div></div>
+      <span class="num">0.6931</span>
+    </div>
+    <div class="bar-row">
+      <span class="lab">v7 — all 261</span>
+      <div class="bar-track"><div class="bar-fill" style="width: 86%; background: var(--warn);"></div></div>
+      <span class="num">0.7158</span>
+    </div>
+    <div class="bar-row">
+      <span class="lab">v7 — ≥ $100K (110)</span>
+      <div class="bar-track"><div class="bar-fill" style="width: 88%; background: var(--warn);"></div></div>
+      <span class="num">0.7311</span>
+    </div>
+    <div class="bar-row">
+      <span class="lab">v7 — ≥ $50K (170)</span>
+      <div class="bar-track"><div class="bar-fill" style="width: 89%; background: var(--warn);"></div></div>
+      <span class="num">0.7402</span>
+    </div>
+  </div>
+  <div class="legend">
+    <span><span class="swatch" style="background: var(--accent);"></span>Market (ceiling)</span>
+    <span><span class="swatch" style="background: var(--good);"></span>Coinflip (floor)</span>
+    <span><span class="swatch" style="background: var(--warn);"></span>v7 (subject)</span>
+  </div>
+  <div class="info-banner warn" style="margin-top: 14px;">
+    <strong>Resolution gap, not calibration.</strong> Coinflip beats v7 on log loss across all
+    slices — the model under-discriminates strong vs weak teams. Calibration alone won't close
+    this; new feature signal will.
+  </div>
+</section>
+
+<!-- ============ RUNS ============ -->
+<section id="runs">
+  <h2>2. Last experiment runs &amp; the v7 selection trail</h2>
+  <p class="section-sub">
+    Each row is a complete <code>run_experiment.py</code> invocation: parquet rebuild → train →
+    261×100 sim eval. Filter by status to focus on what was kept versus what was tested and discarded.
+  </p>
+
+  <div class="chip-row" id="run-filter">
+    <span class="chip active" data-filter="all">All</span>
+    <span class="chip" data-filter="ship">Shipped</span>
+    <span class="chip" data-filter="drop">Dropped</span>
+    <span class="chip" data-filter="info">Reference</span>
+  </div>
+
+  <div class="table-wrap">
+    <table id="runs-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Experiment</th>
+          <th>What changed</th>
+          <th style="text-align:right">Log loss</th>
+          <th style="text-align:right">Brier</th>
+          <th style="text-align:right">Flat ROI</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr data-status="ship">
+          <td class="num">04-25</td>
+          <td><code>xgb_v6_hierarchical_shrink</code></td>
+          <td>Two-stage shrinkage on the 4 vs-type / vs-hand cells</td>
+          <td class="num" style="text-align:right">0.7158</td>
+          <td class="num" style="text-align:right">0.2529</td>
+          <td class="num pos" style="text-align:right">+7.96 %</td>
+          <td><span class="badge ship">v7 — SHIP</span></td>
+        </tr>
+        <tr data-status="drop">
+          <td class="num">04-25</td>
+          <td><code>xgb_v7_k300</code></td>
+          <td>k_player sweep — over-shrunk toward π</td>
+          <td class="num" style="text-align:right">0.7562</td>
+          <td class="num" style="text-align:right">0.2716</td>
+          <td class="num neg" style="text-align:right">−2.35 %</td>
+          <td><span class="badge drop">k=300 lost</span></td>
+        </tr>
+        <tr data-status="drop">
+          <td class="num">04-25</td>
+          <td><code>xgb_v7_k100</code></td>
+          <td>k_player sweep — moderate over-shrink</td>
+          <td class="num" style="text-align:right">0.7357</td>
+          <td class="num" style="text-align:right">0.2619</td>
+          <td class="num neg" style="text-align:right">−2.21 %</td>
+          <td><span class="badge drop">k=100 lost</span></td>
+        </tr>
+        <tr data-status="drop">
+          <td class="num">04-25</td>
+          <td><code>xgb_v7_k10</code></td>
+          <td>k_player sweep — under-shrunk, sparse-player noise</td>
+          <td class="num" style="text-align:right">0.7719</td>
+          <td class="num" style="text-align:right">0.2802</td>
+          <td class="num neg" style="text-align:right">−9.73 %</td>
+          <td><span class="badge drop">k=10 lost</span></td>
+        </tr>
+        <tr data-status="drop">
+          <td class="num">04-24</td>
+          <td><code>xgb_v7_phase_prior</code></td>
+          <td>Add P(outcome | PP / mid / death)</td>
+          <td class="num" style="text-align:right">0.7346</td>
+          <td class="num" style="text-align:right">0.2621</td>
+          <td class="num neg" style="text-align:right">−2.20 %</td>
+          <td><span class="badge drop">Collinear with phase indicators</span></td>
+        </tr>
+        <tr data-status="drop">
+          <td class="num">04-24</td>
+          <td><code>xgb_v6_no_encodings</code></td>
+          <td>Drop <code>batter_encoded</code> / <code>bowler_encoded</code></td>
+          <td class="num" style="text-align:right">0.7805</td>
+          <td class="num" style="text-align:right">0.2818</td>
+          <td class="num neg" style="text-align:right">−3.50 %</td>
+          <td><span class="badge drop">IDs are useful (Δ +0.069 LL)</span></td>
+        </tr>
+        <tr data-status="info">
+          <td class="num">04-23</td>
+          <td><code>xgb_v6_outcome_dist</code></td>
+          <td>+42 empirical-Bayes outcome-dist features</td>
+          <td class="num" style="text-align:right">0.7122</td>
+          <td class="num" style="text-align:right">0.2562</td>
+          <td class="num neg" style="text-align:right">−7.10 %</td>
+          <td><span class="badge info">v6 baseline (kept as backup)</span></td>
+        </tr>
+        <tr data-status="info">
+          <td class="num">04-21</td>
+          <td>v4 baseline (post recent-form fix)</td>
+          <td>72 features, recent-form mismatch closed</td>
+          <td class="num" style="text-align:right">0.7518</td>
+          <td class="num" style="text-align:right">0.2728</td>
+          <td class="num pos" style="text-align:right">+6.51 %</td>
+          <td><span class="badge info">prior baseline</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Selection timeline (April 2026)</h3>
+  <div class="card">
+  <div class="timeline">
+    <div class="tl-item info">
+      <div class="tl-date">2026-04-21</div>
+      <div class="tl-title">v4 baseline: recent-form mismatch fixed</div>
+      <div class="tl-meta">LL 0.7518 · ROI +6.51 % · the starting point for the outcome-dist plan.</div>
+    </div>
+    <div class="tl-item info">
+      <div class="tl-date">2026-04-23</div>
+      <div class="tl-title">v6: +42 empirical-Bayes outcome-distribution features</div>
+      <div class="tl-meta">LL 0.7122 (−5.3 %), Brier 0.2562 (−6.1 %). Calibration improves; flat ROI regresses to −7.1 %. Sharper probabilities compress betting edges.</div>
+    </div>
+    <div class="tl-item drop">
+      <div class="tl-date">2026-04-24</div>
+      <div class="tl-title">Phase 2: drop <code>batter_encoded</code> / <code>bowler_encoded</code> → DROP</div>
+      <div class="tl-meta">Δ +0.069 LL on ≥$50K — 14× the threshold. Encoded IDs are not redundant with outcome-dist features.</div>
+    </div>
+    <div class="tl-item drop">
+      <div class="tl-date">2026-04-24</div>
+      <div class="tl-title">Phase 3: phase prior P(outcome | PP / mid / death) → DROP</div>
+      <div class="tl-meta">Δ +0.022 / +0.023 / +0.036 LL across slices. Collinear with the existing <code>is_powerplay</code> / <code>is_middle_overs</code> / <code>is_death_overs</code> indicators.</div>
+    </div>
+    <div class="tl-item ship">
+      <div class="tl-date">2026-04-25</div>
+      <div class="tl-title">Phase 5: hierarchical shrinkage → SHIP</div>
+      <div class="tl-meta">Two-stage shrinkage on vs-type / vs-hand cells: parent = player overall, not π directly. Flat ROI swings +15 pp on all-261, +16 pp on ≥$50K.</div>
+    </div>
+    <div class="tl-item ship">
+      <div class="tl-date">2026-04-25</div>
+      <div class="tl-title">Phase 6: k_player sweep → k = 30 confirmed</div>
+      <div class="tl-meta">k = 10 noisy from sparse players; k = 100/300 over-shrink toward π. k = 30 wins on both LL and ROI by clear margins.</div>
+    </div>
+    <div class="tl-item warn">
+      <div class="tl-date">2026-05-08 → 09</div>
+      <div class="tl-title">Performance pass: 41.9 min → 16.6 min full eval (2.52×)</div>
+      <div class="tl-meta">strftime cache + per-player memos (−17.9 % serial) + 4-proc parallel disjoint-shard eval. Bit-identical numerics.</div>
+    </div>
+  </div>
+  </div>
+</section>
+
+<!-- ============ ARCHITECTURE ============ -->
+<section id="architecture">
+  <h2>3. System architecture</h2>
+  <p class="section-sub">
+    Three pipelines, three artifact tiers. Each layer has an explicit version gate
+    (<code>SCHEMA_VERSION</code> in SQLite, <code>.feature_hash</code> in parquet) so a change
+    in one layer triggers exactly the rebuilds it should. Hover any node for context.
+  </p>
+
+  <div class="arch-diagram">
+    <div class="arch-stage">
+      <div class="arch-stage-label train">
+        <span class="pip">Training</span>
+        <span class="meta">JSON → SQLite → parquet → model</span>
+      </div>
+      <div class="arch-flow">
+        <div class="node data" title="11 265 cricsheet match JSONs from 14 men's T20 leagues, 2005 → 2026-04-16">
+          <div class="n-title">Cricsheet JSONs</div>
+          <div class="n-sub">11 265 matches</div>
+        </div>
+        <svg class="arrow-svg" width="20" height="20" viewBox="0 0 20 20"><path d="M2 10 L16 10 M11 5 L16 10 L11 15" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+        <div class="node" title="build_stats_cache.py — chronological tracker walk → first-write-wins per-date snapshots → SQLite v4. Idempotent via _meta.source_json_mtime_max.">
+          <div class="n-title">build_stats_cache.py</div>
+          <div class="n-sub">~6 min</div>
+        </div>
+        <svg class="arrow-svg" width="20" height="20" viewBox="0 0 20 20"><path d="M2 10 L16 10 M11 5 L16 10 L11 15" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+        <div class="node data" title="11 tables, mmap-read, fork-safe. Schema v4 adds outcome counts c0..cw to 5 tables. ~57 MB, p50 query ~3 µs.">
+          <div class="n-title">SQLite v4</div>
+          <div class="n-sub">~57 MB</div>
+        </div>
+        <svg class="arrow-svg" width="20" height="20" viewBox="0 0 20 20"><path d="M2 10 L16 10 M11 5 L16 10 L11 15" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+        <div class="node" title="materialize_features.py — per-date batched parquet emission. Rehydrates temp_* trackers from SQLite once per date.">
+          <div class="n-title">materialize_features.py</div>
+          <div class="n-sub">~3 min</div>
+        </div>
+        <svg class="arrow-svg" width="20" height="20" viewBox="0 0 20 20"><path d="M2 10 L16 10 M11 5 L16 10 L11 15" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+        <div class="node data" title="train / validation / test / golden_test parquets. 2.2 M rows × 105 columns.">
+          <div class="n-title">4 parquet splits</div>
+          <div class="n-sub">2.2 M rows</div>
+        </div>
+        <svg class="arrow-svg" width="20" height="20" viewBox="0 0 20 20"><path d="M2 10 L16 10 M11 5 L16 10 L11 15" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+        <div class="node model" title="6-class XGBoost classifier. Optional Optuna TPE 50-trial tune. 114 features (V6_GROUPS).">
+          <div class="n-title">XGBoost v7</div>
+          <div class="n-sub">114 feats</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arch-stage">
+      <div class="arch-stage-label sim">
+        <span class="pip">Simulation</span>
+        <span class="meta">Per-match Monte Carlo ball roll-out</span>
+      </div>
+      <div class="arch-flow">
+        <div class="node data" title="Cricsheet match JSON + lineup → MatchState. 11 or 12 (Impact Player) batters per side.">
+          <div class="n-title">Match + lineup</div>
+          <div class="n-sub">→ MatchState</div>
+        </div>
+        <svg class="arrow-svg" width="20" height="20" viewBox="0 0 20 20"><path d="M2 10 L16 10 M11 5 L16 10 L11 15" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+        <div class="node model" title="extract_features → predict_next_ball → sample 6-class outcome. Wides + no-balls added post-hoc at 1 % each.">
+          <div class="n-title">PredictionModel</div>
+          <div class="n-sub">6-class probs</div>
+        </div>
+        <svg class="arrow-svg" width="20" height="20" viewBox="0 0 20 20"><path d="M2 10 L16 10 M11 5 L16 10 L11 15" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+        <div class="node" title="T20Rules.process_ball — strike rotation (odd runs, end-of-over), bowler caps (24 balls = 4 overs), can't bowl consecutive overs.">
+          <div class="n-title">T20Rules</div>
+          <div class="n-sub">state update</div>
+        </div>
+        <svg class="arrow-svg" width="20" height="20" viewBox="0 0 20 20"><path d="M2 10 L16 10 M11 5 L16 10 L11 15" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+        <div class="node" title="Loop until 120 legal balls / 10 wickets / target chased. 100 simulations per match standard.">
+          <div class="n-title">SimulationEngine</div>
+          <div class="n-sub">100 sims</div>
+        </div>
+        <svg class="arrow-svg" width="20" height="20" viewBox="0 0 20 20"><path d="M2 10 L16 10 M11 5 L16 10 L11 15" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+        <div class="node data" title="Per-match win probability + score distribution + wicket distribution.">
+          <div class="n-title">Win prob</div>
+          <div class="n-sub">+ scores</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arch-stage">
+      <div class="arch-stage-label eval">
+        <span class="pip">Evaluation</span>
+        <span class="meta">Compare to Polymarket / bookmaker odds</span>
+      </div>
+      <div class="arch-flow">
+        <div class="node data" title="261 polymarket_test/ matches + betting_odds_polymarket.json (margin-free).">
+          <div class="n-title">Polymarket set</div>
+          <div class="n-sub">261 matches</div>
+        </div>
+        <svg class="arrow-svg" width="20" height="20" viewBox="0 0 20 20"><path d="M2 10 L16 10 M11 5 L16 10 L11 15" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+        <div class="node" title="MatchLevelEvaluator — log loss, Brier, signed edge, flat / Kelly / fractional-Kelly P&amp;L.">
+          <div class="n-title">match_evaluator</div>
+          <div class="n-sub">LL · Brier · ROI</div>
+        </div>
+        <svg class="arrow-svg" width="20" height="20" viewBox="0 0 20 20"><path d="M2 10 L16 10 M11 5 L16 10 L11 15" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+        <div class="node" title="1 000 resamples on log loss + flat ROI. --min-volume slices the eval at 50K / 100K USD.">
+          <div class="n-title">Bootstrap CI</div>
+          <div class="n-sub">3 slices</div>
+        </div>
+        <svg class="arrow-svg" width="20" height="20" viewBox="0 0 20 20"><path d="M2 10 L16 10 M11 5 L16 10 L11 15" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+        <div class="node data" title="Per-experiment artifacts: config.yaml, metrics.json, training_metrics.json, console_output.log, metadata.json.">
+          <div class="n-title">Eval JSON</div>
+          <div class="n-sub">+ experiment dir</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Module map (where things live)</h3>
+  <div class="grid grid-3">
+    <div class="card hover-lift">
+      <h4>Parsing &amp; features</h4>
+      <ul style="padding-left: 18px; margin: 6px 0; font-size: 13px;">
+        <li><code>build_stats_cache.py</code></li>
+        <li><code>materialize_features.py</code></li>
+        <li><code>parsing_v2.py</code> (tracker primitives)</li>
+        <li><code>tracker_rehydration.py</code></li>
+        <li><code>feature_registry.py</code></li>
+      </ul>
+    </div>
+    <div class="card hover-lift">
+      <h4>Stats backend</h4>
+      <ul style="padding-left: 18px; margin: 6px 0; font-size: 13px;">
+        <li><code>stats_sqlite_backend.py</code> (mmap reader, schema v4)</li>
+        <li><code>stats_provider.py</code> (facade + memo cache)</li>
+      </ul>
+    </div>
+    <div class="card hover-lift">
+      <h4>Training</h4>
+      <ul style="padding-left: 18px; margin: 6px 0; font-size: 13px;">
+        <li><code>xgboost_v2.py</code> · production</li>
+        <li><code>lstm_v1.py</code></li>
+        <li><code>transformer_v1.py</code> (PyTorch + MLX)</li>
+        <li><code>mlp_v1.py</code> · baseline</li>
+      </ul>
+    </div>
+    <div class="card hover-lift">
+      <h4>Simulation</h4>
+      <ul style="padding-left: 18px; margin: 6px 0; font-size: 13px;">
+        <li><code>sim_v1_2.py</code> — MatchState, T20Rules, SimulationEngine, 5 wrappers</li>
+      </ul>
+    </div>
+    <div class="card hover-lift">
+      <h4>Evaluation</h4>
+      <ul style="padding-left: 18px; margin: 6px 0; font-size: 13px;">
+        <li><code>sim_eval/loaders.py</code></li>
+        <li><code>sim_eval/match_evaluator.py</code></li>
+        <li><code>sim_eval/run_sim_eval.py</code></li>
+      </ul>
+    </div>
+    <div class="card hover-lift">
+      <h4>Experiment infra</h4>
+      <ul style="padding-left: 18px; margin: 6px 0; font-size: 13px;">
+        <li><code>run_experiment.py</code> (smart cache)</li>
+        <li><code>experiment_tracker.py</code></li>
+        <li><code>experiments/configs/*.yaml</code></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FLOW ============ -->
+<section id="flow">
+  <h2>4. End-to-end flow</h2>
+  <p class="section-sub">Five steps from raw Cricsheet to a sliced eval report. Each step is independently cacheable.</p>
+
+  <div class="flow-list">
+    <div class="flow-step">
+      <div class="ftitle">Cricsheet refresh — <code>fetch_cricsheet.py</code></div>
+      <div class="fmeta">Idempotent. SHA-256 manifest, append-only JSON merge across 14 leagues + the player register.</div>
+    </div>
+    <div class="flow-step">
+      <div class="ftitle">Build stats cache — <code>build_stats_cache.py</code> · ~6 min</div>
+      <div class="fmeta">Chronological walk; trackers updated ball-by-ball. First-write-wins snapshot per date. Global prior π computed over 2.19 M training balls and stored in <code>_meta.prior_p*</code>.</div>
+    </div>
+    <div class="flow-step">
+      <div class="ftitle">Materialize features — <code>materialize_features.py</code> · ~3 min</div>
+      <div class="fmeta">Per-date batches: rehydrate <code>temp_*</code> trackers from SQLite, replay same-day matches in monolith order, write 4 parquet splits.</div>
+    </div>
+    <div class="flow-step">
+      <div class="ftitle">Train — <code>xgboost_v2.py</code> · ~5–10 min</div>
+      <div class="fmeta">Load splits, fit LabelEncoders, 6-class remap, optional Optuna 50-trial tune, save to <code>models/xgb_v3/</code>.</div>
+    </div>
+    <div class="flow-step">
+      <div class="ftitle">Evaluate — <code>sim_eval/run_sim_eval.py</code> · 16.6 min (4-proc) / 41.9 min (serial)</div>
+      <div class="fmeta">261 matches × 100 sims. log loss + Brier + signed edge + 3 betting strategies + bootstrap 95 % CIs. <code>--min-volume</code> slices for 50 K / 100 K liquidity.</div>
+    </div>
+  </div>
+
+  <h3>Cache invalidation rules</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Layer</th><th>Cache key</th><th>Re-runs when…</th></tr></thead>
+      <tbody>
+        <tr><td>SQLite cache</td><td class="num">_meta.schema_version + source_json_mtime_max</td><td>any JSON modified · schema bumped</td></tr>
+        <tr><td>Parquet splits</td><td class="num">.feature_hash + splits + gender_filter</td><td>feature list changed · splits changed · SQLite newer than parquet</td></tr>
+        <tr><td>Training</td><td class="num">presence of xgboost_model_v3.pkl</td><td><code>--force-train</code> or missing artifact</td></tr>
+        <tr><td>Eval</td><td>none</td><td>always re-runs</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ DATA ============ -->
+<section id="data">
+  <h2>5. Data — sources, what we pull, how it lands</h2>
+  <p class="section-sub">Three external sources feed three internal artifacts; everything else is derived.</p>
+
+  <div class="grid grid-3">
+    <div class="card hover-lift">
+      <h4 style="color: var(--teal);">Cricsheet (training corpus)</h4>
+      <p style="margin: 6px 0 8px; font-size: 13px;">Public ball-by-ball JSON archive. 14 men's T20 leagues, idempotent SHA-256 manifest.</p>
+      <div class="pill-row">
+        <span class="pill teal">11 265 matches</span>
+        <span class="pill teal">~2.19 M balls</span>
+        <span class="pill teal">2005 → 2026-04-16</span>
+      </div>
+      <div style="margin-top: 10px; font-size: 12px; color: var(--muted);">
+        IPL · BBL · PSL · SA20 · ILT20 · CPL · BPL · LPL · SMAT · Super Smash · T20I + 3 more
+      </div>
+    </div>
+    <div class="card hover-lift">
+      <h4 style="color: var(--indigo);">Cricketdata (player metadata)</h4>
+      <p style="margin: 6px 0 8px; font-size: 13px;">R package via <code>rpy2</code>. Fills <code>data/all_players_enriched.csv</code> with hand / arm / DOB / bowling style.</p>
+      <div class="pill-row">
+        <span class="pill">11 256 players covered</span>
+      </div>
+      <div style="margin-top: 10px; font-size: 12px; color: var(--muted);">
+        Keyed via <code>key_cricinfo</code> from Cricsheet's <code>people.csv</code> — no scraping.
+      </div>
+    </div>
+    <div class="card hover-lift">
+      <h4 style="color: var(--accent);">Polymarket (eval odds)</h4>
+      <p style="margin: 6px 0 8px; font-size: 13px;">Margin-free prediction-market odds matched to Cricsheet matches. Volume ≥ $1K filter at build time.</p>
+      <div class="pill-row">
+        <span class="pill accent">261 matches</span>
+        <span class="pill accent">2025-07 → 2026-04</span>
+      </div>
+      <div style="margin-top: 10px; font-size: 12px; color: var(--muted);">
+        Each fixture runs as two YES/NO siblings — dedup picks the sibling whose winner matches Cricsheet.
+      </div>
+    </div>
+  </div>
+
+  <h3>Stats cache layout (SQLite schema v4)</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Table</th><th>Stores</th><th>Rows</th><th>v4 additions</th></tr></thead>
+      <tbody>
+        <tr><td><code>batting</code></td><td>career runs/balls/dismissals + last-5-match sums</td><td class="num">150 006</td><td class="num">+ c0…cw</td></tr>
+        <tr><td><code>bowling</code></td><td>career runs given/balls bowled/wickets + recent</td><td class="num">114 850</td><td class="num">+ c0…cw</td></tr>
+        <tr><td><code>h2h</code></td><td>(batter, bowler) head-to-head</td><td class="num">473 757</td><td>—</td></tr>
+        <tr><td><code>batting_vs_type</code></td><td>(player, date, pace|spin)</td><td class="num">~250 K</td><td class="num">+ c0…cw</td></tr>
+        <tr><td><code>bowling_vs_hand</code></td><td>(player, date, lhb|rhb)</td><td class="num">~150 K</td><td class="num">+ c0…cw</td></tr>
+        <tr><td><code>venue</code></td><td>per-venue cumulative + boundary/dot/PP/death buckets</td><td class="num">~30 K</td><td class="num">+ c0…cw</td></tr>
+        <tr><td><code>batting_match_log</code></td><td>1 row / (player, match) — recent-form rehydration</td><td class="num">~340 K</td><td class="num">schema v3</td></tr>
+        <tr><td><code>bowling_match_log</code></td><td>same for bowlers</td><td class="num">~280 K</td><td class="num">schema v3</td></tr>
+        <tr><td><code>batting_elo</code> / <code>bowling_elo</code></td><td>player ELO snapshots</td><td class="num">~200 K</td><td>—</td></tr>
+        <tr><td><code>_meta</code></td><td>schema_version, build_timestamp, π, JSON mtimes</td><td>13</td><td class="num">+ prior_p*</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Parquet splits (output of <code>materialize_features.py</code>)</h3>
+  <div class="grid grid-4">
+    <div class="card kpi"><span class="label">train.parquet</span><span class="value">~1.7 M</span><span class="ci">≤ 2024-12-31</span></div>
+    <div class="card kpi"><span class="label">validation.parquet</span><span class="value">~250 K</span><span class="ci">2025-01-01 → 2025-06-30</span></div>
+    <div class="card kpi"><span class="label">test.parquet</span><span class="value">~250 K</span><span class="ci">2025-07-01 → 2026-04-16</span></div>
+    <div class="card kpi"><span class="label">golden_test.parquet</span><span class="value">~50 K</span><span class="ci">≥ 2026-04-17 (growing)</span></div>
+  </div>
+  <p style="font-size: 12.5px; color: var(--muted); margin-top: 8px;">
+    105 columns = 8 identifiers + 63 v3 features + 42 schema-v4 outcome-distribution features. Target column
+    <code>ball_outcome ∈ {0, 1, 2, 4, 6, −1}</code> remapped to 6-class
+    <code>{0:0, 1:1, 2:2, 4:3, 6:4, −1:5}</code> at train time.
+  </p>
+</section>
+
+<!-- ============ FEATURES ============ -->
+<section id="features">
+  <h2>6. Features — 16 groups · 114 columns</h2>
+  <p class="section-sub">
+    All features describe ball state <strong>before</strong> the delivery; trackers update <strong>after</strong>.
+    Tap any group to expand its column list.
+  </p>
+
+  <h3>Composition (114 features by family)</h3>
+  <div class="card" style="padding: 24px;">
+    <svg viewBox="0 0 1140 60" width="100%" height="60" preserveAspectRatio="none">
+      <!-- 114 features total. Show stacked horizontal bar with proportional widths -->
+      <!-- Classical (basic + player_stats + h2h + momentum + pressure + chase + medium + matchup): 16+14+2+6+3+3+2+3 = 49 -->
+      <!-- Player metadata (player_metadata): 6 -->
+      <!-- Type-based (type_based): 8 -->
+      <!-- Team strength: 9 -->
+      <!-- Outcome dist (5 groups): 6+6+12+12+6 = 42 -->
+      <!-- 49 + 6 + 8 + 9 + 42 = 114 -->
+      <g>
+        <rect x="0" y="0" width="490" height="60" fill="#2563eb" rx="6"/>
+        <rect x="492" y="0" width="60" height="60" fill="#4f46e5" rx="6"/>
+        <rect x="554" y="0" width="80" height="60" fill="#0891b2" rx="6"/>
+        <rect x="636" y="0" width="90" height="60" fill="#d97706" rx="6"/>
+        <rect x="728" y="0" width="412" height="60" fill="#0d9488" rx="6"/>
+        <text x="245" y="36" text-anchor="middle" fill="white" font-size="13" font-weight="600" font-family="-apple-system, sans-serif">Classical state &amp; momentum · 49</text>
+        <text x="522" y="36" text-anchor="middle" fill="white" font-size="11" font-weight="600">Bio · 6</text>
+        <text x="594" y="36" text-anchor="middle" fill="white" font-size="11" font-weight="600">Type · 8</text>
+        <text x="681" y="36" text-anchor="middle" fill="white" font-size="11" font-weight="600">Team · 9</text>
+        <text x="934" y="36" text-anchor="middle" fill="white" font-size="13" font-weight="600">Outcome distributions (v6/v7) · 42</text>
+      </g>
+    </svg>
+    <div class="legend" style="margin-top: 14px;">
+      <span><span class="swatch" style="background:#2563eb"></span>Classical state &amp; momentum</span>
+      <span><span class="swatch" style="background:#4f46e5"></span>Player metadata (bio)</span>
+      <span><span class="swatch" style="background:#0891b2"></span>Type-based (vs pace/spin/LHB/RHB)</span>
+      <span><span class="swatch" style="background:#d97706"></span>Team strength (ELO + aggregates)</span>
+      <span><span class="swatch" style="background:#0d9488"></span>Outcome distributions (v6 + v7 hierarchical)</span>
+    </div>
+  </div>
+
+  <h3>The 16 active groups (V6_GROUPS)</h3>
+  <div class="feature-grid">
+    <div class="feat-tile classical" data-target="grp-basic"><div class="gname">basic <span class="gcount">16</span></div><div class="gdesc">Match-state context</div></div>
+    <div class="feat-tile classical" data-target="grp-player_stats"><div class="gname">player_stats <span class="gcount">14</span></div><div class="gdesc">Career + recent-form aggregates</div></div>
+    <div class="feat-tile classical" data-target="grp-h2h"><div class="gname">h2h <span class="gcount">2</span></div><div class="gdesc">Batter vs bowler historical</div></div>
+    <div class="feat-tile classical" data-target="grp-momentum"><div class="gname">momentum <span class="gcount">6</span></div><div class="gdesc">Last-N rolling counts</div></div>
+    <div class="feat-tile classical" data-target="grp-pressure"><div class="gname">pressure <span class="gcount">3</span></div><div class="gdesc">Recent dot / boundary % + cooker</div></div>
+    <div class="feat-tile classical" data-target="grp-chase"><div class="gname">chase <span class="gcount">3</span></div><div class="gdesc">Second-innings target context</div></div>
+    <div class="feat-tile classical" data-target="grp-medium"><div class="gname">medium <span class="gcount">2</span></div><div class="gdesc">Venue avg + non-striker SR</div></div>
+    <div class="feat-tile classical" data-target="grp-matchup"><div class="gname">matchup <span class="gcount">3</span></div><div class="gdesc">Derived interactions</div></div>
+    <div class="feat-tile meta" data-target="grp-player_metadata"><div class="gname">player_metadata <span class="gcount">6</span></div><div class="gdesc">Hand · arm · age · style</div></div>
+    <div class="feat-tile classical" data-target="grp-type_based"><div class="gname">type_based <span class="gcount">8</span></div><div class="gdesc">vs pace / spin / LHB / RHB</div></div>
+    <div class="feat-tile team" data-target="grp-team_strength"><div class="gname">team_strength <span class="gcount">9</span></div><div class="gdesc">ELO + lineup aggregates</div></div>
+    <div class="feat-tile outcome" data-target="grp-batter_outcome_dist"><div class="gname">batter_outcome_dist <span class="gcount">6</span></div><div class="gdesc">P(0,1,2,4,6,W) per batter</div></div>
+    <div class="feat-tile outcome" data-target="grp-bowler_outcome_dist"><div class="gname">bowler_outcome_dist <span class="gcount">6</span></div><div class="gdesc">P(...) per bowler</div></div>
+    <div class="feat-tile outcome" data-target="grp-batter_vs_type_dist"><div class="gname">batter_vs_type_dist <span class="gcount">12</span></div><div class="gdesc">Hierarchical, vs pace + spin</div></div>
+    <div class="feat-tile outcome" data-target="grp-bowler_vs_hand_dist"><div class="gname">bowler_vs_hand_dist <span class="gcount">12</span></div><div class="gdesc">Hierarchical, vs LHB + RHB</div></div>
+    <div class="feat-tile outcome" data-target="grp-venue_outcome_dist"><div class="gname">venue_outcome_dist <span class="gcount">6</span></div><div class="gdesc">P(...) per ground</div></div>
+  </div>
+
+  <div style="margin-top: 18px;">
+    <details class="collapse" id="grp-basic"><summary>basic — 16 features</summary><div class="body">
+      <ul class="feats">
+        <li><code>inning_idx</code></li><li><code>score</code></li><li><code>wickets</code></li><li><code>balls_bowled</code></li>
+        <li><code>run_rate</code></li><li><code>wickets_ratio</code></li><li><code>balls_ratio</code></li><li><code>wickets_in_hand</code></li>
+        <li><code>balls_remaining</code></li><li><code>is_powerplay</code></li><li><code>is_middle_overs</code></li><li><code>is_death_overs</code></li>
+        <li><code>balls_in_over</code></li><li><code>venue_encoded</code></li><li><code>is_toss_winner</code></li><li><code>is_batting_first</code></li>
+      </ul>
+    </div></details>
+    <details class="collapse" id="grp-player_stats"><summary>player_stats — 14 features</summary><div class="body">
+      <ul class="feats">
+        <li><code>batter_encoded</code></li><li><code>bowler_encoded</code></li>
+        <li><code>batsman_avg</code></li><li><code>batsman_sr</code></li>
+        <li><code>bowler_avg</code></li><li><code>bowler_econ</code></li>
+        <li><code>batsman_recent_avg</code></li><li><code>batsman_recent_sr</code></li>
+        <li><code>bowler_recent_avg</code></li><li><code>bowler_recent_econ</code></li>
+        <li><code>batter_balls_faced</code></li><li><code>batter_runs_scored</code></li>
+        <li><code>bowler_balls_in_innings</code></li><li><code>bowler_overs_in_innings</code></li>
+      </ul>
+    </div></details>
+    <details class="collapse" id="grp-h2h"><summary>h2h — 2 features</summary><div class="body">
+      <ul class="feats"><li><code>h2h_avg</code></li><li><code>h2h_sr</code></li></ul>
+    </div></details>
+    <details class="collapse" id="grp-momentum"><summary>momentum — 6 features</summary><div class="body">
+      <ul class="feats"><li><code>last_5_balls_runs</code></li><li><code>last_10_balls_runs</code></li><li><code>last_30_balls_runs</code></li><li><code>balls_since_boundary</code></li><li><code>last_10_dots</code></li><li><code>partnership_runs</code></li></ul>
+    </div></details>
+    <details class="collapse" id="grp-pressure"><summary>pressure — 3 features</summary><div class="body">
+      <ul class="feats"><li><code>dot_percentage_recent</code></li><li><code>boundary_percentage_recent</code></li><li><code>pressure_cooker_index</code></li></ul>
+    </div></details>
+    <details class="collapse" id="grp-chase"><summary>chase — 3 features</summary><div class="body">
+      <ul class="feats"><li><code>chase_target</code></li><li><code>run_rate_required</code></li><li><code>lead_gap</code></li></ul>
+    </div></details>
+    <details class="collapse" id="grp-medium"><summary>medium — 2 features</summary><div class="body">
+      <ul class="feats"><li><code>venue_avg_score</code></li><li><code>non_striker_sr</code></li></ul>
+    </div></details>
+    <details class="collapse" id="grp-matchup"><summary>matchup — 3 features</summary><div class="body">
+      <ul class="feats"><li><code>spin_matchup_advantage</code></li><li><code>same_arm_matchup</code></li><li><code>matchup_type_encoded</code></li></ul>
+    </div></details>
+    <details class="collapse" id="grp-player_metadata"><summary>player_metadata — 6 features</summary><div class="body">
+      <ul class="feats"><li><code>batter_hand</code></li><li><code>bowler_arm</code></li><li><code>is_pace</code></li><li><code>bowling_type</code></li><li><code>batter_age</code></li><li><code>bowler_age</code></li></ul>
+    </div></details>
+    <details class="collapse" id="grp-type_based"><summary>type_based — 8 features</summary><div class="body">
+      <ul class="feats"><li><code>batter_avg_vs_pace</code></li><li><code>batter_sr_vs_pace</code></li><li><code>batter_avg_vs_spin</code></li><li><code>batter_sr_vs_spin</code></li><li><code>bowler_avg_vs_lhb</code></li><li><code>bowler_econ_vs_lhb</code></li><li><code>bowler_avg_vs_rhb</code></li><li><code>bowler_econ_vs_rhb</code></li></ul>
+    </div></details>
+    <details class="collapse" id="grp-team_strength"><summary>team_strength — 9 features <span class="badge ship" style="margin-left: 6px;">+19 % LL, March 2026</span></summary><div class="body">
+      <ul class="feats"><li><code>striker_elo</code></li><li><code>bowler_elo_rating</code></li><li><code>batting_team_elo</code></li><li><code>bowling_team_elo</code></li><li><code>elo_diff</code></li><li><code>team_batting_avg</code></li><li><code>team_batting_sr</code></li><li><code>team_bowling_avg</code></li><li><code>team_bowling_econ</code></li></ul>
+    </div></details>
+    <details class="collapse" id="grp-batter_outcome_dist"><summary>batter_outcome_dist — 6 features <span class="badge ship" style="margin-left: 6px;">v6 schema-v4</span></summary><div class="body">
+      <ul class="feats"><li><code>batter_p0</code></li><li><code>batter_p1</code></li><li><code>batter_p2</code></li><li><code>batter_p4</code></li><li><code>batter_p6</code></li><li><code>batter_pw</code></li></ul>
+    </div></details>
+    <details class="collapse" id="grp-bowler_outcome_dist"><summary>bowler_outcome_dist — 6 features</summary><div class="body">
+      <ul class="feats"><li><code>bowler_p0</code></li><li><code>bowler_p1</code></li><li><code>bowler_p2</code></li><li><code>bowler_p4</code></li><li><code>bowler_p6</code></li><li><code>bowler_pw</code></li></ul>
+    </div></details>
+    <details class="collapse" id="grp-batter_vs_type_dist"><summary>batter_vs_type_dist — 12 features <span class="badge ship" style="margin-left: 6px;">v7 hierarchical</span></summary><div class="body">
+      <p style="font-size: 12.5px; color: var(--text-2); margin: 0 0 6px;">v7 shrinks toward player overall (already shrunk toward π) instead of toward π directly.</p>
+      <ul class="feats">
+        <li><code>batter_p0_vs_pace</code></li><li><code>batter_p1_vs_pace</code></li><li><code>batter_p2_vs_pace</code></li>
+        <li><code>batter_p4_vs_pace</code></li><li><code>batter_p6_vs_pace</code></li><li><code>batter_pw_vs_pace</code></li>
+        <li><code>batter_p0_vs_spin</code></li><li><code>batter_p1_vs_spin</code></li><li><code>batter_p2_vs_spin</code></li>
+        <li><code>batter_p4_vs_spin</code></li><li><code>batter_p6_vs_spin</code></li><li><code>batter_pw_vs_spin</code></li>
+      </ul>
+    </div></details>
+    <details class="collapse" id="grp-bowler_vs_hand_dist"><summary>bowler_vs_hand_dist — 12 features <span class="badge ship" style="margin-left: 6px;">v7 hierarchical</span></summary><div class="body">
+      <ul class="feats">
+        <li><code>bowler_p0_vs_lhb</code></li><li><code>bowler_p1_vs_lhb</code></li><li><code>bowler_p2_vs_lhb</code></li>
+        <li><code>bowler_p4_vs_lhb</code></li><li><code>bowler_p6_vs_lhb</code></li><li><code>bowler_pw_vs_lhb</code></li>
+        <li><code>bowler_p0_vs_rhb</code></li><li><code>bowler_p1_vs_rhb</code></li><li><code>bowler_p2_vs_rhb</code></li>
+        <li><code>bowler_p4_vs_rhb</code></li><li><code>bowler_p6_vs_rhb</code></li><li><code>bowler_pw_vs_rhb</code></li>
+      </ul>
+    </div></details>
+    <details class="collapse" id="grp-venue_outcome_dist"><summary>venue_outcome_dist — 6 features</summary><div class="body">
+      <p style="font-size: 12.5px; color: var(--text-2); margin: 0 0 6px;">k = 200 (more data per venue than per player).</p>
+      <ul class="feats"><li><code>venue_p0</code></li><li><code>venue_p1</code></li><li><code>venue_p2</code></li><li><code>venue_p4</code></li><li><code>venue_p6</code></li><li><code>venue_pw</code></li></ul>
+    </div></details>
+  </div>
+
+  <h3>Empirical-Bayes shrinkage (the v6 / v7 trick)</h3>
+  <div class="card" style="padding: 22px 26px;">
+    <pre><code>p̂_c = (n_c + k · π_c) / (N + k)        where N = Σ n_c
+
+   π = corpus prior, computed during cache build over 2.19 M balls
+   π = (0.304, 0.411, 0.076, 0.108, 0.047, 0.054)
+        dot    one    two   four   six    W
+
+   k = 30  for player cells     N → 0  ⇒ p̂ → π   (full prior fallback)
+   k = 200 for venue cells      N → ∞  ⇒ p̂ → MLE (data dominates)
+                                N = k  ⇒ half-and-half
+
+v7 hierarchical (the four narrow cells only):
+   p̂_overall  = shrink(n_overall, π,         k=30)
+   p̂_vs_pace  = shrink(n_vs_pace, p̂_overall, k=30)</code></pre>
+  </div>
+
+  <h3>Negative results — disabled but kept in code</h3>
+  <div class="grid grid-3">
+    <div class="card hover-lift">
+      <h4 style="color: var(--bad);">venue_profile + match_context</h4>
+      <p style="font-size: 12.5px; margin: 6px 0;">11 features across 2 groups. March 2026 ablation: LL +30 %, Brier +32 %. Highly correlated with each other (r &gt; 0.9) and with <code>venue_avg_score</code>.</p>
+    </div>
+    <div class="card hover-lift">
+      <h4 style="color: var(--bad);">phase_outcome_dist</h4>
+      <p style="font-size: 12.5px; margin: 6px 0;">Phase 3 ablation (2026-04-24): only 3 unique values per phase, collinear with <code>is_powerplay</code> / middle / death. Δ +0.022 / +0.023 / +0.036 LL.</p>
+    </div>
+    <div class="card hover-lift">
+      <h4 style="color: var(--bad);">No-encodings ablation</h4>
+      <p style="font-size: 12.5px; margin: 6px 0;">Dropping <code>batter_encoded</code> / <code>bowler_encoded</code> regressed LL by +0.069 on ≥$50K — 14× the threshold. Importance metric understated their value.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ EVALUATION ============ -->
+<section id="evaluation">
+  <h2>7. How we evaluate</h2>
+  <p class="section-sub">Three slices, three betting strategies, one explicit go / no-go gate.</p>
+
+  <h3>Per-match procedure</h3>
+  <div class="card" style="padding: 20px;">
+    <pre><code>for each match in 261 polymarket matches:
+    state         = TestMatchLoader.from_json(match)
+    market_probs  = BettingOddsLoader.implied_probs(odds, normalize=False)  # margin-free
+    sim_results   = SimulationEngine.simulate_multiple(state, n_sims=100)
+    sim_probs     = aggregate(sim_results)
+
+    log_loss      = −log P(actual_winner)
+    brier         = (P(team1) − 1{team1_won})²
+    edge[t]       = sim_probs[t] − market_probs[t]
+    signed_edge   = +|edge|  if predicted_winner == actual_winner else −|edge|
+
+    flat_pnl      = +1 unit if model > market, P&amp;L from decimal odds
+    full_kelly    = (b·p − q) / b · bankroll        # b = decimal_odds − 1
+    frac_kelly    = ¼ · full_kelly                  # safer in practice</code></pre>
+  </div>
+
+  <h3>Three betting strategies (v7, all 261)</h3>
+  <div class="card" style="padding: 22px;">
+    <div class="strat-row">
+      <div><div class="name">Flat</div><div class="desc">+1 unit per profitable-edge match</div></div>
+      <div class="strat-bar"><div class="strat-fill" style="width: 100%;"></div></div>
+      <div class="roi" style="color: var(--good);">+7.96 %</div>
+    </div>
+    <div class="strat-row">
+      <div><div class="name">Full Kelly</div><div class="desc">(b·p − q) / b · bankroll</div></div>
+      <div class="strat-bar"><div class="strat-fill" style="width: 42%;"></div></div>
+      <div class="roi" style="color: var(--good);">+3.33 %</div>
+    </div>
+    <div class="strat-row">
+      <div><div class="name">Fractional Kelly (¼)</div><div class="desc">conservative quarter-Kelly</div></div>
+      <div class="strat-bar"><div class="strat-fill" style="width: 11%;"></div></div>
+      <div class="roi" style="color: var(--good);">+0.83 %</div>
+    </div>
+  </div>
+
+  <h3>Flat-ROI bootstrap CI on ≥ $50K (zero = no skill)</h3>
+  <div class="card" style="padding: 22px;">
+    <svg class="ci-svg" viewBox="0 0 800 110" preserveAspectRatio="xMidYMid meet">
+      <!-- axis -->
+      <line x1="60" y1="80" x2="780" y2="80" stroke="#cbd5e1" stroke-width="1"/>
+      <!-- ticks -->
+      <g font-size="11" fill="#64748b" font-family="ui-monospace, Menlo, monospace">
+        <line x1="120" y1="76" x2="120" y2="84" stroke="#cbd5e1"/><text x="120" y="100" text-anchor="middle">−25%</text>
+        <line x1="264" y1="76" x2="264" y2="84" stroke="#cbd5e1"/><text x="264" y="100" text-anchor="middle">−10%</text>
+        <line x1="420" y1="76" x2="420" y2="84" stroke="#dc2626" stroke-width="2"/><text x="420" y="100" text-anchor="middle" fill="#dc2626" font-weight="600">0%</text>
+        <line x1="560" y1="76" x2="560" y2="84" stroke="#cbd5e1"/><text x="560" y="100" text-anchor="middle">+10%</text>
+        <line x1="700" y1="76" x2="700" y2="84" stroke="#cbd5e1"/><text x="700" y="100" text-anchor="middle">+25%</text>
+      </g>
+      <!-- v7 CI: -10.7% to +23.9%, point estimate +6.11% -->
+      <!-- mapping: 0% at x=420; 1% = 14.4 px (since 25% spans 140px) -->
+      <!-- -10.7% → 420 - 154 = 266; +23.9% → 420 + 344 = 764; +6.11% → 420 + 88 = 508 -->
+      <line x1="266" y1="40" x2="764" y2="40" stroke="#16a34a" stroke-width="4" stroke-linecap="round"/>
+      <line x1="266" y1="28" x2="266" y2="52" stroke="#16a34a" stroke-width="3"/>
+      <line x1="764" y1="28" x2="764" y2="52" stroke="#16a34a" stroke-width="3"/>
+      <circle cx="508" cy="40" r="7" fill="#16a34a" stroke="white" stroke-width="2"/>
+      <text x="508" y="22" text-anchor="middle" font-size="13" font-weight="600" fill="#0f172a" font-family="-apple-system">v7 +6.11 %</text>
+      <text x="266" y="68" text-anchor="middle" font-size="10" fill="#64748b" font-family="ui-monospace">−10.7 %</text>
+      <text x="764" y="68" text-anchor="middle" font-size="10" fill="#64748b" font-family="ui-monospace">+23.9 %</text>
+    </svg>
+  </div>
+  <p style="font-size: 12.5px; color: var(--muted); margin-top: 6px;">
+    CI straddles zero — encouraging direction but not yet "we can bet this." Closing it needs either a larger
+    eval set (the post-2026-04-17 golden holdout) or stronger model resolution.
+  </p>
+
+  <h3>Go / no-go gate</h3>
+  <div class="gate-card">
+    <h4>Both conditions must hold to claim skill</h4>
+    <div class="gate-cond">
+      <div class="gate-status fail">×</div>
+      <div>
+        <strong>1. Model log loss &lt; market log loss on the ≥ $50K slice</strong><br>
+        <span style="font-family: ui-monospace; font-size: 12.5px; color: var(--text-2);">Current: 0.7402 vs market 0.6267 — fail by 0.114</span>
+      </div>
+    </div>
+    <div class="gate-cond">
+      <div class="gate-status fail">×</div>
+      <div>
+        <strong>2. Flat-ROI bootstrap CI on the ≥ $50K slice excludes zero</strong><br>
+        <span style="font-family: ui-monospace; font-size: 12.5px; color: var(--text-2);">Current: CI [−10.7 %, +23.9 %] — fail, straddles zero</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DECISIONS ============ -->
+<section id="decisions">
+  <h2>8. Critical invariants &amp; design choices</h2>
+  <p class="section-sub">The non-obvious decisions that drive correctness, performance, and reproducibility.</p>
+
+  <div class="grid grid-2">
+    <div class="card hover-lift">
+      <h4>Temporal integrity</h4>
+      <p style="margin: 4px 0 0; font-size: 13px;">Features reflect state <strong>before</strong> the ball; trackers update <strong>after</strong>. Verified bit-exact on all 9 519 male T20 matches via <code>test_phase_a_parity.py</code>.</p>
+    </div>
+    <div class="card hover-lift">
+      <h4>6-class outcome space</h4>
+      <p style="margin: 4px 0 0; font-size: 13px;"><code>{0:dot, 1:one, 2:two, 3:four, 4:six, 5:wicket}</code>. Wides + no-balls added post-hoc at 1 % each, then re-normalised.</p>
+    </div>
+    <div class="card hover-lift">
+      <h4>Schema versioning</h4>
+      <p style="margin: 4px 0 0; font-size: 13px;">Any change to <code>_SQLiteBackend</code> tables bumps <code>SCHEMA_VERSION</code>. Provider refuses to open a file with the wrong version. Currently <strong>4</strong>.</p>
+    </div>
+    <div class="card hover-lift">
+      <h4>Same-day match order</h4>
+      <p style="margin: 4px 0 0; font-size: 13px;">Within a single date, matches are processed in monolith order. <code>temp_*</code> trackers carry state across same-day siblings; reordering changes features for every match.</p>
+    </div>
+    <div class="card hover-lift">
+      <h4>--parallel is a trap</h4>
+      <p style="margin: 4px 0 0; font-size: 13px;">Intra-match <code>--parallel</code> is correct but slower than serial — IPC pickle overwhelms the gain. Use <code>perf_runs/run_n_parallel.py</code> (4 procs at OMP=2 → 2.52× full eval).</p>
+    </div>
+    <div class="card hover-lift">
+      <h4>Calibration ≠ resolution</h4>
+      <p style="margin: 4px 0 0; font-size: 13px;">Coinflip (LL 0.6931) beats v7 on ≥$50K (LL 0.7402) — under-resolution, not miscalibration. Calibration alone can't close it; new feature signal must.</p>
+    </div>
+  </div>
+
+  <h3>Performance pass timeline</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Phase</th><th>Change</th><th>5×100 wall</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Baseline</td><td>—</td><td class="num">53.1 s</td><td>cProfile-driven</td></tr>
+        <tr><td>Phase 1 <code>85d67bf</code></td><td><code>strftime</code> cache on <code>_norm_date</code></td><td class="num">50.1 s</td><td>−5.6 %</td></tr>
+        <tr><td>Phase 2 <code>135514a</code></td><td>memoize 12 per-player getters</td><td class="num">43.6 s</td><td>−17.9 % cumulative · <code>_fill_outcome_dists</code> −80 % cumtime</td></tr>
+        <tr><td>Phase 3 <code>e4b97cc</code></td><td>fix pickle round-trip → 4-proc parallel</td><td class="num">—</td><td>2.52× throughput · 1.5 GB combined RSS</td></tr>
+        <tr><td>Full eval result</td><td>4-proc parallel + Phase 1+2</td><td class="num">16.6 min (261×100)</td><td>vs 41.9 min pre-perf</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Open follow-ups</h3>
+  <div class="grid grid-2">
+    <div class="card">
+      <h4>Resolution work, not calibration</h4>
+      <p style="margin: 4px 0 0; font-size: 13px; color: var(--text-2);">Closing the 0.114 LL gap to market needs features / architecture that discriminate strong vs weak teams better.</p>
+    </div>
+    <div class="card">
+      <h4>Per-batter / per-bowler phase distributions</h4>
+      <p style="margin: 4px 0 0; font-size: 13px; color: var(--text-2);">Phase 3's natural successor — per-player so NOT collinear with <code>is_powerplay</code>.</p>
+    </div>
+    <div class="card">
+      <h4>Larger eval set</h4>
+      <p style="margin: 4px 0 0; font-size: 13px; color: var(--text-2);">261 matches sit at the edge for ROI signal (CIs span ~±20 pp). Build a fresh golden holdout from genuine pre-match Polymarket snapshots after 2026-04-17.</p>
+    </div>
+    <div class="card">
+      <h4>build_ball_features refactor (Phase 4 deferred)</h4>
+      <p style="margin: 4px 0 0; font-size: 13px; color: var(--text-2);">Consolidate 5 model wrappers' duplicated feature-build blocks into one helper. ~4 h. Must keep 9 519 / 9 519 parity.</p>
+    </div>
+  </div>
+</section>
+
+<div class="footer">
+  Generated 2026-05-09 from <code>docs/ARCHITECTURE.md</code>, <code>docs/OPERATIONS.md</code>,
+  <code>docs/feature_roadmap.md</code>, <code>IMPROVEMENTS.md</code>, <code>TODO.md</code>,
+  <code>experiments/results/*</code>, <code>eval_out_v7_full_20260508/</code>.
+  Active branch <code>main</code> · model <code>xgb_v7</code> · 11 265 cricsheet matches · 261-match Polymarket eval.
+</div>
+
+</main>
+
+<script>
+(function () {
+  // ===== Slice tabs =====
+  var tabs = document.querySelectorAll('#slice-tabs .tab-btn');
+  tabs.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var target = btn.dataset.target;
+      tabs.forEach(function (b) { b.setAttribute('aria-selected', b === btn ? 'true' : 'false'); });
+      document.querySelectorAll('.tab-panel').forEach(function (p) {
+        p.classList.toggle('active', p.id === target);
+      });
+    });
+  });
+
+  // ===== Run filter chips =====
+  var chips = document.querySelectorAll('#run-filter .chip');
+  chips.forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      chips.forEach(function (c) { c.classList.toggle('active', c === chip); });
+      var f = chip.dataset.filter;
+      document.querySelectorAll('#runs-table tbody tr').forEach(function (tr) {
+        if (f === 'all' || tr.dataset.status === f) tr.style.display = '';
+        else tr.style.display = 'none';
+      });
+    });
+  });
+
+  // ===== Feature tile → expand details =====
+  document.querySelectorAll('.feat-tile').forEach(function (tile) {
+    tile.addEventListener('click', function () {
+      var id = tile.dataset.target;
+      var d = document.getElementById(id);
+      if (!d) return;
+      d.open = true;
+      d.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      d.style.transition = 'box-shadow 600ms ease';
+      d.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.25)';
+      setTimeout(function () { d.style.boxShadow = ''; }, 1200);
+    });
+  });
+
+  // ===== Smooth nav anchor scrolling =====
+  document.querySelectorAll('.nav-links a').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      var id = a.getAttribute('href').slice(1);
+      var t = document.getElementById(id);
+      if (!t) return;
+      e.preventDefault();
+      window.scrollTo({ top: t.offsetTop - 70, behavior: 'smooth' });
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

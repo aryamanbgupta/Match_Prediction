@@ -150,6 +150,84 @@ Truly out-of-sample: 2026-04-17 → 2026-05-07, never seen by training/selection
 - [ ] **Address outlier sensitivity**: long-shot wins still have outsized PnL impact at small n. Consider an edge-cap or position-size rule before live deployment.
 - [ ] **Feature work**: with leakage removed, the clean model is borderline-skilful. Real improvement likely requires features that capture intra-season form / current-IPL performance — the 2025-06-30 frozen state for A2 trackers is now visibly stale.
 
+## Match-level v3 — feature engineering plan (2026-05-10)
+
+Phased rollout to close the 0.05 LL resolution gap to market on the ≥$50k slice. Mirrors the v6→v7 outcome-dist phased shape: eval infra → highest-leverage feature → ablations → architecture sweep → sizing. Full catalog with rationale lives in `IMPROVEMENTS.md` § "Future improvements catalog — match-level direct model".
+
+**Excluded from this plan** (per 2026-05-10 decision): market price as a feature. We don't have market prices on the training corpus, only on the eval set; revisit only if multi-bookmaker historical odds land (C3 in the catalog).
+
+**Per-phase discipline**: each phase ends with a feature ablation run on the iteration set's `≥$50k` slice (170 matches). Keep additions iff Δ val LL < −0.005 *and* iteration ROI CI doesn't materially regress. Document each phase in IMPROVEMENTS.md and a memory file before moving on, exactly like Phases 1–6 of the v6→v7 sequence.
+
+**Reference points** (clean baseline, golden ≥$50k): LL 0.6747, ROI +32.61% [-0.20, +63.6], market LL 0.6267.
+
+### M1 — Eval infrastructure + sizing prep
+Land the measurement lens before any feature work, so M2+ can ablate cleanly.
+- [ ] **Stratified bootstrap** (D2): stratify by `competition_tier` × early/late half before resampling in `_bootstrap_ci`. ~hours.
+- [ ] **Adversarial slices** (D3): add IPL-only, international-only, top6-ELO-diff > X (mismatches), and top6-ELO-diff < Y (close) slice helpers in `scripts/sim_eval/reslice_eval_json.py`. ~hours.
+- [ ] **Walk-forward eval** (D4): expanding train+val, evaluate at each test month; checks whether edge is decaying. ~half day.
+- [ ] **CLV measurement** (D1): recover closing prob from polymarket time-stamped order books, compute per-bet CLV alongside ROI. ~1 day.
+- [ ] **Calibration as sizing tool** (B4): isotonic LOOCV on val, applied to predictions for Kelly sizing only — NOT for the headline LL gate. Required input to E1. ~half day.
+- [ ] **Monotonic constraints** (B3): bake into the baseline retrain. Sign-correct on `top6_batting_elo_diff`, `bottom5_bowling_elo_diff` (force +slope on team1_wins direction), `elo_diff_batting`, `elo_diff_bowling`, `win_rate_diff`, `batting_avg_diff`, `bowling_econ_diff` (sign-flipped). ~hours.
+
+Exit criterion for M1: monotone-constrained baseline LL within ±0.003 of unconstrained `xgb_match_v2_clean`; eval helpers wired and producing slice tables on demand.
+
+### M2 — Phase/matchup outcome-dist transfer (highest expected lift)
+Transfer the v7 ball-level outcome-dist features up to match level via lineup-aggregation. SQLite getters (`get_batter_vs_type_outcome_dist`, `get_bowler_vs_hand_outcome_dist`, `get_batter_outcome_dist`, `get_bowler_outcome_dist`, `get_venue_outcome_dist`) already exist; pure aggregation layer, no schema bump.
+- [ ] Add ~12–18 features in `materialize_match_features.py`: top-6 batter mean P({4, 6, w} | opp's pace/spinner mix); symmetric bowler-vs-LHB/RHB-mix; venue outcome dist (`venue_p4`, `venue_p6`, `venue_pw`).
+- [ ] Schema-bump the parquet version (`match_v3` or similar) so old artifacts don't get silently mixed.
+- [ ] Retrain with monotone constraints from M1; ablate against M1-baseline on iteration ≥$50k.
+- [ ] Per-feature importance + per-feature drop-one ablation; cull anything with importance < 0.005 *and* no LL contribution.
+
+Exit criterion for M2: iteration ≥$50k LL improves by Δ ≥ 0.01 vs M1 baseline (i.e., ≤ 0.624 vs market 0.6267 — closing the gate). If Δ < 0.005, treat as failed lift, drop the feature group, revisit Phase A2 trackers' staleness.
+
+### M3 — Player-level rolling form
+Replace coarse `team1_win_rate_last_10` (team-aggregate) with player-level recency stats aggregated to lineup. Backend getters `get_batting_recent`, `get_bowling_recent`, `get_batting_match_log_recent`, `get_bowling_match_log_recent` already serve windowed stats.
+- [ ] Add ~8–12 features: top-6 batting avg/SR recent, bowling econ/avg recent, n_inform_batters / n_outofform_batters per team, pairwise diffs.
+- [ ] Train + ablate against the post-M2 model.
+- [ ] Determine best window (last-30d vs last-N-balls vs last-N-matches) via small sweep.
+
+Exit criterion for M3: iteration ≥$50k Δ LL ≤ −0.003 (additive on top of M2). Else drop.
+
+### M4 — Within-tournament features
+Cheap, derivable from match data + competition_tier.
+- [ ] Add `team1_tournament_win_rate`, `team1_tournament_n_matches`, `team1_tournament_run_rate_for/against` (NRR proxy), `days_since_team_last_match`, `is_back_to_back`. Symmetric for team2.
+- [ ] Train + ablate against post-M3 model.
+
+Exit criterion: any LL improvement *or* a clear ROI lift on the IPL-only adversarial slice (D3). Else drop.
+
+### M5 — Player × opposition / player × venue affinity
+- [ ] Player × opposition (today, no schema work): aggregate per-batter h2h stats over the opposing XI's bowlers; symmetric for bowlers vs the opposing batting lineup. Shrunk to overall with empirical Bayes (k≈10).
+- [ ] Player × venue (schema work): add a `(player, venue)` tracker / table to SQLite (SCHEMA_VERSION=5 bump), wire materialization pass, then aggregate at lineup level.
+- [ ] Train + ablate; the player×opp half can land independently of the player×venue schema bump.
+
+Exit criterion: M5 lift Δ LL ≤ −0.003 OR clear lift on a defined opposition-specific slice (e.g., teams that have met ≥ 3 times). Else drop.
+
+### M6 — Conditions / captain
+Light additions, half-day each.
+- [ ] **Conditions** (A5): `is_day_match`, `month_of_year`, `month × venue` interaction (proxy for seasonal dew/heat), `toss_winner_chase_propensity` derived from venue chase win pct.
+- [ ] **Captain** (A6): per-team captain identity from `info.toss.winner` + lineup metadata; `captain_win_rate_as_captain` last-N matches; pairwise diffs.
+- [ ] Train + ablate. Drop if neither group moves LL or ROI.
+
+### M7 — Architecture sweep on the stabilized feature set
+Run only after the feature set is fixed (post-M6).
+- [ ] **Hyperparameter resweep** (B1): `n_estimators × lr × max_depth × subsample` grid, early-stopped on val.
+- [ ] **Stacking** (B2): split features into 2–3 disjoint blocks (team-strength / contextual / phase-matchup), train base learners, logistic-stack on val.
+- [ ] **Per-tier specialization** (B5): IPL+international vs long-tail; train separate models, evaluate per-slice.
+- [ ] **LightGBM / CatBoost** (B6) — only if M7's earlier steps still leave a gap to the gate. Low priority.
+
+Exit criterion: pick the single best architecture+features combination as the new production reference.
+
+### M8 — Sizing / operational
+After the new production model is locked.
+- [ ] **Edge threshold + fractional Kelly** (E1): bet only when calibrated edge > 3%, quarter-Kelly stake.
+- [ ] **Outlier per-bet cap** (E2): 2% of bank regardless of Kelly.
+- [ ] Final golden re-evaluation; lock numbers; update CLAUDE.md "honest headline" block.
+
+### Parallel / continuous (not gated by M-sequence)
+- [ ] **Forward polymarket capture** (C2 in catalog) — already in TODO. Continues independently; first 30–60-match read on real edge.
+- [ ] **The Hundred ingestion** (C1 in catalog) — deferred; revisit if M2–M5 don't close the gate.
+- [ ] **Multi-bookmaker historical odds** (C3 in catalog) — deferred; precondition for re-opening market-residual modeling (C4).
+
 ## Root Cause Analysis (Dec 2024)
 **Why both models predict ~50% for all matches:**
 1. **Weak correlation**: Player stats have r=0.06-0.11 with ball outcomes (explains <1.5% of variance)

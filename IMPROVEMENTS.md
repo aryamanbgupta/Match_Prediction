@@ -1012,6 +1012,109 @@ Roughly two-thirds of the previously reported ROI was leakage-driven.
 
 Full audit and comparison: `reports/leakage_fix_comparison.md`.
 
+### Future improvements catalog — match-level direct model (2026-05-10)
+
+Diagnosis: golden ≥$50k LL 0.6747 vs market 0.6267 — a **resolution gap** of ~0.05 LL. The current ~45 features are dominated by slow-moving career aggregates (ELO sums, lifetime avg/SR/econ, lineup composition). The market knows things this stack does not — fast-moving player form, phase-/matchup-specific lineup quality, within-tournament dynamics, conditions on the day, late roster news. Closing the gap requires features (or architecture) that *add discriminative information*, not features that recalibrate what's already there. Calibration alone has been shown twice to anti-correlate with flat ROI on this project (2026-03 Platt; 2026-04-23 v6 outcome-dist) and is not a path through the gate.
+
+The catalog below groups every candidate improvement by category, flags external-data feasibility, and estimates relative cost. **Excluded** from the catalog by design: market price as a feature (residual modeling) — we have polymarket prices only on the eval set, not on the ~12k training corpus, so we cannot train this without acquiring multi-bookmaker historical odds first. Listed as deferred under §C.
+
+The phased rollout is mirrored in `TODO.md` § "Match-level v3 — feature engineering plan", following the same shape as the v6→v7 outcome-dist phases (eval infra → highest-leverage feature → ablations → architecture sweep → sizing).
+
+#### A. Feature additions
+
+**A1. Phase/matchup outcome-dist transfer.** Aggregate the v7 ball-level outcome-dist features up to match level. The ball-level pipeline already shrunk these via empirical Bayes (k=30 player / k=200 venue) under SCHEMA_VERSION=4; the match-level model uses none of them. Backend getters already exist (`get_batter_vs_type_outcome_dist`, `get_bowler_vs_hand_outcome_dist`, `get_batter_outcome_dist`, etc.), so this is a pure aggregation layer, no schema work.
+
+Proposed features (~12–18):
+- `team1_top6_p4_vs_opp_pace_mix`, `..._p6_...`, `..._pw_...` — top-6 batter mean P(class) given the opposition's pace_count / spinner_count weighting.
+- Symmetric for bowlers vs the opposing batting hand mix (lhb/rhb counts).
+- Aggregate venue outcome dist (`venue_p4`, `venue_p6`, `venue_pw`) — direct match-level addition.
+
+Why this is the highest expected lift: XGBoost cannot reconstruct outcome distributions from `team1_lhb_count` + `top6_batting_elo`. Pre-aggregated and pre-shrunk, these directly encode "this set of batters vs this attack profile produces X distribution of outcomes," which is closer to the target than any team-level summary. Feasibility: **today, no extra data, ~1 day implementation**.
+
+**A2. Player-level rolling form (lineup-aggregated).** Replace coarse `team1_win_rate_last_10` with player-level recency stats aggregated to the lineup. Backend getters `get_batting_recent`, `get_bowling_recent`, `get_batting_match_log_recent`, `get_bowling_match_log_recent` already exist and serve windowed stats.
+
+Proposed features (~8–12):
+- `team1_top6_batting_avg_recent`, `team1_top6_batting_sr_recent` (mean of top-6 batters' rolling-window avg/SR)
+- `team1_bowling_econ_recent`, `team1_bowling_avg_recent` (mean over all bowlers in the 11)
+- `team1_n_inform_batters` (count of top-6 with rolling avg > career avg + threshold)
+- `team1_n_outofform_batters` (symmetric)
+- Symmetric for team2; pairwise diffs.
+
+Targets the IPL-2026-mid-tournament-form gap that team-level ELO smooths over. Feasibility: **today, no extra data, ~1 day**.
+
+**A3. Within-tournament features.** Computed from match data + competition_tier:
+- `team1_tournament_win_rate` (current competition only — e.g., IPL 2026 to date)
+- `team1_tournament_n_matches` (sample-size flag for the rate)
+- `team1_tournament_run_rate_for`, `team1_tournament_run_rate_against` (NRR proxy from match runs/balls totals)
+- `days_since_team_last_match` per team (fatigue / rest)
+- `is_back_to_back` flag
+
+Cheap to compute; targets the tournament composition effects flagged in `reports/no_leakage_diagnostic_clean.md`. Feasibility: **today, no extra data, half day**.
+
+**A4. Player × opposition / player × venue affinity.** Per-batter career stats *against the opposing team* and *at this venue*, shrunk to overall.
+- Player × opposition: derivable from h2h table (per-bowler), aggregated to opposing-XI level. Schema-friendly.
+- Player × venue: requires either (a) a new (player, venue) tracker / table, or (b) deriving it on-the-fly from cricsheet JSONs at materialization time. (a) is cleaner and parallels existing schema; estimate +0.5 day for schema bump and +0.5 day for materializer wiring.
+
+Captures "Pollard at Wankhede" / "Warner vs CSK" effects that career means hide. Feasibility: **partial today (player×opp via existing h2h)**; player×venue needs schema work but no new external data.
+
+**A5. Conditions / scheduling.** No external weather API initially:
+- `is_day_match` (from match start time in cricsheet info, where present)
+- `month_of_year` (encoded), `month × venue` interaction (proxy for seasonal dew/heat at known dew-affected grounds — e.g., Chennai/Mumbai evenings in April–May)
+- Toss × venue interaction explicitly featurized: `toss_winner_chase_propensity` based on venue chase win pct.
+
+Cheap, derivable from cricsheet `info` block. Weather-API integration deferred (operationally heavy, modest expected lift). Feasibility: **today, no extra data, half day**.
+
+**A6. Captain proxy.** From `info.toss.winner` plus lineup metadata. Each team's nominal captain has a per-captain win-rate-as-captain track record:
+- `team1_captain_win_rate_as_captain` (last-N matches)
+- `team1_captain_chase_win_rate_as_captain`
+- Pairwise diffs.
+
+Tactical decision-making (field placement, bowling rotation) is partially captain-driven and not captured anywhere else in the feature set. Feasibility: **today, no extra data, ~1 day** (slight overhead to track captain identity per match).
+
+#### B. Architecture / training improvements
+
+**B1. Hyperparameter resweep.** Current config (300 × lr=0.1 × depth=4) was set before the leakage fix. Run a small grid: `n_estimators ∈ {400, 600, 1000}` × `lr ∈ {0.03, 0.05, 0.07}` × `max_depth ∈ {3, 4, 5, 6}` × `subsample ∈ {0.7, 0.8, 0.9}`, early-stopped on val. Expected lift: 1–3% LL. Cost: half day with early stopping. Feasibility: **today**.
+
+**B2. Stacking with disjoint feature subsets.** Train 2–3 base learners on non-overlapping feature blocks (e.g., team-strength only / contextual-only / phase-matchup-only), then logistic-regression-stack on val. Phase A2's blend with the v7 sim showed w=0 was optimal — but that was because v7 sim is *wrong*, not because stacking is. Disjoint XGBs trained directly on `team1_wins` should give the meta-learner real diversity. Feasibility: **today**, ~1 day.
+
+**B3. Monotonic constraints.** Force monotone increasing on directional ELO/strength diffs (`top6_batting_elo_diff`, `bottom5_bowling_elo_diff`, `elo_diff_batting`, `elo_diff_bowling`, `win_rate_diff`, `batting_avg_diff`, `bowling_econ_diff` — sign-flipped). XGBoost has `monotone_constraints` natively. Prevents small-sample inversions; usually worth 0.005–0.015 LL. Feasibility: **today, hours**.
+
+**B4. Calibration as sizing tool, not headline metric.** Isotonic regression LOOCV on val, applied to test predictions for the *Kelly sizing* path only. Don't let it drive the LL gate (TODO.md "measurement hygiene tool" framing). Required for honest fractional Kelly and edge-threshold rules. Feasibility: **today, half day**.
+
+**B5. Per-tier specialization.** Train a separate model for the top-tier cluster (IPL + international + premier franchises) vs the long tail (associate / lower-tier domestic). Tier-1 has 10× more data and very different feature distributions. Light specialization often beats one-size-fits-all. Worth doing only after the feature set stabilizes. Feasibility: **today**, ~1 day.
+
+**B6. LightGBM / CatBoost.** Marginal at best on tabular but cheap. CatBoost handles categorical `venue` natively and may pick up venue interactions the label-encoding loses. Low priority — only revisit if we're squeezing the last 0.005 LL. Feasibility: **today**, half day.
+
+#### C. Data / corpus (deferred — needs new external data)
+
+**C1. The Hundred (`hnd_json`).** TODO already lists this. Match-level model doesn't care about variable innings length (only first-row-of-each-innings is used in `_build_match_record`); blocker is the parser path. ~150–200 additional matches/year of high-quality data, modest expected lift.
+
+**C2. Forward polymarket capture.** TODO already lists this. Provides the only path to a clean forward-test of the +34.75% ROI claim. Operationally critical, not feature work.
+
+**C3. Multi-bookmaker historical odds.** Required to enable the (deferred) market-residual modeling approach. Polymarket alone covers only ~261 matches; Bet365 / Betfair / Pinnacle archives would give the residual model real training corpus. Operationally heavy; defer until C2 forward test confirms there's edge to refine.
+
+**C4. Market-residual modeling (DEFERRED — explicit user decision 2026-05-10).** Train to predict `team1_wins − market_implied_prob` and ship `final_prob = market_prob + residual`. Excluded from current planning because we lack market prices on the training corpus. Reconsider only if C3 lands.
+
+#### D. Evaluation upgrades
+
+**D1. CLV (closing line value).** Polymarket has time-stamped order books → closing prob is recoverable. CLV is the gold standard for betting models — a model with positive CLV is empirically picking bets the market revalues toward truth, which is the only durable measure of edge. Sample-size requirements are far gentler than for ROI significance. Feasibility: **today** (data is in the polymarket_prematch_odds JSONs already), ~1 day.
+
+**D2. Stratified bootstrap.** Current bootstrap CIs treat matches as exchangeable; stratify by `competition_tier` × early/late half before resampling. Feasibility: **today, hours**.
+
+**D3. Adversarial slices.** IPL-only, international-only, mismatches (top6 ELO diff > X), close fixtures (top6 ELO diff < Y). Diagnoses where the +34.75% golden ROI actually concentrates and whether it's robust. Feasibility: **today, hours**.
+
+**D4. Walk-forward eval.** Re-train on expanding train+val and evaluate at each test month. Catches whether edge is gaining or losing over time. Feasibility: **today**, half day.
+
+#### E. Inference / sizing
+
+**E1. Edge-threshold + fractional Kelly.** Bet only when calibrated edge > 3%, size at quarter-Kelly. From the blend report, large fractions of bets clear by very slim margins; cutting those should preserve most ROI while halving variance. Requires B4 first. Feasibility: **today (after B4)**, hours.
+
+**E2. Outlier per-bet stake cap.** Already flagged in TODO follow-ups. Cap at 2% of bank regardless of Kelly — keeps tail risk bounded for live deployment. Feasibility: **today**, hours.
+
+#### Phasing — see `TODO.md` § "Match-level v3 — feature engineering plan"
+
+Eight numbered milestones (M1–M8) following the v6→v7 phased shape: eval infra first (M1), then highest-leverage feature work with per-phase ablation (M2–M5), then conditions/captain (M6), then architecture sweep on the stabilized feature set (M7), then sizing/operational (M8). Forward-test (C2) and deferred items run in parallel to M1–M8.
+
 ### Stage-1 audit follow-ups landed (2026-05-09)
 
 **v7 ball-level sim audited for analogous leakage — clean.** Same parser as the match-level path, but the bug pattern doesn't apply: per-ball features are computed before per-ball `update_stats` / `elo_tracker.update`; team-level constants (lines 1061-1098 of `parsing_v2.py`) are computed at match start before any ball-loop mutation; SQLite snapshot per date is first-write-wins (pre-D state); there is no second-pass equivalent of `_build_match_record`. Empirical check: 10/10 solo-date first-of-day matches show bit-exact match between parquet `striker_elo` / `batting_team_elo` and SQLite pre-D rehydration. v7 also doesn't compute top-6/bottom-5 ELO splits at all, so the specific bug pattern can't symmetrically apply. The honest LL gap (v7 0.7402 ≥$50k vs clean direct golden 0.6747) reflects a real resolution problem in v7, not a fixable measurement artifact. Full report: `reports/v7_leakage_audit.md`.
