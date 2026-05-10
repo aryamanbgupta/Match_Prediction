@@ -255,11 +255,20 @@ Full reference: `reports/m7_architecture_eval.md`.
 - **Close-slice ROI**: +33.27% [+4.36, +61.53] (M2 v.o. was +26.12% [-2.34, +52.30] — CI now excludes 0 on the historically weak slice)
 - 2026-04 IPL walk-forward: +34.87% ROI [+2.04, +68.06], win 65.7%
 
-### M8 — Sizing / operational
-After the new production model is locked.
-- [ ] **Edge threshold + fractional Kelly** (E1): bet only when calibrated edge > 3%, quarter-Kelly stake.
-- [ ] **Outlier per-bet cap** (E2): 2% of bank regardless of Kelly.
-- [ ] Final golden re-evaluation; lock numbers; update CLAUDE.md "honest headline" block.
+### M8 — Sizing / operational ✅ LANDED 2026-05-10
+Full reference: `reports/m8_sizing_rules_eval.md`.
+- [x] **Edge threshold + fractional Kelly (E1) tested**: sweep over thresholds {0, 0.01, 0.02, 0.03, 0.05, 0.07, 0.10, 0.15}. **Threshold 0 wins on aggregate**: only config where iter ≥$50k ROI CI cleanly excludes 0 (+0.91 lower bound). Counter-intuitive but confirmed: the M7 model's low-edge bets are calibrated and carry real signal — filtering them hurts every metric.
+- [x] **Outlier per-bet cap (E2) tooling shipped**: `scripts/sim_eval/sizing_rules.py` supports per-bet Kelly cap. Quarter Kelly + 2% cap is the documented Kelly default. No data-driven optimization (small n).
+- [~] **Final golden re-evaluation DEFERRED to production-launch time** (per the iteration-only-decisions discipline). Single use only, not for sizing-rule selection.
+
+**Production sizing rule LANDED**: flat 1-unit at edge threshold 0.
+
+**Slice-conditional finding** (documented, not landed): on mismatch fixtures (|top6 ELO diff| ≥ 15), threshold=10% gives ROI +44% [+1.15, +78.30], win 72%. On close fixtures (|diff| ≤ 5), threshold=0 wins. Inference-time complexity not justified at small n; revisit after C2 forward capture provides more mismatch samples.
+
+**Kelly variants preserved as tooling** (not production default):
+- Quarter Kelly + 2% per-bet cap: conservative; tiny per-bet returns
+- Full Kelly + 2% cap: moderate; per-bet ROI +0.38%
+- Full Kelly no cap: aggressive; per-bet ROI +4.06% but max DD 2.52 of bank
 
 ### Parallel / continuous (not gated by M-sequence)
 - [ ] **Forward polymarket capture** (C2 in catalog) — already in TODO. Continues independently; first 30–60-match read on real edge.
