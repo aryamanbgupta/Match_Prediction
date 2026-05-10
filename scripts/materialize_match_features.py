@@ -111,6 +111,16 @@ FEATURE_COLUMNS = [
     "p4_bowling_diff", "p6_bowling_diff", "pw_bowling_diff",
     # Venue outcome distribution (k_venue=200, shrunk to corpus prior π).
     "venue_p4", "venue_p6", "venue_pw",
+    # === M5 (2026-05-10): player × opposition affinity ===
+    # Top-6 batters' aggregate runs/balls/dismissals across the opposing
+    # XI's bowlers (h2h matrix sums), shrunk to each batter's career
+    # avg/SR with k_balls=60. Captures "Pollard vs CSK"-type patterns
+    # that career means can't.
+    "team1_top6_avg_vs_opp_shrunk", "team1_top6_sr_vs_opp_shrunk",
+    "team2_top6_avg_vs_opp_shrunk", "team2_top6_sr_vs_opp_shrunk",
+    "avg_vs_opp_diff", "sr_vs_opp_diff",
+    # Sample-size indicator (total h2h balls across the matchup matrix).
+    "team1_h2h_balls_total", "team2_h2h_balls_total",
     # === M4 (2026-05-10): within-tournament / scheduling features ===
     # Date-windowed form (last 60d, Beta(1,1)-shrunk on team win rate).
     "team1_win_rate_last_60d", "team1_n_matches_last_60d",
@@ -401,6 +411,84 @@ def _expected_outcome_features(
     }
 
 
+def _player_vs_opposition_features(
+    team1_lineup: List[str], team2_lineup: List[str],
+    temp_stats, top_n: int = 6, k_balls: float = 10.0,
+) -> Dict[str, float]:
+    """M5 (2026-05-10) player × opposition affinity.
+
+    For each top-N batter in team1, sum h2h (runs, balls, dismissals)
+    across every player in team2's lineup. Compute the batter's
+    expected avg/SR against this specific attack. Shrink to the
+    batter's career avg/SR via convex combination with weight
+    `balls / (balls + k_balls)` — at k_balls=60 (one innings worth of
+    balls), a batter who has faced 60 balls against this attack gets
+    half weight on the matchup, half on career.
+
+    Aggregate the shrunk per-batter avg/SR by mean across top-N.
+    Symmetric for team2's top-N batters vs team1's lineup.
+
+    h2h_balls_total returned as separate sample-size signal.
+    """
+    def _batter_vs_attack(batter_id: str, opp_lineup: List[str]
+                           ) -> Tuple[float, float, int]:
+        """Sum h2h counts of batter vs every player in opp_lineup; return
+        (shrunk_avg, shrunk_sr, total_balls).
+        """
+        total_runs = total_balls = total_dismissals = 0
+        for bowler_id in opp_lineup:
+            cell = temp_stats.h2h_stats.get((batter_id, bowler_id))
+            if cell is None:
+                continue
+            total_runs += cell.get('runs', 0)
+            total_balls += cell.get('balls', 0)
+            total_dismissals += cell.get('dismissals', 0)
+
+        career = temp_stats.get_batting_features(batter_id)
+        career_avg = career.get('batsman_avg', 0.0)
+        career_sr = career.get('batsman_sr', 0.0)
+
+        if total_balls == 0:
+            return career_avg, career_sr, 0
+
+        cell_avg = total_runs / max(total_dismissals, 1)
+        cell_sr = (total_runs / total_balls) * 100.0
+        weight = total_balls / (total_balls + k_balls)
+        shrunk_avg = weight * cell_avg + (1.0 - weight) * career_avg
+        shrunk_sr = weight * cell_sr + (1.0 - weight) * career_sr
+        return shrunk_avg, shrunk_sr, total_balls
+
+    def _agg(top: List[str], opp: List[str]) -> Tuple[float, float, int]:
+        if not top:
+            return 0.0, 0.0, 0
+        avgs, srs = [], []
+        balls_total = 0
+        for pid in top:
+            a, s, b = _batter_vs_attack(pid, opp)
+            avgs.append(a)
+            srs.append(s)
+            balls_total += b
+        return (
+            sum(avgs) / len(avgs),
+            sum(srs) / len(srs),
+            balls_total,
+        )
+
+    t1_avg, t1_sr, t1_balls = _agg(team1_lineup[:top_n], team2_lineup)
+    t2_avg, t2_sr, t2_balls = _agg(team2_lineup[:top_n], team1_lineup)
+
+    return {
+        "team1_top6_avg_vs_opp_shrunk": t1_avg,
+        "team1_top6_sr_vs_opp_shrunk": t1_sr,
+        "team2_top6_avg_vs_opp_shrunk": t2_avg,
+        "team2_top6_sr_vs_opp_shrunk": t2_sr,
+        "avg_vs_opp_diff": t1_avg - t2_avg,
+        "sr_vs_opp_diff": t1_sr - t2_sr,
+        "team1_h2h_balls_total": float(t1_balls),
+        "team2_h2h_balls_total": float(t2_balls),
+    }
+
+
 def _within_tournament_features(
     team1: str, team2: str, match_date: datetime,
     competition_tier,
@@ -571,6 +659,7 @@ def _build_match_record(
     home_tracker: HomeVenueTracker,
     outcome_features: Optional[Dict[str, float]] = None,
     rolling_features: Optional[Dict[str, float]] = None,
+    affinity_features: Optional[Dict[str, float]] = None,
 ) -> Optional[dict]:
     """Collapse per-ball rows into a single match-level record. Returns
     None if the match has no valid winner (no-result / abandoned).
@@ -797,6 +886,15 @@ def _build_match_record(
             "inform_batters_diff", "outofform_batters_diff",
         ]}
     record.update({k: float(v) for k, v in rolling_features.items()})
+
+    if affinity_features is None:
+        affinity_features = {k: float("nan") for k in [
+            "team1_top6_avg_vs_opp_shrunk", "team1_top6_sr_vs_opp_shrunk",
+            "team2_top6_avg_vs_opp_shrunk", "team2_top6_sr_vs_opp_shrunk",
+            "avg_vs_opp_diff", "sr_vs_opp_diff",
+            "team1_h2h_balls_total", "team2_h2h_balls_total",
+        ]}
+    record.update({k: float(v) for k, v in affinity_features.items()})
     return record
 
 
@@ -903,6 +1001,7 @@ def materialize(
             teams_info = info.get("teams", [])
             outcome_features = None
             rolling_features = None
+            affinity_features = None
             if len(teams_info) == 2:
                 team1, team2 = teams_info[0], teams_info[1]
                 player_registry = info.get("registry", {}).get("people", {})
@@ -920,6 +1019,9 @@ def materialize(
                     k_player=k_player, k_venue=k_venue,
                 )
                 rolling_features = _rolling_form_features(
+                    t1_ids, t2_ids, temp_stats,
+                )
+                affinity_features = _player_vs_opposition_features(
                     t1_ids, t2_ids, temp_stats,
                 )
 
@@ -943,6 +1045,7 @@ def materialize(
                 metadata, pre_match_elo, form_tracker, h2h_tracker, home_tracker,
                 outcome_features=outcome_features,
                 rolling_features=rolling_features,
+                affinity_features=affinity_features,
             )
             if record is None:
                 n_dropped += 1

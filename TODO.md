@@ -213,12 +213,18 @@ Full reference: `reports/m4_within_tournament_eval.md`.
 
 **M4 features stay in materializer code** (`_within_tournament_features`, TeamFormTracker extensions, FEATURE_COLUMNS entries) but excluded from production via `--drop-features` substring filter.
 
-### M5 — Player × opposition / player × venue affinity
-- [ ] Player × opposition (today, no schema work): aggregate per-batter h2h stats over the opposing XI's bowlers; symmetric for bowlers vs the opposing batting lineup. Shrunk to overall with empirical Bayes (k≈10).
-- [ ] Player × venue (schema work): add a `(player, venue)` tracker / table to SQLite (SCHEMA_VERSION=5 bump), wire materialization pass, then aggregate at lineup level.
-- [ ] Train + ablate; the player×opp half can land independently of the player×venue schema bump.
+### M5 — Player × opposition / player × venue affinity ❌ DROPPED 2026-05-10 (at correlation check, pre-training)
+Full reference: `reports/m5_player_affinity_eval.md`.
+- [x] Added 8 player × opposition features in `_player_vs_opposition_features` helper. h2h-matrix aggregation, shrunk to career with k_balls. Parquet at `data/xgb_match_data_v3_m5_unfrozen/`.
+- [x] **Correlation check (the post-M4 discipline) FAILED for all 8 features**: 7 have |r|>0.5 with an M1 baseline feature AND target r ≤ baseline's; the 1 borderline (`sr_vs_opp_diff`) has target r essentially identical to baseline (0.99×).
+- [x] Sanity check at k_balls=10 (lower shrinkage): target correlations unchanged (~0.10-0.15). The redundancy is structural — lineup aggregation collapses per-player matchup signal toward team career means.
+- [~] Player × venue (schema-bump half): SKIPPED. Same structural failure mode expected (per-player venue stats aggregate toward team venue stats already encoded by `is_team1_home` + `venue_p4/p6/pw`).
 
-Exit criterion: M5 lift Δ LL ≤ −0.003 OR clear lift on a defined opposition-specific slice (e.g., teams that have met ≥ 3 times). Else drop.
+**Key insight (durable)**: M3 (player rolling form), M4 (within-tournament form), M5 (player × opposition) all failed because lineup-aggregate features collapse to team-level career aggregates. **Aggregated-player features don't beat team-level career features at the match level.**
+
+**M6 strategy shift**: prioritize features that are *match-level by nature*. Captain identity, pitch conditions, day-of-match flags, month×venue interactions are per-match (not lineup-aggregated), so they don't suffer the aggregation collapse.
+
+**Discipline win**: the M4 ablation report committed to a pre-training correlation check; this was its first application. Caught structural redundancy in minutes instead of after a full training+ablation cycle.
 
 ### M6 — Conditions / captain
 Light additions, half-day each.
