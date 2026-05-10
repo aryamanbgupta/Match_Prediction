@@ -290,11 +290,15 @@ def main():
     ap.add_argument("--model-dir", type=str,
                     default="models/xgb_match_v1",
                     help="Output artifact dir.")
-    ap.add_argument("--n-estimators", type=int, default=300)
+    # Defaults updated 2026-05-10 per M7.A hyperparameter sweep (best val LL):
+    # md=4, lr=0.05, ss=0.8, cs=0.9, 300 → up to 1000 with early stopping.
+    # Old defaults (md=4, lr=0.10, ss=0.8, cs=0.8) preserved via the
+    # `xgb_match_v3_m2_venue_only_unfrozen` model artifact for reference.
+    ap.add_argument("--n-estimators", type=int, default=1000)
     ap.add_argument("--max-depth", type=int, default=4)
-    ap.add_argument("--learning-rate", type=float, default=0.1)
+    ap.add_argument("--learning-rate", type=float, default=0.05)
     ap.add_argument("--subsample", type=float, default=0.8)
-    ap.add_argument("--colsample-bytree", type=float, default=0.8)
+    ap.add_argument("--colsample-bytree", type=float, default=0.9)
     ap.add_argument("--reg-alpha", type=float, default=0.1)
     ap.add_argument("--reg-lambda", type=float, default=1.0)
     ap.add_argument("--early-stopping-rounds", type=int, default=30)

@@ -7,27 +7,32 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
 **Active models** (two production models with complementary roles):
 
 1. **Match-level direct (winner-market predictor)** — XGBoost binary classifier
-   on ~45 match-level features (team strength, position-split ELOs, recent
-   form, H2H, home/away, lineup mix). Trained on `team1_wins`. Variant of
-   record: **`models/xgb_match_v2_clean_unfrozen/`** — booster bytes
-   bit-identical to the earlier `xgb_match_v2_clean` (train+val parquets
-   are identical between frozen and unfrozen builds, so retraining
-   produces the same model). Named for inference semantics: per-fixture
-   unfrozen rehydration is the production path. The model was retrained
-   2026-05-09 after a feature-leakage fix
-   (see `reports/leakage_fix_comparison.md`); pre-fix `_build_match_record`
-   was reading per-player ELOs *after* `parse_match_data_v2` had updated
-   them ball-by-ball with this match's own outcomes. Patched in
-   `materialize_match_features.py`. Config:
-   `experiments/configs/xgb_match_v1_baseline.yaml`.
-   **Honest headline (golden eval, 2026-05-07 cutoff, n=55 polymarket overlap)**:
-   ≥$50k slice (n=50) LL **0.6747** (CI [0.64, 0.72]) vs market 0.6267 — does
-   *not* beat market on log loss; flat ROI **+32.6%** (CI [-0.2%, +63.6%]) —
-   ROI CI just barely includes zero. ≥$100k slice (n=45) LL 0.6698,
-   flat ROI **+34.8%** (CI [+3.79%, +65.5%]) — narrowly clears the soft
-   ROI-only gate. The earlier "+47-58% ROI" claim was inflated by the leakage
-   and is retracted. Use this for match-winner predictions; treat the edge as
-   modest, not dominant.
+   on 49 match-level features (M1 baseline + 3 venue outcome-dist).
+   Trained on `team1_wins`. **Production variant of record (post M7,
+   2026-05-10): `models/xgb_match_v3_m7_production/`**. Same feature set as
+   the prior `xgb_match_v3_m2_venue_only_unfrozen`; the only change at M7
+   was the hyperparameter sweep result: lr 0.10 → 0.05, colsample 0.8 →
+   0.9 (the prior config was over-aggressive). `predict_fixture.py` uses
+   this model directly; raw probabilities (no Platt — Platt over-corrects
+   on this config and kills iteration ROI). Per-fixture unfrozen
+   rehydration semantics (chronological tracker walk through pre-match
+   date). Earlier baselines preserved for reference: `xgb_match_v2_clean`,
+   `xgb_match_v2_clean_unfrozen`, `xgb_match_v3_baseline` (M1 monotone),
+   `xgb_match_v3_m2_venue_only`, `xgb_match_v3_m2_venue_only_unfrozen`.
+   See `reports/m7_architecture_eval.md` for the sweep, M2 → M7
+   improvement deltas, and the explanation of why M3–M6 feature work
+   dropped.
+
+   **Honest headline (iteration polymarket eval, the gate; n=170 ≥$50k bets)**:
+   raw LL **0.6299** vs market 0.6267 (essentially at market);
+   flat ROI **+21.90%** (CI [+2.28%, +43.83%]) — clears strict ROI gate.
+   ≥$100k slice (n=110): LL 0.5929, ROI **+26.39%** (CI [+0.57%, +58.78%])
+   — CI cleanly excludes 0. **Close-match slice** (top6 ELO diff ≤ 5,
+   n=74): ROI **+33.27%** (CI [+4.36%, +61.53%]) — the historically weak
+   slice finally clears the gate. 2026-04 IPL walk-forward: ROI +34.87%
+   (CI [+2.04%, +68.06%]), win 65.7%. **Golden eval is intentionally NOT
+   recomputed for M-phase selection** — held out for production-launch
+   confirmation only (see `feedback_iteration_only_decisions.md`).
 
    **Frozen vs unfrozen tracker semantics**: previous diagnostic claimed
    frozen-mode trackers (snapshot at val/test boundary, no within-test

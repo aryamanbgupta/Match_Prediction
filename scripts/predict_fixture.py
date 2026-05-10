@@ -1,12 +1,15 @@
 """Predict a single upcoming fixture without going through the full
 materialization pipeline.
 
-Uses xgb_match_v2_clean_unfrozen — the post-leakage-fix model trained
-on unfrozen-tracker test rows (booster bytes bit-identical to
-xgb_match_v2_clean, since train+val parquets are identical between the
-two builds; named for semantic clarity). Unfrozen-style inference: per
-fixture, rehydrate SQLite + tracker queries as-of the fixture date,
-not a fixed freeze boundary. Golden-test data (2026-04-17+) is NOT
+Uses xgb_match_v3_m7_production — promoted 2026-05-10 at M7.A.
+Same M2-v.o. feature set (49 features: M1 baseline + 3 venue
+outcome-dist), retrained with the M7.A hyperparameter sweep winners:
+max_depth=4, learning_rate=0.05, subsample=0.8, colsample_bytree=0.9
+(M2 v.o. baseline had lr=0.10, cs=0.8). Iter ≥$50k LL 0.6299 vs
+M2 v.o. 0.6348; close-slice ROI +33.27% [+4.36, +61.53] (the
+historically weak slice now clears the gate). Unfrozen-style
+inference: per fixture, rehydrate SQLite + tracker queries as-of
+the fixture date, not a fixed freeze boundary. Golden-test data (2026-04-17+) is NOT
 included in the SQLite cache or tracker snapshot — that's reserved for
 final eval. The corpus consequently covers data through 2026-04-16
 (the test_end date), so for fixtures dated after that, predictions
@@ -62,7 +65,7 @@ from tracker_rehydration import (  # noqa: E402
     rehydrate_venue_tracker,
 )
 
-MODEL_DIR = REPO / "models" / "xgb_match_v2_clean_unfrozen"
+MODEL_DIR = REPO / "models" / "xgb_match_v3_m7_production"
 TRACKER_SNAPSHOT = REPO / "data" / "tracker_snapshot_test_end.pkl"
 EDGE_THRESHOLD = 0.0
 

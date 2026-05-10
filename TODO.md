@@ -238,14 +238,22 @@ Full reference: `reports/m6_conditions_captain_eval.md`.
 
 **5 of 5 named v3 feature phases now DROPPED**. The match-level model at M2 v.o. (49 features) is at a local LL optimum given the pre-match signal available. Feature-engineering frontier exhausted; M7 should be ARCHITECTURE work.
 
-### M7 — Architecture sweep on the stabilized feature set
-Run only after the feature set is fixed (post-M6).
-- [ ] **Hyperparameter resweep** (B1): `n_estimators × lr × max_depth × subsample` grid, early-stopped on val.
-- [ ] **Stacking** (B2): split features into 2–3 disjoint blocks (team-strength / contextual / phase-matchup), train base learners, logistic-stack on val.
-- [ ] **Per-tier specialization** (B5): IPL+international vs long-tail; train separate models, evaluate per-slice.
-- [ ] **LightGBM / CatBoost** (B6) — only if M7's earlier steps still leave a gap to the gate. Low priority.
+### M7 — Architecture sweep ✅ LANDED 2026-05-10
+Full reference: `reports/m7_architecture_eval.md`.
+- [x] **B1 Hyperparameter resweep** — 81-config grid (md × lr × ss × cs). Winner: md=4 lr=0.05 ss=0.8 cs=0.9 (baseline was lr=0.10 cs=0.8). Trainer defaults updated.
+- [x] **B5 Per-tier specialization** explored (IPL-only hybrid). Marginal +3-5pp ROI on aggregate driven by 22 IPL matches with wide CI [-8, +77]. Not landed (complexity not justified). Preserved at `models/xgb_match_v3_m7b_ipl_only/` for future re-evaluation when IPL test n grows.
+- [~] **B2 Stacking** SKIPPED — M7.A delivered a clean win; stacking unlikely to add. Keep architecture simple.
+- [~] **B6 LightGBM/CatBoost** SKIPPED — low priority, no clear gap remaining.
 
-Exit criterion: pick the single best architecture+features combination as the new production reference.
+**Production model**: `models/xgb_match_v3_m7_production/` (raw probabilities; Platt over-corrects on this config). `predict_fixture.py` switched from v2_clean_unfrozen → v3_m7_production.
+
+**Iteration metrics (the gate)**:
+- iter ≥$50k LL: 0.6299 vs M2 v.o. 0.6348 (Δ -0.005, closer to market 0.6267)
+- iter ≥$50k ROI: +21.90% [+2.28, +43.83] (CI overlap with baseline)
+- iter ≥$100k LL: 0.5929 vs M2 v.o. 0.6006
+- iter ≥$100k ROI: +26.39% [+0.57, +58.78] (**CI now excludes 0**; baseline was [-0.93, +57.10])
+- **Close-slice ROI**: +33.27% [+4.36, +61.53] (M2 v.o. was +26.12% [-2.34, +52.30] — CI now excludes 0 on the historically weak slice)
+- 2026-04 IPL walk-forward: +34.87% ROI [+2.04, +68.06], win 65.7%
 
 ### M8 — Sizing / operational
 After the new production model is locked.
