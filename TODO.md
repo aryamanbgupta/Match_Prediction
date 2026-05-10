@@ -180,13 +180,20 @@ Mixed result. Full reference: `reports/m2_outcome_dist_eval.md`.
 
 **Landed: M2 venue-only (3 features added)** — `models/xgb_match_v3_m2_venue_only/`. Iteration ≥$50k raw LL 0.6347 / ROI +22.77% [+2.73, +43.46] (first variant with positive ROI CI lower bound). Golden ≥$50k raw LL 0.6885 vs M1's 0.7006 (Δ -0.012). The bowler outcome-dist follow-up is open: investigate metadata-based bowler set (`is_pace` filter) instead of bottom-5 squad-order; revisit in M5.
 
-### M3 — Player-level rolling form
-Replace coarse `team1_win_rate_last_10` (team-aggregate) with player-level recency stats aggregated to lineup. Backend getters `get_batting_recent`, `get_bowling_recent`, `get_batting_match_log_recent`, `get_bowling_match_log_recent` already serve windowed stats.
-- [ ] Add ~8–12 features: top-6 batting avg/SR recent, bowling econ/avg recent, n_inform_batters / n_outofform_batters per team, pairwise diffs.
-- [ ] Train + ablate against the post-M2 model.
-- [ ] Determine best window (last-30d vs last-N-balls vs last-N-matches) via small sweep.
+### M3 — Player-level rolling form ❌ DROPPED — but UNFROZEN materialization landed (2026-05-10)
+Mixed outcome. Full reference: `reports/m3_rolling_form_eval.md`.
+- [x] Added 18 rolling-form features in `_rolling_form_features` helper: top-6 batting avg/SR_recent + diffs, all-11 bowlers avg/econ_recent + diffs, in-form/out-of-form indicators + diffs. Parquet at `data/xgb_match_data_v3_m3{,_unfrozen}/`.
+- [x] Drop-one ablation: bowling-recent HURTS (same pattern as M2 bowler outcome-dist); batting-recent + form indicators individually neutral.
+- [x] Stale-tracker hypothesis test: re-materialized in UNFROZEN mode. Confirmed material feature drift (mean |Δ| ~7 batting avg points on golden).
+- [~] **M3 features do not add value even unfrozen** — career-aggregate features already capture the predictive variance. M3 features stay in materializer (`--drop-features` excludes them at training time) but are NOT in production.
 
-Exit criterion for M3: iteration ≥$50k Δ LL ≤ −0.003 (additive on top of M2). Else drop.
+**Phase outcome — UNFROZEN MATERIALIZATION ADOPTED as new production mode**:
+- New baseline: `models/xgb_match_v3_m2_venue_only_unfrozen/`. Same features as M2 v.o. but trained on unfrozen chronological-walk parquet.
+- **First variant to clear iteration ≥$50k LL gate AND ROI CI gate simultaneously**: LL 0.6279 + Platt vs market 0.6267; ROI +26.69% [+6.26, +48.65].
+- Golden ≥$50k + Platt: LL 0.6849, ROI **+31.29% [+1.92, +59.11]**, win 61.2%. First variant with golden ROI CI cleanly excluding 0.
+- 2026-04 walk-forward (IPL): ROI **+43.67% [+10.36, +76.65]**, win 68.6%.
+
+**Materialization mode going forward**: unfrozen (no `--freeze-trackers-after` flag). Frozen kept for diagnostic reference. Bowler-unit identification remains broken; revisit in M5 with metadata-based `is_pace` filter.
 
 ### M4 — Within-tournament features
 Cheap, derivable from match data + competition_tier.

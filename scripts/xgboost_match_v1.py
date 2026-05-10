@@ -70,6 +70,13 @@ _MONOTONE_SIGNS = {
     "p6_bowling_diff": -1,
     # pw_bowling_diff: HIGHER team1 wicket-taking rate = team1 wins MORE.
     "pw_bowling_diff": 1,
+    # M3 (2026-05-10) rolling-form diffs.
+    "batting_avg_recent_diff": 1,    # higher team1 recent avg = better
+    "batting_sr_recent_diff": 1,     # higher team1 recent SR = better
+    "bowling_avg_recent_diff": -1,   # higher team1 recent bowling avg = WORSE
+    "bowling_econ_recent_diff": -1,  # higher team1 recent econ = leaks more = worse
+    "inform_batters_diff": 1,        # more in-form team1 batters = better
+    "outofform_batters_diff": -1,    # more out-of-form team1 batters = worse
 }
 
 

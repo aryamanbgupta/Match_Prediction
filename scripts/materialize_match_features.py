@@ -111,6 +111,24 @@ FEATURE_COLUMNS = [
     "p4_bowling_diff", "p6_bowling_diff", "pw_bowling_diff",
     # Venue outcome distribution (k_venue=200, shrunk to corpus prior π).
     "venue_p4", "venue_p6", "venue_pw",
+    # === M3 (2026-05-10): player-level rolling form (last-5-matches) ===
+    # Top-6 mean recent batting avg/SR; pairwise diff. Lineup members
+    # whose recent_batting deque is empty are excluded from the mean.
+    "team1_top6_batting_avg_recent", "team1_top6_batting_sr_recent",
+    "team2_top6_batting_avg_recent", "team2_top6_batting_sr_recent",
+    "batting_avg_recent_diff", "batting_sr_recent_diff",
+    # All-11 mean recent bowling avg/econ; lineup members whose
+    # recent_bowling deque is empty are excluded (so non-bowlers don't
+    # drag the mean to 0). Pairwise diff.
+    "team1_bowlers_avg_recent", "team1_bowlers_econ_recent",
+    "team2_bowlers_avg_recent", "team2_bowlers_econ_recent",
+    "bowling_avg_recent_diff", "bowling_econ_recent_diff",
+    # Form indicators: count of top-6 batters with recent_avg > 1.2 ×
+    # career_avg ("in form") or recent_avg < 0.8 × career_avg
+    # ("out of form"). Players with no career stats (rookies) excluded.
+    "team1_n_inform_batters", "team1_n_outofform_batters",
+    "team2_n_inform_batters", "team2_n_outofform_batters",
+    "inform_batters_diff", "outofform_batters_diff",
 ]
 
 METADATA_COLUMNS = [
@@ -315,6 +333,101 @@ def _expected_outcome_features(
     }
 
 
+def _rolling_form_features(
+    team1_lineup: List[str], team2_lineup: List[str],
+    temp_stats, top_n: int = 6,
+    inform_ratio: float = 1.2, outform_ratio: float = 0.8,
+) -> Dict[str, float]:
+    """Player-level rolling form (M3, 2026-05-10).
+
+    Last-5-matches per-player batting/bowling stats from
+    `temp_stats.recent_batting` / `recent_bowling` deques. Aggregated
+    over top-6 batters and ALL-11 bowlers. Players with empty recent
+    deques excluded from the means so non-bowlers / rookies don't drag
+    aggregates toward zero. Form indicators count top-6 batters whose
+    recent_avg deviates from career_avg by ≥20% in either direction.
+    """
+    def _player_recent(pid: str) -> Tuple[float, float, float, float, float, float]:
+        """Return (career_bat_avg, career_bat_sr, recent_bat_avg,
+        recent_bat_sr, recent_bowl_avg, recent_bowl_econ).
+        recent_bat_balls / recent_bowl_balls implicitly via 0 sentinel
+        when deque is empty.
+        """
+        bat = temp_stats.get_batting_features(pid)
+        bowl = temp_stats.get_bowling_features(pid)
+        return (
+            bat.get('batsman_avg', 0.0),
+            bat.get('batsman_sr', 0.0),
+            bat.get('batsman_recent_avg', 0.0),
+            bat.get('batsman_recent_sr', 0.0),
+            bowl.get('bowler_recent_avg', 0.0),
+            bowl.get('bowler_recent_econ', 0.0),
+        )
+
+    def _batting_recent(lineup: List[str]) -> Tuple[float, float, int, int]:
+        """Mean over top-N batters with non-zero recent_balls. Returns
+        (avg_recent, sr_recent, n_inform, n_outform).
+        """
+        top = lineup[:top_n]
+        avgs, srs = [], []
+        n_inform = n_outform = 0
+        for pid in top:
+            career_avg, _, rec_avg, rec_sr, _, _ = _player_recent(pid)
+            # SR is from the same deque as avg; if SR is 0 the deque was empty.
+            if rec_sr > 0:
+                avgs.append(rec_avg)
+                srs.append(rec_sr)
+            if career_avg > 0 and rec_avg > 0:
+                if rec_avg >= inform_ratio * career_avg:
+                    n_inform += 1
+                elif rec_avg <= outform_ratio * career_avg:
+                    n_outform += 1
+        avg_mean = sum(avgs) / len(avgs) if avgs else 0.0
+        sr_mean = sum(srs) / len(srs) if srs else 0.0
+        return avg_mean, sr_mean, n_inform, n_outform
+
+    def _bowling_recent(lineup: List[str]) -> Tuple[float, float]:
+        """Mean over all 11 with non-zero recent bowling balls. Excludes
+        non-bowlers so the mean reflects "what these bowlers have done
+        lately" rather than "what 11 people have averaged."
+        """
+        avgs, econs = [], []
+        for pid in lineup:
+            _, _, _, _, rec_avg, rec_econ = _player_recent(pid)
+            if rec_econ > 0:
+                avgs.append(rec_avg)
+                econs.append(rec_econ)
+        avg_mean = sum(avgs) / len(avgs) if avgs else 0.0
+        econ_mean = sum(econs) / len(econs) if econs else 0.0
+        return avg_mean, econ_mean
+
+    t1_avg, t1_sr, t1_inform, t1_outform = _batting_recent(team1_lineup)
+    t2_avg, t2_sr, t2_inform, t2_outform = _batting_recent(team2_lineup)
+    t1_bowl_avg, t1_bowl_econ = _bowling_recent(team1_lineup)
+    t2_bowl_avg, t2_bowl_econ = _bowling_recent(team2_lineup)
+
+    return {
+        "team1_top6_batting_avg_recent": t1_avg,
+        "team1_top6_batting_sr_recent": t1_sr,
+        "team2_top6_batting_avg_recent": t2_avg,
+        "team2_top6_batting_sr_recent": t2_sr,
+        "batting_avg_recent_diff": t1_avg - t2_avg,
+        "batting_sr_recent_diff": t1_sr - t2_sr,
+        "team1_bowlers_avg_recent": t1_bowl_avg,
+        "team1_bowlers_econ_recent": t1_bowl_econ,
+        "team2_bowlers_avg_recent": t2_bowl_avg,
+        "team2_bowlers_econ_recent": t2_bowl_econ,
+        "bowling_avg_recent_diff": t1_bowl_avg - t2_bowl_avg,
+        "bowling_econ_recent_diff": t1_bowl_econ - t2_bowl_econ,
+        "team1_n_inform_batters": float(t1_inform),
+        "team1_n_outofform_batters": float(t1_outform),
+        "team2_n_inform_batters": float(t2_inform),
+        "team2_n_outofform_batters": float(t2_outform),
+        "inform_batters_diff": float(t1_inform - t2_inform),
+        "outofform_batters_diff": float(t1_outform - t2_outform),
+    }
+
+
 def _split_elo(lineup_ids: List[str], elo_tracker,
                top_n: int = 6) -> Tuple[float, float]:
     """Return (top-N batting ELO mean, bottom-(len−N) bowling ELO mean)
@@ -344,6 +457,7 @@ def _build_match_record(
     h2h_tracker: H2HTracker,
     home_tracker: HomeVenueTracker,
     outcome_features: Optional[Dict[str, float]] = None,
+    rolling_features: Optional[Dict[str, float]] = None,
 ) -> Optional[dict]:
     """Collapse per-ball rows into a single match-level record. Returns
     None if the match has no valid winner (no-result / abandoned).
@@ -547,6 +661,20 @@ def _build_match_record(
         "bottom5_bowling_elo_diff": float(t1_bot5_bow - t2_bot5_bow),
     }
     record.update({k: float(v) for k, v in outcome_features.items()})
+
+    if rolling_features is None:
+        rolling_features = {k: float("nan") for k in [
+            "team1_top6_batting_avg_recent", "team1_top6_batting_sr_recent",
+            "team2_top6_batting_avg_recent", "team2_top6_batting_sr_recent",
+            "batting_avg_recent_diff", "batting_sr_recent_diff",
+            "team1_bowlers_avg_recent", "team1_bowlers_econ_recent",
+            "team2_bowlers_avg_recent", "team2_bowlers_econ_recent",
+            "bowling_avg_recent_diff", "bowling_econ_recent_diff",
+            "team1_n_inform_batters", "team1_n_outofform_batters",
+            "team2_n_inform_batters", "team2_n_outofform_batters",
+            "inform_batters_diff", "outofform_batters_diff",
+        ]}
+    record.update({k: float(v) for k, v in rolling_features.items()})
     return record
 
 
@@ -645,12 +773,14 @@ def materialize(
             pre_match_elo.batting_elo = dict(temp_elo.batting_elo)
             pre_match_elo.bowling_elo = dict(temp_elo.bowling_elo)
 
-            # M2: compute outcome-dist features against PRE-MATCH live
-            # trackers — same temporal semantics as pre_match_elo. Must
-            # run before parse_match_data_v2 mutates temp_stats/temp_venue.
+            # M2 + M3: compute lineup-aggregate features against
+            # PRE-MATCH live trackers — same temporal semantics as
+            # pre_match_elo. Must run before parse_match_data_v2 mutates
+            # temp_stats/temp_venue.
             info = data.get("info", {})
             teams_info = info.get("teams", [])
             outcome_features = None
+            rolling_features = None
             if len(teams_info) == 2:
                 team1, team2 = teams_info[0], teams_info[1]
                 player_registry = info.get("registry", {}).get("people", {})
@@ -666,6 +796,9 @@ def materialize(
                     t2_pace_pre, t2_spin_pre, t2_lhb_pre,
                     venue, temp_stats, temp_venue, prior,
                     k_player=k_player, k_venue=k_venue,
+                )
+                rolling_features = _rolling_form_features(
+                    t1_ids, t2_ids, temp_stats,
                 )
 
             rows, _it, vname, innings_details, chase_won = (
@@ -687,6 +820,7 @@ def materialize(
                 match_id, match_date, data, rows,
                 metadata, pre_match_elo, form_tracker, h2h_tracker, home_tracker,
                 outcome_features=outcome_features,
+                rolling_features=rolling_features,
             )
             if record is None:
                 n_dropped += 1
