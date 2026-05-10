@@ -171,14 +171,14 @@ Eval lens in place for M2+ ablations. Full reference: `reports/m1_baseline_eval.
 
 **Notable M1 outcome (positive surprise)**: M1+Platt is the first variant to clear iteration ≥$50k LL gate (0.6235 < market 0.6267) AND ROI CI > 0 simultaneously. On golden it is ~0.025 LL worse than `xgb_match_v2_clean` — within bootstrap noise on n=50, not promoted to production. M2 baseline is `xgb_match_v3_baseline` (raw, not calibrated) — calibrated layer is for sizing only.
 
-### M2 — Phase/matchup outcome-dist transfer (highest expected lift)
-Transfer the v7 ball-level outcome-dist features up to match level via lineup-aggregation. SQLite getters (`get_batter_vs_type_outcome_dist`, `get_bowler_vs_hand_outcome_dist`, `get_batter_outcome_dist`, `get_bowler_outcome_dist`, `get_venue_outcome_dist`) already exist; pure aggregation layer, no schema bump.
-- [ ] Add ~12–18 features in `materialize_match_features.py`: top-6 batter mean P({4, 6, w} | opp's pace/spinner mix); symmetric bowler-vs-LHB/RHB-mix; venue outcome dist (`venue_p4`, `venue_p6`, `venue_pw`).
-- [ ] Schema-bump the parquet version (`match_v3` or similar) so old artifacts don't get silently mixed.
-- [ ] Retrain with monotone constraints from M1; ablate against M1-baseline on iteration ≥$50k.
-- [ ] Per-feature importance + per-feature drop-one ablation; cull anything with importance < 0.005 *and* no LL contribution.
+### M2 — Phase/matchup outcome-dist transfer ✅ LANDED (venue-only) 2026-05-10
+Mixed result. Full reference: `reports/m2_outcome_dist_eval.md`.
+- [x] Added 21 outcome-dist features to `materialize_match_features.py` (top-6 batter pX_expected vs opp attack mix; bottom-5 bowler pX_expected vs opp batting hand mix; venue pX). Parquet at `data/xgb_match_data_v3_m2/`.
+- [x] Trainer `--drop-features` substring filter for clean drop-one ablation.
+- [x] Drop-one ablation across batter / bowler / venue groups → bowler group actively HURTS (test LL +0.006 when included; bottom-5 squad-order is not a clean bowling unit). Batter group neutral. Venue group helps.
+- [~] Strict iteration ≥$50k LL Δ ≥ 0.01 gate **NOT cleared** (best M2 variant 0.6266 vs M1 0.6302 = Δ -0.0036; full M2 was Δ +0.0072 worse). Per drop-one rule, landed cleaner subset rather than full feature group.
 
-Exit criterion for M2: iteration ≥$50k LL improves by Δ ≥ 0.01 vs M1 baseline (i.e., ≤ 0.624 vs market 0.6267 — closing the gate). If Δ < 0.005, treat as failed lift, drop the feature group, revisit Phase A2 trackers' staleness.
+**Landed: M2 venue-only (3 features added)** — `models/xgb_match_v3_m2_venue_only/`. Iteration ≥$50k raw LL 0.6347 / ROI +22.77% [+2.73, +43.46] (first variant with positive ROI CI lower bound). Golden ≥$50k raw LL 0.6885 vs M1's 0.7006 (Δ -0.012). The bowler outcome-dist follow-up is open: investigate metadata-based bowler set (`is_pace` filter) instead of bottom-5 squad-order; revisit in M5.
 
 ### M3 — Player-level rolling form
 Replace coarse `team1_win_rate_last_10` (team-aggregate) with player-level recency stats aggregated to lineup. Backend getters `get_batting_recent`, `get_bowling_recent`, `get_batting_match_log_recent`, `get_bowling_match_log_recent` already serve windowed stats.

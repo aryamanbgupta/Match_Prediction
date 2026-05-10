@@ -56,6 +56,20 @@ _MONOTONE_SIGNS = {
     "h2h_team1_win_rate_shrunk": 1,
     "is_team1_home": 1,
     "is_team2_home": -1,
+    # M2 (2026-05-10) outcome-dist diffs.
+    # batting diffs: team1 batters' expected boundary rate − team2's.
+    # Higher team1 boundary rate = team1 scores more = wins more.
+    "p4_batting_diff": 1,
+    "p6_batting_diff": 1,
+    # pw_batting_diff: HIGHER team1 wicket-as-batter rate = team1 batters
+    # get out more often = team1 wins LESS.
+    "pw_batting_diff": -1,
+    # bowling diffs: team1 bowlers' expected boundary rate CONCEDED − team2's.
+    # Higher team1 conceded = team1 leaks more boundaries = team1 wins LESS.
+    "p4_bowling_diff": -1,
+    "p6_bowling_diff": -1,
+    # pw_bowling_diff: HIGHER team1 wicket-taking rate = team1 wins MORE.
+    "pw_bowling_diff": 1,
 }
 
 
@@ -131,6 +145,13 @@ def train_model(args) -> tuple:
     test = _apply_encoders(test, encoders)
 
     feat_cols = _feature_columns(numeric, encoders)
+
+    if args.drop_features:
+        drop_subs = [s.strip() for s in args.drop_features.split(",") if s.strip()]
+        before = len(feat_cols)
+        feat_cols = [c for c in feat_cols if not any(s in c for s in drop_subs)]
+        print(f"  drop_features: {drop_subs}  →  {before} → {len(feat_cols)} features")
+
     print(f"  features ({len(feat_cols)}): {feat_cols}")
 
     monotone = _build_monotone_constraints(feat_cols) if args.monotone else None
@@ -267,6 +288,14 @@ def main():
                     help="Apply per-feature monotone constraints from "
                     "_MONOTONE_SIGNS. Off by default for back-compat with "
                     "xgb_match_v2_clean baseline; on for xgb_match_v3_baseline+.")
+    ap.add_argument("--drop-features", type=str, default=None,
+                    help="Comma-separated substrings; any feature whose name "
+                    "contains ANY listed substring is excluded from training. "
+                    "Used for drop-one ablation. Examples: "
+                    "'top6_p,top6_pw' drops the M2 batter outcome-dist set; "
+                    "'bowlers_p,pw_bowling_diff,p4_bowling_diff,p6_bowling_diff' "
+                    "drops the M2 bowler set; 'venue_p4,venue_p6,venue_pw' "
+                    "drops M2 venue.")
     ap.add_argument("--config-json", type=str, default=None,
                     help="JSON config from run_experiment (overrides CLI hyperparameters)")
     args = ap.parse_args()

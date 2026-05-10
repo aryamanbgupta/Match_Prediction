@@ -98,6 +98,19 @@ FEATURE_COLUMNS = [
     "top6_batting_elo_diff",
     "team1_bottom5_bowling_elo_avg", "team2_bottom5_bowling_elo_avg",
     "bottom5_bowling_elo_diff",
+    # === M2 (2026-05-10): outcome-dist transfer ===
+    # Top-6 batters' expected p4/p6/pw against opp's pace/spin attack mix.
+    # Each is a lineup-aggregate of per-batter shrunk vs-pace/spin distribution.
+    "team1_top6_p4_expected", "team1_top6_p6_expected", "team1_top6_pw_expected",
+    "team2_top6_p4_expected", "team2_top6_p6_expected", "team2_top6_pw_expected",
+    # Bottom-5 bowlers' expected p4/p6/pw conceded vs opp's LHB/RHB batting mix.
+    "team1_bowlers_p4_expected", "team1_bowlers_p6_expected", "team1_bowlers_pw_expected",
+    "team2_bowlers_p4_expected", "team2_bowlers_p6_expected", "team2_bowlers_pw_expected",
+    # Diffs
+    "p4_batting_diff", "p6_batting_diff", "pw_batting_diff",
+    "p4_bowling_diff", "p6_bowling_diff", "pw_bowling_diff",
+    # Venue outcome distribution (k_venue=200, shrunk to corpus prior π).
+    "venue_p4", "venue_p6", "venue_pw",
 ]
 
 METADATA_COLUMNS = [
@@ -201,6 +214,107 @@ def _lineup_mix_counts(lineup_ids: List[str], metadata) -> Tuple[int, int, int]:
     return lhb, pace, spin
 
 
+def _expected_outcome_features(
+    team1_lineup: List[str], team2_lineup: List[str],
+    t1_pace: int, t1_spin: int, t1_lhb: int,
+    t2_pace: int, t2_spin: int, t2_lhb: int,
+    venue: str,
+    temp_stats, temp_venue, prior,
+    top_n: int = 6, k_player: float = 30.0, k_venue: float = 200.0,
+) -> Dict[str, float]:
+    """Return ~15 outcome-dist match features (M2, 2026-05-10).
+
+    Per-batter and per-bowler distributions come from `temp_stats` (a
+    PlayerStatsTracker holding pre-match state — same semantics as
+    pre_match_elo). Each is empirical-Bayes-shrunk via the existing v7
+    machinery. Lineup aggregation: top-6 batters' mean expected p_class
+    against the opposing attack mix (pace_share / spin_share); bottom-5
+    bowlers' mean expected p_class CONCEDED vs opp's batting hand mix
+    (lhb_share / rhb_share, with rhb_share computed as 1 - lhb_share
+    against the top-6, treating unknowns as RHB to match metadata
+    convention). Venue dist is the shrunk match-level distribution at
+    this venue.
+
+    Returns a dict with the 15 expected_* + 6 diff + 3 venue keys
+    consumed by `_build_match_record`.
+    """
+    def _pace_spin_share(pace: int, spin: int) -> Tuple[float, float]:
+        total = pace + spin
+        if total == 0:
+            return 0.5, 0.5
+        return pace / total, spin / total
+
+    def _lhb_rhb_share(lhb: int, top: int) -> Tuple[float, float]:
+        if top <= 0:
+            return 0.0, 1.0
+        share = lhb / top
+        return min(max(share, 0.0), 1.0), 1.0 - min(max(share, 0.0), 1.0)
+
+    def _agg_batters(lineup: List[str], opp_pace_share: float,
+                      opp_spin_share: float) -> Tuple[float, float, float]:
+        top = lineup[:top_n]
+        if not top:
+            return prior[3], prior[4], prior[5]
+        s_p4 = s_p6 = s_pw = 0.0
+        for pid in top:
+            d = temp_stats.get_batter_vs_type_outcome_dist(pid, prior, k=k_player)
+            s_p4 += opp_pace_share * d['batter_p4_vs_pace'] + opp_spin_share * d['batter_p4_vs_spin']
+            s_p6 += opp_pace_share * d['batter_p6_vs_pace'] + opp_spin_share * d['batter_p6_vs_spin']
+            s_pw += opp_pace_share * d['batter_pw_vs_pace'] + opp_spin_share * d['batter_pw_vs_spin']
+        n = len(top)
+        return s_p4 / n, s_p6 / n, s_pw / n
+
+    def _agg_bowlers(lineup: List[str], opp_lhb_share: float,
+                      opp_rhb_share: float) -> Tuple[float, float, float]:
+        bottom = lineup[top_n:]
+        if not bottom:
+            return prior[3], prior[4], prior[5]
+        s_p4 = s_p6 = s_pw = 0.0
+        for pid in bottom:
+            d = temp_stats.get_bowler_vs_hand_outcome_dist(pid, prior, k=k_player)
+            s_p4 += opp_lhb_share * d['bowler_p4_vs_lhb'] + opp_rhb_share * d['bowler_p4_vs_rhb']
+            s_p6 += opp_lhb_share * d['bowler_p6_vs_lhb'] + opp_rhb_share * d['bowler_p6_vs_rhb']
+            s_pw += opp_lhb_share * d['bowler_pw_vs_lhb'] + opp_rhb_share * d['bowler_pw_vs_rhb']
+        n = len(bottom)
+        return s_p4 / n, s_p6 / n, s_pw / n
+
+    t2_pace_share, t2_spin_share = _pace_spin_share(t2_pace, t2_spin)
+    t1_pace_share, t1_spin_share = _pace_spin_share(t1_pace, t1_spin)
+    t2_lhb_share, t2_rhb_share = _lhb_rhb_share(t2_lhb, top_n)
+    t1_lhb_share, t1_rhb_share = _lhb_rhb_share(t1_lhb, top_n)
+
+    t1_b_p4, t1_b_p6, t1_b_pw = _agg_batters(team1_lineup, t2_pace_share, t2_spin_share)
+    t2_b_p4, t2_b_p6, t2_b_pw = _agg_batters(team2_lineup, t1_pace_share, t1_spin_share)
+    t1_w_p4, t1_w_p6, t1_w_pw = _agg_bowlers(team1_lineup, t2_lhb_share, t2_rhb_share)
+    t2_w_p4, t2_w_p6, t2_w_pw = _agg_bowlers(team2_lineup, t1_lhb_share, t1_rhb_share)
+
+    venue_dist = temp_venue.get_venue_outcome_dist(venue, prior, k=k_venue)
+
+    return {
+        "team1_top6_p4_expected": t1_b_p4,
+        "team1_top6_p6_expected": t1_b_p6,
+        "team1_top6_pw_expected": t1_b_pw,
+        "team2_top6_p4_expected": t2_b_p4,
+        "team2_top6_p6_expected": t2_b_p6,
+        "team2_top6_pw_expected": t2_b_pw,
+        "team1_bowlers_p4_expected": t1_w_p4,
+        "team1_bowlers_p6_expected": t1_w_p6,
+        "team1_bowlers_pw_expected": t1_w_pw,
+        "team2_bowlers_p4_expected": t2_w_p4,
+        "team2_bowlers_p6_expected": t2_w_p6,
+        "team2_bowlers_pw_expected": t2_w_pw,
+        "p4_batting_diff": t1_b_p4 - t2_b_p4,
+        "p6_batting_diff": t1_b_p6 - t2_b_p6,
+        "pw_batting_diff": t1_b_pw - t2_b_pw,
+        "p4_bowling_diff": t1_w_p4 - t2_w_p4,
+        "p6_bowling_diff": t1_w_p6 - t2_w_p6,
+        "pw_bowling_diff": t1_w_pw - t2_w_pw,
+        "venue_p4": venue_dist["venue_p4"],
+        "venue_p6": venue_dist["venue_p6"],
+        "venue_pw": venue_dist["venue_pw"],
+    }
+
+
 def _split_elo(lineup_ids: List[str], elo_tracker,
                top_n: int = 6) -> Tuple[float, float]:
     """Return (top-N batting ELO mean, bottom-(len−N) bowling ELO mean)
@@ -229,6 +343,7 @@ def _build_match_record(
     form_tracker: TeamFormTracker,
     h2h_tracker: H2HTracker,
     home_tracker: HomeVenueTracker,
+    outcome_features: Optional[Dict[str, float]] = None,
 ) -> Optional[dict]:
     """Collapse per-ball rows into a single match-level record. Returns
     None if the match has no valid winner (no-result / abandoned).
@@ -350,6 +465,24 @@ def _build_match_record(
     is_t1_home = home_tracker.is_home(team1, venue, match_date)
     is_t2_home = home_tracker.is_home(team2, venue, match_date)
 
+    # === M2 outcome-dist features ===
+    # `outcome_features` is computed by the materialize loop BEFORE
+    # parse_match_data_v2 runs, so the per-batter / per-bowler / venue
+    # distributions reflect pre-this-match state (frozen mode: snapshot
+    # at freeze_as_of; normal mode: live tracker not yet mutated by
+    # parse for THIS match — same temporal semantics as `pre_match_elo`).
+    if outcome_features is None:
+        # Back-compat: callers that don't pass it get NaN-filled M2 cols.
+        outcome_features = {k: float("nan") for k in [
+            "team1_top6_p4_expected", "team1_top6_p6_expected", "team1_top6_pw_expected",
+            "team2_top6_p4_expected", "team2_top6_p6_expected", "team2_top6_pw_expected",
+            "team1_bowlers_p4_expected", "team1_bowlers_p6_expected", "team1_bowlers_pw_expected",
+            "team2_bowlers_p4_expected", "team2_bowlers_p6_expected", "team2_bowlers_pw_expected",
+            "p4_batting_diff", "p6_batting_diff", "pw_batting_diff",
+            "p4_bowling_diff", "p6_bowling_diff", "pw_bowling_diff",
+            "venue_p4", "venue_p6", "venue_pw",
+        ]}
+
     record = {
         "match_id": synth_match_id,
         "cricsheet_id": match_id,  # keep the JSON filename stem for debug
@@ -413,6 +546,7 @@ def _build_match_record(
         "team2_bottom5_bowling_elo_avg": float(t2_bot5_bow),
         "bottom5_bowling_elo_diff": float(t1_bot5_bow - t2_bot5_bow),
     }
+    record.update({k: float(v) for k, v in outcome_features.items()})
     return record
 
 
@@ -511,6 +645,29 @@ def materialize(
             pre_match_elo.batting_elo = dict(temp_elo.batting_elo)
             pre_match_elo.bowling_elo = dict(temp_elo.bowling_elo)
 
+            # M2: compute outcome-dist features against PRE-MATCH live
+            # trackers — same temporal semantics as pre_match_elo. Must
+            # run before parse_match_data_v2 mutates temp_stats/temp_venue.
+            info = data.get("info", {})
+            teams_info = info.get("teams", [])
+            outcome_features = None
+            if len(teams_info) == 2:
+                team1, team2 = teams_info[0], teams_info[1]
+                player_registry = info.get("registry", {}).get("people", {})
+                t1_names = info.get("players", {}).get(team1, [])
+                t2_names = info.get("players", {}).get(team2, [])
+                t1_ids = [player_registry.get(n, n) for n in t1_names]
+                t2_ids = [player_registry.get(n, n) for n in t2_names]
+                t1_lhb_pre, t1_pace_pre, t1_spin_pre = _lineup_mix_counts(t1_ids, metadata)
+                t2_lhb_pre, t2_pace_pre, t2_spin_pre = _lineup_mix_counts(t2_ids, metadata)
+                outcome_features = _expected_outcome_features(
+                    t1_ids, t2_ids,
+                    t1_pace_pre, t1_spin_pre, t1_lhb_pre,
+                    t2_pace_pre, t2_spin_pre, t2_lhb_pre,
+                    venue, temp_stats, temp_venue, prior,
+                    k_player=k_player, k_venue=k_venue,
+                )
+
             rows, _it, vname, innings_details, chase_won = (
                 parse_match_data_v2(
                     json_text, temp_stats, temp_venue, metadata,
@@ -529,6 +686,7 @@ def materialize(
             record = _build_match_record(
                 match_id, match_date, data, rows,
                 metadata, pre_match_elo, form_tracker, h2h_tracker, home_tracker,
+                outcome_features=outcome_features,
             )
             if record is None:
                 n_dropped += 1
