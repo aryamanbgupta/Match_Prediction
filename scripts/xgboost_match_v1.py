@@ -40,6 +40,31 @@ METADATA_COLS = {
 }
 CATEGORICAL_FEATURES = ["venue", "competition_tier"]
 
+# Per-feature monotone constraints (M1, 2026-05-10). Only directional features
+# whose sign w.r.t. P(team1_wins) is physically unambiguous get constrained;
+# style/composition features (lineup mix counts, venue character, toss flags)
+# are left unconstrained (0) so the model can still pick up interactions.
+# bowling_econ_diff is sign-flipped because LOWER team1 economy = BETTER team1.
+_MONOTONE_SIGNS = {
+    "top6_batting_elo_diff": 1,
+    "bottom5_bowling_elo_diff": 1,
+    "elo_diff_batting": 1,
+    "elo_diff_bowling": 1,
+    "win_rate_diff": 1,
+    "batting_avg_diff": 1,
+    "bowling_econ_diff": -1,
+    "h2h_team1_win_rate_shrunk": 1,
+    "is_team1_home": 1,
+    "is_team2_home": -1,
+}
+
+
+def _build_monotone_constraints(feat_cols: list) -> tuple:
+    """Return a tuple of {-1, 0, 1} aligned to feat_cols index order, ready
+    to pass into XGBClassifier(monotone_constraints=...).
+    """
+    return tuple(_MONOTONE_SIGNS.get(c, 0) for c in feat_cols)
+
 
 def _load_split(data_dir: Path, name: str) -> pd.DataFrame:
     path = data_dir / f"{name}.parquet"
@@ -108,6 +133,13 @@ def train_model(args) -> tuple:
     feat_cols = _feature_columns(numeric, encoders)
     print(f"  features ({len(feat_cols)}): {feat_cols}")
 
+    monotone = _build_monotone_constraints(feat_cols) if args.monotone else None
+    if monotone is not None:
+        n_constrained = sum(1 for s in monotone if s != 0)
+        print(f"  monotone constraints: {n_constrained}/{len(feat_cols)} features"
+              f" constrained ({sum(1 for s in monotone if s == 1)} +1, "
+              f"{sum(1 for s in monotone if s == -1)} -1)")
+
     X_train, y_train = train[feat_cols], train["team1_wins"]
     X_val, y_val = val[feat_cols], val["team1_wins"]
     X_test, y_test = test[feat_cols], test["team1_wins"]
@@ -123,6 +155,7 @@ def train_model(args) -> tuple:
         reg_alpha=args.reg_alpha,
         reg_lambda=args.reg_lambda,
         early_stopping_rounds=args.early_stopping_rounds,
+        monotone_constraints=monotone,
         random_state=29,
     )
 
@@ -230,6 +263,10 @@ def main():
     ap.add_argument("--reg-alpha", type=float, default=0.1)
     ap.add_argument("--reg-lambda", type=float, default=1.0)
     ap.add_argument("--early-stopping-rounds", type=int, default=30)
+    ap.add_argument("--monotone", action="store_true",
+                    help="Apply per-feature monotone constraints from "
+                    "_MONOTONE_SIGNS. Off by default for back-compat with "
+                    "xgb_match_v2_clean baseline; on for xgb_match_v3_baseline+.")
     ap.add_argument("--config-json", type=str, default=None,
                     help="JSON config from run_experiment (overrides CLI hyperparameters)")
     args = ap.parse_args()

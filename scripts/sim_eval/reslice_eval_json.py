@@ -3,18 +3,26 @@ Post-hoc re-slicer for previously saved match-level eval JSONs.
 
 Loads an existing eval result file (with per-match `log_loss` /
 `realized_pnl` etc.) and a polymarket-style odds file (with
-`polymarket_volume_usd`), and produces 3 sliced summaries (all / >=$50k
-/ >=$100k) using the same bootstrap-CI helper that powers
-run_sim_eval.py. This avoids ~30 min of redundant re-eval compute when
-the only change is the liquidity filter — useful for back-filling
-sliced metrics on already-trained models (e.g., the v4 post-fix
-baseline at eval_out_postfix/xgboost_20260421_220541.json).
+`polymarket_volume_usd`), and produces sliced summaries using the same
+bootstrap-CI helper that powers run_sim_eval.py. Default loop emits all
+/ ≥$50k / ≥$100k volume slices; pass --slice to apply an additional
+predicate (IPL-only, international-only, mismatch, close).
+
+Adversarial slices (M1, 2026-05-10) require feature-row joining for
+is_international / top6_batting_elo_diff / competition_tier — pass
+--feature-parquet pointing at the materialized parquet that produced the
+predictions JSON. --stratify-by tier_x_half enables stratified bootstrap
+(stratum = competition_tier × early/late half of the match-date range).
 
 Usage:
     uv run python scripts/sim_eval/reslice_eval_json.py \\
         --in  eval_out_postfix/xgboost_20260421_220541.json \\
         --odds betting_odds_polymarket.json \\
         --out-dir eval_out_phase1_sliced_v4
+    uv run python scripts/sim_eval/reslice_eval_json.py \\
+        --in  ... --odds ... --out-dir ... \\
+        --slice ipl --feature-parquet data/xgb_match_data_v2_clean/test.parquet \\
+        --stratify-by tier_x_half
 """
 
 import argparse
@@ -29,57 +37,186 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
 
+SLICE_NAMES = ("all", "ipl", "international", "mismatch", "close")
+
+# IPL franchises 2025–2026 era. A match counts as IPL iff BOTH teams are in
+# this set. competition_tier alone won't do it — tier 3 also covers MLC, CPL,
+# BBL, Hundred, SA20, T20 Blast.
+_IPL_TEAMS = frozenset({
+    "Chennai Super Kings",
+    "Delhi Capitals",
+    "Gujarat Titans",
+    "Kolkata Knight Riders",
+    "Lucknow Super Giants",
+    "Mumbai Indians",
+    "Punjab Kings",
+    "Rajasthan Royals",
+    "Royal Challengers Bengaluru",
+    "Royal Challengers Bangalore",  # legacy name pre-2024 rebrand
+    "Sunrisers Hyderabad",
+})
+
+
 def _bootstrap_ci(values: List[float], n: int = 1000, ci: float = 0.95,
-                  seed: int = 42) -> tuple:
+                  seed: int = 42, strata: Optional[List] = None) -> tuple:
+    """Percentile bootstrap. If strata given, resample within each
+    stratum and concat — preserves stratum sizes (standard stratified
+    bootstrap). Returns (low, high) of mean(values).
+    """
     if not values:
         return (float('nan'), float('nan'))
     arr = np.asarray(values, dtype=float)
     rng = np.random.default_rng(seed)
-    idx = rng.integers(0, len(arr), size=(n, len(arr)))
-    means = arr[idx].mean(axis=1)
+    if strata is None:
+        idx = rng.integers(0, len(arr), size=(n, len(arr)))
+        means = arr[idx].mean(axis=1)
+    else:
+        if len(strata) != len(arr):
+            raise ValueError(f"strata length {len(strata)} != values "
+                             f"length {len(arr)}")
+        groups: Dict = {}
+        for i, s in enumerate(strata):
+            groups.setdefault(s, []).append(i)
+        sums = np.zeros(n)
+        for members in groups.values():
+            m = len(members)
+            resampled = rng.integers(0, m, size=(n, m))
+            sums += arr[np.asarray(members)][resampled].sum(axis=1)
+        means = sums / len(arr)
     alpha = (1 - ci) / 2
     return (float(np.quantile(means, alpha)),
             float(np.quantile(means, 1 - alpha)))
 
 
+def _load_feature_lookup(feature_parquet: Optional[Path]) -> Dict[str, Dict]:
+    """Build match_id → {team1, team2, is_international, top6_batting_elo_diff,
+    competition_tier, match_date} lookup from the parquet that produced
+    the predictions JSON. Empty dict if no parquet given.
+    """
+    if feature_parquet is None:
+        return {}
+    import pandas as pd
+    df = pd.read_parquet(feature_parquet)
+    cols = ["match_id", "team1", "team2", "is_international",
+            "top6_batting_elo_diff", "competition_tier", "match_date"]
+    have = [c for c in cols if c in df.columns]
+    return {row["match_id"]: {c: row[c] for c in have if c != "match_id"}
+            for _, row in df[have].iterrows()}
+
+
+def _slice_predicate(slice_name: str, mismatch_thresh: float,
+                     close_thresh: float):
+    """Return a function (match, feat_row) -> bool. feat_row may be {}.
+    Team names live on the match object (eval JSON preserves the
+    materializer fields); ELO/tier/intl come from the joined feature row.
+    """
+    if slice_name == "all":
+        return lambda m, f: True
+    if slice_name == "ipl":
+        # Eval JSON match objects use `teams` (list); parquet feat_row
+        # provides `team1`/`team2`. Prefer parquet when joined.
+        def _is_ipl(m, f):
+            t1 = f.get("team1")
+            t2 = f.get("team2")
+            if t1 is None or t2 is None:
+                teams = m.get("teams") or []
+                if len(teams) == 2:
+                    t1, t2 = teams[0], teams[1]
+            return t1 in _IPL_TEAMS and t2 in _IPL_TEAMS
+        return _is_ipl
+    if slice_name == "international":
+        return lambda m, f: bool(f.get("is_international", 0))
+    if slice_name == "mismatch":
+        return lambda m, f: abs(f.get("top6_batting_elo_diff", 0.0)) >= mismatch_thresh
+    if slice_name == "close":
+        return lambda m, f: abs(f.get("top6_batting_elo_diff", 0.0)) <= close_thresh
+    raise ValueError(f"Unknown slice: {slice_name}")
+
+
+def _build_strata(matches: List[dict], feat_lookup: Dict[str, Dict],
+                  mode: str) -> Optional[List]:
+    """Build a per-match stratum label list. Mode 'tier_x_half' splits
+    on (competition_tier, early/late half of date range). Returns None
+    if mode is None or unknown.
+    """
+    if mode is None or mode == "none":
+        return None
+    if mode != "tier_x_half":
+        raise ValueError(f"Unknown stratify mode: {mode}")
+    dates = sorted(set(
+        feat_lookup.get(m["match_id"], {}).get("match_date")
+        for m in matches
+        if feat_lookup.get(m["match_id"], {}).get("match_date") is not None
+    ))
+    if not dates:
+        return None
+    median_date = dates[len(dates) // 2]
+    strata = []
+    for m in matches:
+        f = feat_lookup.get(m["match_id"], {})
+        tier = f.get("competition_tier", "unknown")
+        d = f.get("match_date")
+        half = "early" if d is not None and d <= median_date else "late"
+        strata.append((tier, half))
+    return strata
+
+
 def reslice(eval_json_path: str, odds_json_path: str,
-            min_volume: Optional[float], n_resamples: int = 1000) -> Dict:
-    """Recompute summary stats over the slice {match: vol >= min_volume}."""
+            min_volume: Optional[float], n_resamples: int = 1000,
+            slice_name: str = "all",
+            feature_parquet: Optional[Path] = None,
+            mismatch_thresh: float = 15.0,
+            close_thresh: float = 5.0,
+            stratify_by: Optional[str] = None) -> Dict:
+    """Recompute summary stats over the slice {match: vol >= min_volume
+    AND predicate(slice_name)}.
+    """
     with open(eval_json_path) as f:
         eval_data = json.load(f)
     with open(odds_json_path) as f:
         odds_data = json.load(f)
 
-    # Build match_id → volume lookup (None if field absent).
-    vol_by_id = {}
-    for m in odds_data.get('matches', []):
-        vol_by_id[m['match_id']] = m.get('polymarket_volume_usd')
+    vol_by_id = {m['match_id']: m.get('polymarket_volume_usd')
+                 for m in odds_data.get('matches', [])}
+    feat_lookup = _load_feature_lookup(feature_parquet)
+    predicate = _slice_predicate(slice_name, mismatch_thresh, close_thresh)
 
     matches = eval_data.get('matches', [])
     kept_matches = []
     for match in matches:
-        if min_volume is None:
-            kept_matches.append(match)
-            continue
-        vol = vol_by_id.get(match['match_id'])
-        if vol is None or vol < min_volume:
+        if min_volume is not None:
+            vol = vol_by_id.get(match['match_id'])
+            if vol is None or vol < min_volume:
+                continue
+        feat = feat_lookup.get(match['match_id'], {})
+        if not predicate(match, feat):
             continue
         kept_matches.append(match)
 
-    log_losses = [m['log_loss'] for m in kept_matches
-                  if m.get('log_loss') is not None and not (
-                      isinstance(m['log_loss'], float) and np.isnan(m['log_loss']))]
+    def _is_valid_ll(m):
+        ll = m.get('log_loss')
+        return ll is not None and not (isinstance(ll, float) and np.isnan(ll))
+
+    def _has_bet(m):
+        return m.get('realized_pnl') not in (None, 0, 0.0)
+
+    ll_matches = [m for m in kept_matches if _is_valid_ll(m)]
+    log_losses = [m['log_loss'] for m in ll_matches]
     brier_scores = [m['brier_score'] for m in kept_matches
                     if m.get('brier_score') is not None and not (
                         isinstance(m['brier_score'], float) and np.isnan(m['brier_score']))]
 
-    # Flat-betting P&L: only matches where a bet was placed (realized_pnl != 0).
-    flat_returns = [m['realized_pnl'] for m in kept_matches
-                    if m.get('realized_pnl') not in (None, 0, 0.0)]
+    flat_betting_matches = [m for m in kept_matches if _has_bet(m)]
+    flat_returns = [m['realized_pnl'] for m in flat_betting_matches]
 
-    # CI on per-match log loss; CI on flat P&L (then ×100 for ROI).
-    ll_lo, ll_hi = _bootstrap_ci(log_losses, n=n_resamples)
-    pl_lo, pl_hi = _bootstrap_ci(flat_returns, n=n_resamples)
+    # Strata are filtered to the same subset they're scoring against.
+    ll_strata = _build_strata(ll_matches, feat_lookup, stratify_by) \
+        if stratify_by else None
+    roi_strata = _build_strata(flat_betting_matches, feat_lookup, stratify_by) \
+        if stratify_by else None
+
+    ll_lo, ll_hi = _bootstrap_ci(log_losses, n=n_resamples, strata=ll_strata)
+    pl_lo, pl_hi = _bootstrap_ci(flat_returns, n=n_resamples, strata=roi_strata)
 
     avg_log_loss = float(np.mean(log_losses)) if log_losses else float('nan')
     avg_brier = float(np.mean(brier_scores)) if brier_scores else float('nan')
@@ -92,16 +229,18 @@ def reslice(eval_json_path: str, odds_json_path: str,
 
     win_rate = (sum(1 for r in flat_returns if r > 0) / bets_placed) if bets_placed else 0.0
 
-    if min_volume is None:
-        slice_tag = "all"
-    else:
-        slice_tag = f"min_volume_{int(min_volume)}"
+    vol_tag = "all" if min_volume is None else f"min_volume_{int(min_volume)}"
+    slice_tag = vol_tag if slice_name == "all" else f"{slice_name}_{vol_tag}"
 
     summary = {
         'reslice_source': str(Path(eval_json_path).resolve()),
         'reslice_odds':   str(Path(odds_json_path).resolve()),
         'slice':          slice_tag,
+        'slice_name':     slice_name,
         'min_volume':     min_volume,
+        'mismatch_threshold': mismatch_thresh if slice_name == "mismatch" else None,
+        'close_threshold':    close_thresh if slice_name == "close" else None,
+        'stratify_by':    stratify_by,
         'n_matches_in_source': len(matches),
         'n_matches_evaluated': len(kept_matches),
         'avg_log_loss':            avg_log_loss,
@@ -120,21 +259,55 @@ def reslice(eval_json_path: str, odds_json_path: str,
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Re-slice an existing match-eval JSON by polymarket liquidity.')
+    parser = argparse.ArgumentParser(description='Re-slice an existing match-eval JSON by polymarket liquidity and adversarial slice predicate.')
     parser.add_argument('--in', dest='in_path', required=True, help='Path to eval results JSON to re-slice.')
     parser.add_argument('--odds', required=True, help='Polymarket-style odds JSON with polymarket_volume_usd.')
     parser.add_argument('--out-dir', required=True, help='Output directory for sliced JSONs.')
     parser.add_argument('--bootstrap-resamples', type=int, default=1000)
+    parser.add_argument('--slice', choices=SLICE_NAMES, default="all",
+                        help='Adversarial slice predicate. Composes with '
+                        '--min-volume (intersection). Default: all.')
+    parser.add_argument('--mismatch-threshold', type=float, default=15.0,
+                        help='|top6_batting_elo_diff| >= this is "mismatch". '
+                        'Default 15.0 ≈ q90 of |diff| on the iteration test set; '
+                        'top6 ELO is averaged over 6 batters so absolute diffs '
+                        'are ~10x smaller than per-player ELO.')
+    parser.add_argument('--close-threshold', type=float, default=5.0,
+                        help='|top6_batting_elo_diff| <= this is "close". '
+                        'Default 5.0 ≈ median of |diff| on iteration test.')
+    parser.add_argument('--feature-parquet', type=Path, default=None,
+                        help='Parquet path with match_id + is_international + '
+                        'top6_batting_elo_diff + competition_tier + match_date '
+                        'for slice predicates and stratification. '
+                        'E.g. data/xgb_match_data_v2_clean/test.parquet.')
+    parser.add_argument('--stratify-by', choices=("none", "tier_x_half"),
+                        default="none",
+                        help='Stratify the bootstrap by '
+                        '(competition_tier, early/late half). Default: none.')
+    parser.add_argument('--min-volume', type=int, action="append", default=None,
+                        help='Volume threshold(s). Repeat for multiple. If '
+                        'omitted, defaults to (None, 50000, 100000) — three '
+                        'slices in one call (back-compat).')
     args = parser.parse_args()
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-
     src_stem = Path(args.in_path).stem
+    stratify = None if args.stratify_by == "none" else args.stratify_by
 
-    for min_vol in (None, 50_000, 100_000):
+    if args.min_volume is None:
+        min_vol_list = [None, 50_000, 100_000]
+    else:
+        min_vol_list = list(args.min_volume)
+
+    for min_vol in min_vol_list:
         result = reslice(args.in_path, args.odds, min_vol,
-                         n_resamples=args.bootstrap_resamples)
+                         n_resamples=args.bootstrap_resamples,
+                         slice_name=args.slice,
+                         feature_parquet=args.feature_parquet,
+                         mismatch_thresh=args.mismatch_threshold,
+                         close_thresh=args.close_threshold,
+                         stratify_by=stratify)
         slice_tag = result['summary']['slice']
         out_path = out_dir / f"{src_stem}_{slice_tag}.json"
         with open(out_path, 'w') as f:

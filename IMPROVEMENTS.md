@@ -1097,7 +1097,7 @@ Tactical decision-making (field placement, bowling rotation) is partially captai
 
 #### D. Evaluation upgrades
 
-**D1. CLV (closing line value).** Polymarket has time-stamped order books → closing prob is recoverable. CLV is the gold standard for betting models — a model with positive CLV is empirically picking bets the market revalues toward truth, which is the only durable measure of edge. Sample-size requirements are far gentler than for ROI significance. Feasibility: **today** (data is in the polymarket_prematch_odds JSONs already), ~1 day.
+**D1. CLV (closing line value).** CLV is the gold standard for betting models — a model with positive CLV is empirically picking bets the market revalues toward truth, which is the only durable measure of edge. Sample-size requirements are far gentler than for ROI significance. **Feasibility: BLOCKED on data** (audited 2026-05-10). The current `betting_odds_polymarket.json` carries only one opening-line timestamp per market (no order-book snapshots, no closing line). Recoverable only after forward capture (C2) starts ingesting periodic snapshots through to market resolution. Re-evaluate once we have ≥30 matches with both pre-match and closing snapshots.
 
 **D2. Stratified bootstrap.** Current bootstrap CIs treat matches as exchangeable; stratify by `competition_tier` × early/late half before resampling. Feasibility: **today, hours**.
 

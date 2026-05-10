@@ -718,8 +718,15 @@ class MatchLevelEvaluator:
             return -kelly_fraction
 
     def _bootstrap_ci(self, values: List[float], n_resamples: int = None,
-                      ci: float = 0.95, seed: int = 42) -> Tuple[float, float]:
+                      ci: float = 0.95, seed: int = 42,
+                      strata: Optional[List] = None) -> Tuple[float, float]:
         """Percentile-method bootstrap CI for the mean of `values`.
+
+        If `strata` is provided (one label per value), resampling happens
+        within each stratum, preserving stratum sizes — a standard
+        stratified bootstrap. This widens the CI when within-stratum
+        variance is lower than between-stratum variance, which is the
+        honest framing for cross-tier / cross-period match samples.
 
         Returns (low, high). Returns (nan, nan) on empty input.
         """
@@ -733,8 +740,24 @@ class MatchLevelEvaluator:
         arr = np.asarray(values, dtype=float)
         n = len(arr)
         rng = np.random.default_rng(seed)
-        idx = rng.integers(0, n, size=(n_resamples, n))
-        means = arr[idx].mean(axis=1)
+
+        if strata is None:
+            idx = rng.integers(0, n, size=(n_resamples, n))
+            means = arr[idx].mean(axis=1)
+        else:
+            if len(strata) != n:
+                raise ValueError(
+                    f"strata length {len(strata)} does not match values "
+                    f"length {n}")
+            stratum_to_idx: Dict = {}
+            for i, s in enumerate(strata):
+                stratum_to_idx.setdefault(s, []).append(i)
+            sums = np.zeros(n_resamples)
+            for s, members in stratum_to_idx.items():
+                m = len(members)
+                resampled = rng.integers(0, m, size=(n_resamples, m))
+                sums += arr[np.asarray(members)][resampled].sum(axis=1)
+            means = sums / n
         alpha = (1 - ci) / 2
         return (
             float(np.quantile(means, alpha)),

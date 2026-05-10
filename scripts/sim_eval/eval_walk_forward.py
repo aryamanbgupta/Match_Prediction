@@ -1,0 +1,170 @@
+"""Walk-forward / monthly partition harness for match-level eval JSONs.
+
+M1 (2026-05-10) — partitions an eval JSON's matches by year-month
+(parsed from match_id prefix or from a feature parquet's match_date),
+recomputes summary stats per partition, emits a markdown table.
+
+Catches whether model edge is gaining or losing across the test period
+— a one-shot eval hides per-month drift. Composes with --slice and
+--min-volume identically to reslice_eval_json.py (which it borrows
+helpers from), so e.g. you can do walk-forward on the IPL ≥$50k slice.
+
+Usage:
+    uv run python scripts/sim_eval/eval_walk_forward.py \\
+        --in eval_out_m1_baseline/blend_w0p00.json \\
+        --odds betting_odds_polymarket.json \\
+        --out reports/walk_forward_m1.md
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+from typing import Dict, List, Optional
+
+import numpy as np
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "sim_eval"))
+
+from reslice_eval_json import (  # noqa: E402
+    SLICE_NAMES,
+    _bootstrap_ci,
+    _load_feature_lookup,
+    _slice_predicate,
+)
+
+
+_DATE_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})_")
+
+
+def _match_year_month(match: dict, feat_row: dict) -> Optional[str]:
+    """Resolve YYYY-MM. Prefer parquet's match_date if joined; else
+    parse from match_id prefix.
+    """
+    d = feat_row.get("match_date")
+    if d is not None:
+        return str(d)[:7]
+    mid = match.get("match_id", "")
+    m = _DATE_RE.match(mid)
+    return f"{m.group(1)}-{m.group(2)}" if m else None
+
+
+def walk_forward(eval_json_path: str, odds_json_path: str,
+                 slice_name: str = "all",
+                 feature_parquet: Optional[Path] = None,
+                 mismatch_thresh: float = 15.0,
+                 close_thresh: float = 5.0,
+                 min_volume: Optional[float] = None,
+                 n_resamples: int = 1000) -> List[dict]:
+    """Group matches by YYYY-MM and recompute per-month stats."""
+    eval_data = json.load(open(eval_json_path))
+    odds_data = json.load(open(odds_json_path))
+    vol_by_id = {m["match_id"]: m.get("polymarket_volume_usd")
+                 for m in odds_data.get("matches", [])}
+    feat_lookup = _load_feature_lookup(feature_parquet)
+    predicate = _slice_predicate(slice_name, mismatch_thresh, close_thresh)
+
+    by_month: Dict[str, List[dict]] = {}
+    for match in eval_data.get("matches", []):
+        if min_volume is not None:
+            vol = vol_by_id.get(match["match_id"])
+            if vol is None or vol < min_volume:
+                continue
+        feat = feat_lookup.get(match["match_id"], {})
+        if not predicate(match, feat):
+            continue
+        ym = _match_year_month(match, feat)
+        if ym is None:
+            continue
+        by_month.setdefault(ym, []).append(match)
+
+    rows = []
+    for ym in sorted(by_month):
+        matches = by_month[ym]
+        log_losses = [m["log_loss"] for m in matches
+                      if m.get("log_loss") is not None and not (
+                          isinstance(m["log_loss"], float)
+                          and np.isnan(m["log_loss"]))]
+        flat_returns = [m["realized_pnl"] for m in matches
+                        if m.get("realized_pnl") not in (None, 0, 0.0)]
+        avg_ll = float(np.mean(log_losses)) if log_losses else float("nan")
+        ll_lo, ll_hi = _bootstrap_ci(log_losses, n=n_resamples)
+        bets = len(flat_returns)
+        total_pnl = float(np.sum(flat_returns)) if flat_returns else 0.0
+        roi = (total_pnl / bets * 100) if bets else 0.0
+        roi_lo, roi_hi = _bootstrap_ci(flat_returns, n=n_resamples)
+        win_rate = sum(1 for r in flat_returns if r > 0) / bets if bets else 0.0
+        rows.append({
+            "month": ym,
+            "n_matches": len(matches),
+            "avg_log_loss": avg_ll,
+            "ll_ci_low": ll_lo,
+            "ll_ci_high": ll_hi,
+            "bets": bets,
+            "flat_roi_pct": roi,
+            "roi_ci_low": roi_lo * 100 if not np.isnan(roi_lo) else float("nan"),
+            "roi_ci_high": roi_hi * 100 if not np.isnan(roi_hi) else float("nan"),
+            "win_rate": win_rate,
+        })
+    return rows
+
+
+def to_markdown(rows: List[dict], slice_name: str,
+                min_volume: Optional[float]) -> str:
+    """Render rows to a markdown summary."""
+    vol_tag = "all volumes" if min_volume is None else f"≥${int(min_volume):,}"
+    title = f"# Walk-forward eval — slice={slice_name}, {vol_tag}\n\n"
+    if not rows:
+        return title + "_(no matches in slice)_\n"
+    header = "| Month | n | LL | LL 95% CI | Bets | Flat ROI | ROI 95% CI | Win % |\n"
+    sep = "|---|---|---|---|---|---|---|---|\n"
+    body = []
+    for r in rows:
+        body.append(
+            f"| {r['month']} | {r['n_matches']} | "
+            f"{r['avg_log_loss']:.4f} | "
+            f"[{r['ll_ci_low']:.4f}, {r['ll_ci_high']:.4f}] | "
+            f"{r['bets']} | "
+            f"{r['flat_roi_pct']:+.2f}% | "
+            f"[{r['roi_ci_low']:+.2f}%, {r['roi_ci_high']:+.2f}%] | "
+            f"{r['win_rate']:.1%} |"
+        )
+    return title + header + sep + "\n".join(body) + "\n"
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--in", dest="in_path", required=True)
+    ap.add_argument("--odds", required=True)
+    ap.add_argument("--out", type=Path, required=True,
+                    help="Markdown output path.")
+    ap.add_argument("--slice", choices=SLICE_NAMES, default="all")
+    ap.add_argument("--mismatch-threshold", type=float, default=15.0)
+    ap.add_argument("--close-threshold", type=float, default=5.0)
+    ap.add_argument("--feature-parquet", type=Path, default=None)
+    ap.add_argument("--min-volume", type=int, default=None)
+    ap.add_argument("--bootstrap-resamples", type=int, default=1000)
+    args = ap.parse_args()
+
+    rows = walk_forward(
+        args.in_path, args.odds,
+        slice_name=args.slice,
+        feature_parquet=args.feature_parquet,
+        mismatch_thresh=args.mismatch_threshold,
+        close_thresh=args.close_threshold,
+        min_volume=args.min_volume,
+        n_resamples=args.bootstrap_resamples,
+    )
+    md = to_markdown(rows, args.slice, args.min_volume)
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(md)
+    print(md)
+    print(f"\n  → {args.out}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
