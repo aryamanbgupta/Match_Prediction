@@ -79,27 +79,20 @@ def _compute_pnl(match: dict, sizing: str, kelly_mult: float, cap: float
     raise ValueError(f"Unknown sizing: {sizing}")
 
 
-def evaluate(eval_json: str, odds_json: str,
-              threshold: float, sizing: str,
+def evaluate(matches: List[dict], vol_by_id: Dict[str, Optional[float]],
+              feat_lookup: Dict[str, dict],
+              *, threshold: float, sizing: str,
               kelly_mult: float = 0.25, cap: float = 0.02,
-              feature_parquet: Optional[Path] = None,
               slice_name: str = "all",
               min_volume: Optional[float] = None,
               n_resamples: int = 1000) -> Dict:
     """Apply sizing rules to the bets passing slice/volume filters."""
-    with open(eval_json) as f:
-        eval_data = json.load(f)
-    with open(odds_json) as f:
-        odds_data = json.load(f)
-    vol_by_id = {m["match_id"]: m.get("polymarket_volume_usd")
-                 for m in odds_data.get("matches", [])}
-    feat_lookup = _load_feature_lookup(feature_parquet) if feature_parquet else {}
     predicate = _slice_predicate(slice_name, 15.0, 5.0)
 
     pnls: List[float] = []
     n_eligible = 0
     skipped_under_threshold = 0
-    for match in eval_data.get("matches", []):
+    for match in matches:
         if min_volume is not None:
             vol = vol_by_id.get(match["match_id"])
             if vol is None or vol < min_volume:
@@ -124,13 +117,12 @@ def evaluate(eval_json: str, odds_json: str,
     win_rate = sum(1 for p in pnls if p > 0) / n_bets if n_bets else 0.0
     roi_lo, roi_hi = _bootstrap_ci(pnls, n=n_resamples)
 
-    # Drawdown (sequential by match order)
-    cum = np.cumsum(pnls) if pnls else np.array([0.0])
-    peak = np.maximum.accumulate(cum)
-    drawdown = peak - cum
-    max_dd = float(drawdown.max()) if pnls else 0.0
-    max_dd_pct_of_total = (max_dd / abs(total_pnl) * 100.0
-                           if total_pnl != 0 else float("nan"))
+    if pnls:
+        cum = np.cumsum(pnls)
+        peak = np.maximum.accumulate(cum)
+        max_dd = float((peak - cum).max())
+    else:
+        max_dd = 0.0
 
     return {
         "threshold": threshold, "sizing": sizing,
@@ -171,13 +163,22 @@ def main() -> int:
     thresholds = [float(s) for s in args.thresholds.split(",")]
     sizings = ["flat", "kelly"] if args.sizing == "both" else [args.sizing]
 
+    with open(args.in_path) as f:
+        matches = json.load(f).get("matches", [])
+    with open(args.odds) as f:
+        odds_data = json.load(f)
+    vol_by_id = {m["match_id"]: m.get("polymarket_volume_usd")
+                 for m in odds_data.get("matches", [])}
+    feat_lookup = (_load_feature_lookup(args.feature_parquet)
+                   if args.feature_parquet else {})
+
     rows = []
     for sz in sizings:
         for t in thresholds:
             r = evaluate(
-                args.in_path, args.odds, threshold=t, sizing=sz,
+                matches, vol_by_id, feat_lookup,
+                threshold=t, sizing=sz,
                 kelly_mult=args.kelly_mult, cap=args.cap,
-                feature_parquet=args.feature_parquet,
                 slice_name=args.slice, min_volume=args.min_volume,
                 n_resamples=args.bootstrap_resamples,
             )

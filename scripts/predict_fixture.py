@@ -1,39 +1,18 @@
 """Predict a single upcoming fixture without going through the full
 materialization pipeline.
 
-Uses xgb_match_v3_m7_production — promoted 2026-05-10 at M7.A.
-Same M2-v.o. feature set (49 features: M1 baseline + 3 venue
-outcome-dist), retrained with the M7.A hyperparameter sweep winners:
-max_depth=4, learning_rate=0.05, subsample=0.8, colsample_bytree=0.9
-(M2 v.o. baseline had lr=0.10, cs=0.8). Iter ≥$50k LL 0.6299 vs
-M2 v.o. 0.6348; close-slice ROI +33.27% [+4.36, +61.53] (the
-historically weak slice now clears the gate). Unfrozen-style
-inference: per fixture, rehydrate SQLite + tracker queries as-of
-the fixture date, not a fixed freeze boundary. Golden-test data (2026-04-17+) is NOT
-included in the SQLite cache or tracker snapshot — that's reserved for
-final eval. The corpus consequently covers data through 2026-04-16
-(the test_end date), so for fixtures dated after that, predictions
-reflect the most recent NON-golden state.
-
-For a future match we:
-
-  1. Read a hand-written fixture JSON (date, teams, venue, lineups, toss).
-  2. Rehydrate per-player ELO + venue trackers from SQLite as-of the
-     fixture date (not a fixed freeze).
-  3. Load the pickled Phase A2 tracker snapshot built through the
-     latest non-golden data; queries filter by fixture date internally.
-  4. Compute the same 47 features that materialize_match_features.py
-     would compute for this match (no ball data needed — we use the
-     same StatsProvider getters parse_match_data_v2 ultimately calls).
-  5. Apply the saved encoders + model, return P(team1_wins) and the
-     suggested bet given polymarket odds (if provided).
+Default model: xgb_match_v3_m7_production. Override with --model-dir.
+Per-fixture unfrozen inference: rehydrate SQLite + tracker queries
+as-of the fixture date. Golden-test data (2026-04-17+) is excluded
+from the SQLite cache and tracker snapshot — fixtures past 2026-04-16
+fall back to the latest non-golden state.
 
 Usage:
-    uv run python scripts/predict_fixture.py --fixture fixtures/2026-05-10_csk_rcb.json
+    uv run python scripts/predict_fixture.py --fixture fixtures/<id>.json
     uv run python scripts/predict_fixture.py --fixture <path> --out predictions/<id>.json
+    uv run python scripts/predict_fixture.py --fixture <path> --model-dir models/<other>
 
-The first run will build a tracker snapshot pickle (~30s); subsequent
-runs are sub-second.
+First run builds the tracker snapshot pickle (~30s); subsequent runs sub-second.
 """
 from __future__ import annotations
 
@@ -268,6 +247,8 @@ def compute_features(fixture: dict,
     venue_chase_win_pct = vp["venue_chase_win_pct"]
     venue_dot_pct = vp["venue_dot_pct"]
     venue_boundary_pct = vp["venue_boundary_pct"]
+    # k_venue=200 matches materialize_match_features._build_match_record.
+    venue_dist = provider.get_venue_outcome_dist(venue, rehydrate_as_of, k=200.0)
 
     # Lineup mix.
     t1_lhb, t1_pace, t1_spin = _lineup_mix_counts(team1_lineup, metadata)
@@ -316,6 +297,9 @@ def compute_features(fixture: dict,
         "venue_chase_win_pct": float(venue_chase_win_pct),
         "venue_dot_pct": float(venue_dot_pct),
         "venue_boundary_pct": float(venue_boundary_pct),
+        "venue_p4": float(venue_dist["venue_p4"]),
+        "venue_p6": float(venue_dist["venue_p6"]),
+        "venue_pw": float(venue_dist["venue_pw"]),
         "is_international": int(is_international),
         "team1_batting_first": int(team1_batting_first),
         "toss_winner_is_team1": int(toss_winner == team1) if toss_winner else 0,
@@ -346,10 +330,11 @@ def compute_features(fixture: dict,
     return record
 
 
-def apply_encoders_and_predict(record: dict) -> tuple[float, dict]:
-    model = joblib.load(MODEL_DIR / "model.pkl")
-    encoders = joblib.load(MODEL_DIR / "encoders.pkl")
-    with open(MODEL_DIR / "feature_columns.txt") as f:
+def apply_encoders_and_predict(record: dict,
+                                model_dir: Path = MODEL_DIR) -> tuple[float, dict]:
+    model = joblib.load(model_dir / "model.pkl")
+    encoders = joblib.load(model_dir / "encoders.pkl")
+    with open(model_dir / "feature_columns.txt") as f:
         feat_cols = [line.strip() for line in f if line.strip()]
 
     df = pd.DataFrame([record])
@@ -410,6 +395,8 @@ def main() -> int:
                     help="Output JSON path; default predictions/<match_id>.json")
     ap.add_argument("--rebuild-snapshot", action="store_true",
                     help="Force rebuild of the Phase A2 tracker snapshot.")
+    ap.add_argument("--model-dir", type=Path, default=MODEL_DIR,
+                    help=f"Model artifact dir (default: {MODEL_DIR.name})")
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -429,7 +416,7 @@ def main() -> int:
     record = compute_features(fixture, provider, metadata, form, h2h, home)
 
     print("Applying model...")
-    p_team1, debug = apply_encoders_and_predict(record)
+    p_team1, debug = apply_encoders_and_predict(record, args.model_dir)
     p_team2 = 1.0 - p_team1
 
     bet_info = compute_bet(fixture["team1"], fixture["team2"], p_team1,
@@ -447,7 +434,7 @@ def main() -> int:
         },
         "bet": bet_info,
         "diagnostics": {
-            "model": str(MODEL_DIR),
+            "model": str(args.model_dir),
             "rehydrate_as_of": fixture["date"],
             "tracker_snapshot_as_of": _peek_snapshot_as_of(),
             "encoder_warnings": debug["encoder_warnings"],

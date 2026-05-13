@@ -233,18 +233,24 @@ usually marginal.
 
 ## 5. Run all three models against the same feature row
 
-The shipped `scripts/predict_fixture.py` hardcodes M7 production. To get all
-three, write a thin runner that calls `predict_fixture.compute_features` once,
-then patches `predict_fixture.MODEL_DIR` before each `apply_encoders_and_predict`
-call. The M7 model needs **3 extra features** (`venue_p4`, `venue_p6`,
-`venue_pw`) that the base `compute_features` doesn't emit — add them via the
-StatsProvider.
+For a single-model M7 run, the shipped CLI works directly:
+
+```bash
+uv run python scripts/predict_fixture.py --fixture fixtures/<file>.json
+# or against a different model:
+uv run python scripts/predict_fixture.py --fixture fixtures/<file>.json \
+    --model-dir models/xgb_match_v2_clean_unfrozen
+```
+
+For the three-way sanity check, write a thin runner that calls
+`predict_fixture.compute_features` once, then passes `model_dir` per call.
+`compute_features` now emits the M7 venue outcome-dist features
+(`venue_p4`/`p6`/`pw`) directly — no manual bolt-on needed.
 
 ```python
 # /tmp/predict_three_models.py
-import sys, json, pickle
+import sys, json
 from pathlib import Path
-from datetime import datetime
 sys.path.insert(0, 'scripts')
 import predict_fixture as pf
 from stats_provider import StatsProvider
@@ -275,24 +281,19 @@ record = pf.compute_features(fixture, provider, metadata, form, h2h, home)
 # trust the venue is genuinely team2's home.
 # record['is_team2_home'] = 1
 
-# Add the 3 M7-only features
-match_date = datetime.strptime(fixture['date'], '%Y-%m-%d')
-vd = provider.get_venue_outcome_dist(fixture['venue'], match_date, k=200.0)
-record['venue_p4'] = vd['venue_p4']
-record['venue_p6'] = vd['venue_p6']
-record['venue_pw'] = vd['venue_pw']
-
 models = [
     ('V2 clean (frozen)',           Path('models/xgb_match_v2_clean')),
     ('V2 clean (unfrozen)',         Path('models/xgb_match_v2_clean_unfrozen')),
     ('M7 production (active)',      Path('models/xgb_match_v3_m7_production')),
 ]
 for label, mdir in models:
-    pf.MODEL_DIR = mdir
-    p_t1, _ = pf.apply_encoders_and_predict(record)
+    p_t1, _ = pf.apply_encoders_and_predict(record, mdir)
     print(f'{label}: P({fixture["team1"]})={p_t1*100:.1f}%  '
           f'P({fixture["team2"]})={(1-p_t1)*100:.1f}%')
 ```
+
+The V2 models ignore `venue_p4/p6/pw` (not in their `feature_columns.txt`);
+the M7 model uses them. A single `record` dict feeds all three.
 
 **Why all three?** V2 frozen was the May 8/9 production model; V2 unfrozen was
 May 10's; M7 is the post-2026-05-10 default. Running all three is a sanity check
