@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CricML — Live Predictions Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f6fa;
+    --surface: #ffffff;
+    --surface-2: #f8f9fc;
+    --border: #e3e6ee;
+    --border-strong: #c5cad6;
+    --text: #1a1f2e;
+    --text-2: #4a5063;
+    --muted: #8089a0;
+    --green: #16a34a;
+    --green-soft: #dcfce7;
+    --red: #dc2626;
+    --red-soft: #fee2e2;
+    --blue: #2563eb;
+    --blue-soft: #dbeafe;
+    --amber: #d97706;
+    --amber-soft: #fef3c7;
+    --indigo: #4f46e5;
+    --indigo-soft: #e0e7ff;
+    --shadow-sm: 0 1px 2px rgba(15,23,42,0.04);
+    --shadow: 0 1px 3px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04);
+    --shadow-lg: 0 10px 24px -4px rgba(15,23,42,0.10);
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    font-size: 14px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  .topbar {
+    display: flex; align-items: center; gap: 18px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    box-shadow: var(--shadow-sm);
+    position: sticky; top: 0; z-index: 50;
+  }
+  .brand-mark {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--green) 0%, var(--blue) 100%);
+    display: grid; place-items: center; color: white; font-weight: 700; font-size: 14px;
+  }
+  .brand-text { font-weight: 700; letter-spacing: -0.01em; font-size: 16px; }
+  .brand-sub { color: var(--muted); font-size: 12px; margin-left: 4px; }
+  .nav { display: flex; gap: 4px; margin-left: 24px; }
+  .nav a {
+    padding: 6px 14px; border-radius: 6px;
+    color: var(--text-2); font-size: 13px; font-weight: 500; text-decoration: none;
+  }
+  .nav a:hover { background: var(--surface-2); color: var(--text); }
+  .nav a.active { color: var(--blue); background: var(--blue-soft); }
+  .nav-meta { margin-left: auto; color: var(--muted); font-size: 12px; }
+
+  main { max-width: 1320px; margin: 0 auto; padding: 24px; }
+
+  /* === KPI ROW === */
+  .kpis {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px;
+  }
+  .kpi {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; box-shadow: var(--shadow-sm);
+  }
+  .kpi .lbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; font-weight: 600; }
+  .kpi .v { font-size: 26px; font-weight: 700; line-height: 1.1; }
+  .kpi .v.green { color: var(--green); }
+  .kpi .v.red { color: var(--red); }
+  .kpi .v.blue { color: var(--blue); }
+  .kpi .sub { color: var(--text-2); font-size: 12.5px; margin-top: 4px; }
+
+  /* === PANELS === */
+  .section { margin-top: 32px; }
+  .section-h { display: flex; justify-content: space-between; align-items: end; margin-bottom: 14px; }
+  .section-h h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+  .section-h .meta { color: var(--text-2); font-size: 13px; }
+  .section-sub { color: var(--text-2); margin: -8px 0 16px; font-size: 13px; max-width: 880px; }
+
+  /* === FIXTURES === */
+  .fix-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; }
+  .fix {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; box-shadow: var(--shadow-sm);
+    transition: all 0.15s;
+  }
+  .fix:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); }
+  .fix-head { display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px; }
+  .fix-date { font-size: 12px; color: var(--muted); font-family: ui-monospace, monospace; }
+  .fix-comp { font-size: 11px; padding: 2px 8px; background: var(--blue-soft); color: var(--blue); border-radius: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+  .fix-teams { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+  .fix-vs { color: var(--muted); font-size: 12px; margin: 0 6px; }
+  .fix-venue { color: var(--text-2); font-size: 12px; margin-bottom: 10px; }
+  .fix-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding-top: 10px; border-top: 1px dashed var(--border); }
+  .fix-meta .col { font-size: 12px; }
+  .fix-meta .col .lbl { color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px; font-weight: 600; }
+  .fix-meta .col .v { font-weight: 600; margin-top: 2px; }
+  .fix-meta .col .v.muted { color: var(--muted); font-weight: 400; }
+  .fix-foot { color: var(--muted); font-size: 11px; font-family: ui-monospace, monospace; padding-top: 8px; margin-top: 10px; border-top: 1px dashed var(--border); }
+  .fix-cta { background: var(--surface-2); padding: 8px 10px; border-radius: 6px; font-size: 12px; color: var(--text-2); margin-top: 10px; }
+  .fix-cta code { background: var(--surface); padding: 2px 4px; border-radius: 3px; font-size: 11px; color: var(--text); }
+
+  /* === FILTERS === */
+  .filter-bar {
+    display: flex; gap: 16px; align-items: center; padding: 12px 14px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    margin-bottom: 14px; flex-wrap: wrap;
+  }
+  .filter-bar label { font-size: 13px; color: var(--text-2); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .filter-bar input[type=checkbox] { accent-color: var(--blue); }
+  .filter-bar .info { margin-left: auto; color: var(--muted); font-size: 12px; }
+
+  /* === MATCH TABLE === */
+  .tbl-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-sm); }
+  table.matches { width: 100%; border-collapse: collapse; }
+  table.matches th, table.matches td {
+    padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border);
+    font-size: 13px; vertical-align: top;
+  }
+  table.matches th { background: var(--surface-2); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 1; }
+  table.matches th:hover { color: var(--blue); }
+  table.matches tr.row-win { background: rgba(220,252,231,0.5); }
+  table.matches tr.row-loss { background: rgba(254,226,226,0.4); }
+  table.matches tbody tr:hover { background: rgba(37,99,235,0.05); }
+  .matchup { font-weight: 600; }
+  .matchup .vs { color: var(--muted); font-weight: 400; font-size: 11px; }
+  .toss { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .result-line { font-weight: 600; }
+  .score { color: var(--text-2); font-size: 11px; font-family: ui-monospace, monospace; margin-top: 2px; }
+  .market-line { font-size: 12px; }
+  .vol { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .pred { font-size: 12px; }
+  .pred-source { color: var(--muted); font-size: 10.5px; margin-top: 2px; font-style: italic; }
+  .edge { color: var(--text-2); font-size: 11px; margin-top: 2px; }
+  .pnl { font-family: ui-monospace, monospace; font-weight: 600; text-align: right; white-space: nowrap; }
+  .pnl.win { color: var(--green); }
+  .pnl.loss { color: var(--red); }
+  .pnl.dim { color: var(--muted); font-weight: 400; }
+  .cum { font-family: ui-monospace, monospace; text-align: right; white-space: nowrap; }
+  .cum .roi { color: var(--text-2); font-size: 11px; margin-top: 2px; }
+  .cum .wr { color: var(--muted); font-size: 11px; }
+  .tag { display: inline-block; padding: 1px 6px; font-size: 9.5px; border-radius: 4px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 3px; }
+  .tag-live { background: var(--amber-soft); color: var(--amber); }
+  .tag-golden { background: var(--green-soft); color: var(--green); }
+
+  .chart-wrap { height: 280px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; box-shadow: var(--shadow-sm); }
+
+  .err {
+    padding: 40px; text-align: center; color: var(--red);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  }
+  .err code { background: var(--surface-2); padding: 2px 6px; border-radius: 4px; }
+  .footnote {
+    color: var(--muted); font-size: 12px; margin-top: 32px;
+    border-top: 1px solid var(--border); padding-top: 14px;
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand-mark">CR</div>
+  <div>
+    <div class="brand-text">CricML Live Predictions <span class="brand-sub">/ tracker</span></div>
+  </div>
+  <div class="nav">
+    <a href="model_dashboard_terminal.html">Terminal</a>
+    <a href="model_dashboard_trader.html">Strategy Desk</a>
+    <a href="predictions_tracker.html" class="active">Live Predictions</a>
+    <a href="project_overview.html">Overview</a>
+  </div>
+  <div class="nav-meta" id="topclock">2026-05-14</div>
+</div>
+
+<main id="root">
+  <div class="err">Loading <code>dashboard_data.json</code>…</div>
+</main>
+
+<script>
+let DATA = null;
+
+async function init() {
+  try {
+    const r = await fetch('dashboard_data.json');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    DATA = await r.json();
+  } catch (e) {
+    document.getElementById('root').innerHTML = `<div class="err">Could not load <code>dashboard_data.json</code>. Run <code>uv run python scripts/build_dashboard_data.py</code> from repo root, then serve <code>docs/</code> via local HTTP server.</div>`;
+    return;
+  }
+  document.getElementById('topclock').textContent = `Last refresh ${DATA.generated_at}`;
+  render();
+}
+
+function render() {
+  const root = document.getElementById('root');
+  const eq = DATA.ipl_2026_equity;
+  root.innerHTML = `
+    <div class="kpis">
+      <div class="kpi">
+        <div class="lbl">IPL 2026 cumulative PnL</div>
+        <div class="v green">+${eq.final_pnl.toFixed(2)}u</div>
+        <div class="sub">flat 1u, edge ≥ 0% · ${eq.bets} bets · ${eq.wins}/${eq.bets} wins (${(eq.wins/eq.bets*100).toFixed(1)}%)</div>
+      </div>
+      <div class="kpi">
+        <div class="lbl">Flat ROI</div>
+        <div class="v green">+${eq.final_roi.toFixed(1)}%</div>
+        <div class="sub">on ${eq.bets} resolved bets · max DD —</div>
+      </div>
+      <div class="kpi">
+        <div class="lbl">Production model</div>
+        <div class="v blue">M7</div>
+        <div class="sub">xgb_match_v3_m7_production · 49 features · raw probs</div>
+      </div>
+      <div class="kpi">
+        <div class="lbl">Pending fixtures</div>
+        <div class="v">${DATA.fixtures.length}</div>
+        <div class="sub">in <code class="mono">fixtures/</code> · run <code class="mono">predict_fixture.py</code></div>
+      </div>
+    </div>
+
+    ${renderSection('Pending fixtures', `Fixtures hand-written under <code>fixtures/*.json</code>. Run <code>uv run python scripts/predict_fixture.py --fixture fixtures/&lt;file&gt;</code> to score with the M7 production model. (Predictions are not auto-computed in this dashboard — the lineup-aware predict_fixture pipeline takes ~7s on first run.)`, renderFixtures())}
+
+    <div class="section">
+      <div class="section-h"><h2>IPL 2026 cumulative equity</h2><span class="meta">flat 1u, edge ≥ 0%, model: ${eq.model}</span></div>
+      <div class="section-sub">${eq.caveat}</div>
+      <div class="chart-wrap"><canvas id="equityChart"></canvas></div>
+    </div>
+
+    <div class="section">
+      <div class="section-h"><h2>Per-match audit · IPL 2026</h2><span class="meta">${DATA.ipl_2026_matches.length} matches</span></div>
+      <div class="section-sub">Chronological. Green rows are bets we won; red rows are bets we lost. "Cumulative" tracks PnL/ROI across only resolved bets — unbet matches don't move the line. Click column headers to sort.</div>
+      <div class="filter-bar">
+        <label><input type="checkbox" id="f-bets" checked> Only matches we bet on</label>
+        <label><input type="checkbox" id="f-golden"> Only golden set (post-2026-04-17)</label>
+        <label><input type="checkbox" id="f-loss"> Only losing bets</label>
+        <span class="info" id="filter-count"></span>
+      </div>
+      <div class="tbl-wrap"><table class="matches" id="match-table">
+        <thead><tr>
+          <th>#</th><th>Date / venue</th><th>Match</th><th>Result</th>
+          <th>Polymarket</th><th>Our prediction</th><th>Bet placed</th>
+          <th>PnL</th><th>Cumulative</th>
+        </tr></thead>
+        <tbody>${renderMatchRows(DATA.ipl_2026_matches)}</tbody>
+      </table></div>
+    </div>
+
+    <div class="footnote">
+      <b>How to refresh</b>: per-match data is parsed from <code>reports/ipl_2026_dashboard_clean.html</code> by <code>scripts/build_dashboard_data.py</code>.
+      To regenerate the underlying IPL dashboard, run <code>uv run python scripts/build_ipl_dashboard.py</code>; then re-run <code>scripts/build_dashboard_data.py</code> to pick up the new rows.
+      Pending-fixture predictions need <code>uv run python scripts/predict_fixture.py --fixture fixtures/&lt;file&gt;</code> per fixture; they're not auto-computed here.
+    </div>
+  `;
+
+  buildEquityChart();
+  attachFilters();
+  attachSort();
+}
+
+function renderSection(title, sub, body) {
+  return `
+    <div class="section">
+      <div class="section-h"><h2>${title}</h2></div>
+      <div class="section-sub">${sub}</div>
+      ${body}
+    </div>
+  `;
+}
+
+function renderFixtures() {
+  if (!DATA.fixtures || !DATA.fixtures.length) {
+    return `<div style="color: var(--muted); padding: 20px;">No pending fixtures in <code>fixtures/</code>.</div>`;
+  }
+  const cards = DATA.fixtures.map(f => {
+    const oddsCells = f.polymarket_odds
+      ? Object.entries(f.polymarket_odds).map(([t, o]) => `<div><b>${t}</b>: ${o}</div>`).join('')
+      : '<div class="muted">— no odds yet</div>';
+    const tossLine = f.toss_winner
+      ? `${f.toss_winner} elected to ${f.toss_decision}`
+      : 'pre-toss';
+    return `
+      <div class="fix">
+        <div class="fix-head">
+          <div class="fix-date">${f.date}</div>
+          <div class="fix-comp">${f.competition || '—'}</div>
+        </div>
+        <div class="fix-teams">${f.team1} <span class="fix-vs">vs</span> ${f.team2}</div>
+        <div class="fix-venue">${f.venue || ''}</div>
+        <div class="fix-meta">
+          <div class="col">
+            <div class="lbl">Toss</div>
+            <div class="v ${f.toss_winner?'':'muted'}">${tossLine}</div>
+          </div>
+          <div class="col">
+            <div class="lbl">Polymarket</div>
+            <div class="v ${f.polymarket_odds?'':'muted'}" style="font-family: ui-monospace, monospace; font-size: 11px;">${oddsCells}</div>
+          </div>
+        </div>
+        <div class="fix-cta">
+          Run <code>uv run python scripts/predict_fixture.py --fixture fixtures/${f.file}</code> to score.
+        </div>
+        <div class="fix-foot">${f.team1_lineup_names.length || 0} + ${f.team2_lineup_names.length || 0} players in lineup file</div>
+      </div>
+    `;
+  }).join('');
+  return `<div class="fix-grid">${cards}</div>`;
+}
+
+function renderMatchRows(matches) {
+  return matches.map(m => {
+    const dateBlock = `${m.date}<br><span style="color: var(--muted); font-size: 11px;">${m.venue}</span><br><span class="tag tag-${m.set}">${m.set}</span>`;
+    const matchBlock = `<div class="matchup"><b>${m.team1}</b><span class="vs"> vs </span><b>${m.team2}</b></div><div class="toss">${m.toss || ''}</div>`;
+    const resultBlock = m.result
+      ? `<div class="result-line">${m.result}</div>${(m.scores||[]).map(s => `<div class="score">${s}</div>`).join('')}`
+      : '<span style="color:var(--muted)">—</span>';
+    const marketBlock = m.market.length
+      ? m.market.map(o => `<div class="market-line"><b>${o.team}</b>: ${o.odds.toFixed(2)} (${o.pct.toFixed(1)}%)</div>`).join('') + (m.volume_usd ? `<div class="vol">vol $${m.volume_usd.toLocaleString()}</div>` : '')
+      : '<span style="color:var(--muted)">—</span>';
+    const predBlock = m.prediction.length
+      ? m.prediction.map(p => `<div class="pred"><b>${p.team}</b>: ${p.pct.toFixed(1)}%</div>`).join('') + (m.pred_source ? `<div class="pred-source">${m.pred_source}</div>` : '')
+      : '<span style="color:var(--muted)">—</span>';
+    const betBlock = m.bet
+      ? `<div><b>${m.bet.team}</b></div><div class="edge">edge ${m.bet.edge_pp >= 0 ? '+' : ''}${m.bet.edge_pp.toFixed(1)}pp @ ${m.bet.odds.toFixed(2)}</div>`
+      : '<span style="color:var(--muted)">no bet</span>';
+    let pnlBlock = '<span class="pnl dim">0</span>';
+    if (m.pnl != null) {
+      const cls = m.pnl > 0 ? 'win' : 'loss';
+      pnlBlock = `<span class="pnl ${cls}">${m.pnl >= 0 ? '+' : ''}${m.pnl.toFixed(3)}</span>`;
+    }
+    const cumBlock = m.cum && m.cum.pnl != null
+      ? `<div>${m.cum.pnl >= 0 ? '+' : ''}${m.cum.pnl.toFixed(2)}</div><div class="roi">ROI ${m.cum.roi_pct >= 0 ? '+' : ''}${m.cum.roi_pct.toFixed(1)}%</div><div class="wr">${m.cum.wins}/${m.cum.bets}</div>`
+      : '';
+    return `
+      <tr class="${m.row_class}" data-set="${m.set}" data-bet="${m.row_class.startsWith('row')?'1':'0'}" data-loss="${m.row_class==='row-loss'?'1':'0'}">
+        <td>${m.idx}</td>
+        <td>${dateBlock}</td>
+        <td>${matchBlock}</td>
+        <td>${resultBlock}</td>
+        <td>${marketBlock}</td>
+        <td>${predBlock}</td>
+        <td>${betBlock}</td>
+        <td class="pnl">${pnlBlock}</td>
+        <td class="cum">${cumBlock}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function buildEquityChart() {
+  const eq = DATA.ipl_2026_equity;
+  const ctx = document.getElementById('equityChart');
+  if (!ctx) return;
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: eq.dates,
+      datasets: [
+        {
+          label: 'Cumulative PnL (units)',
+          data: eq.cum_pnl,
+          borderColor: '#16a34a', backgroundColor: 'rgba(22,163,74,0.12)',
+          tension: 0.15, fill: true, pointRadius: 0, borderWidth: 2,
+          yAxisID: 'y',
+        },
+        {
+          label: 'Cumulative ROI (%)',
+          data: eq.cum_roi,
+          borderColor: '#2563eb', borderDash: [5, 5],
+          tension: 0.15, fill: false, pointRadius: 0, borderWidth: 1.5,
+          yAxisID: 'y1',
+        },
+        {
+          label: 'Break-even',
+          data: eq.dates.map(_ => 0),
+          borderColor: '#cbd5e1', borderDash: [3, 3], pointRadius: 0, borderWidth: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 14, font: { size: 11 } } } },
+      scales: {
+        y: { position: 'left', title: { display: true, text: 'PnL (units)', font: { size: 11 } } },
+        y1: { position: 'right', title: { display: true, text: 'ROI (%)', font: { size: 11 } }, grid: { drawOnChartArea: false } },
+        x: { ticks: { maxTicksLimit: 8, font: { size: 10 } } },
+      },
+    },
+  });
+}
+
+function attachFilters() {
+  const apply = () => {
+    const onlyBets = document.getElementById('f-bets').checked;
+    const onlyGolden = document.getElementById('f-golden').checked;
+    const onlyLoss = document.getElementById('f-loss').checked;
+    let visible = 0;
+    document.querySelectorAll('#match-table tbody tr').forEach(tr => {
+      let show = true;
+      if (onlyBets && tr.dataset.bet !== '1') show = false;
+      if (onlyGolden && tr.dataset.set !== 'golden') show = false;
+      if (onlyLoss && tr.dataset.loss !== '1') show = false;
+      tr.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+    document.getElementById('filter-count').textContent = `${visible} matches shown`;
+  };
+  ['f-bets', 'f-golden', 'f-loss'].forEach(id =>
+    document.getElementById(id).addEventListener('change', apply));
+  apply();
+}
+
+function attachSort() {
+  document.querySelectorAll('#match-table th').forEach((th, idx) => {
+    let asc = true;
+    th.addEventListener('click', () => {
+      const tbody = document.querySelector('#match-table tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      rows.sort((a, b) => {
+        const av = a.cells[idx].innerText.trim();
+        const bv = b.cells[idx].innerText.trim();
+        const an = parseFloat(av.replace(/[^\d.\-+]/g, ''));
+        const bn = parseFloat(bv.replace(/[^\d.\-+]/g, ''));
+        if (!isNaN(an) && !isNaN(bn)) return asc ? an - bn : bn - an;
+        return asc ? av.localeCompare(bv) : bv.localeCompare(av);
+      });
+      tbody.innerHTML = '';
+      rows.forEach(r => tbody.appendChild(r));
+      asc = !asc;
+    });
+  });
+}
+
+init();
+</script>
+
+</body>
+</html>

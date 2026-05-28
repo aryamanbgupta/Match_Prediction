@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CricML — Strategy Desk</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f6fa;
+    --surface: #ffffff;
+    --surface-2: #f8f9fc;
+    --border: #e3e6ee;
+    --border-strong: #c5cad6;
+    --text: #1a1f2e;
+    --text-2: #4a5063;
+    --muted: #8089a0;
+    --green: #16a34a;
+    --green-soft: #dcfce7;
+    --red: #dc2626;
+    --red-soft: #fee2e2;
+    --blue: #2563eb;
+    --blue-soft: #dbeafe;
+    --amber: #d97706;
+    --amber-soft: #fef3c7;
+    --indigo: #4f46e5;
+    --indigo-soft: #e0e7ff;
+    --violet: #7c3aed;
+    --teal: #0d9488;
+    --shadow-sm: 0 1px 2px rgba(15,23,42,0.04);
+    --shadow: 0 1px 3px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04);
+    --shadow-lg: 0 10px 24px -4px rgba(15,23,42,0.10), 0 4px 8px -2px rgba(15,23,42,0.06);
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    font-size: 14px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  .topbar {
+    display: flex; align-items: center; gap: 18px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    box-shadow: var(--shadow-sm);
+    position: sticky; top: 0; z-index: 50;
+  }
+  .brand-mark {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--indigo) 0%, var(--blue) 100%);
+    display: grid; place-items: center; color: white; font-weight: 700; font-size: 14px;
+  }
+  .brand-text { font-weight: 700; letter-spacing: -0.01em; font-size: 16px; }
+  .brand-sub { color: var(--muted); font-size: 12px; margin-left: 4px; }
+  .nav { display: flex; gap: 4px; margin-left: 24px; }
+  .nav a {
+    padding: 6px 14px; border-radius: 6px;
+    color: var(--text-2); font-size: 13px; font-weight: 500; text-decoration: none;
+  }
+  .nav a:hover { background: var(--surface-2); color: var(--text); }
+  .nav a.active { color: var(--blue); background: var(--blue-soft); }
+  .nav-meta { margin-left: auto; color: var(--muted); font-size: 12px; }
+
+  main { max-width: 1320px; margin: 0 auto; padding: 24px; }
+
+  /* === HERO PANEL === */
+  .hero {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 24px; box-shadow: var(--shadow); margin-bottom: 20px;
+    display: grid; grid-template-columns: 240px 1fr; gap: 24px;
+    align-items: start;
+  }
+  .hero-meta h1 {
+    font-size: 13px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 0.08em; margin: 0 0 8px;
+  }
+  .hero-meta .big {
+    font-size: 38px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1;
+  }
+  .hero-meta .big.green { color: var(--green); }
+  .hero-meta .sub { color: var(--text-2); font-size: 13px; margin-top: 4px; }
+  .hero-meta .row { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border); }
+  .hero-meta .row .lbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .hero-meta .row .v { font-size: 16px; font-weight: 600; margin-top: 2px; }
+  .hero-meta .row .v small { color: var(--text-2); font-weight: 400; font-size: 12px; }
+  .chart-wrap { height: 280px; position: relative; }
+  .strategy-bar {
+    display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap;
+  }
+  .strategy-bar .lbl { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; margin-right: 6px; }
+  .chip {
+    padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--surface-2); cursor: pointer; font-size: 12.5px;
+    font-family: ui-monospace, monospace; color: var(--text-2);
+    transition: all 0.15s;
+  }
+  .chip:hover { border-color: var(--blue); color: var(--blue); }
+  .chip.active { background: var(--blue); color: white; border-color: var(--blue); }
+
+  /* === KPI ROW === */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; box-shadow: var(--shadow-sm); }
+  .kpi .lbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; font-weight: 600; }
+  .kpi .v { font-size: 22px; font-weight: 700; line-height: 1.1; }
+  .kpi .v.green { color: var(--green); }
+  .kpi .v.red { color: var(--red); }
+  .kpi .v.blue { color: var(--blue); }
+  .kpi .sub { color: var(--text-2); font-size: 12.5px; margin-top: 4px; }
+  .kpi .sub .gate-pass { color: var(--green); font-weight: 600; }
+  .kpi .sub .gate-fail { color: var(--red); font-weight: 600; }
+
+  /* === SECTION HEADERS === */
+  .section { margin-top: 32px; }
+  .section-h {
+    display: flex; justify-content: space-between; align-items: end;
+    margin-bottom: 14px;
+  }
+  .section-h h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+  .section-h .meta { color: var(--text-2); font-size: 13px; }
+  .section-sub { color: var(--text-2); margin: -8px 0 16px; font-size: 13px; }
+
+  /* === MODEL CARD GRID === */
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    overflow: hidden; box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.15s, transform 0.15s;
+    cursor: pointer;
+  }
+  .card:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); }
+  .card-header {
+    padding: 12px 14px; display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid var(--border); background: var(--surface-2);
+  }
+  .card-header .name { font-weight: 700; font-size: 13.5px; }
+  .card-header .phase { color: var(--muted); font-size: 11px; font-family: monospace; }
+  .card-body { padding: 14px; }
+  .card-roi {
+    font-size: 30px; font-weight: 700; letter-spacing: -0.02em; line-height: 1;
+  }
+  .card-roi.pos { color: var(--green); }
+  .card-roi.neg { color: var(--red); }
+  .card-roi.dim { color: var(--muted); }
+  .card-ll { color: var(--text-2); font-size: 12.5px; margin-top: 4px; font-family: ui-monospace, monospace; }
+  .card-radar { height: 140px; margin-top: 8px; position: relative; }
+  .card-foot { padding: 10px 14px; background: var(--surface-2); border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-size: 11.5px; color: var(--text-2); }
+  .badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+  .badge.prod { background: var(--amber-soft); color: var(--amber); }
+  .badge.landed { background: var(--green-soft); color: var(--green); }
+  .badge.dropped { background: var(--red-soft); color: var(--red); }
+  .badge.dropped_at_corr { background: #ffedd5; color: #c2410c; }
+  .badge.ref { background: var(--blue-soft); color: var(--blue); }
+  .badge.archived { background: #e5e7eb; color: #4b5563; }
+  .badge.prod_props { background: #ede9fe; color: var(--violet); }
+
+  /* === LEADERBOARD === */
+  .lb-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-sm); }
+  .lb-tbl { width: 100%; border-collapse: collapse; }
+  .lb-tbl th, .lb-tbl td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .lb-tbl th { background: var(--surface-2); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; cursor: pointer; user-select: none; }
+  .lb-tbl th:hover { color: var(--blue); }
+  .lb-tbl tbody tr:hover { background: var(--surface-2); }
+  .lb-tbl td.right { text-align: right; font-family: ui-monospace, monospace; }
+  .lb-tbl tr.prod { background: linear-gradient(90deg, var(--amber-soft) 0%, transparent 100%); }
+  .ci-pill {
+    display: inline-block; padding: 1px 8px; border-radius: 10px;
+    font-size: 11px; font-family: ui-monospace, monospace;
+  }
+  .ci-pill.pos { background: var(--green-soft); color: #14532d; }
+  .ci-pill.neg { background: var(--red-soft); color: #7f1d1d; }
+  .ci-pill.straddle { background: #f3f4f6; color: var(--text-2); }
+  .lb-tbl .delta-pos { color: var(--green); font-weight: 600; }
+  .lb-tbl .delta-neg { color: var(--red); font-weight: 600; }
+
+  /* === PHASE TIMELINE === */
+  .timeline {
+    display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 0;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px; box-shadow: var(--shadow-sm); overflow-x: auto;
+  }
+  .tl-step { padding: 14px 12px; border-right: 1px dashed var(--border); position: relative; min-width: 0; }
+  .tl-step:last-child { border-right: none; }
+  .tl-phase { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); font-weight: 700; }
+  .tl-title { font-weight: 700; font-size: 13.5px; margin-top: 4px; min-height: 36px; }
+  .tl-out { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 6px; }
+  .tl-out.green { background: var(--green-soft); color: var(--green); }
+  .tl-out.red { background: var(--red-soft); color: var(--red); }
+  .tl-result { color: var(--text-2); font-size: 12px; margin-top: 8px; line-height: 1.45; }
+  .tl-lesson { background: var(--surface-2); border-left: 3px solid var(--blue); padding: 8px 10px; margin-top: 10px; font-size: 12px; color: var(--text-2); border-radius: 0 4px 4px 0; }
+  .tl-lesson b { color: var(--text); }
+
+  /* === SIZING COMPARE === */
+  .size-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .size-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; box-shadow: var(--shadow-sm); }
+  .size-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .size-tbl th, .size-tbl td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--border); font-family: ui-monospace, monospace; }
+  .size-tbl th { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; font-family: -apple-system, sans-serif; font-weight: 600; }
+  .size-tbl td.left { text-align: left; }
+  .size-tbl tr.opt { background: var(--green-soft); font-weight: 700; }
+
+  /* === MODAL === */
+  .modal-bg {
+    display: none; position: fixed; inset: 0; z-index: 100;
+    background: rgba(15,23,42,0.4); backdrop-filter: blur(6px);
+    align-items: flex-start; justify-content: center; padding: 40px 16px;
+  }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: var(--surface); border-radius: 14px;
+    width: 100%; max-width: 920px; max-height: 90vh; overflow-y: auto;
+    box-shadow: var(--shadow-lg); border: 1px solid var(--border);
+  }
+  .modal-h {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 20px 24px; border-bottom: 1px solid var(--border);
+  }
+  .modal-h h3 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+  .modal-h .close { background: var(--surface-2); border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 14px; color: var(--text-2); }
+  .modal-h .close:hover { background: var(--red-soft); color: var(--red); }
+  .modal-b { padding: 20px 24px; }
+  .modal-b h4 { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; margin: 18px 0 8px; font-weight: 600; }
+  .modal-b h4:first-child { margin-top: 0; }
+  .modal-b .kvtbl { width: 100%; border-collapse: collapse; }
+  .modal-b .kvtbl td { padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: top; }
+  .modal-b .kvtbl td.k { color: var(--muted); font-size: 12px; width: 38%; padding-right: 12px; }
+  .modal-b p { color: var(--text-2); margin: 6px 0; }
+
+  .err {
+    padding: 40px; text-align: center; color: var(--red);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  }
+  .err code { background: var(--surface-2); padding: 2px 6px; border-radius: 4px; }
+  .footnote {
+    color: var(--muted); font-size: 12px; margin-top: 32px;
+    border-top: 1px solid var(--border); padding-top: 14px;
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand-mark">CR</div>
+  <div>
+    <div class="brand-text">CricML Strategy Desk <span class="brand-sub">/ trader view</span></div>
+  </div>
+  <div class="nav">
+    <a href="model_dashboard_terminal.html">Terminal</a>
+    <a href="model_dashboard_trader.html" class="active">Strategy Desk</a>
+    <a href="predictions_tracker.html">Live Predictions</a>
+    <a href="project_overview.html">Overview</a>
+  </div>
+  <div class="nav-meta" id="topclock">2026-05-14</div>
+</div>
+
+<main id="root">
+  <div class="err">Loading <code>dashboard_data.json</code>…</div>
+</main>
+
+<script>
+let DATA = null;
+let CURRENT_STRATEGY = 0.0;  // edge threshold
+
+async function init() {
+  try {
+    const r = await fetch('dashboard_data.json');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    DATA = await r.json();
+  } catch (e) {
+    document.getElementById('root').innerHTML = `<div class="err">Could not load <code>dashboard_data.json</code>. Run <code>uv run python scripts/build_dashboard_data.py</code> from repo root, then serve <code>docs/</code> via local HTTP server.</div>`;
+    return;
+  }
+  document.getElementById('topclock').textContent = `Last refresh ${DATA.generated_at}`;
+  render();
+}
+
+function render() {
+  const root = document.getElementById('root');
+  root.innerHTML = `
+    ${renderHero()}
+    ${renderKPIs()}
+    ${renderSection('Model scorecards', 'Match-level direct lineage. Each card = one model variant. Click for full eval.', renderCards(DATA.match_level_models))}
+    ${renderSection('Leaderboard', 'All variants sorted by iter ≥$50k flat ROI. Production model highlighted.', renderLeaderboard())}
+    ${renderSection('Phase release notes', 'Step through the journey: M1 → M8. Each phase ended with a landing or drop decision.', renderTimeline())}
+    ${renderSection('Sizing strategy comparison', 'Edge threshold sweep on iter ≥$50k and ≥$100k. The flat-at-0 row is current production.', renderSizing())}
+    ${renderSection('Ball-level / props (v7)', 'v7 sim lost the winner-market race; now reserved for prop bets. Brier skill = (base − model) / base.', renderProps())}
+    <div class="footnote">
+      Built from <code>docs/dashboard_data.json</code> via <code>scripts/build_dashboard_data.py</code>.
+      Numbers are sourced from the M-phase reports (<code>reports/m{1..8}_*.md</code>) and the M7 sizing-sweep CSVs at
+      <code>models/xgb_match_v3_m7_production/m8_sizing_sweep_{50k,100k}.csv</code>.
+      Equity curve uses the previous production model (<code>xgb_match_v2_frozen</code>) on IPL 2026 — re-running with M7 production is open.
+    </div>
+  `;
+  buildEquityChart();
+  buildRadarsForCards();
+  attachStrategyChips();
+  attachCardClicks();
+  attachLeaderboardSort();
+}
+
+function renderHero() {
+  const eq = DATA.ipl_2026_equity;
+  const p = DATA.production.match_level;
+  return `
+    <div class="hero">
+      <div class="hero-meta">
+        <h1>IPL 2026 cumulative PnL</h1>
+        <div class="big green">+${eq.final_pnl.toFixed(2)}u</div>
+        <div class="sub">Flat ROI <b>+${eq.final_roi.toFixed(1)}%</b> · ${eq.wins}/${eq.bets} bets · win ${(eq.wins/eq.bets*100).toFixed(1)}%</div>
+        <div class="row">
+          <div class="lbl">Iter ≥$50k LL</div>
+          <div class="v">${p.headline_iter_50k.ll.toFixed(4)} <small>vs market ${p.headline_iter_50k.market_ll.toFixed(4)}</small></div>
+        </div>
+        <div class="row">
+          <div class="lbl">Iter ≥$50k Flat ROI</div>
+          <div class="v" style="color: var(--green);">+${p.headline_iter_50k.roi.toFixed(2)}% <small>CI [${p.headline_iter_50k.roi_ci[0].toFixed(2)}, ${p.headline_iter_50k.roi_ci[1].toFixed(2)}]</small></div>
+        </div>
+        <div class="row">
+          <div class="lbl">2026-04 IPL walk-fwd</div>
+          <div class="v" style="color: var(--green);">+${p.headline_2026_04_ipl.roi.toFixed(2)}% <small>win ${p.headline_2026_04_ipl.win_pct}%</small></div>
+        </div>
+      </div>
+      <div>
+        <div class="strategy-bar">
+          <span class="lbl">Sizing strategy</span>
+          <button class="chip active" data-strat="0.0">Flat 1u · edge ≥ 0%</button>
+          <button class="chip" data-strat="0.05">Flat · edge ≥ 5%</button>
+          <button class="chip" data-strat="0.10">Flat · edge ≥ 10%</button>
+          <button class="chip" data-strat="kelly">¼ Kelly · 2% cap</button>
+        </div>
+        <div class="chart-wrap"><canvas id="equityChart"></canvas></div>
+        <div style="font-size: 11.5px; color: var(--muted); margin-top: 4px;">${eq.caveat}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderKPIs() {
+  const m7 = DATA.match_level_models.find(m => m.id === 'xgb_match_v3_m7_production');
+  const i50 = m7.metrics.iter_50k_raw;
+  const i100 = m7.metrics.iter_100k_raw;
+  const close = m7.metrics.close;
+  return `
+    <div class="kpis">
+      <div class="kpi">
+        <div class="lbl">LL gap to market</div>
+        <div class="v ${i50.ll < 0.6267 ? 'green' : 'red'}">${(i50.ll - 0.6267 >= 0 ? '+' : '') + (i50.ll - 0.6267).toFixed(4)}</div>
+        <div class="sub"><span class="gate-pass">✓ beats market</span> on iter ≥$50k</div>
+      </div>
+      <div class="kpi">
+        <div class="lbl">≥$50k ROI CI</div>
+        <div class="v green">+${i50.roi_ci[0].toFixed(2)}% lower</div>
+        <div class="sub"><span class="gate-pass">✓ excludes 0</span> · upper +${i50.roi_ci[1].toFixed(2)}%</div>
+      </div>
+      <div class="kpi">
+        <div class="lbl">≥$100k ROI CI</div>
+        <div class="v green">+${i100.roi_ci[0].toFixed(2)}% lower</div>
+        <div class="sub"><span class="gate-pass">✓ excludes 0</span> · upper +${i100.roi_ci[1].toFixed(2)}%</div>
+      </div>
+      <div class="kpi">
+        <div class="lbl">Close-slice ROI</div>
+        <div class="v green">+${close.roi.toFixed(2)}%</div>
+        <div class="sub"><span class="gate-pass">✓ excludes 0</span> · the historically weak slice clears at M7</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderSection(title, sub, body) {
+  return `
+    <div class="section">
+      <div class="section-h"><h2>${title}</h2><span class="meta"></span></div>
+      <div class="section-sub">${sub}</div>
+      ${body}
+    </div>
+  `;
+}
+
+function renderCards(models) {
+  const cards = models.map(m => {
+    const i50 = m.metrics.iter_50k_raw || m.metrics.iter_50k_platt || {};
+    const roiCls = i50.roi == null ? 'dim' : (i50.roi >= 0 ? 'pos' : 'neg');
+    const roiTxt = i50.roi == null ? '—' : `${i50.roi>=0?'+':''}${i50.roi.toFixed(1)}%`;
+    const llTxt = i50.ll == null ? '<span style="color:var(--muted)">no eval</span>' : `LL ${i50.ll.toFixed(4)} · n=${i50.n||'?'}`;
+    return `
+      <div class="card" data-model-id="${m.id}">
+        <div class="card-header">
+          <div><div class="name">${m.label}</div><div class="phase">${m.phase} · ${m.feature_count||'—'} feats</div></div>
+          <span class="badge ${m.status.toLowerCase()}">${m.status}</span>
+        </div>
+        <div class="card-body">
+          <div class="card-roi ${roiCls}">${roiTxt}</div>
+          <div class="card-ll">${llTxt}</div>
+          <div class="card-radar"><canvas id="radar-${m.id}"></canvas></div>
+        </div>
+        <div class="card-foot">
+          <span>${m.date}</span>
+          <span>parent: ${m.parent}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+  return `<div class="card-grid">${cards}</div>`;
+}
+
+function buildRadarsForCards() {
+  const market_ll = 0.6267;
+  DATA.match_level_models.forEach(m => {
+    const ctx = document.getElementById('radar-' + m.id);
+    if (!ctx) return;
+    const i50 = m.metrics.iter_50k_raw || m.metrics.iter_50k_platt || {};
+    const i100 = m.metrics.iter_100k_raw || m.metrics.iter_100k_platt || {};
+    const close = m.metrics.close || {};
+    const golden = m.metrics.golden_50k_raw || m.metrics.golden_50k_platt || {};
+    // Score each axis 0-1: ROI on -50/+50 scale; LL gap to market on -0.1/+0.1
+    const score = (v, lo, hi) => {
+      if (v == null) return 0;
+      return Math.max(0, Math.min(1, (v - lo) / (hi - lo)));
+    };
+    const llScore = (ll) => ll == null ? 0 : Math.max(0, Math.min(1, (0.10 - (ll - market_ll)) / 0.20));
+    const data = {
+      labels: ['ROI ≥$50k', 'ROI ≥$100k', 'LL ≥$50k', 'Close-slice ROI', 'Golden ROI'],
+      datasets: [{
+        data: [
+          score(i50.roi, -30, 50),
+          score(i100.roi, -30, 50),
+          llScore(i50.ll),
+          score(close.roi, -30, 50),
+          score(golden.roi, -30, 50),
+        ],
+        backgroundColor: m.status === 'PROD' ? 'rgba(217,119,6,0.25)' : (m.status === 'LANDED' ? 'rgba(22,163,74,0.20)' : (m.status.startsWith('DROP') ? 'rgba(220,38,38,0.15)' : 'rgba(37,99,235,0.18)')),
+        borderColor: m.status === 'PROD' ? '#d97706' : (m.status === 'LANDED' ? '#16a34a' : (m.status.startsWith('DROP') ? '#dc2626' : '#2563eb')),
+        borderWidth: 1.5,
+        pointRadius: 0,
+      }],
+    };
+    new Chart(ctx, {
+      type: 'radar',
+      data,
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        scales: { r: {
+          min: 0, max: 1,
+          ticks: { display: false, stepSize: 0.25 },
+          pointLabels: { font: { size: 9 }, color: '#6b7280' },
+          grid: { color: '#e5e7eb' },
+          angleLines: { color: '#e5e7eb' },
+        } },
+      },
+    });
+  });
+}
+
+function renderLeaderboard() {
+  // Sort by iter ≥$50k raw ROI desc
+  const rows = DATA.match_level_models
+    .map(m => ({m, i50: m.metrics.iter_50k_raw || m.metrics.iter_50k_platt || {}}))
+    .sort((a, b) => (b.i50.roi || -999) - (a.i50.roi || -999))
+    .map(({m, i50}, idx) => {
+      const i100 = m.metrics.iter_100k_raw || m.metrics.iter_100k_platt || {};
+      const golden = m.metrics.golden_50k_platt || m.metrics.golden_50k_raw || {};
+      const ciCls = i50.roi_ci ? (i50.roi_ci[0] > 0 ? 'pos' : (i50.roi_ci[1] < 0 ? 'neg' : 'straddle')) : 'straddle';
+      const llDelta = i50.ll != null ? i50.ll - 0.6267 : null;
+      const llDeltaCls = llDelta == null ? '' : (llDelta < 0 ? 'delta-pos' : 'delta-neg');
+      return `
+        <tr class="${m.status==='PROD'?'prod':''}" data-model-id="${m.id}">
+          <td>${idx + 1}</td>
+          <td><b>${m.label}</b><br><span style="color:var(--muted); font-size:11.5px;">${m.id}</span></td>
+          <td><span class="badge ${m.status.toLowerCase()}">${m.status}</span></td>
+          <td>${m.phase}</td>
+          <td class="right">${i50.ll != null ? i50.ll.toFixed(4) : '—'}</td>
+          <td class="right ${llDeltaCls}">${llDelta != null ? (llDelta > 0 ? '+' : '') + llDelta.toFixed(4) : '—'}</td>
+          <td class="right" style="font-weight: 600;">${i50.roi != null ? `${i50.roi>=0?'+':''}${i50.roi.toFixed(2)}%` : '—'}</td>
+          <td><span class="ci-pill ${ciCls}">${i50.roi_ci ? `[${i50.roi_ci[0].toFixed(1)}, ${i50.roi_ci[1].toFixed(1)}]` : '—'}</span></td>
+          <td class="right">${i100.roi != null ? `${i100.roi>=0?'+':''}${i100.roi.toFixed(2)}%` : '—'}</td>
+          <td class="right">${golden.roi != null ? `${golden.roi>=0?'+':''}${golden.roi.toFixed(2)}%` : '—'}</td>
+        </tr>
+      `;
+    }).join('');
+  return `
+    <div class="lb-wrap">
+      <table class="lb-tbl" id="lb">
+        <thead><tr>
+          <th>#</th><th>Model</th><th>Status</th><th>Phase</th>
+          <th class="right">≥$50k LL</th><th class="right">Δ vs market</th>
+          <th class="right">≥$50k ROI</th><th>ROI 95% CI</th>
+          <th class="right">≥$100k ROI</th><th class="right">Golden ROI</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function attachLeaderboardSort() {
+  const ths = document.querySelectorAll('#lb th');
+  ths.forEach((th, idx) => {
+    let asc = false;
+    th.addEventListener('click', () => {
+      const tbody = document.querySelector('#lb tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      rows.sort((a, b) => {
+        const av = a.cells[idx].innerText.trim();
+        const bv = b.cells[idx].innerText.trim();
+        const an = parseFloat(av.replace(/[^\d.\-+]/g, ''));
+        const bn = parseFloat(bv.replace(/[^\d.\-+]/g, ''));
+        if (!isNaN(an) && !isNaN(bn)) return asc ? an - bn : bn - an;
+        return asc ? av.localeCompare(bv) : bv.localeCompare(av);
+      });
+      tbody.innerHTML = '';
+      rows.forEach(r => tbody.appendChild(r));
+      asc = !asc;
+    });
+  });
+}
+
+function renderTimeline() {
+  const cells = DATA.phase_narrative.map(p => `
+    <div class="tl-step">
+      <div class="tl-phase">${p.phase}</div>
+      <div class="tl-title">${p.title}</div>
+      <span class="tl-out ${p.outcome_color}">${p.outcome}</span>
+      <div class="tl-result">${p.result}</div>
+      <div class="tl-lesson"><b>Lesson:</b> ${p.lesson}</div>
+    </div>
+  `).join('');
+  return `<div class="timeline">${cells}</div>`;
+}
+
+function renderSizing() {
+  const fmt = (rows, opt) => rows.filter(r => r.sizing === 'flat').map(r => {
+    const isOpt = r.threshold === opt;
+    const ciCls = r.roi_ci[0] > 0 ? 'pos' : (r.roi_ci[1] < 0 ? 'neg' : 'straddle');
+    return `
+      <tr class="${isOpt?'opt':''}">
+        <td class="left">${(r.threshold*100).toFixed(0)}%${isOpt?' ★':''}</td>
+        <td>${r.n_bets}</td>
+        <td>${r.roi>=0?'+':''}${r.roi.toFixed(2)}%</td>
+        <td><span class="ci-pill ${ciCls}">[${r.roi_ci[0].toFixed(1)}, ${r.roi_ci[1].toFixed(1)}]</span></td>
+        <td>${(r.win_rate*100).toFixed(1)}%</td>
+        <td>${r.max_dd.toFixed(2)}</td>
+      </tr>`;
+  }).join('');
+  const sweep50 = DATA.sizing_sweep_50k;
+  const sweep100 = DATA.sizing_sweep_100k;
+  return `
+    <div class="size-grid">
+      <div class="size-card">
+        <h3 style="margin: 0 0 12px; font-size: 14px;">iter ≥$50k</h3>
+        <table class="size-tbl">
+          <thead><tr><th class="left">threshold</th><th>bets</th><th>ROI</th><th>CI</th><th>win%</th><th>max DD</th></tr></thead>
+          <tbody>${fmt(sweep50, 0.0)}</tbody>
+        </table>
+      </div>
+      <div class="size-card">
+        <h3 style="margin: 0 0 12px; font-size: 14px;">iter ≥$100k</h3>
+        <table class="size-tbl">
+          <thead><tr><th class="left">threshold</th><th>bets</th><th>ROI</th><th>CI</th><th>win%</th><th>max DD</th></tr></thead>
+          <tbody>${fmt(sweep100, 0.0)}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderProps() {
+  const v7 = DATA.ball_level_models.find(m => m.id === 'xgb_v7_hierarchical_shrink');
+  if (!v7 || !v7.prop_skill) return '<div style="color:var(--muted)">no prop data</div>';
+  const ship = v7.prop_skill.filter(p => p.skill > 0);
+  const fade = v7.prop_skill.filter(p => p.skill <= 0);
+  const tbl = (rows, color) => `
+    <table class="size-tbl">
+      <thead><tr><th class="left">prop family</th><th>n</th><th>Brier</th><th>base</th><th>skill</th></tr></thead>
+      <tbody>${rows.map(p => `
+        <tr><td class="left">${p.family}</td><td>${p.n}</td><td>${p.brier.toFixed(4)}</td><td>${p.base.toFixed(4)}</td><td style="color:${color}; font-weight:600;">${p.skill>=0?'+':''}${p.skill.toFixed(3)}</td></tr>
+      `).join('')}</tbody>
+    </table>`;
+  return `
+    <div class="size-grid">
+      <div class="size-card">
+        <h3 style="margin: 0 0 12px; font-size: 14px; color: var(--green);">Ship (positive Brier skill)</h3>
+        ${tbl(ship, 'var(--green)')}
+      </div>
+      <div class="size-card">
+        <h3 style="margin: 0 0 12px; font-size: 14px; color: var(--red);">Fade (sim systematically biased — bet against)</h3>
+        ${tbl(fade, 'var(--red)')}
+      </div>
+    </div>
+  `;
+}
+
+function buildEquityChart() {
+  const eq = DATA.ipl_2026_equity;
+  const ctx = document.getElementById('equityChart');
+  if (!ctx) return;
+  if (window._equityChart) window._equityChart.destroy();
+  // Strategy variants: rough scaling (we don't have per-strategy curves; show flat baseline + scaled approximations using sizing sweep ROI deltas)
+  const strat = CURRENT_STRATEGY;
+  const strategies = {
+    0.0:  { label: 'Flat · edge ≥ 0% (production)', mult: 1.0, color: '#16a34a' },
+    0.05: { label: 'Flat · edge ≥ 5%',  mult: 19.72/20.47, color: '#2563eb' },
+    0.10: { label: 'Flat · edge ≥ 10%', mult: 38.09/20.47, color: '#7c3aed' },
+    'kelly': { label: '¼ Kelly · 2% cap', mult: 0.005, color: '#0d9488' },
+  };
+  const s = strategies[strat] || strategies[0.0];
+  const scaledPnl = eq.cum_pnl.map(v => v * s.mult);
+  window._equityChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: eq.dates,
+      datasets: [
+        { label: s.label, data: scaledPnl, borderColor: s.color, backgroundColor: s.color + '22', tension: 0.15, fill: true, pointRadius: 0, borderWidth: 2 },
+        { label: 'Break-even', data: eq.dates.map(_ => 0), borderColor: '#cbd5e1', borderDash: [4, 4], pointRadius: 0, borderWidth: 1 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 14, font: { size: 11 } } } },
+      scales: {
+        y: { title: { display: true, text: 'Cumulative PnL (units)', font: { size: 11 } }, grid: { color: '#eef0f5' } },
+        x: { ticks: { maxTicksLimit: 8, font: { size: 10 } }, grid: { color: '#eef0f5' } },
+      },
+    },
+  });
+}
+
+function attachStrategyChips() {
+  document.querySelectorAll('.chip[data-strat]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.chip[data-strat]').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      const v = chip.dataset.strat;
+      CURRENT_STRATEGY = isNaN(parseFloat(v)) ? v : parseFloat(v);
+      buildEquityChart();
+    });
+  });
+}
+
+function attachCardClicks() {
+  document.querySelectorAll('.card[data-model-id]').forEach(card => {
+    card.addEventListener('click', () => openModal(card.dataset.modelId));
+  });
+  document.querySelectorAll('#lb tr[data-model-id]').forEach(row => {
+    row.addEventListener('click', () => openModal(row.dataset.modelId));
+    row.style.cursor = 'pointer';
+  });
+}
+
+function openModal(id) {
+  const m = DATA.match_level_models.find(x => x.id === id);
+  if (!m) return;
+  const slices = ['iter_50k_raw', 'iter_50k_platt', 'iter_100k_raw', 'iter_100k_platt', 'golden_50k_raw', 'golden_50k_platt', 'golden_100k_raw', 'golden_100k_platt', 'close', 'mismatch', 'ipl', 'international'];
+  const sliceLabels = {iter_50k_raw: 'iter ≥$50k (raw)', iter_50k_platt: 'iter ≥$50k (Platt)', iter_100k_raw: 'iter ≥$100k (raw)', iter_100k_platt: 'iter ≥$100k (Platt)', golden_50k_raw: 'golden ≥$50k (raw)', golden_50k_platt: 'golden ≥$50k (Platt)', golden_100k_raw: 'golden ≥$100k (raw)', golden_100k_platt: 'golden ≥$100k (Platt)', close: 'close (|ELO|≤5)', mismatch: 'mismatch (|ELO|≥15)', ipl: 'IPL', international: 'international'};
+  const sliceRows = slices.map(k => {
+    const sl = m.metrics[k];
+    if (!sl) return '';
+    const ll = sl.ll != null ? sl.ll.toFixed(4) : '—';
+    const roi = sl.roi != null ? `${sl.roi>=0?'+':''}${sl.roi.toFixed(2)}%` : '—';
+    const ci = sl.roi_ci ? `[${sl.roi_ci[0].toFixed(2)}, ${sl.roi_ci[1].toFixed(2)}]` : '—';
+    const win = sl.win_pct != null ? `${sl.win_pct}%` : '—';
+    const n = sl.n != null ? sl.n : '—';
+    return `<tr><td class="k">${sliceLabels[k]}</td><td><span class="mono">n=${n} · LL ${ll} · ROI ${roi} ${ci} · win ${win}</span></td></tr>`;
+  }).filter(Boolean).join('');
+  const wf = (m.walk_forward||[]).map(w => `<tr><td class="k">${w.month}</td><td><span class="mono">n=${w.n} · LL ${w.ll.toFixed(4)} · ROI ${w.roi>=0?'+':''}${w.roi.toFixed(2)}%${w.win_pct?` · win ${w.win_pct}%`:''}</span></td></tr>`).join('');
+  document.getElementById('root').insertAdjacentHTML('beforeend', `
+    <div class="modal-bg open" id="m-${m.id}" onclick="if(event.target===this)document.getElementById('m-${m.id}').remove()">
+      <div class="modal">
+        <div class="modal-h"><h3>${m.label}</h3><button class="close" onclick="document.getElementById('m-${m.id}').remove()">Close</button></div>
+        <div class="modal-b">
+          <h4>Identity</h4>
+          <table class="kvtbl">
+            <tr><td class="k">id</td><td><span class="mono">${m.id}</span></td></tr>
+            <tr><td class="k">phase / status</td><td>${m.phase} · <span class="badge ${m.status.toLowerCase()}">${m.status}</span></td></tr>
+            <tr><td class="k">date</td><td>${m.date}</td></tr>
+            <tr><td class="k">parent</td><td><span class="mono">${m.parent}</span></td></tr>
+            <tr><td class="k">features</td><td>${m.feature_count} · ${m.mode}</td></tr>
+          </table>
+          <h4>What changed vs parent</h4><p>${m.what_changed}</p>
+          <h4>Why it landed / dropped</h4><p>${m.why || '—'}</p>
+          <h4>Train</h4>
+          <table class="kvtbl">
+            <tr><td class="k">val LL</td><td><span class="mono">${m.metrics.val_ll != null ? m.metrics.val_ll.toFixed(4) : '—'}</span></td></tr>
+            <tr><td class="k">test LL (n=791)</td><td><span class="mono">${m.metrics.test_ll != null ? m.metrics.test_ll.toFixed(4) : '—'}</span></td></tr>
+          </table>
+          <h4>Slices</h4>
+          <table class="kvtbl">${sliceRows || '<tr><td class="k">—</td><td>no slice metrics</td></tr>'}</table>
+          ${wf ? `<h4>Walk-forward (iter ≥$50k by month)</h4><table class="kvtbl">${wf}</table>` : ''}
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+init();
+</script>
+
+</body>
+</html>
