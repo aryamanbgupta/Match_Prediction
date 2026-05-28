@@ -63,3 +63,7 @@ archive/eval_results/
 perf_runs/*
 !perf_runs/*.py
 !perf_runs/README.md
+
+# Local scratch space for forward-fixture prediction (refreshed SQLite,
+# tracker snapshots, sweep outputs). Never load-bearing for the pipeline.
+tmp/
