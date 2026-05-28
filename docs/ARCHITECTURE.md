@@ -131,7 +131,9 @@ quick "scope sniff."
 |---|---:|---|
 | `loaders.py` | ~310 | `TestMatchLoader` (JSON → `MatchState`), `BettingOddsLoader` (decimal odds → margin-free probabilities). |
 | `match_evaluator.py` | ~1010 | `MatchLevelEvaluator` — runs sims per match, computes log loss / Brier / edge / calibration / flat & Kelly P&L. Optional Platt + isotonic calibration via `--calibrate` / `--ball-calibrate`. |
-| `run_sim_eval.py` | ~22 K bytes | CLI entrypoint. `--model-type {xgboost,lstm,mlp,transformer}`, `--model-version`, `--n-sims`, `--max-matches`, `--mlx`, calibration flags. |
+| `run_sim_eval.py` | ~22 K bytes | CLI entrypoint. `--model-type {xgboost,lstm,mlp,transformer}`, `--model-version`, `--n-sims`, `--max-matches`, `--mlx`, calibration flags, `--bowler-selector {empirical,random}` (default empirical). |
+| `prop_backtest.py` | ~1100 | Prop-bet backtest harness (2026-05-12). Simulates each test match, aggregates ~25 prop families (top batter/bowler, innings/PP totals, team top-scorer, sixes/fours counts, first-wicket runs, bowler wickets/economy, tie), scores Brier-skill + MAE vs cricsheet actuals with bootstrap CIs. |
+| `render_prop_per_match.py` / `compare_selector_eval.py` / `check_bowler_coverage.py` | — | Prop drilldown renderer (per-match markdown + index), empirical-vs-random selector A/B with gate verdicts, and bowler-coverage (G5) diagnostic. |
 
 ### 2.6 Experiment infrastructure
 
@@ -362,7 +364,8 @@ class BowlerSelector(ABC):
     @abstractmethod
     def select_bowler(self, state, available: List[int]) -> int
 
-class RandomBowlerSelector(BowlerSelector): ...     # current default
+class EmpiricalBowlerSelector(BowlerSelector): ...  # current default (2026-05-12)
+class RandomBowlerSelector(BowlerSelector): ...     # A/B baseline only
 ```
 
 State-transition invariants:
@@ -984,6 +987,35 @@ get clean cache hits; busy ICC days will partially invalidate.
 - **Direct match-winner training**: not implemented; `IMPROVEMENTS.md`
   considers it.
 - **Real-time streaming**: out of scope. Eval on captured pre-match odds.
+
+### 6.15 Phase-aware bowler selection (2026-05-12)
+
+The sim originally picked each over's bowler uniformly at random from the
+available set (`RandomBowlerSelector`). For winner-market eval this barely
+matters — over 100 sims the bowler-of-record washes out — but it badly
+distorts **prop** distributions: powerplay/death overs are bowled by
+different specialists than the middle, so a uniform pick mis-attributes
+wickets and economy.
+
+`EmpiricalBowlerSelector` (now the default in `T20Rules()` and
+`SimulationEngine`) samples each over's bowler proportional to that
+bowler's **historical share of balls in the current phase** (PP / mid /
+death), using counts strictly before the match year. The weight is the
+Dirichlet posterior-mean expected balls, `phase_balls + k·league_share`
+(`k=30`), which collapses to a clean per-bowler weight after
+renormalization; unknown bowlers fall back to the year's league-marginal
+phase share. The usage prior is built offline by
+`scripts/build_bowler_phase_usage.py` → `models/bowler_phase_usage.json`
+(gitignored, like all `models/` artifacts) and module-cached at sim time.
+
+**Validation** (n=60 vs random baseline): winner-market LL parity (G1,
+Δ −0.06, empirical better), top-batter no-regression (G3), ≥90% bowler
+coverage (G5, 91.2%). Top-bowler skill improved only marginally (G2
+strict target missed) because *which* bowler takes a wicket given they
+bowl is governed by the ball-level wicket model, not the selector. The
+continuous-prop MAE wins are significant and the team-fours over-count
+bias halved. Pass `RandomBowlerSelector()` to `T20Rules(...)` (or
+`--bowler-selector random` to `run_sim_eval.py`) to recover the baseline.
 
 ---
 

@@ -122,6 +122,50 @@ uv run python scripts/sim_eval/reslice_eval_json.py \
 
 YAML wiring: set `evaluation.min_volume` and `evaluation.bootstrap_resamples` in the experiment config to make the auto-eval inside `run_experiment.py` produce a single sliced result. To get all three slices, run `run_sliced_eval.sh` after training completes (use `--skip-training` or fresh `--only-eval` invocations).
 
+### Prop-bet backtest + bowler selector (2026-05-12)
+
+The v7 sim doubles as a prop-bet engine. First build the phase-usage prior
+the empirical bowler selector reads (idempotent; skip if current):
+
+```bash
+uv run python scripts/build_bowler_phase_usage.py \
+    --source-dir data/t20s_json --out models/bowler_phase_usage.json
+```
+
+Backtest prop families against cricsheet actuals (Brier-skill + MAE +
+bootstrap CIs), then render per-match views and an empirical-vs-random A/B:
+
+```bash
+# Aggregate prop report (writes report .md + detail .json sidecar).
+uv run python scripts/sim_eval/prop_backtest.py \
+    --test-dir data/polymarket_test --n-sims 100 \
+    --out reports/prop_calibration_report_emp_n261.md
+
+# Per-match drilldowns (one .md per match + index.md hit/miss table).
+uv run python scripts/sim_eval/render_prop_per_match.py \
+    --detail reports/prop_calibration_detail_emp_n261.json \
+    --out-dir reports/prop_per_match/
+
+# Selector A/B: run prop_backtest twice (--bowler-selector via run_sim_eval,
+# or RandomBowlerSelector default in a comparison run) then diff:
+uv run python scripts/sim_eval/compare_selector_eval.py \
+    --left  reports/prop_calibration_detail_emp_n60.json \
+    --right reports/prop_calibration_detail_rand_n60.json \
+    --left-label empirical --right-label random \
+    --out reports/prop_selector_comparison_n60.md
+
+# Gate G5: bowler coverage (fraction with >=N historical balls as-of date).
+uv run python scripts/sim_eval/check_bowler_coverage.py \
+    --test-dir data/polymarket_test \
+    --usage models/bowler_phase_usage.json --threshold 100
+```
+
+`run_sim_eval.py` takes `--bowler-selector {empirical,random}` (default
+`empirical`) and `--bowler-usage-path` to point at a different prior.
+`EmpiricalBowlerSelector` is also the default inside bare `T20Rules()` /
+`SimulationEngine`; construct `T20Rules(RandomBowlerSelector())` to opt out.
+Findings summary: `reports/prop_framework_summary.md`.
+
 ### Outcome-distribution k overrides (Phase 6, 2026-04-25)
 
 The shrinkage strength on the 42 outcome-dist features is controlled via a top-level `outcome_dist:` block in the experiment YAML:

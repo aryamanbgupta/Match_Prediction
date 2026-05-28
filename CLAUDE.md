@@ -58,6 +58,23 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
    anywhere ball-level resolution matters and match-level supervision
    can't help.
 
+   **Prop-bet framework (2026-05-12)**: `scripts/sim_eval/prop_backtest.py`
+   backtests ~25 prop families (top batter/bowler, innings/PP totals,
+   team top-scorer, total sixes, fours/sixes counts, first-wicket runs,
+   bowler wickets/economy) against cricsheet actuals with Brier-skill +
+   bootstrap CIs. Headline (261 iter matches × 100 sims): the sim has
+   real skill on batter-fours, top-batter/bowler ranking, and innings-
+   total O/U; it **systematically over-states tail events** (specific
+   bowlers' wicket counts, powerplay totals) — those are profitable
+   *inverse* plays. Full breakdown: `reports/prop_framework_summary.md`.
+   The sim now defaults to a phase-aware **`EmpiricalBowlerSelector`**
+   (historical usage, EB-shrunk; `models/bowler_phase_usage.json` built
+   by `scripts/build_bowler_phase_usage.py`) instead of the old
+   `RandomBowlerSelector`. It passes winner-market LL parity (G1),
+   top-batter no-regression (G3), and ≥90% bowler coverage (G5); halves
+   the team-fours over-count bias. Pass `--bowler-selector random` to
+   `run_sim_eval.py` for A/B baselines.
+
 Schema-v4 SQLite stats cache at `models/player_stats_cache_v3.sqlite` —
 schema unchanged from v6; v7 differs only in the shrinkage *composition*
 (narrow cells shrink toward player overall, not π directly). Per-phase
@@ -161,6 +178,23 @@ uv run python scripts/run_experiment.py \
 
 # Sliced eval (after eval has produced match_evaluation_results JSON):
 bash scripts/run_sliced_eval.sh   # all / >=$50k / >=$100k
+
+# === Prop-bet backtest (v7 sim) ===
+# Build the bowler-usage prior once (skip if models/bowler_phase_usage.json
+# is current), then backtest prop families vs cricsheet actuals:
+uv run python scripts/build_bowler_phase_usage.py \
+    --source-dir data/t20s_json --out models/bowler_phase_usage.json
+uv run python scripts/sim_eval/prop_backtest.py \
+    --test-dir data/polymarket_test --n-sims 100 \
+    --out reports/prop_calibration_report_emp_n261.md
+# Per-match drilldowns + A/B vs random selector:
+uv run python scripts/sim_eval/render_prop_per_match.py \
+    --detail reports/prop_calibration_detail_emp_n261.json \
+    --out-dir reports/prop_per_match/
+uv run python scripts/sim_eval/compare_selector_eval.py \
+    --left reports/prop_calibration_detail_emp_n60.json \
+    --right reports/prop_calibration_detail_rand_n60.json \
+    --out reports/prop_selector_comparison_n60.md
 ```
 
 Step-by-step v7 sim equivalent: `build_stats_cache.py` → `materialize_features.py`
