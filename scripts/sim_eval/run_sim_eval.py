@@ -16,7 +16,7 @@ warnings.filterwarnings("ignore", message="X does not have valid feature names")
 # Add parent directory to path to import simulation modules
 sys.path.append(str(Path(__file__).parent.parent))
 
-from sim_v1_2 import SimulationEngine, XGBoostModel, T20Rules, XGBoostModelV2, LSTMModelV1, MLPModelV1, MLPModelV2, TransformerModelV1, LLMModelV1
+from sim_v1_2 import SimulationEngine, XGBoostModel, T20Rules, XGBoostModelV2, LSTMModelV1, MLPModelV1, MLPModelV2, TransformerModelV1, LLMModelV1, EmpiricalBowlerSelector, RandomBowlerSelector
 from stats_provider import StatsProvider
 from player_metadata import PlayerMetadataProvider
 from sim_eval.loaders import TestMatchLoader, BettingOddsLoader
@@ -115,6 +115,12 @@ def main():
                        help='Save fitted match-level calibrator to PATH for reuse')
     parser.add_argument('--load-calibrator', type=str, default=None,
                        help='Load pre-fitted match-level calibrator from PATH')
+    parser.add_argument('--bowler-selector', choices=['empirical', 'random'],
+                       default='empirical',
+                       help='Bowler selection strategy. Default = empirical (phase-aware).')
+    parser.add_argument('--bowler-usage-path',
+                       default='models/bowler_phase_usage.json',
+                       help='Usage prior JSON for EmpiricalBowlerSelector.')
 
     args = parser.parse_args()
 
@@ -370,7 +376,12 @@ def main():
             model = DummyModel()
 
     # Create simulation engine
-    rules = T20Rules()
+    if args.bowler_selector == 'empirical':
+        selector = EmpiricalBowlerSelector(usage_path=args.bowler_usage_path)
+    else:
+        selector = RandomBowlerSelector()
+    print(f"Bowler selector: {args.bowler_selector}")
+    rules = T20Rules(selector)
     engine = SimulationEngine(model, rules)
     
     # Load test matches

@@ -6,6 +6,7 @@ from typing import List, Dict, Optional, Tuple, Any
 import numpy as np
 from abc import ABC, abstractmethod
 import random
+import json
 from multiprocessing import Pool, cpu_count
 import time
 from datetime import datetime
@@ -406,12 +407,125 @@ class RandomBowlerSelector(BowlerSelector):
     def select_bowler(self, state: MatchState, available: List[int]) -> int:
         return random.choice(available)
 
+
+# Module-level cache so repeated EmpiricalBowlerSelector() calls share one
+# load + the cumulative-by-year dicts.
+_BOWLER_USAGE_CACHE: Dict[str, Dict] = {}
+
+
+class EmpiricalBowlerSelector(BowlerSelector):
+    """Phase-aware bowler sampler using historical usage from cricsheet.
+
+    Weight for each available bowler is the empirical-Bayes shrunk
+    expected balls in the current phase, computed from matches strictly
+    before state.match_date.year. Unknown bowlers fall back to a
+    league-marginal prior (so they get treated as "average").
+
+    Weight derivation: posterior Dirichlet mean for phase share with
+    prior α = k * league_share gives
+        p_phase = (phase_balls + k * league_share) / (total_balls + k)
+    and expected balls in phase = (total_balls + k) * p_phase
+                                = phase_balls + k * league_share
+    so the weight simplifies to phase_balls + alpha_phase. No volume
+    multiplication needed once we renormalize across bowlers.
+    """
+
+    def __init__(
+        self,
+        usage_path: str = "models/bowler_phase_usage.json",
+        k: int = 30,
+    ):
+        self.usage_path = usage_path
+        self.k = k
+        self._cumulative_cache: Dict[int, Dict[str, Dict[str, int]]] = {}
+
+    def _load(self) -> Dict:
+        cached = _BOWLER_USAGE_CACHE.get(self.usage_path)
+        if cached is not None:
+            return cached
+        with open(self.usage_path) as f:
+            payload = json.load(f)
+        _BOWLER_USAGE_CACHE[self.usage_path] = payload
+        return payload
+
+    def _as_of(self, year: int) -> Dict[str, Dict[str, int]]:
+        """Return {player_id: {pp, mid, death, total}} cumulative for
+        all years strictly < `year`. Cached per year."""
+        if year in self._cumulative_cache:
+            return self._cumulative_cache[year]
+        payload = self._load()
+        cumulative: Dict[str, Dict[str, int]] = {}
+        for cid, years in payload["by_player"].items():
+            agg = {"pp": 0, "mid": 0, "death": 0, "total": 0}
+            for y_str, counts in years.items():
+                if int(y_str) < year:
+                    for k in agg:
+                        agg[k] += counts.get(k, 0)
+            if agg["total"] > 0:
+                cumulative[cid] = agg
+        self._cumulative_cache[year] = cumulative
+        return cumulative
+
+    def _league_share(self, year: int) -> Dict[str, float]:
+        """Phase shares for a given year (falls back to global if missing)."""
+        payload = self._load()
+        by_year = payload.get("by_year_league", {})
+        # Try year, then year-1 (last full year), then global.
+        for y in (year, year - 1):
+            entry = by_year.get(str(y))
+            if entry and entry.get("total_balls", 0) > 0:
+                return {
+                    "pp": entry["pp_share"],
+                    "mid": entry["mid_share"],
+                    "death": entry["death_share"],
+                }
+        glob = payload["global_league"]
+        return {"pp": glob["pp_share"], "mid": glob["mid_share"],
+                "death": glob["death_share"]}
+
+    def select_bowler(self, state: MatchState, available: List[int]) -> int:
+        if state.balls < 36:
+            phase = "pp"
+        elif state.balls < 96:
+            phase = "mid"
+        else:
+            phase = "death"
+
+        match_year = state.match_date.year if state.match_date else 9999
+        as_of = self._as_of(match_year)
+        league = self._league_share(match_year)
+        alpha = self.k * league[phase]
+
+        weights: List[float] = []
+        for idx in available:
+            player = state.bowling_lineup.players[idx]
+            usage = as_of.get(player.player_id)
+            phase_balls = usage[phase] if usage else 0
+            # Weight = phase_balls + alpha. Unknown bowlers get alpha
+            # (≈ k * league_share for this phase).
+            weights.append(float(phase_balls) + alpha)
+
+        total = sum(weights)
+        if total <= 0:
+            # Defensive: shouldn't happen since alpha > 0.
+            return random.choice(available)
+        r = random.random() * total
+        upto = 0.0
+        for idx, w in zip(available, weights):
+            upto += w
+            if r <= upto:
+                return idx
+        return available[-1]
+
+
 # T20 Rules
 class T20Rules:
     """Enforces T20 cricket rules and match flow"""
-    
+
     def __init__(self, bowler_selector: Optional[BowlerSelector] = None):
-        self.bowler_selector = bowler_selector or RandomBowlerSelector()  # Fixed: add default
+        # Default to the empirical phase-aware selector. Pass
+        # RandomBowlerSelector() explicitly for A/B comparison runs.
+        self.bowler_selector = bowler_selector or EmpiricalBowlerSelector()
     
     def select_next_bowler(self, state: MatchState) -> int:
         """Select bowler for next over"""
@@ -3311,7 +3425,9 @@ class SimulationEngine:
     
     def __init__(self, model: PredictionModel, rules: Optional[T20Rules] = None):
         self.model = model
-        self.rules = rules or T20Rules(RandomBowlerSelector())
+        # T20Rules() defaults to EmpiricalBowlerSelector — pass an explicit
+        # T20Rules(RandomBowlerSelector()) for A/B baseline runs.
+        self.rules = rules or T20Rules()
 
     def simulate_match(self, initial_state: MatchState, match_id: str = "sim") -> MatchResult:
         """Simulate a complete match"""
