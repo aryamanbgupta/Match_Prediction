@@ -143,6 +143,13 @@ uv run python scripts/predict_fixture.py --fixture fixtures/<match>.json
 # unfrozen rehydration: SQLite + tracker queries use as-of fixture_date,
 # falling back to test_end (2026-04-16) for fixtures past that. Pass
 # --rebuild-snapshot if data/t20s_json grows.
+#
+# For a fixture well past 2026-04-16 where the stale cache matters
+# (recent-form / current-season player ELOs missing), use the
+# non-destructive duplicate workflow instead — it refreshes inputs in
+# tmp/golden_inclusive/ without touching the train/eval-frozen
+# production cache. See docs/OPERATIONS.md § "Operation 6: Predict an
+# upcoming fixture (live)" for the four-step recipe.
 
 # === Golden eval refresh (after new polymarket capture + cricsheet refresh) ===
 # 1. Pull new T20 cricsheet JSONs from stat-generator (date >= 2026-04-17):

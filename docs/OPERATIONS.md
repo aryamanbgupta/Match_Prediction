@@ -1174,6 +1174,72 @@ except Exception as e:
 
 ---
 
+### Operation 6: Predict an upcoming fixture (live)
+
+For a genuine upcoming fixture, use the match-level direct model via
+`predict_fixture.py`. Hand-write a fixture JSON (see
+`fixtures/_template.json`), then:
+
+```bash
+uv run python scripts/predict_fixture.py --fixture fixtures/<id>.json
+```
+
+Lineup entries may be either cricsheet 8-char IDs or display names
+(names are resolved against `data/all_players_enriched.csv`).
+Polymarket odds are optional; when provided the script also reports
+edge and bet recommendation per the M8 sizing rule (flat 1 unit
+at threshold 0pp).
+
+**The 2026-04-16 staleness caveat.** `predict_fixture.py` uses the
+production SQLite cache (`models/player_stats_cache_v3.sqlite`) +
+tracker snapshot from `data/t20s_json`, both deliberately frozen at
+test_end (2026-04-16) to keep the iteration / golden eval sets
+out-of-sample. For a fixture past that date, all per-player ELOs,
+recent-form, and venue trackers see only pre-cutoff history. This
+is fine for short-horizon fixtures but can materially shift the
+number on longer-horizon ones (e.g. RR vs GT IPL 2026 Qualifier 2,
+2026-05-29: stale cache gave RR 67.2%, post-refresh through
+2026-05-24 gave RR 56.5% — recent-form was the missing signal).
+
+**Refreshed-state prediction (non-destructive).** To predict with
+post-cutoff data without contaminating the held-out train/eval
+artifacts, use the duplicate workflow in `tmp/golden_inclusive/`:
+
+```bash
+# 1. Pull new T20 cricsheet JSONs from stat-generator into the
+#    golden pool. Skips anything already in data/t20s_json (the
+#    frozen local pool) — never mutates it.
+uv run python scripts/extract_golden_cricsheet.py
+
+# 2. Sync new golden files into the tmp combined pool that feeds
+#    the duplicate SQLite cache.
+cp -n data/golden/t20s_json/*.json tmp/golden_inclusive/t20s_combined/
+
+# 3. Rebuild the duplicate SQLite cache (~7 min). The production
+#    cache at models/player_stats_cache_v3.sqlite is left alone.
+uv run python scripts/build_stats_cache.py \
+    --source-dir tmp/golden_inclusive/t20s_combined \
+    --out tmp/golden_inclusive/player_stats_cache_v3.sqlite \
+    --metadata-csv data/all_players_enriched.csv \
+    --force-rebuild
+
+# 4. Predict, rebuilding the combined tracker snapshot in the
+#    process. Same production model (xgb_match_v3_m7_production);
+#    only the feature inputs are refreshed, no retrain.
+uv run python tmp/golden_inclusive/predict_with_refreshed_state.py \
+    --fixture fixtures/<id>.json --rebuild-snapshot
+```
+
+Outputs land in `tmp/golden_inclusive/predictions/`. Drop
+`--rebuild-snapshot` on subsequent runs against the same data state.
+
+The discipline: never add post-2026-04-16 files to `data/t20s_json`
+or rebuild `models/player_stats_cache_v3.sqlite` in place. Doing
+so contaminates the iteration + golden test sets that document the
+production model's ROI numbers.
+
+---
+
 ## Performance Benchmarks
 
 | Operation | Duration | Memory | Notes |

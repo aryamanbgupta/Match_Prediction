@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>T20 Blast 2026 — model ROI dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  body { font-family: -apple-system, system-ui, Segoe UI, sans-serif; margin:0; padding:24px; background:#fafbfc; color:#222; }
+  h1 { margin:0 0 4px 0; } .sub { color:#666; margin-bottom:24px; }
+  .panels { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:24px; }
+  .panel { background:#fff; border:1px solid #e1e4e8; border-radius:8px; padding:16px; }
+  .panel h2 { margin:0 0 12px 0; font-size:14px; color:#586069; text-transform:uppercase; letter-spacing:.06em; }
+  .big { font-size:32px; font-weight:600; } .big-pos { color:#28a745; } .big-neg { color:#d73a49; }
+  .stat-row { display:flex; justify-content:space-between; margin:4px 0; font-size:14px; }
+  .stat-row .lbl { color:#666; }
+  .chart-wrap { background:#fff; border:1px solid #e1e4e8; border-radius:8px; padding:16px; margin-bottom:24px; height:320px; }
+  table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #e1e4e8; border-radius:8px; overflow:hidden; }
+  th,td { padding:10px 12px; text-align:left; vertical-align:top; border-bottom:1px solid #eaecef; font-size:13px; }
+  th { background:#f6f8fa; font-weight:600; color:#24292e; }
+  tr.row-win { background:#f0fff4; } tr.row-loss { background:#fff5f5; }
+  .matchup { font-size:13px; line-height:1.4; } .toss { font-size:11px; margin-top:4px; }
+  .dim { color:#959da5; font-size:11px; }
+  .vol,.edge { color:#6a737d; font-size:11px; margin-top:3px; font-style:italic; }
+  .result-line { font-weight:600; margin-bottom:4px; }
+  .score { color:#586069; font-size:11px; font-family:SF Mono, monospace; }
+  .pnl-win { color:#28a745; font-weight:600; } .pnl-loss { color:#d73a49; font-weight:600; }
+  .pnl-cell,.cum-cell { font-family:SF Mono, monospace; font-size:13px; }
+  .footnote { color:#586069; font-size:12px; margin-top:24px; border-top:1px solid #eaecef; padding-top:16px; }
+</style></head><body>
+<h1>T20 Blast 2026 — model ROI dashboard</h1>
+<div class="sub">
+  Out-of-sample audit of <code>xgb_match_v3_m7_production</code> on the 2026
+  Vitality Blast. The model never saw the 2026 season; odds are real pre-match
+  polymarket prices. Bet rule: 1 unit flat on the largest positive edge
+  (model − market), no bet if best edge ≤ 0. Generated 2026-06-05 02:04Z.
+</div>
+<div class="panels">
+  <div class="panel">
+    <h2>Total return</h2>
+    <div class="big big-neg">-4.13 units</div>
+    <div class="stat-row"><span class="lbl">Bets placed</span><span>34</span></div>
+    <div class="stat-row"><span class="lbl">Wins</span><span>12</span></div>
+    <div class="stat-row"><span class="lbl">Win rate</span><span>35.3%</span></div>
+    <div class="stat-row"><span class="lbl">Flat ROI</span><span>-12.1%</span></div>
+  </div>
+  <div class="panel">
+    <h2>Coverage</h2>
+    <div class="big">34</div>
+    <div class="stat-row"><span class="lbl">Blast 2026 matches</span><span>34</span></div>
+    <div class="stat-row"><span class="lbl">With polymarket odds</span><span>34</span></div>
+    <div class="stat-row"><span class="lbl">With model prediction</span><span>34</span></div>
+  </div>
+  <div class="panel">
+    <h2>Model vs market (log loss)</h2>
+    <div class="big big-neg">0.7138</div>
+    <div class="stat-row"><span class="lbl">Model LL</span><span>0.7138</span></div>
+    <div class="stat-row"><span class="lbl">Market LL (de-vigged)</span><span>0.6894</span></div>
+    <div class="stat-row"><span class="lbl">Coinflip</span><span>0.6931</span></div>
+    <div class="stat-row"><span class="lbl">Verdict</span><span>model trails market</span></div>
+  </div>
+</div>
+<div class="chart-wrap"><canvas id="cumChart"></canvas></div>
+<table>
+<thead><tr><th>#</th><th>Date / venue</th><th>Match</th><th>Result</th>
+<th>Polymarket odds</th><th>Our prediction</th><th>Bet placed</th><th>PnL</th><th>Cumulative</th></tr></thead>
+<tbody>
+        <tr class='row-loss'>
+          <td>1</td>
+          <td>2026-05-22<br><span class='dim'>County Ground</span></td>
+          <td><div class='matchup'><b>Essex</b><br>vs<br><b>Sussex</b></div>
+              <div class='dim toss'>Sussex elected to field</div></td>
+          <td><div class='result-line'>Sussex won by 6 wickets</div><div class='score'>Essex 191/5 (20.0)</div><div class='score'>Sussex 192/4 (16.0)</div></td>
+          <td><div><b>Essex</b>: 2.44 (41%)</div><div><b>Sussex</b>: 1.69 (59%)</div><div class='vol'>vol $7,642</div></td>
+          <td><div><b>Essex</b>: 42.6%</div><div><b>Sussex</b>: 57.4%</div></td>
+          <td><div><b>Essex</b></div><div class='edge'>edge +1.6pp @ 2.44</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-1.00</div><div class='dim'>ROI -100.0%</div><div class='dim'>0/1</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>2</td>
+          <td>2026-05-22<br><span class='dim'>Kennington Oval</span></td>
+          <td><div class='matchup'><b>Surrey</b><br>vs<br><b>Lancashire</b></div>
+              <div class='dim toss'>Lancashire elected to field</div></td>
+          <td><div class='result-line'>Surrey won by 59 runs</div><div class='score'>Surrey 213/6 (20.0)</div><div class='score'>Lancashire 154/9 (16.1)</div></td>
+          <td><div><b>Surrey</b>: 1.57 (64%)</div><div><b>Lancashire</b>: 2.74 (37%)</div><div class='vol'>vol $14,111</div></td>
+          <td><div><b>Surrey</b>: 52.4%</div><div><b>Lancashire</b>: 47.6%</div></td>
+          <td><div><b>Lancashire</b></div><div class='edge'>edge +11.1pp @ 2.74</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-2.00</div><div class='dim'>ROI -100.0%</div><div class='dim'>0/2</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>3</td>
+          <td>2026-05-22<br><span class='dim'>Lord&#x27;s</span></td>
+          <td><div class='matchup'><b>Kent</b><br>vs<br><b>Middlesex</b></div>
+              <div class='dim toss'>Kent elected to bat</div></td>
+          <td><div class='result-line'>Kent won by 27 runs</div><div class='score'>Kent 208/6 (20.0)</div><div class='score'>Middlesex 181/8 (20.0)</div></td>
+          <td><div><b>Kent</b>: 1.69 (59%)</div><div><b>Middlesex</b>: 2.44 (41%)</div><div class='vol'>vol $24,075</div></td>
+          <td><div><b>Kent</b>: 53.4%</div><div><b>Middlesex</b>: 46.6%</div></td>
+          <td><div><b>Middlesex</b></div><div class='edge'>edge +5.6pp @ 2.44</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-3.00</div><div class='dim'>ROI -100.0%</div><div class='dim'>0/3</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>4</td>
+          <td>2026-05-22<br><span class='dim'>County Ground</span></td>
+          <td><div class='matchup'><b>Durham</b><br>vs<br><b>Derbyshire</b></div>
+              <div class='dim toss'>Derbyshire elected to field</div></td>
+          <td><div class='result-line'>Durham won by 6 runs</div><div class='score'>Durham 203/8 (20.0)</div><div class='score'>Derbyshire 197/8 (20.0)</div></td>
+          <td><div><b>Durham</b>: 1.63 (62%)</div><div><b>Derbyshire</b>: 2.60 (39%)</div><div class='vol'>vol $18,096</div></td>
+          <td><div><b>Durham</b>: 55.6%</div><div><b>Derbyshire</b>: 44.4%</div></td>
+          <td><div><b>Derbyshire</b></div><div class='edge'>edge +5.9pp @ 2.60</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-4.00</div><div class='dim'>ROI -100.0%</div><div class='dim'>0/4</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>5</td>
+          <td>2026-05-22<br><span class='dim'>The Cooper Associates County Ground</span></td>
+          <td><div class='matchup'><b>Hampshire</b><br>vs<br><b>Somerset</b></div>
+              <div class='dim toss'>Somerset elected to field</div></td>
+          <td><div class='result-line'>Somerset won by 7 wickets</div><div class='score'>Hampshire 158/10 (19.4)</div><div class='score'>Somerset 160/3 (16.2)</div></td>
+          <td><div><b>Hampshire</b>: 2.53 (40%)</div><div><b>Somerset</b>: 1.65 (60%)</div><div class='vol'>vol $21,850</div></td>
+          <td><div><b>Hampshire</b>: 46.8%</div><div><b>Somerset</b>: 53.2%</div></td>
+          <td><div><b>Hampshire</b></div><div class='edge'>edge +7.3pp @ 2.53</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-5.00</div><div class='dim'>ROI -100.0%</div><div class='dim'>0/5</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>6</td>
+          <td>2026-05-22<br><span class='dim'>County Ground</span></td>
+          <td><div class='matchup'><b>Northamptonshire</b><br>vs<br><b>Glamorgan</b></div>
+              <div class='dim toss'>Glamorgan elected to field</div></td>
+          <td><div class='result-line'>Northamptonshire won by 3 runs</div><div class='score'>Northamptonshire 165/8 (20.0)</div><div class='score'>Glamorgan 162/8 (19.5)</div></td>
+          <td><div><b>Northamptonshire</b>: 1.69 (59%)</div><div><b>Glamorgan</b>: 2.44 (41%)</div><div class='vol'>vol $10,662</div></td>
+          <td><div><b>Northamptonshire</b>: 51.3%</div><div><b>Glamorgan</b>: 48.7%</div></td>
+          <td><div><b>Glamorgan</b></div><div class='edge'>edge +7.7pp @ 2.44</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-6.00</div><div class='dim'>ROI -100.0%</div><div class='dim'>0/6</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>7</td>
+          <td>2026-05-22<br><span class='dim'>County Ground</span></td>
+          <td><div class='matchup'><b>Gloucestershire</b><br>vs<br><b>Birmingham Bears</b></div>
+              <div class='dim toss'>Birmingham Bears elected to field</div></td>
+          <td><div class='result-line'>Gloucestershire won by 47 runs</div><div class='score'>Gloucestershire 121/10 (16.1)</div><div class='score'>Birmingham Bears 74/10 (14.4)</div></td>
+          <td><div><b>Gloucestershire</b>: 2.15 (47%)</div><div><b>Birmingham Bears</b>: 1.87 (53%)</div><div class='vol'>vol $8,505</div></td>
+          <td><div><b>Gloucestershire</b>: 44.0%</div><div><b>Birmingham Bears</b>: 56.0%</div></td>
+          <td><div><b>Birmingham Bears</b></div><div class='edge'>edge +2.5pp @ 1.87</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-7.00</div><div class='dim'>ROI -100.0%</div><div class='dim'>0/7</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>8</td>
+          <td>2026-05-22<br><span class='dim'>Trent Bridge</span></td>
+          <td><div class='matchup'><b>Nottinghamshire</b><br>vs<br><b>Yorkshire</b></div>
+              <div class='dim toss'>Yorkshire elected to field</div></td>
+          <td><div class='result-line'>Yorkshire won by 7 wickets</div><div class='score'>Nottinghamshire 167/7 (20.0)</div><div class='score'>Yorkshire 169/3 (16.3)</div></td>
+          <td><div><b>Nottinghamshire</b>: 1.90 (52%)</div><div><b>Yorkshire</b>: 2.11 (47%)</div><div class='vol'>vol $7,272</div></td>
+          <td><div><b>Nottinghamshire</b>: 58.6%</div><div><b>Yorkshire</b>: 41.4%</div></td>
+          <td><div><b>Nottinghamshire</b></div><div class='edge'>edge +6.1pp @ 1.90</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-8.00</div><div class='dim'>ROI -100.0%</div><div class='dim'>0/8</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>9</td>
+          <td>2026-05-22<br><span class='dim'>Grace Road</span></td>
+          <td><div class='matchup'><b>Worcestershire</b><br>vs<br><b>Leicestershire</b></div>
+              <div class='dim toss'>Leicestershire elected to field</div></td>
+          <td><div class='result-line'>Worcestershire won by 18 runs</div><div class='score'>Worcestershire 188/9 (20.0)</div><div class='score'>Leicestershire 170/4 (20.0)</div></td>
+          <td><div><b>Worcestershire</b>: 2.04 (49%)</div><div><b>Leicestershire</b>: 1.96 (51%)</div><div class='vol'>vol $13,125</div></td>
+          <td><div><b>Worcestershire</b>: 46.6%</div><div><b>Leicestershire</b>: 53.4%</div></td>
+          <td><div><b>Leicestershire</b></div><div class='edge'>edge +2.4pp @ 1.96</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-9.00</div><div class='dim'>ROI -100.0%</div><div class='dim'>0/9</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>10</td>
+          <td>2026-05-23<br><span class='dim'>Sophia Gardens</span></td>
+          <td><div class='matchup'><b>Glamorgan</b><br>vs<br><b>Gloucestershire</b></div>
+              <div class='dim toss'>Gloucestershire elected to field</div></td>
+          <td><div class='result-line'>Gloucestershire won by 2 wickets</div><div class='score'>Glamorgan 157/8 (20.0)</div><div class='score'>Gloucestershire 158/8 (20.0)</div></td>
+          <td><div><b>Glamorgan</b>: 1.75 (57%)</div><div><b>Gloucestershire</b>: 2.33 (43%)</div><div class='vol'>vol $161,714</div></td>
+          <td><div><b>Glamorgan</b>: 50.7%</div><div><b>Gloucestershire</b>: 49.3%</div></td>
+          <td><div><b>Gloucestershire</b></div><div class='edge'>edge +6.3pp @ 2.33</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.326</span></td>
+          <td class='cum-cell'><div>-7.67</div><div class='dim'>ROI -76.7%</div><div class='dim'>1/10</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>11</td>
+          <td>2026-05-24<br><span class='dim'>Riverside Ground</span></td>
+          <td><div class='matchup'><b>Leicestershire</b><br>vs<br><b>Durham</b></div>
+              <div class='dim toss'>Leicestershire elected to bat</div></td>
+          <td><div class='result-line'>Durham won by 6 wickets</div><div class='score'>Leicestershire 148/8 (20.0)</div><div class='score'>Durham 150/4 (14.0)</div></td>
+          <td><div><b>Leicestershire</b>: 2.38 (42%)</div><div><b>Durham</b>: 1.72 (58%)</div><div class='vol'>vol $10,116</div></td>
+          <td><div><b>Leicestershire</b>: 49.7%</div><div><b>Durham</b>: 50.3%</div></td>
+          <td><div><b>Leicestershire</b></div><div class='edge'>edge +7.7pp @ 2.38</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-8.67</div><div class='dim'>ROI -78.9%</div><div class='dim'>1/11</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>12</td>
+          <td>2026-05-24<br><span class='dim'>Edgbaston</span></td>
+          <td><div class='matchup'><b>Birmingham Bears</b><br>vs<br><b>Somerset</b></div>
+              <div class='dim toss'>Birmingham Bears elected to bat</div></td>
+          <td><div class='result-line'>Somerset won by 7 wickets</div><div class='score'>Birmingham Bears 189/6 (20.0)</div><div class='score'>Somerset 193/3 (18.2)</div></td>
+          <td><div><b>Birmingham Bears</b>: 2.47 (41%)</div><div><b>Somerset</b>: 1.68 (59%)</div><div class='vol'>vol $12,509</div></td>
+          <td><div><b>Birmingham Bears</b>: 46.9%</div><div><b>Somerset</b>: 53.1%</div></td>
+          <td><div><b>Birmingham Bears</b></div><div class='edge'>edge +6.4pp @ 2.47</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-9.67</div><div class='dim'>ROI -80.6%</div><div class='dim'>1/12</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>13</td>
+          <td>2026-05-24<br><span class='dim'>Headingley</span></td>
+          <td><div class='matchup'><b>Derbyshire</b><br>vs<br><b>Yorkshire</b></div>
+              <div class='dim toss'>Derbyshire elected to bat</div></td>
+          <td><div class='result-line'>Yorkshire won by 2 wickets</div><div class='score'>Derbyshire 194/4 (20.0)</div><div class='score'>Yorkshire 195/8 (19.2)</div></td>
+          <td><div><b>Derbyshire</b>: 2.74 (37%)</div><div><b>Yorkshire</b>: 1.57 (64%)</div><div class='vol'>vol $15,370</div></td>
+          <td><div><b>Derbyshire</b>: 44.7%</div><div><b>Yorkshire</b>: 55.3%</div></td>
+          <td><div><b>Derbyshire</b></div><div class='edge'>edge +8.2pp @ 2.74</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-10.67</div><div class='dim'>ROI -82.1%</div><div class='dim'>1/13</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>14</td>
+          <td>2026-05-24<br><span class='dim'>Lord&#x27;s</span></td>
+          <td><div class='matchup'><b>Middlesex</b><br>vs<br><b>Surrey</b></div>
+              <div class='dim toss'>Middlesex elected to bat</div></td>
+          <td><div class='result-line'>Surrey won by 6 wickets</div><div class='score'>Middlesex 143/8 (20.0)</div><div class='score'>Surrey 144/4 (18.3)</div></td>
+          <td><div><b>Middlesex</b>: 2.82 (36%)</div><div><b>Surrey</b>: 1.55 (64%)</div><div class='vol'>vol $26,119</div></td>
+          <td><div><b>Middlesex</b>: 46.4%</div><div><b>Surrey</b>: 53.6%</div></td>
+          <td><div><b>Middlesex</b></div><div class='edge'>edge +10.9pp @ 2.82</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-11.67</div><div class='dim'>ROI -83.4%</div><div class='dim'>1/14</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>15</td>
+          <td>2026-05-24<br><span class='dim'>County Ground</span></td>
+          <td><div class='matchup'><b>Northamptonshire</b><br>vs<br><b>Worcestershire</b></div>
+              <div class='dim toss'>Northamptonshire elected to bat</div></td>
+          <td><div class='result-line'>Northamptonshire won by 100 runs</div><div class='score'>Northamptonshire 191/10 (20.0)</div><div class='score'>Worcestershire 91/10 (14.4)</div></td>
+          <td><div><b>Northamptonshire</b>: 1.75 (57%)</div><div><b>Worcestershire</b>: 2.33 (43%)</div><div class='vol'>vol $25,281</div></td>
+          <td><div><b>Northamptonshire</b>: 47.5%</div><div><b>Worcestershire</b>: 52.5%</div></td>
+          <td><div><b>Worcestershire</b></div><div class='edge'>edge +9.5pp @ 2.33</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-12.67</div><div class='dim'>ROI -84.5%</div><div class='dim'>1/15</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>16</td>
+          <td>2026-05-25<br><span class='dim'>Old Trafford</span></td>
+          <td><div class='matchup'><b>Lancashire</b><br>vs<br><b>Nottinghamshire</b></div>
+              <div class='dim toss'>Lancashire elected to bat</div></td>
+          <td><div class='result-line'>Lancashire won by 39 runs</div><div class='score'>Lancashire 208/4 (20.0)</div><div class='score'>Nottinghamshire 169/9 (20.0)</div></td>
+          <td><div><b>Lancashire</b>: 2.04 (49%)</div><div><b>Nottinghamshire</b>: 1.96 (51%)</div><div class='vol'>vol $77,115</div></td>
+          <td><div><b>Lancashire</b>: 49.9%</div><div><b>Nottinghamshire</b>: 50.1%</div></td>
+          <td><div><b>Lancashire</b></div><div class='edge'>edge +0.9pp @ 2.04</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.041</span></td>
+          <td class='cum-cell'><div>-11.63</div><div class='dim'>ROI -72.7%</div><div class='dim'>2/16</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>17</td>
+          <td>2026-05-25<br><span class='dim'>St Lawrence Ground</span></td>
+          <td><div class='matchup'><b>Sussex</b><br>vs<br><b>Kent</b></div>
+              <div class='dim toss'>Sussex elected to bat</div></td>
+          <td><div class='result-line'>Kent won by 7 wickets</div><div class='score'>Sussex 197/6 (20.0)</div><div class='score'>Kent 199/3 (18.2)</div></td>
+          <td><div><b>Sussex</b>: 1.98 (50%)</div><div><b>Kent</b>: 2.02 (50%)</div><div class='vol'>vol $111,338</div></td>
+          <td><div><b>Sussex</b>: 43.2%</div><div><b>Kent</b>: 56.8%</div></td>
+          <td><div><b>Kent</b></div><div class='edge'>edge +7.3pp @ 2.02</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.020</span></td>
+          <td class='cum-cell'><div>-10.61</div><div class='dim'>ROI -62.4%</div><div class='dim'>3/17</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>18</td>
+          <td>2026-05-26<br><span class='dim'>The Rose Bowl</span></td>
+          <td><div class='matchup'><b>Hampshire</b><br>vs<br><b>Essex</b></div>
+              <div class='dim toss'>Essex elected to field</div></td>
+          <td><div class='result-line'>Hampshire won by 30 runs</div><div class='score'>Hampshire 200/4 (20.0)</div><div class='score'>Essex 170/7 (20.0)</div></td>
+          <td><div><b>Hampshire</b>: 1.53 (66%)</div><div><b>Essex</b>: 2.90 (34%)</div><div class='vol'>vol $165,841</div></td>
+          <td><div><b>Hampshire</b>: 61.8%</div><div><b>Essex</b>: 38.2%</div></td>
+          <td><div><b>Essex</b></div><div class='edge'>edge +3.7pp @ 2.90</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-11.61</div><div class='dim'>ROI -64.5%</div><div class='dim'>3/18</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>19</td>
+          <td>2026-05-27<br><span class='dim'>Grace Road</span></td>
+          <td><div class='matchup'><b>Derbyshire</b><br>vs<br><b>Leicestershire</b></div>
+              <div class='dim toss'>Leicestershire elected to field</div></td>
+          <td><div class='result-line'>Derbyshire won by 85 runs</div><div class='score'>Derbyshire 230/5 (20.0)</div><div class='score'>Leicestershire 145/10 (15.2)</div></td>
+          <td><div><b>Derbyshire</b>: 2.15 (47%)</div><div><b>Leicestershire</b>: 1.87 (53%)</div><div class='vol'>vol $202,852</div></td>
+          <td><div><b>Derbyshire</b>: 43.4%</div><div><b>Leicestershire</b>: 56.6%</div></td>
+          <td><div><b>Leicestershire</b></div><div class='edge'>edge +3.1pp @ 1.87</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-12.61</div><div class='dim'>ROI -66.4%</div><div class='dim'>3/19</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>20</td>
+          <td>2026-05-29<br><span class='dim'>Riverside Ground</span></td>
+          <td><div class='matchup'><b>Yorkshire</b><br>vs<br><b>Durham</b></div>
+              <div class='dim toss'>Durham elected to field</div></td>
+          <td><div class='result-line'>Yorkshire won by 58 runs</div><div class='score'>Yorkshire 151/9 (20.0)</div><div class='score'>Durham 93/10 (16.2)</div></td>
+          <td><div><b>Yorkshire</b>: 1.90 (52%)</div><div><b>Durham</b>: 2.11 (47%)</div><div class='vol'>vol $32,863</div></td>
+          <td><div><b>Yorkshire</b>: 50.4%</div><div><b>Durham</b>: 49.6%</div></td>
+          <td><div><b>Durham</b></div><div class='edge'>edge +2.1pp @ 2.11</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-13.61</div><div class='dim'>ROI -68.1%</div><div class='dim'>3/20</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>21</td>
+          <td>2026-05-29<br><span class='dim'>Old Trafford</span></td>
+          <td><div class='matchup'><b>Lancashire</b><br>vs<br><b>Leicestershire</b></div>
+              <div class='dim toss'>Lancashire elected to bat</div></td>
+          <td><div class='result-line'>Leicestershire won by 2 wickets</div><div class='score'>Lancashire 145/9 (20.0)</div><div class='score'>Leicestershire 146/8 (19.5)</div></td>
+          <td><div><b>Lancashire</b>: 1.57 (64%)</div><div><b>Leicestershire</b>: 2.74 (37%)</div><div class='vol'>vol $36,059</div></td>
+          <td><div><b>Lancashire</b>: 52.1%</div><div><b>Leicestershire</b>: 47.9%</div></td>
+          <td><div><b>Leicestershire</b></div><div class='edge'>edge +11.4pp @ 2.74</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.740</span></td>
+          <td class='cum-cell'><div>-11.87</div><div class='dim'>ROI -56.5%</div><div class='dim'>4/21</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>22</td>
+          <td>2026-05-29<br><span class='dim'>Sophia Gardens</span></td>
+          <td><div class='matchup'><b>Somerset</b><br>vs<br><b>Glamorgan</b></div>
+              <div class='dim toss'>Glamorgan elected to field</div></td>
+          <td><div class='result-line'>Glamorgan won by 7 wickets</div><div class='score'>Somerset 171/9 (20.0)</div><div class='score'>Glamorgan 175/3 (13.5)</div></td>
+          <td><div><b>Somerset</b>: 1.55 (64%)</div><div><b>Glamorgan</b>: 2.82 (36%)</div><div class='vol'>vol $34,052</div></td>
+          <td><div><b>Somerset</b>: 62.7%</div><div><b>Glamorgan</b>: 37.3%</div></td>
+          <td><div><b>Glamorgan</b></div><div class='edge'>edge +1.8pp @ 2.82</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.817</span></td>
+          <td class='cum-cell'><div>-10.06</div><div class='dim'>ROI -45.7%</div><div class='dim'>5/22</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>23</td>
+          <td>2026-05-29<br><span class='dim'>County Ground</span></td>
+          <td><div class='matchup'><b>Derbyshire</b><br>vs<br><b>Nottinghamshire</b></div>
+              <div class='dim toss'>Derbyshire elected to bat</div></td>
+          <td><div class='result-line'>Derbyshire won by 23 runs</div><div class='score'>Derbyshire 234/4 (20.0)</div><div class='score'>Nottinghamshire 211/6 (20.0)</div></td>
+          <td><div><b>Derbyshire</b>: 2.30 (43%)</div><div><b>Nottinghamshire</b>: 1.77 (57%)</div><div class='vol'>vol $49,914</div></td>
+          <td><div><b>Derbyshire</b>: 42.8%</div><div><b>Nottinghamshire</b>: 57.2%</div></td>
+          <td><div><b>Nottinghamshire</b></div><div class='edge'>edge +0.7pp @ 1.77</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-11.06</div><div class='dim'>ROI -48.1%</div><div class='dim'>5/23</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>24</td>
+          <td>2026-05-29<br><span class='dim'>County Ground</span></td>
+          <td><div class='matchup'><b>Gloucestershire</b><br>vs<br><b>Northamptonshire</b></div>
+              <div class='dim toss'>Northamptonshire elected to field</div></td>
+          <td><div class='result-line'>Northamptonshire won by 7 wickets</div><div class='score'>Gloucestershire 164/9 (20.0)</div><div class='score'>Northamptonshire 166/3 (16.2)</div></td>
+          <td><div><b>Gloucestershire</b>: 2.44 (41%)</div><div><b>Northamptonshire</b>: 1.69 (59%)</div><div class='vol'>vol $13,209</div></td>
+          <td><div><b>Gloucestershire</b>: 50.3%</div><div><b>Northamptonshire</b>: 49.7%</div></td>
+          <td><div><b>Gloucestershire</b></div><div class='edge'>edge +9.3pp @ 2.44</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-12.06</div><div class='dim'>ROI -50.2%</div><div class='dim'>5/24</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>25</td>
+          <td>2026-05-29<br><span class='dim'>St Lawrence Ground</span></td>
+          <td><div class='matchup'><b>Kent</b><br>vs<br><b>Essex</b></div>
+              <div class='dim toss'>Essex elected to field</div></td>
+          <td><div class='result-line'>Essex won by 9 wickets</div><div class='score'>Kent 129/9 (20.0)</div><div class='score'>Essex 130/1 (13.4)</div></td>
+          <td><div><b>Kent</b>: 1.52 (66%)</div><div><b>Essex</b>: 2.94 (34%)</div><div class='vol'>vol $19,448</div></td>
+          <td><div><b>Kent</b>: 57.7%</div><div><b>Essex</b>: 42.3%</div></td>
+          <td><div><b>Essex</b></div><div class='edge'>edge +8.3pp @ 2.94</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.941</span></td>
+          <td class='cum-cell'><div>-10.12</div><div class='dim'>ROI -40.5%</div><div class='dim'>6/25</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>26</td>
+          <td>2026-05-29<br><span class='dim'>The Rose Bowl</span></td>
+          <td><div class='matchup'><b>Surrey</b><br>vs<br><b>Hampshire</b></div>
+              <div class='dim toss'>Surrey elected to bat</div></td>
+          <td><div class='result-line'>Hampshire won by 5 wickets</div><div class='score'>Surrey 174/8 (20.0)</div><div class='score'>Hampshire 178/5 (19.1)</div></td>
+          <td><div><b>Surrey</b>: 1.79 (56%)</div><div><b>Hampshire</b>: 2.27 (44%)</div><div class='vol'>vol $84,755</div></td>
+          <td><div><b>Surrey</b>: 54.2%</div><div><b>Hampshire</b>: 45.8%</div></td>
+          <td><div><b>Hampshire</b></div><div class='edge'>edge +1.8pp @ 2.27</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.273</span></td>
+          <td class='cum-cell'><div>-8.84</div><div class='dim'>ROI -34.0%</div><div class='dim'>7/26</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>27</td>
+          <td>2026-05-29<br><span class='dim'>County Ground</span></td>
+          <td><div class='matchup'><b>Warwickshire</b><br>vs<br><b>Worcestershire</b></div>
+              <div class='dim toss'>Worcestershire elected to field</div></td>
+          <td><div class='result-line'>Worcestershire won by 6 wickets</div><div class='score'>Warwickshire 141/10 (19.5)</div><div class='score'>Worcestershire 142/4 (18.5)</div></td>
+          <td><div><b>Warwickshire</b>: 2.11 (47%)</div><div><b>Worcestershire</b>: 1.90 (52%)</div><div class='vol'>vol $102,065</div></td>
+          <td><div><b>Warwickshire</b>: 53.6%</div><div><b>Worcestershire</b>: 46.4%</div></td>
+          <td><div><b>Warwickshire</b></div><div class='edge'>edge +6.1pp @ 2.11</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-9.84</div><div class='dim'>ROI -36.5%</div><div class='dim'>7/27</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>28</td>
+          <td>2026-05-30<br><span class='dim'>County Ground</span></td>
+          <td><div class='matchup'><b>Middlesex</b><br>vs<br><b>Sussex</b></div>
+              <div class='dim toss'>Sussex elected to field</div></td>
+          <td><div class='result-line'>Middlesex won by 31 runs</div><div class='score'>Middlesex 213/4 (20.0)</div><div class='score'>Sussex 182/10 (19.4)</div></td>
+          <td><div><b>Middlesex</b>: 2.99 (33%)</div><div><b>Sussex</b>: 1.50 (66%)</div><div class='vol'>vol $323,679</div></td>
+          <td><div><b>Middlesex</b>: 43.6%</div><div><b>Sussex</b>: 56.4%</div></td>
+          <td><div><b>Middlesex</b></div><div class='edge'>edge +10.1pp @ 2.99</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.985</span></td>
+          <td class='cum-cell'><div>-7.86</div><div class='dim'>ROI -28.1%</div><div class='dim'>8/28</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>29</td>
+          <td>2026-05-31<br><span class='dim'>County Ground</span></td>
+          <td><div class='matchup'><b>Derbyshire</b><br>vs<br><b>Essex</b></div>
+              <div class='dim toss'>Derbyshire elected to bat</div></td>
+          <td><div class='result-line'>Essex won by 5 wickets</div><div class='score'>Derbyshire 173/10 (20.0)</div><div class='score'>Essex 179/5 (19.4)</div></td>
+          <td><div><b>Derbyshire</b>: 1.92 (52%)</div><div><b>Essex</b>: 2.08 (48%)</div><div class='vol'>vol $32,347</div></td>
+          <td><div><b>Derbyshire</b>: 48.7%</div><div><b>Essex</b>: 51.3%</div></td>
+          <td><div><b>Essex</b></div><div class='edge'>edge +3.3pp @ 2.08</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.083</span></td>
+          <td class='cum-cell'><div>-6.77</div><div class='dim'>ROI -23.4%</div><div class='dim'>9/29</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>30</td>
+          <td>2026-05-31<br><span class='dim'>Edgbaston</span></td>
+          <td><div class='matchup'><b>Warwickshire</b><br>vs<br><b>Northamptonshire</b></div>
+              <div class='dim toss'>Warwickshire elected to bat</div></td>
+          <td><div class='result-line'>Northamptonshire won by 6 wickets</div><div class='score'>Warwickshire 208/7 (20.0)</div><div class='score'>Northamptonshire 209/4 (19.2)</div></td>
+          <td><div><b>Warwickshire</b>: 2.33 (43%)</div><div><b>Northamptonshire</b>: 1.75 (57%)</div><div class='vol'>vol $171,117</div></td>
+          <td><div><b>Warwickshire</b>: 57.7%</div><div><b>Northamptonshire</b>: 42.3%</div></td>
+          <td><div><b>Warwickshire</b></div><div class='edge'>edge +14.7pp @ 2.33</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-7.77</div><div class='dim'>ROI -25.9%</div><div class='dim'>9/30</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>31</td>
+          <td>2026-05-31<br><span class='dim'>Headingley</span></td>
+          <td><div class='matchup'><b>Gloucestershire</b><br>vs<br><b>Yorkshire</b></div>
+              <div class='dim toss'>Gloucestershire elected to bat</div></td>
+          <td><div class='result-line'>Gloucestershire won by 56 runs</div><div class='score'>Gloucestershire 217/6 (20.0)</div><div class='score'>Yorkshire 161/10 (17.4)</div></td>
+          <td><div><b>Gloucestershire</b>: 2.82 (36%)</div><div><b>Yorkshire</b>: 1.55 (64%)</div><div class='vol'>vol $90,085</div></td>
+          <td><div><b>Gloucestershire</b>: 46.6%</div><div><b>Yorkshire</b>: 53.4%</div></td>
+          <td><div><b>Gloucestershire</b></div><div class='edge'>edge +11.1pp @ 2.82</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.817</span></td>
+          <td class='cum-cell'><div>-5.96</div><div class='dim'>ROI -19.2%</div><div class='dim'>10/31</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>32</td>
+          <td>2026-05-31<br><span class='dim'>Kennington Oval</span></td>
+          <td><div class='matchup'><b>Surrey</b><br>vs<br><b>Kent</b></div>
+              <div class='dim toss'>Kent elected to field</div></td>
+          <td><div class='result-line'>Kent won by 8 wickets</div><div class='score'>Surrey 116/10 (19.5)</div><div class='score'>Kent 118/2 (14.0)</div></td>
+          <td><div><b>Surrey</b>: 1.59 (63%)</div><div><b>Kent</b>: 2.70 (37%)</div><div class='vol'>vol $12,601</div></td>
+          <td><div><b>Surrey</b>: 55.6%</div><div><b>Kent</b>: 44.4%</div></td>
+          <td><div><b>Kent</b></div><div class='edge'>edge +7.4pp @ 2.70</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.703</span></td>
+          <td class='cum-cell'><div>-4.25</div><div class='dim'>ROI -13.3%</div><div class='dim'>11/32</div></td>
+        </tr>
+        <tr class='row-loss'>
+          <td>33</td>
+          <td>2026-05-31<br><span class='dim'>Merchant Taylors&#x27; School Ground</span></td>
+          <td><div class='matchup'><b>Middlesex</b><br>vs<br><b>Hampshire</b></div>
+              <div class='dim toss'>Hampshire elected to field</div></td>
+          <td><div class='result-line'>Hampshire won by 8 wickets</div><div class='score'>Middlesex 126/7 (20.0)</div><div class='score'>Hampshire 130/2 (14.0)</div></td>
+          <td><div><b>Middlesex</b>: 2.74 (37%)</div><div><b>Hampshire</b>: 1.57 (64%)</div><div class='vol'>vol $31,467</div></td>
+          <td><div><b>Middlesex</b>: 42.5%</div><div><b>Hampshire</b>: 57.5%</div></td>
+          <td><div><b>Middlesex</b></div><div class='edge'>edge +6.0pp @ 2.74</div></td>
+          <td class='pnl-cell'><span class='pnl-loss'>-1.000</span></td>
+          <td class='cum-cell'><div>-5.25</div><div class='dim'>ROI -15.9%</div><div class='dim'>11/33</div></td>
+        </tr>
+        <tr class='row-win'>
+          <td>34</td>
+          <td>2026-05-31<br><span class='dim'>Trent Bridge</span></td>
+          <td><div class='matchup'><b>Durham</b><br>vs<br><b>Nottinghamshire</b></div>
+              <div class='dim toss'>Nottinghamshire elected to field</div></td>
+          <td><div class='result-line'>Nottinghamshire won by 6 wickets</div><div class='score'>Durham 156/8 (20.0)</div><div class='score'>Nottinghamshire 157/4 (17.2)</div></td>
+          <td><div><b>Durham</b>: 1.89 (53%)</div><div><b>Nottinghamshire</b>: 2.13 (47%)</div><div class='vol'>vol $18,985</div></td>
+          <td><div><b>Durham</b>: 49.0%</div><div><b>Nottinghamshire</b>: 51.0%</div></td>
+          <td><div><b>Nottinghamshire</b></div><div class='edge'>edge +4.0pp @ 2.13</div></td>
+          <td class='pnl-cell'><span class='pnl-win'>+1.128</span></td>
+          <td class='cum-cell'><div>-4.13</div><div class='dim'>ROI -12.1%</div><div class='dim'>12/34</div></td>
+        </tr></tbody></table>
+<div class="footnote">
+  <b>How to read this</b>: rows are chronological. Green = bet won, red = bet lost.
+  In a 2-way market exactly one side carries positive edge at threshold 0, so the
+  model bets every match. "Cumulative" tracks PnL/ROI across resolved bets.
+  <br><br>
+  <b>Caveat</b>: n=34 is a tiny sample (3 match-days, 2026-05-22→25) — treat
+  ROI as directional, not a verdict. The wide swings on the chart are single-bet
+  variance. Pure out-of-sample: the 2026 Blast was never in training/selection.
+</div>
+<script>
+new Chart(document.getElementById('cumChart'), {
+  type:'line',
+  data:{ labels:["2026-05-22 Ess-Sus", "2026-05-22 Sur-Lan", "2026-05-22 Ken-Mid", "2026-05-22 Dur-Der", "2026-05-22 Ham-Som", "2026-05-22 Nor-Gla", "2026-05-22 Glo-Bir", "2026-05-22 Not-Yor", "2026-05-22 Wor-Lei", "2026-05-23 Gla-Glo", "2026-05-24 Lei-Dur", "2026-05-24 Bir-Som", "2026-05-24 Der-Yor", "2026-05-24 Mid-Sur", "2026-05-24 Nor-Wor", "2026-05-25 Lan-Not", "2026-05-25 Sus-Ken", "2026-05-26 Ham-Ess", "2026-05-27 Der-Lei", "2026-05-29 Yor-Dur", "2026-05-29 Lan-Lei", "2026-05-29 Som-Gla", "2026-05-29 Der-Not", "2026-05-29 Glo-Nor", "2026-05-29 Ken-Ess", "2026-05-29 Sur-Ham", "2026-05-29 War-Wor", "2026-05-30 Mid-Sus", "2026-05-31 Der-Ess", "2026-05-31 War-Nor", "2026-05-31 Glo-Yor", "2026-05-31 Sur-Ken", "2026-05-31 Mid-Ham", "2026-05-31 Dur-Not"], datasets:[
+    { label:'Cumulative PnL (units)', data:[-1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -7.674, -8.674, -9.674, -10.674, -11.674, -12.674, -11.634, -10.613, -11.613, -12.613, -13.613, -11.874, -10.057, -11.057, -12.057, -10.116, -8.843, -9.843, -7.858, -6.775, -7.775, -5.958, -4.255, -5.255, -4.127], borderColor:'#0366d6',
+       backgroundColor:'rgba(3,102,214,0.10)', tension:0.1, yAxisID:'y' },
+    { label:'Cumulative ROI (%)', data:[-100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -100.0, -76.74, -78.86, -80.62, -82.11, -83.39, -84.5, -72.71, -62.43, -64.52, -66.39, -68.07, -56.54, -45.71, -48.07, -50.24, -40.46, -34.01, -36.46, -28.06, -23.36, -25.92, -19.22, -13.3, -15.92, -12.14], borderColor:'#28a745',
+       backgroundColor:'rgba(40,167,69,0.10)', tension:0.1, yAxisID:'y1', borderDash:[5,5] } ]},
+  options:{ responsive:true, maintainAspectRatio:false,
+    interaction:{ mode:'index', intersect:false },
+    scales:{ y:{ position:'left', title:{ display:true, text:'PnL (units)' } },
+      y1:{ position:'right', title:{ display:true, text:'ROI (%)' }, grid:{ drawOnChartArea:false } } } }
+});
+</script>
+</body></html>
