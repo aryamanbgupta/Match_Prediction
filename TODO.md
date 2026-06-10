@@ -326,6 +326,28 @@ Full reference: `reports/m8_sizing_rules_eval.md`.
 - [ ] CLV (Closing Line Value) tracking
 - [ ] Minimum edge threshold (3-5%) before placing a bet
 
+## Pipeline bugs found during E-series experiments (2026-06-09)
+
+- [ ] **`parsing_v2.py:1255` — `innings_id` is `hash(json) % 100000`**: salted
+  per process (irreproducible across runs) and collision-prone (~450 expected
+  collisions at corpus size). Blocks reliable parquet↔cricsheet joins; E6
+  works around it with a (date, venue) + innings-shape join (~5% drop).
+  Fix: emit the cricsheet filename stem. Requires a feature-parquet rebuild
+  (cheap) but no schema bump.
+- [ ] **`sim_v1_2.py` XGBoostModelV2 never sets `venue_encoded`** — `_feat_buf`
+  defaults missing keys to 0, so every simulated ball is scored as venue
+  code 0 while training saw real codes. Teacher-forced deltas real-vs-0 are
+  second-order relative to the class-weight tilt (see below), but it's an
+  out-of-distribution input on every sim ball. Fix: save a venue encoder at
+  training time and wire `venue_encoder_path` into the XGB wrapper (LSTM/
+  Transformer wrappers already do this). Re-baseline sims after fixing.
+- [x] **v7 sampled raw `balanced`-class-weight probabilities** (E5, the big
+  one): per-ball P(wicket) ≈ 2× actual, boundaries +0.05 absolute. Root
+  cause of the prop framework's tail-event overshoot. Fixed via val-fit
+  `VectorScalingCalibrator` (`models/xgb_v3/vector_scaling_calibrator_v1.pkl`),
+  `--ball-calibrator vector` in `prop_backtest.py`. See
+  `reports/e5_teacher_forced_bias.md`.
+
 ## Infrastructure & Refactoring
 - [x] ~~**Eval performance pass (3 phases)**~~ — **LANDED 2026-05-08 → 2026-05-09**. (1) `_SQLiteBackend._norm_date` cache: −5.6 % wall on 5×100 (`85d67bf`). (2) `StatsProviderCache` extended to memoize 12 per-player getters: cumulative −17.9 % wall, `_fill_outcome_dists` −80 % cumtime (`135514a`). (3) Pickle round-trip fixed via explicit `__getstate__`/`__setstate__` (`e4b97cc`); 4-process disjoint-shard parallel eval gives 2.33× throughput at 1.6 GB combined RSS. Bit-identical numerics verified at every stage. **End-to-end full 261×100 eval: 41.9 min → 16.6 min = 2.52× speedup**, with avg LL within 0.0005 of serial baseline. See IMPROVEMENTS.md §"Performance Pass".
 - [x] ~~**Delete legacy v2 stats cache** (`models/cache_chunks/`, 7.4GB)~~ — done in the 2026-04-26 cleanup pass alongside `models/cache_chunks_v3_old/` (8.9 GB) and 9 stray `cache_chunk_*.pkl` chunks at `models/` root (2.1 GB). Repo went 30 GB → 11 GB; see `archive/README.md` for what was archived vs deleted.
