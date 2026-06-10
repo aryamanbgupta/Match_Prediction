@@ -38,52 +38,10 @@ Detail: `prop_calibration_detail_emp_n261.json` (n=261 matches). Baselines built
 | `batter_runs_mae` | 4254 | 14.02 | 14.73 | -0.71 | [-0.89, -0.52] | ✅ sim adds skill |
 | `highest_individual_mae` | 261 | 16.56 | 18.45 | -1.89 | [-2.97, -0.90] | ✅ sim adds skill |
 | `team_first_over_mae` | 522 | 3.40 | 3.38 | +0.02 | [-0.08, +0.12] | ≈ parity |
+| `team_total_fours_mae` | 522 | 4.00 | 3.65 | +0.34 | [+0.10, +0.61] | ❌ baseline wins |
 | `team_total_sixes_mae` | 522 | 2.91 | 2.97 | -0.06 | [-0.24, +0.12] | ≈ parity |
 
 ## Skipped families
 
 - `bowler_economy_ou_*`: fair career baseline ill-defined without modelling overs bowled per spell.
 - `p_tie`: degenerate (ties ~0.4% of matches).
-- `team_total_fours_mae`: team fours not tracked in the corpus venue log (add on next corpus-cache rebuild).
-
-## Caveat — MC noise floor in the sim's Brier
-
-Sim probabilities are MC estimates from **100 sims**, so sampling noise
-alone inflates the sim's Brier by Var(p̂) ≈ p(1−p)/100 ≤ **0.0025**
-(worst case at p=0.5; ~0.001 at the top_batter p≈0.1 range). The fair
-baselines are deterministic rates and carry no such penalty.
-Consequently:
-
-- "❌ baseline wins" rows with Δ ≲ 0.003 (`top_batter` +0.0025,
-  `batter_50plus` +0.0025) should be read as **parity within MC noise**,
-  not as the sim being genuinely worse.
-- Rows with Δ ≥ +0.01 (`bowler_wkts_*` +0.014…+0.036, `pp_total_ou_55_5`
-  +0.031, `first_wicket_runs_ou_30_5` +0.017, `team_highest_individual_
-  ou_29_5` +0.010) are far above the noise floor — **robustly real**.
-- No "✅" verdict among binary families is affected (there are none).
-
-## Verdict (rewrites the 2026-05-12 prop framework conclusions)
-
-1. **No binary prop family demonstrates sim skill over a fair baseline.**
-   The `prop_framework_summary.md` "ship as-is" list (batter fours,
-   top-batter/bowler ranking, innings totals) was an artifact of
-   measuring skill against *base rates*. Against as-of EB-shrunk
-   career/venue/positional baselines, the best binary families are
-   parity; several lose.
-2. **The sim's real value-add is continuous score distributions**:
-   per-batter expected runs (MAE 14.02 vs career baseline 14.73,
-   Δ CI [−0.89, −0.52]) and match highest-individual score (16.56 vs
-   18.45, Δ CI [−2.97, −0.90]). This is consistent with the sim's
-   scenario-generator role: it composes venue + lineup + matchup
-   interactions that a single career rate can't.
-3. **The "inverse play" thesis needs reframing.** Fading the sim on
-   `bowler_wkts_*` / `pp_total_*` is only profitable against a
-   counterparty pricing *like the sim*. A market pricing at the fair
-   baseline (the natural anchor for a competent book) leaves no room:
-   the baseline already beats both the sim and its inverse. Without
-   captured prop lines there is no evidence of a deployable edge.
-4. **Betting candidates from the sim, if any, live in the continuous
-   families** (player runs O/U at bookmaker lines, highest-score
-   markets) where the sim genuinely beats career-rate pricing. These
-   need real prop lines (scraper restoration) before any ROI claim.
-

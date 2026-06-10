@@ -72,7 +72,8 @@ def build_corpus_logs(source_dir: Path) -> dict:
     batter_log = defaultdict(list)   # name -> [(date, runs, fours, sixes)]
     bowler_log = defaultdict(list)   # name -> [(date, wkts)]
     venue_inn = defaultdict(list)    # venue -> [(date, total, pp, top_score,
-                                     #            first_wkt_runs, first_over)]
+                                     #            first_wkt_runs, first_over,
+                                     #            team_fours)]
     venue_match = defaultdict(list)  # venue -> [(date, match_sixes, max_over)]
     pos_top = []                     # [(date, appearance_pos_of_top_scorer)]
 
@@ -136,6 +137,7 @@ def build_corpus_logs(source_dir: Path) -> dict:
                 continue
             if first_wkt_runs is None:
                 first_wkt_runs = total
+            team_fours = sum(v["fours"] for v in batters.values())
             top_score = max(v["runs"] for v in batters.values())
             top_name = max(batters, key=lambda b: batters[b]["runs"])
             pos_top.append((date, appear.index(top_name) + 1))
@@ -151,7 +153,7 @@ def build_corpus_logs(source_dir: Path) -> dict:
             for bw in seen_bowlers - set(wkts_by_bowler):
                 bowler_log[bw].append((date, 0))
             venue_inn[venue].append((date, total, pp, top_score,
-                                     first_wkt_runs, first_over))
+                                     first_wkt_runs, first_over, team_fours))
         venue_match[venue].append((date, match_sixes, match_max_over))
         n_used += 1
 
@@ -338,7 +340,7 @@ def baseline_rows(detail: list, asof: AsOf) -> dict:
                 {"p_sim": r["sim_mean"], "p_base": pb, "y": r["actual"],
                  "mid": mid})
         mae_v = {
-            "team_total_fours_mae": None,  # fours not in venue log; skip
+            "team_total_fours_mae": ("venue_inn", lambda row: row[6]),
             "team_total_sixes_mae": ("venue_match", lambda row: row[1] / 2.0),
             "team_first_over_mae": ("venue_inn", lambda row: row[5]),
             "highest_individual_mae": ("venue_inn", lambda row: row[3]),
