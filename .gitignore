@@ -67,3 +67,4 @@ perf_runs/*
 # Local scratch space for forward-fixture prediction (refreshed SQLite,
 # tracker snapshots, sweep outputs). Never load-bearing for the pipeline.
 tmp/eval_out_e1/
+eval_out_e3/
