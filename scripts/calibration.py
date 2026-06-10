@@ -369,6 +369,89 @@ class IsotonicCalibrator:
 # Ball-Level Calibrator (Per-Class Isotonic Regression)
 # ---------------------------------------------------------------------------
 
+class PriorCorrectionCalibrator:
+    """Undo `balanced` class-weighted training at inference time (E5, 2026-06-09).
+
+    xgboost_v2.py trains with sklearn `compute_class_weight('balanced')`
+    sample weights, so the booster approximates the *weighted* posterior
+    p_w(c|x) ∝ w_c · p(c|x) with w_c = n / (k · n_c). The sim's
+    XGBoostModelV2 samples these tilted probabilities raw, which is the
+    root cause of the systematic tail-event overshoot documented in
+    reports/e2_prop_fair_baselines.md (P(wicket) ≈ 2× actual per ball,
+    boundary classes ≈ +0.05 absolute each; see
+    reports/e5_teacher_forced_bias.md).
+
+    The correction is the standard prior re-weighting:
+        p(c|x) ∝ p_w(c|x) / w_c ∝ p_w(c|x) · n_c
+    Stateless given the train-split class frequencies; no retraining,
+    no extra fit data. Same `calibrate_probs` interface as
+    BallLevelCalibrator so it drops into the existing wrapper hook.
+    """
+
+    # train-split class frequencies (dot, one, two, four, six, wicket),
+    # computed from data/xgb_data_v3/cricket_data_v3_train.parquet.
+    DEFAULT_PRIORS = (0.303601, 0.413227, 0.076086, 0.107686, 0.045362,
+                      0.054037)
+
+    def __init__(self, class_priors=None):
+        p = np.asarray(class_priors if class_priors is not None
+                       else self.DEFAULT_PRIORS, dtype=float)
+        self._priors = p / p.sum()
+
+    def calibrate_probs(self, raw_probs: np.ndarray) -> np.ndarray:
+        single = raw_probs.ndim == 1
+        probs = raw_probs.reshape(1, -1) if single else raw_probs
+        corrected = probs * self._priors
+        corrected = corrected / np.maximum(
+            corrected.sum(axis=1, keepdims=True), 1e-12)
+        return corrected[0] if single else corrected
+
+
+class VectorScalingCalibrator:
+    """Per-class multiplicative correction fit on validation (E5, 2026-06-09).
+
+    The theoretical prior correction (PriorCorrectionCalibrator)
+    over-corrects: the early-stopped booster does not reach the full
+    `balanced`-weight tilt. This calibrator estimates the *actual* tilt
+    empirically: find a 6-vector v such that the corrected probabilities'
+    marginal matches the validation class frequencies, via fixed-point
+    iterative scaling
+        v_c ← v_c · (actual_freq_c / corrected_pred_freq_c).
+    6 parameters fit on ~120k validation balls; fit on probabilities
+    produced under the SIM's input distribution (venue_encoded = 0) so the
+    correction matches deployment. Same `calibrate_probs` interface.
+    """
+
+    def __init__(self, weights=None):
+        self._v = None if weights is None else np.asarray(weights, float)
+
+    def fit(self, raw_probs: np.ndarray, labels: np.ndarray,
+            n_iter: int = 50, tol: float = 1e-8):
+        raw_probs = np.asarray(raw_probs, float)
+        k = raw_probs.shape[1]
+        actual = np.bincount(np.asarray(labels), minlength=k) / len(labels)
+        v = np.ones(k)
+        for _ in range(n_iter):
+            corr = raw_probs * v
+            corr /= corr.sum(axis=1, keepdims=True)
+            pred = corr.mean(axis=0)
+            ratio = actual / np.maximum(pred, 1e-12)
+            v = v * ratio
+            v = v / v.sum()
+            if np.max(np.abs(ratio - 1)) < tol:
+                break
+        self._v = v
+        return self
+
+    def calibrate_probs(self, raw_probs: np.ndarray) -> np.ndarray:
+        single = raw_probs.ndim == 1
+        probs = raw_probs.reshape(1, -1) if single else raw_probs
+        corrected = probs * self._v
+        corrected = corrected / np.maximum(
+            corrected.sum(axis=1, keepdims=True), 1e-12)
+        return corrected[0] if single else corrected
+
+
 class BallLevelCalibrator:
     """Per-class isotonic regression for ball-level 6-class predictions.
 

@@ -870,9 +870,22 @@ def main():
                     help="Usage prior JSON for EmpiricalBowlerSelector.")
     ap.add_argument("--detail-out", default="reports/prop_calibration_detail.json")
     ap.add_argument("--report-out", default="reports/prop_calibration_report.md")
+    ap.add_argument("--ball-calibrator", choices=["none", "vector"],
+                    default="none",
+                    help="'vector' = val-fit VectorScalingCalibrator that "
+                         "undoes the balanced-class-weight tilt in the "
+                         "booster's raw probabilities (E5, 2026-06-09).")
+    ap.add_argument("--ball-calibrator-path",
+                    default="models/xgb_v3/vector_scaling_calibrator_v1.pkl")
     args = ap.parse_args()
 
     np.random.seed(args.seed)
+
+    ball_calibrator = None
+    if args.ball_calibrator == "vector":
+        import joblib
+        ball_calibrator = joblib.load(args.ball_calibrator_path)
+        print(f"Ball calibrator: vector scaling ({args.ball_calibrator_path})")
 
     # Load model + providers.
     print("Loading stats provider + player metadata + model ...")
@@ -885,7 +898,7 @@ def main():
         feature_columns_path=args.feature_columns,
         stats_provider=stats_provider,
         player_metadata=player_metadata,
-        ball_calibrator=None,
+        ball_calibrator=ball_calibrator,
     )
     if args.bowler_selector == "empirical":
         selector = EmpiricalBowlerSelector(usage_path=args.bowler_usage_path)
