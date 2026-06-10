@@ -68,3 +68,10 @@ perf_runs/*
 # tracker snapshots, sweep outputs). Never load-bearing for the pipeline.
 tmp/eval_out_e1/
 eval_out_e3/
+eval_out_e4/
+eval_out_e6_summary.json
+models/xgb_match_e4_*/
+models/inplay_winprob_v1*/
+models/match_winner_map.json
+models/prop_fair_baseline_corpus.pkl
+data/xgb_match_data_v3_e4_unfrozen/

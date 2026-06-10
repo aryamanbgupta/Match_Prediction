@@ -159,6 +159,16 @@ FEATURE_COLUMNS = [
     "team1_n_inform_batters", "team1_n_outofform_batters",
     "team2_n_inform_batters", "team2_n_outofform_batters",
     "inform_batters_diff", "outofform_batters_diff",
+    # === E4 (2026-06-09): quantile lineup pooling ===
+    # M3/M4/M5 showed MEAN-pooled player features collapse to team career
+    # aggregates. Quantile pooling (max / spread / best-k) preserves
+    # within-lineup structure a mean destroys: star quality vs depth.
+    "team1_top6_bat_elo_max", "team1_top6_bat_elo_spread",
+    "team2_top6_bat_elo_max", "team2_top6_bat_elo_spread",
+    "team1_bowl_elo_max", "team1_bowl_elo_top2",
+    "team2_bowl_elo_max", "team2_bowl_elo_top2",
+    "top6_bat_elo_max_diff", "top6_bat_elo_spread_diff",
+    "bowl_elo_max_diff", "bowl_elo_top2_diff",
 ]
 
 METADATA_COLUMNS = [
@@ -675,6 +685,29 @@ def _split_elo(lineup_ids: List[str], elo_tracker,
     )
 
 
+def _quantile_elo_features(lineup_ids: List[str], elo_tracker,
+                           top_n: int = 6) -> Tuple[float, float, float, float]:
+    """E4 quantile pooling: (top6 batting ELO max, top6 batting ELO spread,
+    best bowling ELO over the XI, mean of best-2 bowling ELOs).
+
+    Unlike `_split_elo`'s means, max/spread/best-k preserve within-lineup
+    structure (one elite batter vs six average ones; one strike bowler vs
+    a flat attack) that mean pooling collapses — the M3/M4/M5 failure
+    mode.
+    """
+    if not lineup_ids:
+        return 0.0, 0.0, 0.0, 0.0
+    top_bat = sorted((elo_tracker.get_batting_elo(p) for p in
+                      lineup_ids[:top_n]), reverse=True)
+    bowl = sorted((elo_tracker.get_bowling_elo(p) for p in lineup_ids),
+                  reverse=True)
+    bat_max = top_bat[0]
+    bat_spread = top_bat[0] - top_bat[-1]
+    bowl_max = bowl[0]
+    bowl_top2 = sum(bowl[:2]) / len(bowl[:2])
+    return bat_max, bat_spread, bowl_max, bowl_top2
+
+
 def _build_match_record(
     match_id: str,
     match_date: datetime,
@@ -798,6 +831,12 @@ def _build_match_record(
     t1_top6_bat, t1_bot5_bow = _split_elo(team1_lineup_ids, elo_tracker)
     t2_top6_bat, t2_bot5_bow = _split_elo(team2_lineup_ids, elo_tracker)
 
+    # E4 quantile pooling (same pre-match elo_tracker state as _split_elo)
+    t1_bat_max, t1_bat_spr, t1_bowl_max, t1_bowl_top2 = \
+        _quantile_elo_features(team1_lineup_ids, elo_tracker)
+    t2_bat_max, t2_bat_spr, t2_bowl_max, t2_bowl_top2 = \
+        _quantile_elo_features(team2_lineup_ids, elo_tracker)
+
     # Recent form (querying BEFORE updating tracker for this match)
     t1_form, t1_form_n = form_tracker.get_last_n_win_rate(team1, match_date)
     t2_form, t2_form_n = form_tracker.get_last_n_win_rate(team2, match_date)
@@ -889,6 +928,20 @@ def _build_match_record(
         "team1_bottom5_bowling_elo_avg": float(t1_bot5_bow),
         "team2_bottom5_bowling_elo_avg": float(t2_bot5_bow),
         "bottom5_bowling_elo_diff": float(t1_bot5_bow - t2_bot5_bow),
+
+        # === E4 quantile lineup pooling ===
+        "team1_top6_bat_elo_max": float(t1_bat_max),
+        "team1_top6_bat_elo_spread": float(t1_bat_spr),
+        "team2_top6_bat_elo_max": float(t2_bat_max),
+        "team2_top6_bat_elo_spread": float(t2_bat_spr),
+        "team1_bowl_elo_max": float(t1_bowl_max),
+        "team1_bowl_elo_top2": float(t1_bowl_top2),
+        "team2_bowl_elo_max": float(t2_bowl_max),
+        "team2_bowl_elo_top2": float(t2_bowl_top2),
+        "top6_bat_elo_max_diff": float(t1_bat_max - t2_bat_max),
+        "top6_bat_elo_spread_diff": float(t1_bat_spr - t2_bat_spr),
+        "bowl_elo_max_diff": float(t1_bowl_max - t2_bowl_max),
+        "bowl_elo_top2_diff": float(t1_bowl_top2 - t2_bowl_top2),
     }
     record.update({k: float(v) for k, v in outcome_features.items()})
 
