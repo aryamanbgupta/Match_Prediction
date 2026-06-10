@@ -1128,6 +1128,32 @@ Eight numbered milestones (M1–M8) following the v6→v7 phased shape: eval inf
 
 ---
 
+## E-series experiments (2026-06-09, branch `improvement-experiments`)
+
+Six experiments across both models. Protocol: one change per experiment, fit/select
+on val only, iteration/test readout, pre-registered keep rules, every outcome
+committed (autoresearch-style). Reports: `reports/e{1..6}_*.md`.
+
+| Exp | What | Verdict | Headline |
+|---|---|---|---|
+| E1 | Temperature sharpening (match) | ❌ discard | T=1.205 (val-fit) is the first transform to beat market LL on iter ≥$50k (0.6246 < 0.6267) but costs ~10pp flat ROI — *any* monotone recalibration that crosses market prices on near-coinflip mass destroys side-selection alpha. Kept as sizing layer only. |
+| E2 | Fair baselines for prop families (ball) | 🔁 rewrites prop framework | **No binary prop family beats an as-of fair baseline** (career/venue/positional, EB-shrunk). Sim's real skill = continuous score forecasts (batter-runs MAE −0.71 vs career baseline, highest-individual −1.89). `scripts/sim_eval/prop_fair_baselines.py` is now the bar for any prop claim. |
+| E3 | 10-seed ensemble (match) | ❌ discard | Ensemble *worse* than production seed on val and iteration. Seed 29 is the best of 10 on val → M7 headline contains seed luck. Tempered forward expectation: ~0.64 LL / ~+16% ROI on ≥$50k, not 0.6299 / +21.9%. |
+| E4 | Quantile lineup pooling (match) | ❌ discard (val rule) | Bowling quantiles (`bowl_elo_top2_diff`, target r 0.158) genuinely beat bottom5-mean redundancy check — but val LL regresses; iteration readout favorable (≥$50k ROI CI [+3.6, +47.0]) recorded as **forward-test hypothesis only**. |
+| E5 | Ball-model bias root cause | ✅ **landed** | v7 trains with `balanced` class weights; sim sampled the tilted probs raw → P(wkt) 2× actual per ball, boundaries +0.05 — THE mechanism behind tail-event overshoot. Val-fit `VectorScalingCalibrator` collapses teacher-forced deltas to ~0 (runs/ball +0.024, P(wkt) −0.002; test multiclass LL 1.608→1.520). `--ball-calibrator vector` in prop_backtest. Also found: sim feeds `venue_encoded=0` always; `innings_id` is an unstable hash (TODO). |
+| E6 | Direct in-play win-prob (ball states) | ✅ **landed** (fair_blend) | P(win\|state) trained on 1.81M deliveries. Crease/momentum extras add nothing over chase-math + pre-match rating (Δ +0.0005, CI [−0.003, +0.004], 780 OOS matches) — replicates MLC at 20× sample. `models/inplay_winprob_v1` (LL 0.5418/AUC 0.80 OOS) supersedes the sim for in-play probabilities. |
+
+Durable lessons added this session:
+1. **Side-vs-market is the alpha; probability magnitude is not** (E1). Post-hoc
+   recalibration helps LL and sizing, never side-selection.
+2. **Headline metrics on a fixed eval set contain selection luck** (E3) — judge
+   forward tests against ensemble-tempered expectations.
+3. **Fair baselines first** (E2) — base-rate skill is a mirage; this is now
+   enforced by `prop_fair_baselines.py`.
+4. **Check the loss the model was actually trained on before interpreting its
+   probabilities** (E5) — the class-weight tilt sat undetected through v4→v7
+   because winner-market sims average it out while prop tails amplify it.
+
 ## What NOT To Do
 
 - Don't chase ball-level accuracy beyond ~60% — individual balls are inherently noisy.
