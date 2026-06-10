@@ -76,8 +76,39 @@ removing both breaks that accidental cancellation. Per-batter expected runs
 should be read from the raw sim (or the E2 career baseline) until the wicket
 *attribution* model (G2) improves.
 
-**Full n=261 calibrated rerun launched for confirmation** —
-`reports/prop_calibration_{detail,report}_vec_n261.*` when complete.
+## n=261 confirmation (full iteration set, completed 2026-06-10)
+
+`reports/e5_fair_baselines_vec_n261.md` — raw Δ(sim−base) → calibrated Δ:
+
+| family | raw n261 | calibrated n261 | verdict |
+|---|---:|---:|---|
+| `bowler_wkts_2plus` | +0.0362 | **+0.0159** | halved; residual = attribution (G2) |
+| `bowler_wkts_3plus` | +0.0142 | **+0.0029** | ~fixed |
+| `bowler_wkts_1plus` | +0.0317 | +0.0305 | unmoved — pure attribution |
+| `pp_total_ou_55_5` | +0.0314 | **+0.0151** | halved |
+| `pp_total_ou_45_5/50_5` | +0.011/+0.026 | +0.004/+0.012 | → parity |
+| `first_wicket_runs_ou_30_5` | +0.0171 | +0.0046 | → parity |
+| `team_highest_individual_ou_*` | +0.010/+0.003/+0.012 | +0.001/−0.004/−0.005 | → parity |
+| `team_total_fours_mae` | +0.34 | **+0.02** | fixed |
+| `top_bowler` | −0.0008 (parity) | **−0.0023 [−0.0038, −0.0008]** | ✅ confirmed: first binary family with real skill |
+| `highest_individual_mae` | −1.89 | −2.05 | ✅ stays sim-better |
+| `batter_runs_mae` | −0.71 (sim better) | −0.10 (parity) | the known cost, milder than n=60 suggested |
+| `team_first_over_mae` | +0.02 | **+0.15** ❌ | regression |
+| `highest_over_runs_ou_18_5` | +0.007 | **+0.050** ❌ | regression |
+
+**Reading**: the global 6-param correction fixes *marginal* rates, but the
+class-weight tilt is not uniform across phases — a constant multiplier
+under-corrects boundary-heavy contexts, so families driven by boundary
+*clustering* (first-over runs, highest-over) regress while count/tail
+families are fixed. Follow-up: **phase-conditional vector scaling**
+(3 × 6 params, fit per PP/mid/death on val). Requires passing phase
+context into `calibrate_probs` (wrapper signature change), so it's filed
+as the next ball-level iteration rather than landed here.
+
+**Usage guidance (per family)**: use the calibrated sim for wicket-count,
+PP/innings totals, top-bowler, team-highest, fours/sixes counts; use the
+raw sim (or E2 career baseline) for per-batter runs, first-over, and
+highest-over families.
 
 ## Verdict
 
