@@ -58,15 +58,30 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
    anywhere ball-level resolution matters and match-level supervision
    can't help.
 
-   **Prop-bet framework (2026-05-12)**: `scripts/sim_eval/prop_backtest.py`
-   backtests ~25 prop families (top batter/bowler, innings/PP totals,
-   team top-scorer, total sixes, fours/sixes counts, first-wicket runs,
-   bowler wickets/economy) against cricsheet actuals with Brier-skill +
-   bootstrap CIs. Headline (261 iter matches × 100 sims): the sim has
-   real skill on batter-fours, top-batter/bowler ranking, and innings-
-   total O/U; it **systematically over-states tail events** (specific
-   bowlers' wicket counts, powerplay totals) — those are profitable
-   *inverse* plays. Full breakdown: `reports/prop_framework_summary.md`.
+   **Prop-bet framework (2026-05-12; REVISED 2026-06-09 by E2+E5)**:
+   `scripts/sim_eval/prop_backtest.py` backtests ~25 prop families against
+   cricsheet actuals. **E2 fair-baseline audit
+   (`reports/e2_prop_fair_baselines.md`): no binary prop family beats an
+   as-of fair baseline** (EB-shrunk career/venue/positional) — the
+   2026-05-12 "ship as-is" list was a base-rate artifact; any prop claim
+   must clear `scripts/sim_eval/prop_fair_baselines.py`, not base rates.
+   **E5 root cause of the tail-event overshoot
+   (`reports/e5_class_weight_fix.md`)**: v7 trains with `balanced` class
+   weights and the sim sampled the tilted probabilities raw (P(wkt) 2×
+   actual per ball). Fixed by the val-fit `VectorScalingCalibrator`
+   (`models/xgb_v3/vector_scaling_calibrator_v1.pkl`) — pass
+   `--ball-calibrator vector` to `prop_backtest.py` for all prop/score
+   work. Calibrated, the PP-total overshoot disappears, bowler-wicket
+   overshoot halves, and `top_bowler` becomes the first binary family to
+   beat a fair baseline; known cost: per-batter runs MAE (read that from
+   the raw sim or the career baseline). "Inverse plays" are dead — fair
+   baselines beat both the raw sim and its inverse.
+
+   **In-play win probability (E6, 2026-06-09)**: use
+   `models/inplay_winprob_v1` (direct P(win|ball state), LL 0.5418 / AUC
+   0.80 on 780 OOS matches) for win-prob worms / in-play scenarios — NOT
+   the sim (crease/momentum extras add nothing over chase-math + rating;
+   `reports/e6_inplay_winprob.md`).
    The sim now defaults to a phase-aware **`EmpiricalBowlerSelector`**
    (historical usage, EB-shrunk; `models/bowler_phase_usage.json` built
    by `scripts/build_bowler_phase_usage.py`) instead of the old
