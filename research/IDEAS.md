@@ -109,7 +109,7 @@ evening-hours humidity/temp as 2–3 match features; re-materialize to
 of night remain.
 **Result:** —
 
-## A7 [P2] [PENDING] Betting layer: slice-conditional edge threshold (M8 follow-up)
+## A7 [P2] [RUNNING 2026-07-11T00:50Z] Betting layer: slice-conditional edge threshold (M8 follow-up)
 **Hypothesis:** requiring ~10% edge on mismatch fixtures (top6 ELO diff > 5)
 while betting flat elsewhere improves ROI without touching predictions (M8
 documented this but never forward-tested it as a rule).
