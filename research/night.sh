@@ -6,10 +6,11 @@
 
 cd "$(dirname "$0")/.."
 
-# If launched from inside a Claude Code session, drop its session env so the
-# child `claude -p` authenticates with the normal user login instead of the
-# parent session's proxy (which 401s for children).
-if [[ -n "${CLAUDECODE:-}" ]]; then
+# Always authenticate the child `claude -p` with the normal subscription
+# login: shed env-var auth (stale ANTHROPIC_API_KEY / _BASE_URL in a shell
+# profile silently overrides login and 401s) and any parent Claude session
+# env if launched from inside one. Set NIGHT_USE_ENV_AUTH=1 to keep env auth.
+if [[ -z "${NIGHT_USE_ENV_AUTH:-}" ]]; then
   while IFS= read -r v; do unset "$v"; done < <(
     env | cut -d= -f1 | grep -E '^(CLAUDE|ANTHROPIC|AI_AGENT|BAGGAGE)')
 fi
