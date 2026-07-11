@@ -360,7 +360,7 @@ Kept `d6202e0`; artifact `models/auto/a15/over0_calibrator.pkl` (gitignored,
 reproducible via `scripts/auto/a15_fit_over0_calibrator.py`); default `vector` path
 and A14 sim wiring byte-unchanged. See `research/reports/auto/A15.md`.
 
-## A16 [P3] [RUNNING 2026-07-11T13:26:11Z] Sparse regime-change-over calibrator (A15 extension)
+## A16 [P3] [FAILED] Sparse regime-change-over calibrator (A15 extension)
 **Hypothesis:** A15 showed the sim's single largest per-over calibration defect is
 **over 0** (fixing it alone earns the full `team_first_over_mae` win AND
 `pp_total_ou_45_5` −0.0037, CI excludes 0), while A14's blanket 19 other per-over
@@ -386,7 +386,39 @@ improve paired vs single-vector (candidates: `pp_total_ou_*` for over-6-region,
 only reproduces A15's over-0 gain with no incremental lift → FAILED (over 0 is the
 sole miscalibrated regime-change over; A15 stands as the minimal calibrator).
 **Budget:** ~1.5 h (one n=261 sim run; baseline reused).
-**Result:** —
+**Result:** FAILED 2026-07-11 (resumed a prior iteration that fit the {0,6,15}
+calibrator, logged pre-run divergences, and launched the n=261 sim; this
+iteration waited for it to finish and ran the verdict). Fit byte-identical to
+A15/A14 (global==v1, over0+global==A15, overs{0,6,15}==A14; max diff 0) → A16
+differs from A15 ONLY by carrying over-6 + over-15 vectors. Pre-run divergences
+vs global: over 0 **0.230** (wkt ×1.23), over 6 **0.138** (wkt ×1.14), over 15
+**0.078** (four ×1.08) — all above the ~0.05 A8/A12 washout threshold, so the
+incremental test was worth running. Paired Brier/MAE cluster-boot by match,
+n=261×100 seed 42, vs single-vector (`models/auto/a8/detail_vec_n261.json`) AND
+A15 over-0-only (`models/auto/a15/detail_over0_n261.json`). **GATE 1**
+(INCREMENTAL A16-vs-A15: do overs 6 & 15 add a real gain BEYOND over 0?): of 10
+death/middle/pp families only 2 cross significance — `highest_over_runs_ou_24_5`
+−0.0008 [−0.0018,**−0.0000**] and `pp_total_ou_55_5` −0.0009 [−0.0017,**−0.0000**]
+— **both with CI upper bound AT the noise boundary (−0.0000)**, consistent with
+multiple-comparisons chance (10 families @95%). Decisively, `pp_total_ou_55_5` is
+a **powerplay prop (overs 0–5)** that overs 6 & 15 cannot mechanically move → its
+marginal significance is downstream MC noise, confirming the crossings are noise,
+not signal. No clean above-noise incremental gain like A15's over-0 win
+(`team_first_over_mae` −0.018, ~20–25× larger, CI well clear of 0) → GATE 1 **NOT
+met**. **GATE 2** guards HELD (vs vec: `top_bowler` −0.0001 [−0.0004,+0.0003],
+`bowler_wkts` 1/2/3plus CIs include 0, `team_first_over_mae` −0.018 retained;
+incremental vs A15: all guards ~noise, first-over dMAE −0.000 = IDENTICAL). Zero
+improvements → **FAILED** (honors the pre-committed rule). A16 is strictly
+dominated by the simpler A15 (= A15 + 2 inert vectors). Reproduces the A8/A12
+aggregation-washout: overs 6 & 15 exceed the ~0.05 marginal threshold but wash
+out on **multi-over** props; A15's over-0 fix is the exception only because
+`team_first_over_mae` is a **single-over** prop (no aggregation). No fixed-over
+prop isolates over 6 or 15, so the per-over linear-scaling lever is exhausted at
+over 0. Reverted `27e99c6` (implement `ac3cec9` = fit harness only; sim engine +
+default `vector` path byte-unchanged — calibrator loads via runtime
+`--ball-calibrator-path`). Scratch `models/auto/a16/` + `scripts/auto/a16_gate_analysis.py`
+kept. Pivot to A13 dispersion lever (orthogonal, still PENDING). See
+`research/reports/auto/A16.md`.
 
 ---
 
