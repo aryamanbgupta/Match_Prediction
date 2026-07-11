@@ -266,7 +266,7 @@ vs the single-vector run, with no regression of `batter_runs_mae`. **Budget:** ~
 (two n=261 sim runs; the vec baseline `detail_vec_n261.json` may be reused if unchanged).
 **Result:** —
 
-## A14 [P3] [RUNNING 2026-07-11T10:18:51Z] Per-over (not per-3-phase) ball calibrator for single-over props (A8 follow-up)
+## A14 [P3] [LANDED] Per-over (not per-3-phase) ball calibrator for single-over props (A8 follow-up)
 **Hypothesis:** A8's 3-bucket phase calibrator netted to null on multi-phase aggregate
 props because a bowler's/team's balls span phases and the small per-ball corrections
 wash out. But **single-over** props (`team_first_over_mae`, `highest_over_runs_ou_*`)
@@ -283,6 +283,42 @@ single-vector run with `a8_gate_analysis.py`.
 paired vs single-vector AND `top_bowler` + `bowler_wkts` do not regress. If it only
 matches A8 (null on single-over props too), FAILED — linear ball-prob scaling is
 exhausted, pivot to A13's dispersion lever. **Budget:** ~2 h.
+**Result:** LANDED 2026-07-11. Per-over (20×6) vector calibrator; sim gate pair,
+paired Brier/MAE (over − vec) cluster-boot by match, n=261×100 seed 42 vs
+`models/auto/a8/detail_vec_n261.json`. **GATE 1** (single-over prop improvement):
+`team_first_over_mae` dMAE **−0.022 CI [−0.038, −0.006]** — CI cleanly EXCLUDES 0
+(vec MAE 3.535 → over 3.513), a real above-noise gain → IMPROVED; `highest_over_runs`
+18.5/24.5 both flat (−0.0000/−0.0001). **GATE 2** (guard, no-regress): `top_bowler`
++0.0003 [−0.0003,+0.0008], `bowler_wkts` 1/2/3plus +0.0001/+0.0009/+0.0003, all CIs
+include 0 → HELD. Both gate conditions met → LANDED. Vindicates the hypothesis:
+A8's 3-phase bucket was null on `team_first_over_mae` (+0.003) because over 0 was
+lumped with overs 1–5; per-over resolution recovers the first-over correction
+(over-0 vector six/wicket ×1.23). Pooled tail dBrier +0.0002 [−0.0005,+0.0009] noise
+(A8's multi-over-aggregate washout reproduces). Global fallback == v1 exactly; sim
+engine edit (not eval framework); default v1 path byte-unchanged. Kept `0e1bbb0`;
+artifact `models/auto/a14/over_vector_calibrator.pkl` (gitignored, reproducible via
+`scripts/auto/a14_fit_over_calibrator.py`). See `research/reports/auto/A14.md`.
+
+## A15 [P3] [PENDING] Minimal over-0-only ball calibrator (A14 parsimony follow-up)
+**Hypothesis:** A14 LANDED a 20-vector per-over calibrator, but the entire
+`team_first_over_mae` win is concentrated in **over 0** (its vector diverges most
+from global, six/wicket ×1.23); the other 19 per-over vectors buy nothing
+observable and are pure overfitting surface. A **2-vector** calibrator — one
+first-over vector + the global vector for overs 1–19 — should capture the full
+first-over gain with 10× fewer parameters, which is more robust and cleanly
+isolates *where* the sim's first-over error lives.
+**Method:** reuse `scripts/auto/a14_fit_over_calibrator.py` but fit only over 0
+(all other overs fall back to global); save `models/auto/a15/over0_calibrator.pkl`
+(the `OverVectorScalingCalibrator` already supports a sparse `_v` with global
+fallback — no new class needed). Recipe B on n=261 with the over0 calibrator;
+pair vs the SAME single-vector baseline (`models/auto/a8/detail_vec_n261.json`)
+with `scripts/auto/a8_gate_analysis.py`.
+**Gate (sim pair):** `team_first_over_mae` improves paired vs single-vector (must
+retain A14's ~−0.022 dMAE, CI excluding 0) AND `top_bowler` + `bowler_wkts` do not
+regress. If over0-only matches A14's gain → prefer it (parsimony, LANDED replaces
+the 20-vector artifact as the recommended first-over calibrator); if it loses the
+gain, the win genuinely needs the full per-over grid (A14 stands). **Budget:**
+~1 h (one n=261 sim run; baseline reused).
 **Result:** —
 
 ---
