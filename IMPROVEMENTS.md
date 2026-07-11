@@ -1154,6 +1154,54 @@ Durable lessons added this session:
    probabilities** (E5) — the class-weight tilt sat undetected through v4→v7
    because winner-market sims average it out while prop tails amplify it.
 
+## A-series: first autonomous overnight run (2026-07-11, branch `auto-20260711`)
+
+AutoResearch v2 (auto-mode Ralph loop, `research/night.sh`; constitution in
+`program.md`) ran 46 iterations unattended and resolved 16 ideas. Full verdict
+log: `research/results.tsv`; per-idea reports: `research/reports/auto/`.
+
+- **LANDED**: A1 (fresh 5-seed baseline: LL 0.6318 / ROI +20.56% on ≥$50k;
+  noise floor std 0.0068 LL / 2.3pp ROI), **A7 (slice-conditional edge
+  threshold: bet flat on close fixtures, require edge>10% on |top6 ELO diff|>5
+  — ≥$50k ROI +21.90%→+36.93%, maxDD halved, CI lo +12.06; recommended
+  production sizing rule)**, A14/A15 (per-over ball calibrator for single-over
+  props; A15 shows over-0-only 2-vector version captures the whole gain).
+- **TABLED**: A4 (logistic×M7 logit-average: ROI +3.06pp, LL flat — C-series
+  combination material).
+- **FAILED (hypotheses closed)**: seed bagging (A2), sim blending (A3),
+  ELO×venue interactions (A5), weather/dew at match level (A6) and ball level
+  (A12), 3-phase calibrators (A8), E4 quantile pooling — resolved as seed-29
+  luck via 5-seed paired test (A9), A7 boundary sweep — boundary 5 confirmed
+  robust (A11), sparse multi-over calibrators (A16).
+- Queue remaining: A10 (sim signal as feature), A13 (sim dispersion
+  calibration — claim reset after wall-clock cut), C1 combo pending.
+
+## Repo cleanup backlog (2026-07-11 audit)
+
+Full audit ran 2026-07-11 (183 root entries vs ~12 documented; three defects).
+**Done same day** (commit `a593623`): all eval outputs consolidated under
+`eval_out/<tag>/` (gitignored, regenerable; retired runs → `archive/eval_results/`),
+`.gitignore` fused-line fix, `betting_odds_polymarket.json` +
+`research/results.tsv` now tracked (were irreplaceable-but-ignored).
+
+Remaining, in priority order:
+
+| # | Item | Type | Effect |
+|---|---|---|---|
+| 1 | Delete `perf_runs/` scratch logs (`par_rss.log` 59 MB + profiles); keep the 5 tracked .py + README | safe | ~65 MB |
+| 2 | `git rm --cached tmp/golden_inclusive/player_stats_cache_v3.sqlite` (55 MB, scratch tracked by mistake) + `all_players_enriched.csv`, then `git gc --prune=now` (1,782 loose objects, garbage `tmp_obj`) | safe (index only; full-history purge would need another filter-repo pass — decision) | `.git` 97→~40 MB |
+| 3 | Dead cron: crontab fires `run_scraper_cron.sh` daily 18:00 → `src/bet_scraper.py` no longer exists; fails every day. Remove entry + script, **or revive as the prop-odds capture daemon** (see prop-data roadmap) | decision | stops daily failures |
+| 4 | Retire v7 sweep model dirs: `xgb_v3_phase6_k{10,100,300}`, `xgb_v3_v6_backup`, `xgb_v3_phase5_k30` if byte-identical to shipped `xgb_v3` | quick check | ~510–640 MB |
+| 5 | Archive ~41 superseded `xgb_match_*` ablation model dirs + `data/xgb_match_data_v3_m*` parquets + stale tracker snapshots + `data/betting_test` (Aug 2025) — keep the 7 dirs CLAUDE.md names | safe | ~60 MB, models/ listing 59→~25 |
+| 6 | `reports/` prune: superseded `prop_calibration_detail*.json` (27 MB), non-clean `ipl_2026_dashboard.html`; archive `mlc/EDGE_BRIEF.md` (superseded per memory) | safe | ~27 MB |
+| 7 | `models/auto/` + `data/auto/` retention: delete FAILED-idea artifacts once their tracked report is committed (~8 MB/idea; LANDED artifacts stay until merged). Candidate post-night step in `night.sh` | policy | bounded growth |
+| 8 | Branch hygiene: delete dead `fixes/sim_improvements`, `feature/player-stats-cache`, `features/{cricinfo-features,mlp-model,llm-model,transformer-model}` (Oct 2025–Mar 2026); `backup-pre-rewrite` after confirming the May rewrite | decision | — |
+| 9 | Merge overdue: `main` is 6 weeks stale; `auto-20260711` ⊃ `improvement-experiments` ⊃ E-series + A-series | decision | — |
+| 10 | Move `predict_next_match.md` → `docs/` (nothing references the root path) | safe | root tidiness |
+
+**Kept by explicit decision (2026-07-11)**: `models/llm_v1` (6.0 GB — may be
+used later), `cricWAR/` (1.2 GB — separate project, stays for now).
+
 ## What NOT To Do
 
 - Don't chase ball-level accuracy beyond ~60% — individual balls are inherently noisy.
