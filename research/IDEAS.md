@@ -57,14 +57,24 @@ info the direct model lacks (loses that race by ~0.07 LL) — blending only
 injects noise. Neither gate metric improved. Eval-only, nothing to revert.
 See `research/reports/auto/A3.md`.
 
-## A4 [P2] [RUNNING 2026-07-11T06:09:09Z] Alternative architecture: regularized logistic stack
+## A4 [P2] [TABLED] Alternative architecture: regularized logistic stack
 **Hypothesis:** a heavily regularized logistic regression on the same 49
 features is a different bias class; even if it loses standalone it may
 ensemble well (if standalone fails but blend helps, TABLE with that note).
 **Method:** train sklearn LogisticRegression (existing dep) on the same
 parquet splits → recipe A. Optionally eval a 50/50 logit-average with M7.
 **Gate:** LL + ROI vs fresh baseline. **Budget:** ~40 min.
-**Result:** —
+**Result:** TABLED 2026-07-11. Standalone logistic (43 signed-diff features,
+StandardScaler, val-selected C=0.003) FAILS: ≥$50k LL 0.6390 (+0.0072 worse
+than A1 fresh mean 0.6318, beyond floor) / ROI +21.43% (+0.87pp, sub-floor).
+The 50/50 logit-avg with M7 moves **ROI +23.62%** (+3.06pp vs fresh mean,
+clears 2.3pp floor) but **NOT LL** (0.6298 = −0.0020, inside 0.007 floor) →
+exactly one gate metric → TABLED. Blend ROI beats both parents (real ensemble
+effect) but vs M7-*alone* the logistic adds only +1.72pp ROI / −0.0001 LL
+(both sub-floor) — part of the win is M7 seed luck. Code reverted; `models/
+auto/a4/` JSONs kept on disk. **Combine candidate** (C-series once PENDING dry):
+3-way logit-avg {logistic, A1 seed-bag mean, M7} to keep ROI decorrelation
+while averaging out the seed-luck confound. See `research/reports/auto/A4.md`.
 
 ## A5 [P2] [PENDING] Feature interactions: ELO × venue, toss × venue
 **Hypothesis:** matchup strength conditioned on venue character (chase bias,
