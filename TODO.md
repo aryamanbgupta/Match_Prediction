@@ -348,6 +348,29 @@ Full reference: `reports/m8_sizing_rules_eval.md`.
   `--ball-calibrator vector` in `prop_backtest.py`. See
   `reports/e5_teacher_forced_bias.md`.
 
+## Data acquisition — prop odds & eval expansion (2026-07-11)
+- [ ] **Rebuild the odds-capture scraper as a respectful capture daemon**
+  (replaces dead `run_scraper_cron.sh` → `src/bet_scraper.py`, whose crontab
+  entry still fires daily at 18:00 and fails — remove that entry when this
+  lands). Requirements: **official APIs first, GET-only, conservative rate
+  limits, honor ToS/robots** (design goal: never banned). Targets pending the
+  Betfair research brief (2026-07-11): Polymarket cricket markets (existing
+  capture repo pattern), Betfair exchange prop markets if API access works
+  from the US, Smarkets as fallback. Daily pre-match snapshot per market →
+  `data/external/odds_capture/<source>/<date>.json`. Forward capture
+  compounds — every captured day is prop eval data that can't be bought
+  retroactively. Semi-interactive build preferred (needs account setup +
+  live-endpoint verification); a tightly-scoped overnight iteration can do
+  the backtest wiring once capture exists.
+- [ ] **Betfair historical data purchase decision** — research brief
+  commissioned 2026-07-11 (free-tier check, prop-market coverage, US access,
+  pricing for 2–3 years IPL+T20I). Decide buy/skip when brief lands.
+- [ ] **Conditions eval pool** (`data/conditions_eval/`, separate from golden):
+  all stat-generator T20s since 2026-04-17 (IPL + Blast + MLC + T20I + …),
+  per-competition sliced readout (LL/accuracy/calibration; betting metrics
+  where odds exist). Diagnostic set — allowed to look, not a selection gate.
+  Reuses `extract_golden_cricsheet.py` / `extract_blast_golden.py` patterns.
+
 ## Infrastructure & Refactoring
 - [x] ~~**Eval performance pass (3 phases)**~~ — **LANDED 2026-05-08 → 2026-05-09**. (1) `_SQLiteBackend._norm_date` cache: −5.6 % wall on 5×100 (`85d67bf`). (2) `StatsProviderCache` extended to memoize 12 per-player getters: cumulative −17.9 % wall, `_fill_outcome_dists` −80 % cumtime (`135514a`). (3) Pickle round-trip fixed via explicit `__getstate__`/`__setstate__` (`e4b97cc`); 4-process disjoint-shard parallel eval gives 2.33× throughput at 1.6 GB combined RSS. Bit-identical numerics verified at every stage. **End-to-end full 261×100 eval: 41.9 min → 16.6 min = 2.52× speedup**, with avg LL within 0.0005 of serial baseline. See IMPROVEMENTS.md §"Performance Pass".
 - [x] ~~**Delete legacy v2 stats cache** (`models/cache_chunks/`, 7.4GB)~~ — done in the 2026-04-26 cleanup pass alongside `models/cache_chunks_v3_old/` (8.9 GB) and 9 stray `cache_chunk_*.pkl` chunks at `models/` root (2.1 GB). Repo went 30 GB → 11 GB; see `archive/README.md` for what was archived vs deleted.
@@ -362,7 +385,10 @@ Full reference: `reports/m8_sizing_rules_eval.md`.
 - [ ] **Deduplicate feature-assembly blocks in `sim_v1_2.py`** — 4 near-identical blocks at lines ~601, ~1153, ~1596, ~2017 all call the same `stats_provider` methods and stitch the same feature dict. Drift risk when adding/modifying features. Extract one `build_ball_features(state, striker, bowler, stats_provider)` helper and have all model wrappers (XGBoostModelV2, LSTMModelV1, TransformerModelV1, MLPModelV1) call it.
 
 ## Low Priority (P3) — Tier 3 Features (External Data)
-- [ ] **Weather / conditions data** (temperature, humidity, dew, wind via weather API)
+- [x] ~~**Weather / conditions data**~~ — **tested and closed 2026-07-11** (A6:
+  no winner-market signal at match level; A12: dew-conditional ball calibrator
+  also null). Open-meteo cache kept at `data/external/weather/`. See
+  `research/reports/auto/A6.md`, `A12.md`.
 - [ ] **Ground dimensions** (boundary distances — affects 4/6 rates)
 - [ ] Ensemble stacking: 3-7 diverse models + logistic regression meta-learner
 - [ ] Add time decay to features

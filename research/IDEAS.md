@@ -424,6 +424,85 @@ kept. Pivot to A13 dispersion lever (orthogonal, still PENDING). See
 
 ---
 
+# B-series: ball-level / prop focus (seeded 2026-07-11 by supervisor)
+
+Strategic shift: the match-level model is essentially at market (LL 0.6299 vs
+0.6267); remaining match-level alpha is betting rules, not predictions. The
+sim is the compounding asset (props, in-play, analytics). B-series priorities
+outrank remaining A/C ideas.
+
+## B1 [P0] [PENDING] Fix sim venue blindness: `venue_encoded=0` on every sim ball
+**Hypothesis:** `sim_v1_2.py` `XGBoostModelV2._feat_buf` defaults missing keys
+to 0, so every simulated ball scores as venue code 0 while training saw real
+codes (TODO.md:337, filed at E5). The sim literally cannot see the venue — an
+out-of-distribution input on every ball. Fixing it should improve venue-
+sensitive props (totals, boundaries) across the board.
+**Method:** save a venue encoder at training time; wire `venue_encoder_path`
+into the XGB wrapper (LSTM/Transformer wrappers already do this — copy their
+pattern). Re-run recipe B paired vs the current vec baseline
+(`a8_gate_analysis.py` pairing).
+**Gate (sim pair):** pooled prop Brier/MAE improves paired (CI excludes 0) on
+venue-sensitive families (team totals, PP totals, fours/sixes) AND `top_bowler`
++ `bowler_wkts` guards hold. **Budget:** ~2.5 h. **Note:** this changes the
+sim's input distribution — re-baseline before comparing anything else to
+history; do NOT run the same night as other sim-engine ideas.
+**Result:** —
+
+## B2 [P1] [PENDING] Fix `innings_id` unstable hash (blocks parquet↔cricsheet joins)
+**Hypothesis:** `parsing_v2.py:1255` sets `innings_id = hash(json) % 100000` —
+salted per process (irreproducible across runs), ~450 expected collisions at
+corpus size (TODO.md:331, filed at E5/E6). E6 lost ~5% of matches to a
+workaround join. Correctness fix that unblocks every future ball↔match join.
+**Method:** emit the cricsheet filename stem instead; rebuild feature parquet
+(cheap, no schema bump per TODO). Verify: E6's join recovers the ~5% drop;
+row counts and a sample of per-ball features byte-match otherwise.
+**Gate:** correctness idea — LANDED if joins are lossless and no eval metric
+moves beyond eval-only noise (it should be a no-op on metrics). **Budget:** ~1.5 h.
+**Result:** —
+
+## B3 [P1] [PENDING] Continuous-forecast shrinkage blend (productize E2's finding)
+**Hypothesis:** E2: the sim's only validated skill is continuous score
+forecasts (batter-runs MAE −0.71 vs career baseline). A val-fit shrinkage
+blend `α·sim + (1−α)·fair_baseline` per family should beat both parents —
+the best score forecast the system can produce.
+**Method:** fit α per family (batter_runs, highest_individual, team totals) on
+val matches; evaluate on recipe B test with `--ball-calibrator vector`;
+compare MAE vs sim-alone and baseline-alone (`prop_fair_baselines.py`).
+**Gate (sim pair):** blend MAE beats BOTH parents (paired, CI excludes 0) on
+≥1 family AND no family regresses vs its best parent. **Budget:** ~2 h.
+**Result:** —
+
+## B4 [P2] [PENDING] top_bowler pricing margin (post-calibration edge quantification)
+**Hypothesis:** top_bowler is the only binary family beating its fair baseline
+(E5). Quantify the margin as implied odds: at what price does the sim's
+top_bowler probability have positive EV vs the fair baseline as synthetic
+market? Output a pricing table, not a model change.
+**Method:** per-match top_bowler probs (calibrated sim, n=261) vs fair
+baseline; compute edge distribution, EV curves at hypothetical vig levels
+(2/5/10%), Kelly fractions. Pure analysis on existing detail JSONs if
+sufficient, else one recipe-B run.
+**Gate:** instrumentation (like A1) — LANDED if the pricing table + report
+are produced with real numbers. **Budget:** ~1.5 h.
+**Result:** —
+
+## B5 [P2] [PENDING] In-play over/under quote prototype (analytics-engine seed)
+**Hypothesis:** `models/inplay_winprob_v1` (P(win|state)) + the calibrated sim
+(score distributions from any mid-innings state) can produce live over/under
+quotes for remaining-innings runs. Feasibility prototype: quote quality
+measured against realized outcomes at standard checkpoints (end of overs
+6/10/15).
+**Method:** for each test match, roll the sim forward from the actual state at
+overs 6/10/15 (100 sims, vector calibrator); emit P10/P50/P90 remaining-runs
+quotes; score coverage + MAE vs actuals; compare vs a naive
+run-rate-extrapolation baseline.
+**Gate:** quotes beat the naive baseline on MAE AND P10–P90 coverage within
+[70%, 90%] at all three checkpoints. **Budget:** ~3 h — needs sim-from-state
+plumbing; if that plumbing doesn't exist, scope THIS iteration to building +
+unit-testing it and mark the idea `TABLED (plumbing done, eval next)`.
+**Result:** —
+
+---
+
 ## Combination ideas (C-series)
 Created only when no PENDING ideas remain, from TABLED entries. Follow
 PROTOCOL step 1.
