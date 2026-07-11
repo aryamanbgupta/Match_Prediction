@@ -41,25 +41,35 @@ A9_MODELS = ROOT / "models/auto/a9"
 
 
 def build_parquet():
-    """Subset the E4 unfrozen parquet to metadata + base-46 + 8 survivors."""
+    """Subset the E4 unfrozen parquet to metadata + the 54 non-encoded all8
+    features, IN E4's EXACT all8 column order.
+
+    Column order matters: colsample_bytree=0.9 samples columns by position, so a
+    different order yields a different model even at the same seed. Ordering the
+    a9 feature columns exactly as E4's all8 (survivors interspersed BEFORE
+    venue_p4/p6/pw) makes both variants byte-reproduce E4 seed 29:
+    base 0.6312/+15.38, all8 0.6288/+24.35. Dropping the 8 survivors from this
+    order recovers E4's base order exactly.
+    """
     A9_DATA.mkdir(parents=True, exist_ok=True)
-    base = [l.strip() for l in
-            open(ROOT / "models/xgb_match_e4_base/feature_columns.txt") if l.strip()]
+    all8 = [l.strip() for l in
+            open(ROOT / "models/xgb_match_e4_all8/feature_columns.txt") if l.strip()]
     enc = {"venue_id_encoded", "competition_tier_encoded"}
-    base46 = [c for c in base if c not in enc]
-    assert len(base46) == 46, len(base46)
+    all8_54 = [c for c in all8 if c not in enc]      # E4 all8 order, 54 numeric
+    assert len(all8_54) == 54, len(all8_54)
+    assert all(s in all8_54 for s in SURV)
     meta = ["match_id", "cricsheet_id", "match_date", "team1", "team2",
             "venue", "competition_tier", "team1_wins"]
     e4dir = ROOT / "data/xgb_match_data_v3_e4_unfrozen"
     cols0 = set(pd.read_parquet(e4dir / "train.parquet").columns)
     meta_present = [c for c in meta if c in cols0]
-    keep = meta_present + base46 + SURV
-    assert all(c in cols0 for c in base46 + SURV)
+    keep = meta_present + all8_54
+    assert all(c in cols0 for c in all8_54)
     for split in ["train", "validation", "test"]:
         df = pd.read_parquet(e4dir / f"{split}.parquet").reset_index(drop=True)
         df[keep].to_parquet(A9_DATA / f"{split}.parquet")
     print(f"[build] a9 parquet: {len(keep)} cols "
-          f"(meta {len(meta_present)} + base46 + {len(SURV)} surv)")
+          f"(meta {len(meta_present)} + all8_54 in E4 order)")
 
 
 def run(cmd):
