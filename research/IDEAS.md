@@ -166,13 +166,25 @@ problem — see report). n=30 smoke looked all-worse but was pure sampling noise
 Code reverted (f532396); scratch kept at `models/auto/a8/` (gitignored). See
 `research/reports/auto/A8.md`.
 
-## A9 [P3] [RUNNING 2026-07-11T09:51:22Z] E4 quantile pooling forward test
+## A9 [P3] [FAILED] E4 quantile pooling forward test
 **Hypothesis:** pooling across the quantile ensemble (filed at E4 as a
 forward-test hypothesis) improves tail calibration of match predictions.
 **Method:** per the E4 report's stated recipe (`reports/` E-series); eval via
 recipe A.
 **Gate:** LL + ROI vs fresh baseline. **Budget:** ~1 h.
-**Result:** —
+**Result:** FAILED 2026-07-11. Forward-tested E4's `all8` (+8 pooled-ELO
+survivors) vs `e4-base` as a **paired 5-seed** test {29,7,13,42,101} on the E4
+unfrozen parquet, in E4's exact column order (colsample makes order load-bearing;
+seed 29 byte-reproduces E4: base 0.6312/+15.38, all8 0.6288/+24.35). Paired MEAN
+≥$50k: **ΔLL +0.0019** (all8 WORSE, sub-floor 0.007; only seed 29 favors all8,
+4/5 flat-to-worse) / **ΔROI −0.76pp** (all8 WORSE, sub-floor 2.3; 3/5 seeds
+worse). **Neither gate up → FAILED.** E4's promising single-seed readout was
+**seed-29 luck** — seed 29 is the sole seed where all8 wins both metrics (ΔROI
++8.97pp). Resolves the E4 open hypothesis negative for the winner market;
+vindicates E4's val rule (DISCARD) and the A1/E3 multi-seed discipline. No
+production code changed (quantile cols already in the materializer, excluded
+since E4); harness `scripts/auto/a9_run.py` kept. See
+`research/reports/auto/A9.md`.
 
 ## A10 [P3] [PENDING] Sim signal as a direct-model feature (A3 follow-up)
 **Hypothesis:** post-hoc probability blending fails (A3: any sim weight strictly
