@@ -39,7 +39,7 @@ models; if A1 hasn't run, do its training step first).
 threshold function, not a smooth mean). Code reverted (d994bbd); models kept at
 `models/auto/a2/`. See `research/reports/auto/A2.md`.
 
-## A3 [P1] [RUNNING 2026-07-11T06:03:44Z] Direct + v7 sim blend, fine w-sweep
+## A3 [P1] [FAILED] Direct + v7 sim blend, fine w-sweep
 **Hypothesis:** a small sim weight (w ∈ 0.05–0.3) adds ball-level information
 the direct model lacks, helping the close-match slice without hurting the
 headline.
@@ -49,7 +49,13 @@ production `test_predictions.json` → reslice each → compare ≥$50k and
 close-match slice. Pick best w on ≥$50k only (avoid slice-shopping).
 **Gate:** LL + ROI at the chosen w vs w=0. Pure eval composition — no
 training. **Budget:** ~30 min.
-**Result:** —
+**Result:** FAILED 2026-07-11. ≥$50k LL degrades MONOTONICALLY with w
+(0.6299 → 0.6317 → 0.6339 → 0.6396 → 0.6470 at w=0/0.05/0.1/0.2/0.3); ROI
+noisy, never clears the 2pp floor (best w=0.20 +0.31pp, with LL +0.0097
+worse). Close-match slice worse at every w. v7 sim carries no winner-market
+info the direct model lacks (loses that race by ~0.07 LL) — blending only
+injects noise. Neither gate metric improved. Eval-only, nothing to revert.
+See `research/reports/auto/A3.md`.
 
 ## A4 [P2] [PENDING] Alternative architecture: regularized logistic stack
 **Hypothesis:** a heavily regularized logistic regression on the same 49
@@ -108,6 +114,22 @@ forward-test hypothesis) improves tail calibration of match predictions.
 **Method:** per the E4 report's stated recipe (`reports/` E-series); eval via
 recipe A.
 **Gate:** LL + ROI vs fresh baseline. **Budget:** ~1 h.
+**Result:** —
+
+## A10 [P3] [PENDING] Sim signal as a direct-model feature (A3 follow-up)
+**Hypothesis:** post-hoc probability blending fails (A3: any sim weight strictly
+worsens LL), but a sim-derived scalar fed as a *feature* into the direct model
+lets the tree learn where/whether to trust ball-level info instead of averaging
+it in blindly.
+**Method:** extract one or two scalars per match from the v7 sim envelope
+(simulated P(team1 win); optionally projected margin spread), join as new
+column(s) into the match parquet. BEFORE training, run the correlation check vs
+the existing 49 M1/M2 features (repo discipline: |r|>0.5 vs an existing feature
+needs clearly higher target correlation). If it passes: re-materialize to
+`data/auto/a10/`, train, recipe A.
+**Gate:** LL + ROI vs fresh baseline. **Budget:** ~1 h (envelope already
+exists; join is cheap, retrain is fast — no full re-materialization of the
+career trackers needed if only appending sim columns).
 **Result:** —
 
 ---
