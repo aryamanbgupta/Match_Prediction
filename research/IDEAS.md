@@ -76,7 +76,7 @@ auto/a4/` JSONs kept on disk. **Combine candidate** (C-series once PENDING dry):
 3-way logit-avg {logistic, A1 seed-bag mean, M7} to keep ROI decorrelation
 while averaging out the seed-luck confound. See `research/reports/auto/A4.md`.
 
-## A5 [P2] [PENDING] Feature interactions: ELO × venue, toss × venue
+## A5 [P2] [RUNNING 2026-07-11T06:17:02Z] Feature interactions: ELO × venue, toss × venue
 **Hypothesis:** matchup strength conditioned on venue character (chase bias,
 scoring dist) carries signal the additive features miss.
 **Method:** BEFORE training, run the correlation check (per repo discipline:
