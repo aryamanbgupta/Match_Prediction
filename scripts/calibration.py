@@ -536,6 +536,78 @@ class OverVectorScalingCalibrator:
         return corrected[0] if single else corrected
 
 
+class DewVectorScalingCalibrator:
+    """Dew-conditional 2nd-innings vector scaling (A12, 2026-07-11).
+
+    Follow-up to A6, which found evening humidity (a dew proxy) carries no
+    *match-level* winner signal (|r_target| ~ 0.005) — but the physics (wet
+    ball in the chase: harder to grip/field) is fundamentally a **ball-level,
+    second-innings** effect that match aggregation washes out. This calibrator
+    tests that cleaner hypothesis inside the sim's prop/score gate.
+
+    Construction (fit on validation *innings-2* balls only):
+      v_low  = marginal-matching vector on low-dew  innings-2 balls
+      v_high = marginal-matching vector on high-dew innings-2 balls
+      tilt   = v_high / v_low              (residual dew differential the
+                                            model failed to capture)
+      sqrt_tilt = sqrt(tilt)
+
+    Applied at eval, keyed by (innings, venue, match_date):
+      innings != 2, no RH, or no tilt  -> `_global` (== the E5 v1 vector
+                                          EXACTLY, so innings-1 and no-coverage
+                                          balls are byte-identical to the vec
+                                          baseline);
+      innings == 2, high dew (rh>=thr) -> _global * sqrt_tilt;
+      innings == 2, low  dew (rh< thr) -> _global / sqrt_tilt.
+
+    The +/- sqrt split is **centered**: at the geometric-mean dew level the
+    correction is `_global` exactly, so the ONLY thing that differs from the
+    vec baseline is the dew *differential* — isolating dew from mere
+    innings-2 re-conditioning. `dew_aware = True` signals the sim wrapper
+    (`XGBoostModelV2.predict_next_ball`) to pass innings/venue/match_date.
+
+    `rh_lookup`: {(venue_str, 'YYYY-MM-DD'): evening_rh_float} built offline
+    from the cached open-meteo archive (`data/external/weather/`); baked into
+    the pickle so eval needs no network. `rh_threshold`: the fit-time median
+    evening RH over innings-2 val balls with coverage.
+    """
+
+    dew_aware = True
+
+    def __init__(self, global_weights, sqrt_tilt=None,
+                 rh_lookup=None, rh_threshold=None):
+        self._global = np.asarray(global_weights, float)
+        self._sqrt_tilt = (None if sqrt_tilt is None
+                           else np.asarray(sqrt_tilt, float))
+        self._rh_lookup = dict(rh_lookup) if rh_lookup else {}
+        self._rh_threshold = rh_threshold
+
+    def _rh_for(self, venue, match_date):
+        if venue is None or match_date is None:
+            return None
+        return self._rh_lookup.get((venue, str(match_date)[:10]))
+
+    def _vector(self, innings, venue, match_date):
+        if (innings != 2 or self._sqrt_tilt is None
+                or self._rh_threshold is None):
+            return self._global
+        rh = self._rh_for(venue, match_date)
+        if rh is None:
+            return self._global
+        return (self._global * self._sqrt_tilt if rh >= self._rh_threshold
+                else self._global / self._sqrt_tilt)
+
+    def calibrate_probs(self, raw_probs: np.ndarray, innings=None,
+                        venue=None, match_date=None) -> np.ndarray:
+        single = raw_probs.ndim == 1
+        probs = raw_probs.reshape(1, -1) if single else raw_probs
+        v = self._vector(innings, venue, match_date)
+        corrected = probs * v
+        corrected = corrected / np.maximum(
+            corrected.sum(axis=1, keepdims=True), 1e-12)
+        return corrected[0] if single else corrected
+
+
 class BallLevelCalibrator:
     """Per-class isotonic regression for ball-level 6-class predictions.
 
