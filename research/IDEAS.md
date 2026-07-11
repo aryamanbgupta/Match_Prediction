@@ -229,7 +229,7 @@ is flat ~54–56% across all boundaries (ROI deltas are pnl-mix, not sharper
 discrimination). No production code changed; analysis harness kept (cf. A9). See
 `research/reports/auto/A11.md`.
 
-## A12 [P3] [RUNNING 2026-07-11T11:37:44Z] Dew as a ball-level second-innings covariate (A6 follow-up)
+## A12 [P3] [FAILED] Dew as a ball-level second-innings covariate (A6 follow-up)
 **Hypothesis:** A6 showed dew carries no *match-level* winner signal, but the
 physics (wet ball → harder to grip/field in the chase) is fundamentally a
 **ball-level, second-innings** effect that match aggregation washes out. A dew
@@ -243,7 +243,24 @@ bowling economy / wicket prob). Recipe B on n=261 with `--ball-calibrator vector
 single-vector run AND no regression of an established sim skill (team-fours or
 `top_bowler` margin vs fair baseline). **Budget:** ~2.5 h (data free; sim eval
 is the cost).
-**Result:** —
+**Result:** FAILED 2026-07-11 (resumed a prior iteration that fit the calibrator
++ ran the n=261 dew sim but stopped before the verdict). Centered dew-tilt
+`sqrt(v_high/v_low)` on the E5 v1 global vector, fit on val innings-2 balls split
+at median evening RH 68%; innings-1/no-coverage path == v1 exactly (96.6% inn-2
+coverage). Paired Brier/MAE (dew − vec) cluster-boot by match, n=261×100 seed 42
+vs `models/auto/a8/detail_vec_n261.json`; pairing sanity holds (n_chg ≈ ½ n_all
+on every inn-2 family — only inn-2 obs differ). **GATE 1** (2nd-inns
+scoring+wicket, want dBrier DOWN, CI < 0): pooled **−0.0003 CI [−0.0013, +0.0006]
+INCLUDES 0 → NOT improved** (scoring +0.0003 [−0.0015,+0.0021]; wicket/econ
+−0.0004 [−0.0014,+0.0005], both directionless). **GATE 2** guard: `top_bowler`
++0.0003 CI [+0.0001,+0.0005] **excludes 0** = tiny regression; `team_total_fours_mae`
++0.000 [−0.010,+0.010] held. GATE 1 fails → **FAILED**. Dew signal genuinely weak
+(max |tilt−1| = 0.066 on wicket, all others <2%; applied per-ball tilt ≤3.3%,
+mostly <1%) — below the A8 washout threshold (A8's 3–7% tilts already netted 0 on
+aggregated props). Third dew negative (A6 match-level + A12 ball-level); dew lever
+exhausted at both resolutions. Reverted `eabd701`; default sim path byte-unchanged;
+harness `scripts/auto/a12_*.py` + `models/auto/a12/` scratch kept. See
+`research/reports/auto/A12.md`.
 
 ## A13 [P3] [PENDING] Sim dispersion calibration on sampled score totals (A8 follow-up)
 **Hypothesis:** A8 showed vector scaling (a *marginal-rate* correction) cannot move
