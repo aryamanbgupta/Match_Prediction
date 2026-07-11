@@ -576,15 +576,8 @@ class T20Rules:
         # Extract features
         features = model.extract_features(state)
         
-        # Get outcome probabilities. A dew-aware calibrator (A12) needs the
-        # current ball's innings/venue/date, so pass `state` only in that case;
-        # every other path (all model types, default vec/over calibrators) is
-        # byte-for-byte unchanged.
-        _cal = getattr(model, 'ball_calibrator', None)
-        if _cal is not None and getattr(_cal, 'dew_aware', False):
-            probs = model.predict_next_ball(features, state=state)
-        else:
-            probs = model.predict_next_ball(features)
+        # Get outcome probabilities
+        probs = model.predict_next_ball(features)
         
         # Map string outcomes to Enum
         outcome_map = {
@@ -1085,27 +1078,18 @@ class XGBoostModelV2(PredictionModel):
             return None
         return min(int(features[self._idx_balls_bowled] // 6), 19)
 
-    def predict_next_ball(self, features: np.ndarray, state=None) -> Dict[str, float]:
-        """Get probabilities from model. `features` is a 1-D np.float64 row.
-        `state` is only used by a dew-aware calibrator (A12); it is None on
-        every other path and the default behaviour is unchanged."""
+    def predict_next_ball(self, features: np.ndarray) -> Dict[str, float]:
+        """Get probabilities from model. `features` is a 1-D np.float64 row."""
         probs = self.model.predict_proba(features.reshape(1, -1))[0]
 
         # Apply ball-level calibration if available. An over-aware calibrator
-        # (A14) reads the ball's over off the feature buffer; a dew-aware
-        # calibrator (A12) reads innings/venue/date off `state`; the default
+        # (A14) reads the ball's over off the feature buffer; the default
         # global VectorScalingCalibrator (E5) keeps the plain 1-arg call and
         # is byte-for-byte unchanged.
         if self.ball_calibrator:
             if getattr(self.ball_calibrator, 'over_aware', False):
                 probs = self.ball_calibrator.calibrate_probs(
                     probs, over=self._over_from_features(features))
-            elif getattr(self.ball_calibrator, 'dew_aware', False):
-                probs = self.ball_calibrator.calibrate_probs(
-                    probs,
-                    innings=(state.innings if state is not None else None),
-                    venue=(state.venue if state is not None else None),
-                    match_date=(state.match_date if state is not None else None))
             else:
                 probs = self.ball_calibrator.calibrate_probs(probs)
 
