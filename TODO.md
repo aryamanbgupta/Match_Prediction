@@ -362,9 +362,22 @@ Full reference: `reports/m8_sizing_rules_eval.md`.
   retroactively. Semi-interactive build preferred (needs account setup +
   live-endpoint verification); a tightly-scoped overnight iteration can do
   the backtest wiring once capture exists.
-- [ ] **Betfair historical data purchase decision** — research brief
-  commissioned 2026-07-11 (free-tier check, prop-market coverage, US access,
-  pricing for 2–3 years IPL+T20I). Decide buy/skip when brief lands.
+- [x] ~~**Betfair historical data purchase decision**~~ — **resolved SKIP
+  2026-07-11**: Betfair (historical + exchange API) is the only source
+  confirmed to carry real cricket prop markets (Innings Runs, Top Batsman),
+  but both are gated on a Betfair account and **US residents are
+  contractually barred from registering** (ToS); VPN/proxy registration
+  violates ToS — not pursuing. Pricing unpublished without login anyway.
+  Consequence: **forward capture is the only viable prop-odds path from the
+  US — start it early, every day counts.** Capture targets, by priority:
+  (1) **Polymarket cricket props** — confirmed to exist beyond match winner
+  (e.g. highest-individual-run-total on IPL; polymarket.com/sports/cricket/
+  props; ~35 live markets, coverage inconsistent) — extend the existing
+  polymarket capture repo; (2) probe **The Odds API** free tier for cricket
+  player-prop coverage before paying (reportedly thin outside US sports);
+  (3) **Smarkets** only if US eligibility verifies (£150 API gate, Malta
+  license — unconfirmed). OddsPortal/BetExplorer are match-winner only, not
+  prop sources.
 - [ ] **Conditions eval pool** (`data/conditions_eval/`, separate from golden):
   all stat-generator T20s since 2026-04-17 (IPL + Blast + MLC + T20I + …),
   per-competition sliced readout (LL/accuracy/calibration; betting metrics
