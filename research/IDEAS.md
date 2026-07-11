@@ -360,7 +360,7 @@ Kept `d6202e0`; artifact `models/auto/a15/over0_calibrator.pkl` (gitignored,
 reproducible via `scripts/auto/a15_fit_over0_calibrator.py`); default `vector` path
 and A14 sim wiring byte-unchanged. See `research/reports/auto/A15.md`.
 
-## A16 [P3] [PENDING] Sparse regime-change-over calibrator (A15 extension)
+## A16 [P3] [RUNNING 2026-07-11T13:26:11Z] Sparse regime-change-over calibrator (A15 extension)
 **Hypothesis:** A15 showed the sim's single largest per-over calibration defect is
 **over 0** (fixing it alone earns the full `team_first_over_mae` win AND
 `pp_total_ou_45_5` −0.0037, CI excludes 0), while A14's blanket 19 other per-over
