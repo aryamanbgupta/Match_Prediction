@@ -166,7 +166,7 @@ problem — see report). n=30 smoke looked all-worse but was pure sampling noise
 Code reverted (f532396); scratch kept at `models/auto/a8/` (gitignored). See
 `research/reports/auto/A8.md`.
 
-## A9 [P3] [PENDING] E4 quantile pooling forward test
+## A9 [P3] [RUNNING 2026-07-11T09:51:22Z] E4 quantile pooling forward test
 **Hypothesis:** pooling across the quantile ensemble (filed at E4 as a
 forward-test hypothesis) improves tail calibration of match predictions.
 **Method:** per the E4 report's stated recipe (`reports/` E-series); eval via
