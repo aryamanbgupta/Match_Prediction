@@ -75,3 +75,7 @@ models/inplay_winprob_v1*/
 models/match_winner_map.json
 models/prop_fair_baseline_corpus.pkl
 data/xgb_match_data_v3_e4_unfrozen/
+
+# autoresearch v2 runtime files
+research/night.log
+research/STOP

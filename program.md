@@ -1,153 +1,157 @@
-# AutoResearch: CricML Match Prediction
+# AutoResearch v2 — CricML Match Prediction
+
+You are one iteration of an unattended overnight research loop. One iteration =
+one idea from `research/IDEAS.md`: implement it, evaluate it, issue a verdict,
+log it, exit. You run with a fresh context every time — everything you need is
+in this file, `research/IDEAS.md`, `research/results.tsv`, and `git log`.
 
 ## GOAL
 
-Improve the XGBoost T20 cricket match prediction model by discovering better features, hyperparameters, or training strategies. Each iteration makes ONE focused change, evaluates it, and keeps or discards.
+Improve the production winner-market model (and supporting sim/prop stack) on
+**both** prediction accuracy and betting return, measured on the iteration
+eval set.
 
-## METRICS
+## GATE METRICS
 
-### Primary metric (used for keep/discard decisions)
-**Avg Log Loss** on 44 T20 World Cup 2024 test matches (100 simulations each).
-Lower is better.
+Primary eval: **iteration polymarket set, ≥$50k volume slice** (~170 bets).
 
-### Secondary metrics (log but do NOT optimize directly)
-- **Avg Brier Score** — confirms calibration isn't just compression toward 50%
-- **Flat ROI** — sanity check on betting performance
-- **Win Rate** — % of bets that would have won
-- **Avg Edge** — average |model_prob - market_prob| across matches. Measures how differentiated predictions are from the market. If this shrinks while log loss improves, the model is becoming conservative, not better.
+1. **Accuracy** — Avg Log Loss (lower is better). Market reference: 0.6267.
+2. **Return** — Flat ROI % (higher is better), with its bootstrap CI.
 
-### Red flag rule
-If log loss improves BUT avg edge decreases (predictions converge toward market odds / 50-50), **DISCARD** the change. The model is becoming less decisive, not better calibrated. This is the Platt scaling trap — better log loss through conservative predictions doesn't translate to profitable betting. Also discard if log loss improves but flat ROI gets significantly worse.
+Production baseline (M7, `models/xgb_match_v3_m7_production`):
+≥$50k LL **0.6299**, flat ROI **+21.90%** (CI [+2.28, +43.83]).
 
-### Run evaluation
+**Seed variance is real** (retrains of the same config move LL by ~±0.004 and
+ROI by several points). If your idea involves retraining, compare against a
+same-session or logged fresh-baseline row in `research/results.tsv`, not the
+historical headline. If no fresh baseline row exists yet, produce one first
+(idea A1 does exactly this).
+
+## VERDICT RULE (follow exactly)
+
+- **BOTH** LL improves **AND** ROI improves → **LANDED** — keep the commits.
+- **Exactly one** improves → **TABLED** — revert the code, but keep the idea
+  in `IDEAS.md` marked `TABLED`, recording which metric moved and by how much.
+  Tabled ideas are candidates for future *combinations*.
+- **Neither** improves → **FAILED** — revert the code, mark `FAILED`.
+- Crash / exceeds 2× its time budget → kill it, revert, mark `CRASH`.
+
+Qualifiers:
+- Improvement smaller than noise (ΔLL < 0.002, or ΔROI within ~2pp with a
+  heavily overlapping CI) counts as "not improved".
+- **Betting-layer ideas** (bet sizing, edge thresholds — anything that leaves
+  the predicted probabilities untouched) cannot move LL by construction:
+  for those, ROI improves without degrading anything else → LANDED.
+- **Sim/prop ideas** have their own gate pair, stated per-idea in `IDEAS.md`
+  (typically: calibration/overshoot metric + margin vs fair baseline). The
+  same both/one/none verdict logic applies to that pair.
+- When out of `PENDING` ideas, design ONE combination of `TABLED` ideas and
+  run it (see PROTOCOL step 1).
+
+## DO NOT CHEAT — hard rules
+
+The eval only means something if it stays fixed. Violating any of these makes
+the whole night worthless:
+
+1. **Never modify** the eval framework or eval inputs:
+   `scripts/sim_eval/`, `betting_odds_polymarket.json`,
+   `data/polymarket_test/`, `scripts/parsing_v2.py`,
+   `scripts/stats_provider.py`, `scripts/stats_sqlite_backend.py`.
+2. **Never touch, read, or evaluate against `data/golden/`** — it is the
+   held-out production audit set. Selecting on it contaminates it.
+3. **Never overwrite production artifacts**: `models/xgb_match_v3_m7_production/`,
+   `models/xgb_match_v2_clean*/`, `data/xgb_match_data_v2_clean/`,
+   `models/player_stats_cache_v3.sqlite`. Write new artifacts to
+   `models/auto/<idea-id>/` and `data/auto/<idea-id>/`.
+4. **Report numbers verbatim** from tool output into `results.tsv` and your
+   report. Never estimate, extrapolate, or round in your favor. If an eval
+   didn't finish, the number does not exist.
+5. **Temporal integrity**: features reflect state before the ball/match;
+   trackers update after. Use `--freeze-trackers-after 2025-06-30` when
+   materializing match features (matches production). No feature may use
+   information from the match being predicted or later.
+6. Any prop/sim skill claim must beat the **fair baseline**
+   (`scripts/sim_eval/prop_fair_baselines.py`), not the base rate, and use
+   `--ball-calibrator vector` on `prop_backtest.py`.
+7. Do not edit this file, `research/night.sh`, `research/RUNNER_PROMPT.md`,
+   or existing rows of `results.tsv` / verdict history in `IDEAS.md` —
+   append only.
+
+## EVAL RECIPES
+
+### A) Match-level model ideas (most ideas; minutes, not hours)
+
 ```bash
-uv run python scripts/sim_eval/run_sim_eval.py \
-    --test-dir data/betting_test \
-    --odds betting_odds_v3.json \
-    --n-sims 100
+# 1. Train (defaults == M7 production config; override what your idea changes)
+uv run python scripts/xgboost_match_v1.py \
+    --cmd both \
+    --data-dir data/xgb_match_data_v2_clean \
+    --model-dir models/auto/<idea-id>
+
+# 2. Convert direct predictions to an eval envelope (--w 0.0 = 100% direct model)
+uv run python scripts/sim_eval/blend_eval_json.py \
+    --sim-json eval_out_phase5_hier/hier_all_20260425_165622.json \
+    --direct-json models/auto/<idea-id>/test_predictions.json \
+    --w 0.0 --out-dir models/auto/<idea-id>/eval
+
+# 3. Slice against market odds — read the ≥$50k slice numbers
+uv run python scripts/sim_eval/reslice_eval_json.py \
+    --in models/auto/<idea-id>/eval/hier_all_20260425_165622_w0p00.json \
+    --odds betting_odds_polymarket.json \
+    --out-dir models/auto/<idea-id>/eval/sliced
 ```
 
-Record ALL metrics from the output.
+Record from the `≥$50k` slice output: Avg Log Loss, market LL, Flat ROI, CI,
+bets placed. If the idea adds features, re-materialize to `data/auto/<idea-id>`
+(`scripts/materialize_match_features.py --out-dir data/auto/<idea-id>
+--freeze-trackers-after 2025-06-30`) — this takes ~30–60 min; budget for it.
 
-## CURRENT BASELINE
+### B) Sim / prop ideas
 
-- Model: XGBoost v4 (team strength features, learning_rate=0.15)
-- Log Loss: ~0.584
-- Brier: ~0.203
-- Flat ROI: -35.3%
-- Features: 72 (see `scripts/feature_registry.py`)
-- Training: `uv run python scripts/xgboost_v2.py`
+```bash
+uv run python scripts/sim_eval/prop_backtest.py \
+    --test-dir data/polymarket_test --n-sims 100 \
+    --ball-calibrator vector \
+    --out research/reports/auto/<idea-id>_props.md
+```
 
-## DIRECTION
+Full n=261 × 100 sims ≈ 40+ min. One heavy process at a time — never
+`--parallel`, never concurrent train + eval (16 GB box).
 
-Before each iteration:
-1. Read `results.tsv` to see what's been tried and what patterns emerge (if the file doesn't exist yet, skip this step)
-2. Check `git log --oneline -10` to see the line of evolution
-3. Think about what single change is most likely to improve the metric
+## OPERATIONAL GUARDRAILS
 
-Types of changes to explore (in rough priority order):
-- **Feature engineering**: Modify feature groups, ablate or recombine existing features
-- **Hyperparameter tuning**: max_depth, learning_rate, min_child_weight, subsample, colsample_bytree
-- **Class weights**: Rebalance dot/1/2/4/6/wicket weights
-- **Feature selection**: Ablate low-importance features (check feature importance first)
-- **Feature scaling/normalization**: StandardScaler, log transforms on skewed features
-- **Regularization**: L1/L2 via reg_alpha/reg_lambda
-
-## EDITABLE FILES
-
-You may ONLY modify these files:
-- `scripts/xgboost_v2.py` — model architecture, hyperparameters, training loop
-- `scripts/feature_registry.py` — feature definitions, group composition
-
-## FIXED FILES (DO NOT MODIFY)
-
-- `scripts/parsing_v2.py` — data pipeline, temporal integrity (CRITICAL)
-- `scripts/stats_provider.py` — temporal stats access (CRITICAL)
-- `scripts/sim_v1_2.py` — simulation engine
-- `scripts/sim_eval/` — evaluation framework (metrics must stay consistent)
-- `data/betting_test/` — test data
-- `betting_odds_v3.json` — market odds
-- `pyproject.toml` / `requirements.txt` — no new dependencies
+- ONE idea per session. When it's logged, stop — do not start another.
+- No new dependencies (`pip install` / `uv add`). Work with what's installed.
+- Network: **GET-only** downloads for new-data ideas (e.g. `curl` a weather
+  archive). Save raw pulls under `data/external/<source>/`. Never upload,
+  post, or push anything anywhere.
+- Git: commit with message prefix `Auto[<idea-id>]:`. **Never push. Never**
+  `git reset` / `git checkout -- .` — discard only via `git revert`.
+- If a command hangs at 2× its expected time, kill it and record CRASH.
+- Don't leave background processes running when you exit.
 
 ## PROTOCOL
 
-For each iteration:
-
-### 1. COMMIT BEFORE RUNNING
-```bash
-git add scripts/xgboost_v2.py scripts/feature_registry.py
-git commit -m "Try: [one-line description of change]"
-```
-
-### 2. TRAIN THE MODEL
-```bash
-uv run python scripts/xgboost_v2.py
-```
-If training crashes or takes > 60 minutes, treat as CRASH.
-
-### 3. RUN EVALUATION
-```bash
-uv run python scripts/sim_eval/run_sim_eval.py \
-    --test-dir data/betting_test \
-    --odds betting_odds_v3.json \
-    --n-sims 100
-```
-If evaluation takes > 15 minutes, something is wrong (normal is ~5-10 min). Treat as CRASH.
-Record the "Avg Log Loss" from the output.
-
-### 4. DECIDE: KEEP or DISCARD
-- If log loss **decreased** AND avg edge did NOT shrink: **KEEP** — the commit stays
-- If log loss **increased or stayed same**, OR avg edge shrank significantly: **DISCARD** — revert:
-  ```bash
-  git revert --no-edit HEAD
-  ```
-
-### 5. LOG TO results.tsv
-Append a tab-separated row. On the very first iteration, create the file with a header row first.
-
-**Header:**
-```
-commit_hash	log_loss	brier	flat_roi	win_rate	avg_edge	train_time_sec	eval_time_sec	status	description
-```
-
-**Fields** (all from the eval console output):
-- `commit_hash`: 7-char git hash (or "none" if discarded)
-- `log_loss`: "Average Log Loss" from eval output
-- `brier`: "Average Brier Score" from eval output
-- `flat_roi`: "ROI" under "Flat Staking" (e.g., -44.8%)
-- `win_rate`: "Win Rate" under "Flat Staking" (e.g., 24.4%)
-- `avg_edge`: "Average Edge (magnitude)" from eval output — used for the red flag rule
-- `train_time_sec`: approximate training duration
-- `eval_time_sec`: approximate evaluation duration
-- `status`: keep, discard, or crash
-- `description`: what you changed (1-2 sentences)
-
-### 6. REPEAT
-Go back to step 1. Continue until you've completed the requested number of iterations.
-
-## GUARDRAILS
-
-- **ONE change per iteration** — no compound changes (can't tell what helped)
-- **Never modify fixed files** — especially parsing_v2.py and stats_provider.py
-- **No new dependencies** — work with existing packages only
-- **No test set changes** — the 44 matches and odds file are sacred
-- **Do NOT use --parallel on eval** — it spawns N processes each loading ~550MB stats cache, which OOM-kills this machine. The default sequential eval is fine (~5 min total).
-- **Memory limit: 8GB** — do not launch concurrent heavy processes (no background training + eval, no parallel simulations, no multi-process anything). One heavy process at a time.
-- **Run commands EXACTLY as written** — do not add flags, redirect output, or wrap in background processes unless the protocol says to
-- **If you crash twice in a row** — step back, try a more conservative change
-- **If 5 consecutive discards** — try a completely different direction
-- **Log EVERY attempt** — including crashes and discards. results.tsv is the full history.
-
-## ITERATIONS
-
-Run the number of iterations requested by the user. If not specified, default to 20 rounds, then stop and summarize findings.
-
-## SUMMARY
-
-After completing all iterations, provide:
-1. Best log loss achieved vs baseline
-2. Brier score and ROI trends — did they move in the same direction as log loss?
-3. Avg edge trend — did the model stay decisive or become conservative?
-4. Which changes helped most (pattern analysis from results.tsv)
-5. Suggested next directions based on what you learned
-6. The cumulative diff: `git diff <first-commit>..HEAD`
+0. Orient: `git log --oneline -10`, read `research/results.tsv` and
+   `research/IDEAS.md`.
+1. **Pick** the highest-priority `PENDING` idea. If none: design ONE
+   combination from `TABLED` ideas, append it to `IDEAS.md` as a new entry
+   (id `C<n>`, method = which tabled ideas + how combined), and run that.
+   If nothing is tabled either: write `research/reports/auto/NIGHT_SUMMARY.md`
+   summarizing the night, `touch research/STOP`, commit, and exit.
+2. **Claim**: set the idea's status to `RUNNING <UTC timestamp>`, commit
+   `Auto[<id>]: claim`.
+3. **Implement** (artifacts under `models/auto/<id>/`, `data/auto/<id>/`).
+   Commit before running the eval.
+4. **Evaluate** per the recipe. Wait for it to finish; record real numbers.
+5. **Verdict** per the rule. If not LANDED, `git revert` the implementation
+   commits (keep the report/log changes).
+6. **Log**: append one row to `research/results.tsv`
+   (`date  idea  commit  ll_50k  market_ll  roi_50k_pct  roi_ci  n_bets  verdict  notes`)
+   and write `research/reports/auto/<id>.md` — hypothesis, what you did,
+   numbers table, verdict, one paragraph "what I'd try next".
+7. **Update the queue**: set the idea's final status + one-line result in
+   `IDEAS.md`. Append up to 2 new `PENDING` ideas if this run surfaced
+   genuinely promising directions (check for duplicates first; never delete
+   or edit other entries).
+8. Final commit `Auto[<id>]: <verdict> — <one-line result>`. **Stop.**
