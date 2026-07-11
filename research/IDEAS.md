@@ -109,7 +109,7 @@ evening-hours humidity/temp as 2–3 match features; re-materialize to
 of night remain.
 **Result:** —
 
-## A7 [P2] [RUNNING 2026-07-11T00:50Z] Betting layer: slice-conditional edge threshold (M8 follow-up)
+## A7 [P2] [LANDED] Betting layer: slice-conditional edge threshold (M8 follow-up)
 **Hypothesis:** requiring ~10% edge on mismatch fixtures (top6 ELO diff > 5)
 while betting flat elsewhere improves ROI without touching predictions (M8
 documented this but never forward-tested it as a rule).
@@ -117,7 +117,19 @@ documented this but never forward-tested it as a rule).
 conditional threshold using the reslice outputs; compare ROI/CI.
 **Gate:** betting-layer rule — ROI improves, predictions untouched → LANDED.
 **Budget:** ~30 min.
-**Result:** —
+**Result:** LANDED 2026-07-11. Pure betting-layer filter on frozen production
+pnls (`scripts/auto/a7_conditional_threshold.py`; LL unchanged = 0.6299).
+≥$50k: baseline flat-thr-0 +21.90%/168 bets → conditional (close |elo_diff|≤5
+bet flat, mismatch >5 require edge>10%) **+36.93%/109 bets** — ΔROI **+15.03pp**
+(>> 2pp floor), and NOTHING degrades: win 51.8→56.0%, max drawdown 12.52→5.91,
+total profit 36.79→40.25u, ROI CI lo +2.28→+12.06. The 59 dropped mismatch/
+low-edge bets are a net-losing subset (−5.86% ROI), reproducing M8's
+over-confidence-on-lopsided finding. 100k directionally consistent
+(+26.39→+35.86%, CI lo −0.99 at n=72). Recommended production sizing becomes
+slice-conditional (wiring into a live betting harness is human follow-up;
+`predict_fixture.py` only emits probabilities). Kept commit. C-series candidate:
+stack on A4's logit-avg (orthogonal — probability ensemble × bet filter). See
+`research/reports/auto/A7.md`.
 
 ## A8 [P3] [PENDING] Sim: phase-conditional vector scaling (E5 follow-up)
 **Hypothesis:** one global vector calibrator over/under-corrects by phase;
@@ -152,6 +164,22 @@ needs clearly higher target correlation). If it passes: re-materialize to
 **Gate:** LL + ROI vs fresh baseline. **Budget:** ~1 h (envelope already
 exists; join is cheap, retrain is fast — no full re-materialization of the
 career trackers needed if only appending sim columns).
+**Result:** —
+
+## A11 [P3] [PENDING] A7 boundary sweep — is |elo_diff|=5 the right mismatch cut?
+**Hypothesis:** A7 landed the slice-conditional threshold with the mismatch/close
+boundary fixed at |top6_batting_elo_diff|=5 (inherited from the M8 write-up) and
+edge>10%. The edge threshold is robust (A7's 0.05/0.10/0.15 sweep all improved),
+but the *boundary* was never varied — a different cut may separate the
+over-confident lopsided bets more cleanly.
+**Method:** rerun `scripts/auto/a7_conditional_threshold.py` at boundaries
+{3, 5, 8, 12} with edge>10% fixed. To avoid slice-shopping, DO NOT pick the
+max-ROI boundary post hoc: pre-commit that A7's landed boundary=5 stays
+production unless another boundary beats it on BOTH ≥$50k and ≥$100k ROI by
+more than the 2pp floor AND keeps ≥$50k CI excluding 0. Report the full curve.
+**Gate:** betting-layer rule — a challenger boundary must clear the pre-committed
+dual-slice bar to replace 5; else A7's rule stands (idea = FAILED, no change).
+**Budget:** ~20 min (reuses A7 tooling + existing eval JSONs, no retraining).
 **Result:** —
 
 ---
