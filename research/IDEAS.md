@@ -98,7 +98,7 @@ already captures interactions natively; explicit products only add variance.
 additive frontier exhausted. Eval-only (gitignored scratch), nothing to revert.
 See `research/reports/auto/A5.md`.
 
-## A6 [P2] [RUNNING 2026-07-11T06:36:38Z] New data: historical weather (dew proxy)
+## A6 [P2] [FAILED] New data: historical weather (dew proxy)
 **Hypothesis:** evening humidity/dew at the venue affects chase advantage
 (wet ball), which the model can't currently see; strongest for night games.
 **Method:** GET-only pull from the open-meteo historical archive for venue
@@ -107,7 +107,18 @@ evening-hours humidity/temp as 2–3 match features; re-materialize to
 `data/auto/a6/`; train; recipe A. Respect the correlation-check discipline.
 **Gate:** LL + ROI vs fresh baseline. **Budget:** ~3 h — start only if >4 h
 of night remain.
-**Result:** —
+**Result:** FAILED 2026-07-11. Built the full open-meteo pipeline (geocode 340/464
+venues = 73%, hourly archive, evening 18–22h RH/dewpoint; 89.9% test coverage;
+joined onto existing parquet — no re-materialization). 3 features incl. an
+*oriented* `wx_dew_adv_team1=(RH−trainmean)×(1−2·bat_first)`. Correlation check =
+M6/A5 pattern: PASS redundancy (max|r_existing| 0.13–0.14) but FAIL target-floor
+(|r_tgt| 0.004–0.008; oriented feat 0.0049 ≪ 0.03). Paired 5-seed (A1 seeds):
+mean LL 0.6320 vs base 0.6318 (ΔLL +0.0002, sub-floor → not improved), ROI
++19.04% vs +20.56% (ΔROI −1.52pp, down 3/5, within noise → not improved). Neither
+gate up → FAILED. Dew is real physics but weak / already priced by
+`venue_chase_win_pct`×`team1_batting_first` at match-level. Code reverted; ~450 MB
+weather cache kept at `data/external/weather/` for reuse (see A12). See
+`research/reports/auto/A6.md`.
 
 ## A7 [P2] [LANDED] Betting layer: slice-conditional edge threshold (M8 follow-up)
 **Hypothesis:** requiring ~10% edge on mismatch fixtures (top6 ELO diff > 5)
@@ -180,6 +191,22 @@ more than the 2pp floor AND keeps ≥$50k CI excluding 0. Report the full curve.
 **Gate:** betting-layer rule — a challenger boundary must clear the pre-committed
 dual-slice bar to replace 5; else A7's rule stands (idea = FAILED, no change).
 **Budget:** ~20 min (reuses A7 tooling + existing eval JSONs, no retraining).
+**Result:** —
+
+## A12 [P3] [PENDING] Dew as a ball-level second-innings covariate (A6 follow-up)
+**Hypothesis:** A6 showed dew carries no *match-level* winner signal, but the
+physics (wet ball → harder to grip/field in the chase) is fundamentally a
+**ball-level, second-innings** effect that match aggregation washes out. A dew
+covariate feeding second-innings scoring/wicket rates in the v7 sim is a cleaner
+test of the same physics — and it lives in the sim/prop gate, not the winner gate.
+**Method:** reuse the already-built weather cache (`data/external/weather/`,
+evening RH per venue/date — no new pulls needed). Join evening RH as a per-ball
+feature active only in innings 2 (or as a sim-time multiplier on 2nd-innings
+bowling economy / wicket prob). Recipe B on n=261 with `--ball-calibrator vector`.
+**Gate (sim pair):** second-innings scoring/wicket calibration vs the current
+single-vector run AND no regression of an established sim skill (team-fours or
+`top_bowler` margin vs fair baseline). **Budget:** ~2.5 h (data free; sim eval
+is the cost).
 **Result:** —
 
 ---
