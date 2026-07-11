@@ -142,7 +142,7 @@ slice-conditional (wiring into a live betting harness is human follow-up;
 stack on A4's logit-avg (orthogonal — probability ensemble × bet filter). See
 `research/reports/auto/A7.md`.
 
-## A8 [P3] [PENDING] Sim: phase-conditional vector scaling (E5 follow-up)
+## A8 [P3] [RUNNING 2026-07-11T07:15:31Z] Sim: phase-conditional vector scaling (E5 follow-up)
 **Hypothesis:** one global vector calibrator over/under-corrects by phase;
 per-phase (PP/mid/death) scaling removes the residual bowler-wicket overshoot
 without breaking what E5 fixed.
