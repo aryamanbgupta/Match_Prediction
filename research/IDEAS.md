@@ -98,7 +98,7 @@ already captures interactions natively; explicit products only add variance.
 additive frontier exhausted. Eval-only (gitignored scratch), nothing to revert.
 See `research/reports/auto/A5.md`.
 
-## A6 [P2] [PENDING] New data: historical weather (dew proxy)
+## A6 [P2] [RUNNING 2026-07-11T06:36:38Z] New data: historical weather (dew proxy)
 **Hypothesis:** evening humidity/dew at the venue affects chase advantage
 (wet ball), which the model can't currently see; strongest for night games.
 **Method:** GET-only pull from the open-meteo historical archive for venue
