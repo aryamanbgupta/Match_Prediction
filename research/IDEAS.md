@@ -202,7 +202,7 @@ exists; join is cheap, retrain is fast — no full re-materialization of the
 career trackers needed if only appending sim columns).
 **Result:** —
 
-## A11 [P3] [PENDING] A7 boundary sweep — is |elo_diff|=5 the right mismatch cut?
+## A11 [P3] [RUNNING 2026-07-11T10:05:50Z] A7 boundary sweep — is |elo_diff|=5 the right mismatch cut?
 **Hypothesis:** A7 landed the slice-conditional threshold with the mismatch/close
 boundary fixed at |top6_batting_elo_diff|=5 (inherited from the M8 write-up) and
 edge>10%. The edge threshold is robust (A7's 0.05/0.10/0.15 sweep all improved),
