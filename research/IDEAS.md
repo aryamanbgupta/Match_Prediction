@@ -229,7 +229,7 @@ is flat ~54–56% across all boundaries (ROI deltas are pnl-mix, not sharper
 discrimination). No production code changed; analysis harness kept (cf. A9). See
 `research/reports/auto/A11.md`.
 
-## A12 [P3] [PENDING] Dew as a ball-level second-innings covariate (A6 follow-up)
+## A12 [P3] [RUNNING 2026-07-11T11:37:44Z] Dew as a ball-level second-innings covariate (A6 follow-up)
 **Hypothesis:** A6 showed dew carries no *match-level* winner signal, but the
 physics (wet ball → harder to grip/field in the chase) is fundamentally a
 **ball-level, second-innings** effect that match aggregation washes out. A dew
