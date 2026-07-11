@@ -24,7 +24,7 @@ complete. **Budget:** ~45 min.
 0.6318, ROI +20.56%. Noise floor: std 0.0068 LL / 2.3pp ROI. Models kept at
 `models/auto/a1_seed*` for A2. See `research/reports/auto/A1.md`.
 
-## A2 [P1] [RUNNING 2026-07-11T05:59:09Z] Seed bagging (5-seed probability ensemble)
+## A2 [P1] [FAILED] Seed bagging (5-seed probability ensemble)
 **Hypothesis:** averaging predicted probabilities across the 5 seeds from A1
 removes seed variance and improves both LL and ROI (variance reduction, no new
 information — historically the safest kind of win).
@@ -32,7 +32,12 @@ information — historically the safest kind of win).
 into one prediction set → recipe A steps 2–3.
 **Gate:** LL + ROI vs A1's fresh baseline mean. **Budget:** ~20 min (reuses A1
 models; if A1 hasn't run, do its training step first).
-**Result:** —
+**Result:** FAILED 2026-07-11. Bag ≥$50k: LL 0.6308 (vs baseline mean 0.6318 =
++0.0010, inside the 0.007 seed-std floor → not improved), ROI +18.23% (vs
++20.56% = −2.33pp → declined). Neither gate metric improved. Bagging five
+*correlated* seeds gives only the tiny Jensen LL gain and no ROI help (ROI is a
+threshold function, not a smooth mean). Code reverted (d994bbd); models kept at
+`models/auto/a2/`. See `research/reports/auto/A2.md`.
 
 ## A3 [P1] [PENDING] Direct + v7 sim blend, fine w-sweep
 **Hypothesis:** a small sim weight (w ∈ 0.05–0.3) adds ball-level information
