@@ -6,6 +6,14 @@
 
 cd "$(dirname "$0")/.."
 
+# If launched from inside a Claude Code session, drop its session env so the
+# child `claude -p` authenticates with the normal user login instead of the
+# parent session's proxy (which 401s for children).
+if [[ -n "${CLAUDECODE:-}" ]]; then
+  while IFS= read -r v; do unset "$v"; done < <(
+    env | cut -d= -f1 | grep -E '^(CLAUDE|ANTHROPIC|AI_AGENT|BAGGAGE)')
+fi
+
 BRANCH="auto-$(date +%Y%m%d)"
 git checkout "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH" || exit 1
 mkdir -p research/reports/auto
@@ -18,7 +26,7 @@ while (( $(date +%s) < END )) && [[ ! -f research/STOP ]]; do
   # perl alarm = portable timeout (macOS has no GNU `timeout`)
   perl -e 'alarm shift; exec @ARGV' "${ITER_TIMEOUT:-7200}" \
       claude -p "$(cat research/RUNNER_PROMPT.md)" \
-      --permission-mode auto >> research/night.log 2>&1
+      --permission-mode auto < /dev/null >> research/night.log 2>&1
   rc=$?
   echo "=== iter $i exit=$rc $(date '+%F %T') ===" >> research/night.log
   # Non-zero: usage limit, classifier abort, or timeout. Sleep out part of the
