@@ -316,7 +316,7 @@ engine edit (not eval framework); default v1 path byte-unchanged. Kept `0e1bbb0`
 artifact `models/auto/a14/over_vector_calibrator.pkl` (gitignored, reproducible via
 `scripts/auto/a14_fit_over_calibrator.py`). See `research/reports/auto/A14.md`.
 
-## A15 [P3] [RUNNING 2026-07-11T12:34:18Z] Minimal over-0-only ball calibrator (A14 parsimony follow-up)
+## A15 [P3] [LANDED] Minimal over-0-only ball calibrator (A14 parsimony follow-up)
 **Hypothesis:** A14 LANDED a 20-vector per-over calibrator, but the entire
 `team_first_over_mae` win is concentrated in **over 0** (its vector diverges most
 from global, six/wicket ×1.23); the other 19 per-over vectors buy nothing
@@ -336,6 +336,56 @@ regress. If over0-only matches A14's gain → prefer it (parsimony, LANDED repla
 the 20-vector artifact as the recommended first-over calibrator); if it loses the
 gain, the win genuinely needs the full per-over grid (A14 stands). **Budget:**
 ~1 h (one n=261 sim run; baseline reused).
+**Result:** LANDED 2026-07-11. Over-0-only (2 effective vectors: over-0 + global)
+vs A14's 20-vector. Refit from the same val balls, keeping only over 0 in `_v`;
+overs 1–19 fall back to global. **Byte-identity verified** at fit time (max abs
+diff 0.00e+00 on all three: `_global`==v1, A15 over-0 vec==A14 over-0 vec, A15
+`_global`==A14 `_global`) → A15 differs from A14 *only* by reverting overs 1–19 to
+global, isolating the parsimony question exactly. Sim gate pair, paired Brier/MAE
+(over0 − vec) cluster-boot by match, n=261×100 seed 42, baseline
+`models/auto/a8/detail_vec_n261.json`. **GATE 1** `team_first_over_mae` dMAE
+**−0.018 CI [−0.032, −0.003]** — CI **excludes 0** (vec 3.535 → over0 3.517);
+statistically indistinguishable from A14's −0.022 [−0.038, −0.006] (CIs overlap)
+→ first-over gain **RETAINED by over 0 alone** → IMPROVED. **GATE 2** guards
+`top_bowler` +0.0000 [−0.0003,+0.0003], `bowler_wkts` 1/2/3plus
+−0.0002/−0.0003/−0.0002 all CIs include 0 → HELD (no regression). Both conditions
+met → LANDED. Direct A15-vs-A14 cross-check: `team_first_over_mae` dMAE +0.004
+[−0.004,+0.011] = noise (first over IDENTICAL), and A15 is marginally *cleaner* on
+the pooled tail (−0.0007 [−0.0014,−0.0000]) → A14's 19 extra per-over vectors were
+slight overfitting. Parsimony confirmed: 10× fewer params, full gain retained, no
+guard regress. A15 = recommended minimal first-over calibrator (supersedes A14's
+20-vector for that purpose); A14 stays LANDED (established the win). Secondary:
+`pp_total_ou_45_5` −0.0037 [−0.0063,−0.0010] also improves from fixing over 0.
+Kept `d6202e0`; artifact `models/auto/a15/over0_calibrator.pkl` (gitignored,
+reproducible via `scripts/auto/a15_fit_over0_calibrator.py`); default `vector` path
+and A14 sim wiring byte-unchanged. See `research/reports/auto/A15.md`.
+
+## A16 [P3] [PENDING] Sparse regime-change-over calibrator (A15 extension)
+**Hypothesis:** A15 showed the sim's single largest per-over calibration defect is
+**over 0** (fixing it alone earns the full `team_first_over_mae` win AND
+`pp_total_ou_45_5` −0.0037, CI excludes 0), while A14's blanket 19 other per-over
+vectors are inert/overfit. But over 0 is a "regime-change" over — the first ball a
+fresh batter and a new bowler face. The other regime-change overs — **over 6**
+(start of the middle overs, field restriction lifts, bowling change) and **over 15**
+(start of the death, specialist death bowlers enter) — plausibly carry a similar,
+mechanically-distinct marginal miscalibration that a *sparse* calibrator could fix,
+whereas the ~17 non-boundary overs stay on global (A15 discipline: add a vector only
+where it's mechanically distinct and observable, not a blanket grid).
+**Method:** reuse `scripts/auto/a15_fit_over0_calibrator.py` but fit vectors for
+overs {0, 6, 15} only (all others fall back to global == v1); save
+`models/auto/a16/regime_calibrator.pkl`. Recipe B on n=261 with the calibrator;
+pair vs the SAME single-vector baseline (`models/auto/a8/detail_vec_n261.json`) with
+`scripts/auto/a8_gate_analysis.py`. Pre-commit: report the per-over vector
+divergences BEFORE the sim run; if over 6 / over 15 vectors barely diverge from
+global (max|ratio−1| ≲ the ~0.05 threshold below which A8/A12 washed out), expect
+null and say so.
+**Gate (sim pair):** a phase-boundary prop that lives in the added overs must
+improve paired vs single-vector (candidates: `pp_total_ou_*` for over-6-region,
+`highest_over_runs_ou_*` for the death) beyond the A15/over-0-only result, AND
+`top_bowler` + `bowler_wkts` + `team_first_over_mae` do not regress. If {0,6,15}
+only reproduces A15's over-0 gain with no incremental lift → FAILED (over 0 is the
+sole miscalibrated regime-change over; A15 stands as the minimal calibrator).
+**Budget:** ~1.5 h (one n=261 sim run; baseline reused).
 **Result:** —
 
 ---
