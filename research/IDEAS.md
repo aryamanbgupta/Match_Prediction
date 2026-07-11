@@ -10,7 +10,7 @@ FAILED.
 
 ---
 
-## A1 [P0] [RUNNING 2026-07-11T00:45Z] Fresh baseline + seed-variance floor
+## A1 [P0] [LANDED] Fresh baseline + seed-variance floor
 **Hypothesis:** the M7 headline (LL 0.6299 / ROI +21.90%) carries seed luck;
 every later verdict needs an honest noise floor.
 **Method:** retrain the M7 config (trainer defaults) 5× with different seeds
@@ -20,7 +20,9 @@ LL and ROI on ≥$50k. Append one `baseline` row to results.tsv with the mean,
 and the spread in notes.
 **Gate:** none — this is instrumentation; verdict is `LANDED` if 5 evals
 complete. **Budget:** ~45 min.
-**Result:** —
+**Result:** LANDED 2026-07-11. Fresh baseline mean (5 seeds, ≥$50k): LL
+0.6318, ROI +20.56%. Noise floor: std 0.0068 LL / 2.3pp ROI. Models kept at
+`models/auto/a1_seed*` for A2. See `research/reports/auto/A1.md`.
 
 ## A2 [P1] [PENDING] Seed bagging (5-seed probability ensemble)
 **Hypothesis:** averaging predicted probabilities across the 5 seeds from A1

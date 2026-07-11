@@ -37,8 +37,11 @@ historical headline. If no fresh baseline row exists yet, produce one first
 - Crash / exceeds 2× its time budget → kill it, revert, mark `CRASH`.
 
 Qualifiers:
-- Improvement smaller than noise (ΔLL < 0.002, or ΔROI within ~2pp with a
-  heavily overlapping CI) counts as "not improved".
+- Improvement smaller than noise counts as "not improved". Noise floor
+  (measured by A1, 5 seeds, ≥$50k): seed std ≈ 0.007 LL / 2.3pp ROI. For
+  ideas that retrain the model, require better-than-baseline-mean by more
+  than ~1 seed-std on a metric to call it improved. For eval-only ideas
+  (no retraining), use ΔLL < 0.002 / ΔROI < 2pp as the floor.
 - **Betting-layer ideas** (bet sizing, edge thresholds — anything that leaves
   the predicted probabilities untouched) cannot move LL by construction:
   for those, ROI improves without degrading anything else → LANDED.
