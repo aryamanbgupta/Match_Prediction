@@ -57,7 +57,7 @@ info the direct model lacks (loses that race by ~0.07 LL) — blending only
 injects noise. Neither gate metric improved. Eval-only, nothing to revert.
 See `research/reports/auto/A3.md`.
 
-## A4 [P2] [PENDING] Alternative architecture: regularized logistic stack
+## A4 [P2] [RUNNING 2026-07-11T06:09:09Z] Alternative architecture: regularized logistic stack
 **Hypothesis:** a heavily regularized logistic regression on the same 49
 features is a different bias class; even if it loses standalone it may
 ensemble well (if standalone fails but blend helps, TABLE with that note).
