@@ -24,7 +24,7 @@ complete. **Budget:** ~45 min.
 0.6318, ROI +20.56%. Noise floor: std 0.0068 LL / 2.3pp ROI. Models kept at
 `models/auto/a1_seed*` for A2. See `research/reports/auto/A1.md`.
 
-## A2 [P1] [PENDING] Seed bagging (5-seed probability ensemble)
+## A2 [P1] [RUNNING 2026-07-11T05:59:09Z] Seed bagging (5-seed probability ensemble)
 **Hypothesis:** averaging predicted probabilities across the 5 seeds from A1
 removes seed variance and improves both LL and ROI (variance reduction, no new
 information — historically the safest kind of win).
