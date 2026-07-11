@@ -262,7 +262,9 @@ exhausted at both resolutions. Reverted `eabd701`; default sim path byte-unchang
 harness `scripts/auto/a12_*.py` + `models/auto/a12/` scratch kept. See
 `research/reports/auto/A12.md`.
 
-## A13 [P3] [RUNNING 2026-07-11T14:45:08Z] Sim dispersion calibration on sampled score totals (A8 follow-up)
+## A13 [P3] [PENDING] Sim dispersion calibration on sampled score totals (A8 follow-up)
+*(claim reset by supervisor: the 2026-07-11 iteration was cut mid-eval by the
+wall clock — no verdict was reached, safe to re-run)*
 **Hypothesis:** A8 showed vector scaling (a *marginal-rate* correction) cannot move
 the tail-overshoot props — but the vec baseline report shows the sim **under-disperses**
 score totals (`team_first_over` P10–P90 coverage 53% vs ideal 80%; `batter_runs`
