@@ -32,9 +32,9 @@ from a7_conditional_threshold import run  # noqa: E402
 
 FEATURE_PARQUET = PROJECT_ROOT / "data/xgb_match_data_v3_m6_unfrozen/test.parquet"
 EVAL_50K = (PROJECT_ROOT /
-            "eval_out_m7prod_sliced/hier_all_20260425_165622_w0p00_min_volume_50000.json")
+            "eval_out/m7prod_sliced/hier_all_20260425_165622_w0p00_min_volume_50000.json")
 EVAL_100K = (PROJECT_ROOT /
-             "eval_out_m7prod_sliced/hier_all_20260425_165622_w0p00_min_volume_100000.json")
+             "eval_out/m7prod_sliced/hier_all_20260425_165622_w0p00_min_volume_100000.json")
 
 BOUNDARIES = [3.0, 5.0, 8.0, 12.0]
 EDGE_THR = 0.10          # held fixed (A7's landed threshold)

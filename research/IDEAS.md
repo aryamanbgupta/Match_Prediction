@@ -44,7 +44,7 @@ threshold function, not a smooth mean). Code reverted (d994bbd); models kept at
 the direct model lacks, helping the close-match slice without hurting the
 headline.
 **Method:** `blend_eval_json.py` with `--w 0.05 0.1 0.2 0.3` using the
-existing envelope `eval_out_phase5_hier/hier_all_20260425_165622.json` +
+existing envelope `eval_out/phase5_hier/hier_all_20260425_165622.json` +
 production `test_predictions.json` → reslice each → compare ≥$50k and
 close-match slice. Pick best w on ≥$50k only (avoid slice-shopping).
 **Gate:** LL + ROI at the chosen w vs w=0. Pure eval composition — no

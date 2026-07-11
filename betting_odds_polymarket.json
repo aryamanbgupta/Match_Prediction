@@ -1,0 +1,4973 @@
+{
+  "source": "polymarket",
+  "generated_at": "2026-04-19T03:52:19.509170Z",
+  "total_matches": 261,
+  "filters": {
+    "min_volume_usd": 1000.0,
+    "test_window_start": "2025-07-01",
+    "test_window_end": "2026-04-16",
+    "requires_resolved_winner": true,
+    "requires_match_type_t20_male": true
+  },
+  "matches": [
+    {
+      "match_id": "2025-09-10_United_Arab_Emirates_India_Dubai_International_Cricket_Stadium",
+      "date": "2025-09-10",
+      "team1": "United Arab Emirates",
+      "team2": "India",
+      "venue": "Dubai International Cricket Stadium",
+      "actual_winner": "India",
+      "odds": {
+        "winner": {
+          "United Arab Emirates": 40.8163,
+          "India": 1.0251,
+          "timestamp": "2025-09-10T14:00:07Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "asia-cup-united-arab-emirates-vs-india-2025-09-10",
+      "polymarket_volume_usd": 3314.592926,
+      "tournament": "Asia Cup"
+    },
+    {
+      "match_id": "2025-09-11_Hong_Kong_Bangladesh_Zayed_Cricket_Stadium,_Abu_Dhabi",
+      "date": "2025-09-11",
+      "team1": "Hong Kong",
+      "team2": "Bangladesh",
+      "venue": "Zayed Cricket Stadium, Abu Dhabi",
+      "actual_winner": "Bangladesh",
+      "odds": {
+        "winner": {
+          "Hong Kong": 34.4828,
+          "Bangladesh": 1.0299,
+          "timestamp": "2025-09-11T14:00:08Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "asia-cup-bangladesh-vs-hong-kong-2025-09-11",
+      "polymarket_volume_usd": 1169.457821,
+      "tournament": "Asia Cup"
+    },
+    {
+      "match_id": "2025-09-13_Bangladesh_Sri_Lanka_Zayed_Cricket_Stadium,_Abu_Dhabi",
+      "date": "2025-09-13",
+      "team1": "Bangladesh",
+      "team2": "Sri Lanka",
+      "venue": "Zayed Cricket Stadium, Abu Dhabi",
+      "actual_winner": "Sri Lanka",
+      "odds": {
+        "winner": {
+          "Bangladesh": 2.8571,
+          "Sri Lanka": 1.5385,
+          "timestamp": "2025-09-13T14:00:13Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "asia-cup-bangladesh-vs-sri-lanka-2025-09-13",
+      "polymarket_volume_usd": 4130.328251,
+      "tournament": "Asia Cup"
+    },
+    {
+      "match_id": "2025-09-14_Pakistan_India_Dubai_International_Cricket_Stadium",
+      "date": "2025-09-14",
+      "team1": "Pakistan",
+      "team2": "India",
+      "venue": "Dubai International Cricket Stadium",
+      "actual_winner": "India",
+      "odds": {
+        "winner": {
+          "Pakistan": 4.0,
+          "India": 1.3333,
+          "timestamp": "2025-09-14T14:00:22Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "asia-cup-india-vs-pakistan-2025-09-14",
+      "polymarket_volume_usd": 25486.099133,
+      "tournament": "Asia Cup"
+    },
+    {
+      "match_id": "2025-09-15_United_Arab_Emirates_Oman_Zayed_Cricket_Stadium,_Abu_Dhabi",
+      "date": "2025-09-15",
+      "team1": "United Arab Emirates",
+      "team2": "Oman",
+      "venue": "Zayed Cricket Stadium, Abu Dhabi",
+      "actual_winner": "United Arab Emirates",
+      "odds": {
+        "winner": {
+          "United Arab Emirates": 1.3245,
+          "Oman": 4.0816,
+          "timestamp": "2025-09-15T11:00:02Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "asia-cup-united-arab-emirates-vs-oman-2025-09-15",
+      "polymarket_volume_usd": 1232.46148,
+      "tournament": "Asia Cup"
+    },
+    {
+      "match_id": "2025-09-17_Pakistan_United_Arab_Emirates_Dubai_International_Cricket_Stadium",
+      "date": "2025-09-17",
+      "team1": "Pakistan",
+      "team2": "United Arab Emirates",
+      "venue": "Dubai International Cricket Stadium",
+      "actual_winner": "Pakistan",
+      "odds": {
+        "winner": {
+          "Pakistan": 1.105,
+          "United Arab Emirates": 10.5263,
+          "timestamp": "2025-09-17T14:00:15Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "asia-cup-united-arab-emirates-vs-pakistan-2025-09-17",
+      "polymarket_volume_usd": 7430.53372,
+      "tournament": "Asia Cup"
+    },
+    {
+      "match_id": "2025-09-19_India_Oman_Zayed_Cricket_Stadium,_Abu_Dhabi",
+      "date": "2025-09-19",
+      "team1": "India",
+      "team2": "Oman",
+      "venue": "Zayed Cricket Stadium, Abu Dhabi",
+      "actual_winner": "India",
+      "odds": {
+        "winner": {
+          "India": 1.0091,
+          "Oman": 111.1111,
+          "timestamp": "2025-09-19T14:00:02Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "asia-cup-india-vs-oman-2025-09-19",
+      "polymarket_volume_usd": 17110.67293,
+      "tournament": "Asia Cup"
+    },
+    {
+      "match_id": "2025-09-21_Pakistan_India_Dubai_International_Cricket_Stadium",
+      "date": "2025-09-21",
+      "team1": "Pakistan",
+      "team2": "India",
+      "venue": "Dubai International Cricket Stadium",
+      "actual_winner": "India",
+      "odds": {
+        "winner": {
+          "Pakistan": 5.1282,
+          "India": 1.2422,
+          "timestamp": "2025-09-21T14:00:20Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "asia-cup-india-vs-pakistan-2025-09-21",
+      "polymarket_volume_usd": 43067.242936,
+      "tournament": "Asia Cup"
+    },
+    {
+      "match_id": "2025-09-23_Sri_Lanka_Pakistan_Zayed_Cricket_Stadium,_Abu_Dhabi",
+      "date": "2025-09-23",
+      "team1": "Sri Lanka",
+      "team2": "Pakistan",
+      "venue": "Zayed Cricket Stadium, Abu Dhabi",
+      "actual_winner": "Pakistan",
+      "odds": {
+        "winner": {
+          "Sri Lanka": 2.2989,
+          "Pakistan": 1.7699,
+          "timestamp": "2025-09-23T14:00:10Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "asia-cup-pakistan-vs-sri-lanka-2025-09-23",
+      "polymarket_volume_usd": 11754.873694,
+      "tournament": "Asia Cup"
+    },
+    {
+      "match_id": "2025-09-24_India_Bangladesh_Dubai_International_Cricket_Stadium",
+      "date": "2025-09-24",
+      "team1": "India",
+      "team2": "Bangladesh",
+      "venue": "Dubai International Cricket Stadium",
+      "actual_winner": "India",
+      "odds": {
+        "winner": {
+          "India": 1.105,
+          "Bangladesh": 10.5263,
+          "timestamp": "2025-09-24T14:00:05Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "asia-cup-bangladesh-vs-india-2025-09-24",
+      "polymarket_volume_usd": 23038.992881,
+      "tournament": "Asia Cup"
+    },
+    {
+      "match_id": "2025-09-25_Pakistan_Bangladesh_Dubai_International_Cricket_Stadium",
+      "date": "2025-09-25",
+      "team1": "Pakistan",
+      "team2": "Bangladesh",
+      "venue": "Dubai International Cricket Stadium",
+      "actual_winner": "Pakistan",
+      "odds": {
+        "winner": {
+          "Pakistan": 1.4286,
+          "Bangladesh": 3.3333,
+          "timestamp": "2025-09-25T14:00:10Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "asia-cup-bangladesh-vs-pakistan-2025-09-25",
+      "polymarket_volume_usd": 18857.191615,
+      "tournament": "Asia Cup"
+    },
+    {
+      "match_id": "2025-09-26_India_Sri_Lanka_Dubai_International_Cricket_Stadium",
+      "date": "2025-09-26",
+      "team1": "India",
+      "team2": "Sri Lanka",
+      "venue": "Dubai International Cricket Stadium",
+      "actual_winner": null,
+      "odds": {
+        "winner": {
+          "India": 1.2422,
+          "Sri Lanka": 5.1282,
+          "timestamp": "2025-09-26T14:00:04Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "asia-cup-india-vs-sri-lanka-2025-09-26",
+      "polymarket_volume_usd": 40306.244967,
+      "tournament": "Asia Cup"
+    },
+    {
+      "match_id": "2025-10-01_New_Zealand_Australia_Bay_Oval,_Mount_Maunganui",
+      "date": "2025-10-01",
+      "team1": "New Zealand",
+      "team2": "Australia",
+      "venue": "Bay Oval, Mount Maunganui",
+      "actual_winner": "Australia",
+      "odds": {
+        "winner": {
+          "New Zealand": 10.0,
+          "Australia": 1.1111,
+          "timestamp": "2025-10-01T09:00:04Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricket-icc-aus-nz-2025-10-01",
+      "polymarket_volume_usd": 17411.172538,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-10-27_West_Indies_Bangladesh_Bir_Sreshtho_Flight_Lieutenant_Matiur_Rahman_Stadium,_Chattogram",
+      "date": "2025-10-27",
+      "team1": "West Indies",
+      "team2": "Bangladesh",
+      "venue": "Bir Sreshtho Flight Lieutenant Matiur Rahman Stadium, Chattogram",
+      "actual_winner": "West Indies",
+      "odds": {
+        "winner": {
+          "West Indies": 1.9231,
+          "Bangladesh": 2.0833,
+          "timestamp": "2025-10-27T11:00:04Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "intt20-bgd-wst-2025-10-27",
+      "polymarket_volume_usd": 4863.186871,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-10-28_South_Africa_Pakistan_Rawalpindi_Cricket_Stadium",
+      "date": "2025-10-28",
+      "team1": "South Africa",
+      "team2": "Pakistan",
+      "venue": "Rawalpindi Cricket Stadium",
+      "actual_winner": "South Africa",
+      "odds": {
+        "winner": {
+          "South Africa": 2.2727,
+          "Pakistan": 1.7857,
+          "timestamp": "2025-10-28T14:00:06Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "intt20-pak-zaf-2025-10-28",
+      "polymarket_volume_usd": 35174.33926,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-10-29_West_Indies_Bangladesh_Bir_Sreshtho_Flight_Lieutenant_Matiur_Rahman_Stadium,_Chattogram",
+      "date": "2025-10-29",
+      "team1": "West Indies",
+      "team2": "Bangladesh",
+      "venue": "Bir Sreshtho Flight Lieutenant Matiur Rahman Stadium, Chattogram",
+      "actual_winner": "West Indies",
+      "odds": {
+        "winner": {
+          "West Indies": 1.8349,
+          "Bangladesh": 2.1978,
+          "timestamp": "2025-10-29T09:00:05Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "intt20-bgd-wst-2025-10-29",
+      "polymarket_volume_usd": 21068.936873,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-10-31_India_Australia_Melbourne_Cricket_Ground",
+      "date": "2025-10-31",
+      "team1": "India",
+      "team2": "Australia",
+      "venue": "Melbourne Cricket Ground",
+      "actual_winner": "Australia",
+      "odds": {
+        "winner": {
+          "India": 2.1978,
+          "Australia": 1.8349,
+          "timestamp": "2025-10-31T08:00:20Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "intt20-aus-ind-2025-10-31",
+      "polymarket_volume_usd": 56619.376898,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-10-31_Bangladesh_West_Indies_Bir_Sreshtho_Flight_Lieutenant_Matiur_Rahman_Stadium,_Chattogram",
+      "date": "2025-10-31",
+      "team1": "Bangladesh",
+      "team2": "West Indies",
+      "venue": "Bir Sreshtho Flight Lieutenant Matiur Rahman Stadium, Chattogram",
+      "actual_winner": "West Indies",
+      "odds": {
+        "winner": {
+          "Bangladesh": 2.1277,
+          "West Indies": 1.8868,
+          "timestamp": "2025-10-31T11:00:23Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "intt20-bgd-wst-2025-10-31",
+      "polymarket_volume_usd": 14133.578725,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-10-31_South_Africa_Pakistan_Gaddafi_Stadium,_Lahore",
+      "date": "2025-10-31",
+      "team1": "South Africa",
+      "team2": "Pakistan",
+      "venue": "Gaddafi Stadium, Lahore",
+      "actual_winner": "Pakistan",
+      "odds": {
+        "winner": {
+          "South Africa": 2.1978,
+          "Pakistan": 1.8349,
+          "timestamp": "2025-10-31T14:00:06Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "intt20-pak-zaf-2025-10-31",
+      "polymarket_volume_usd": 39689.099596,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-11-01_South_Africa_Pakistan_Gaddafi_Stadium,_Lahore",
+      "date": "2025-11-01",
+      "team1": "South Africa",
+      "team2": "Pakistan",
+      "venue": "Gaddafi Stadium, Lahore",
+      "actual_winner": "Pakistan",
+      "odds": {
+        "winner": {
+          "South Africa": 2.1978,
+          "Pakistan": 1.8349,
+          "timestamp": "2025-11-01T14:00:12Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "intt20-pak-zaf-2025-11-01",
+      "polymarket_volume_usd": 42525.514191,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-11-02_Australia_India_Bellerive_Oval,_Hobart",
+      "date": "2025-11-02",
+      "team1": "Australia",
+      "team2": "India",
+      "venue": "Bellerive Oval, Hobart",
+      "actual_winner": "India",
+      "odds": {
+        "winner": {
+          "Australia": 2.0833,
+          "India": 1.9231,
+          "timestamp": "2025-11-02T08:00:20Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "intt20-aus-ind-2025-11-02",
+      "polymarket_volume_usd": 48751.632013,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-11-05_West_Indies_New_Zealand_Eden_Park,_Auckland",
+      "date": "2025-11-05",
+      "team1": "West Indies",
+      "team2": "New Zealand",
+      "venue": "Eden Park, Auckland",
+      "actual_winner": "West Indies",
+      "odds": {
+        "winner": {
+          "West Indies": 3.5714,
+          "New Zealand": 1.3889,
+          "timestamp": "2025-11-05T06:00:25Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "intt20-nzl-wst-2025-11-05",
+      "polymarket_volume_usd": 60291.451175,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-11-06_India_Australia_Carrara_Oval",
+      "date": "2025-11-06",
+      "team1": "India",
+      "team2": "Australia",
+      "venue": "Carrara Oval",
+      "actual_winner": "India",
+      "odds": {
+        "winner": {
+          "India": 1.9802,
+          "Australia": 2.0202,
+          "timestamp": "2025-11-06T08:00:11Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "t20-aus-ind-2025-11-06",
+      "polymarket_volume_usd": 39865.948894,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-11-06_New_Zealand_West_Indies_Eden_Park,_Auckland",
+      "date": "2025-11-06",
+      "team1": "New Zealand",
+      "team2": "West Indies",
+      "venue": "Eden Park, Auckland",
+      "actual_winner": "New Zealand",
+      "odds": {
+        "winner": {
+          "New Zealand": 1.4925,
+          "West Indies": 3.0303,
+          "timestamp": "2025-11-06T06:00:16Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "t20-new-wes-2025-11-06",
+      "polymarket_volume_usd": 49434.22172,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-11-09_New_Zealand_West_Indies_Saxton_Oval,_Nelson",
+      "date": "2025-11-09",
+      "team1": "New Zealand",
+      "team2": "West Indies",
+      "venue": "Saxton Oval, Nelson",
+      "actual_winner": "New Zealand",
+      "odds": {
+        "winner": {
+          "New Zealand": 1.4599,
+          "West Indies": 3.1746,
+          "timestamp": "2025-11-09T00:00:18Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "t20-new-wes-2025-11-09",
+      "polymarket_volume_usd": 11139.891671,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-11-13_West_Indies_New_Zealand_University_Oval,_Dunedin",
+      "date": "2025-11-13",
+      "team1": "West Indies",
+      "team2": "New Zealand",
+      "venue": "University Oval, Dunedin",
+      "actual_winner": "New Zealand",
+      "odds": {
+        "winner": {
+          "West Indies": 2.9851,
+          "New Zealand": 1.5038,
+          "timestamp": "2025-11-13T00:00:04Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "t20-new-wes-2025-11-13",
+      "polymarket_volume_usd": 15124.024072,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-11-22_Sri_Lanka_Pakistan_Rawalpindi_Cricket_Stadium",
+      "date": "2025-11-22",
+      "team1": "Sri Lanka",
+      "team2": "Pakistan",
+      "venue": "Rawalpindi Cricket Stadium",
+      "actual_winner": "Pakistan",
+      "odds": {
+        "winner": {
+          "Sri Lanka": 2.7027,
+          "Pakistan": 1.5873,
+          "timestamp": "2025-11-22T13:00:24Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "t20-pak-sri-2025-11-22",
+      "polymarket_volume_usd": 46405.977321,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-11-23_Pakistan_Zimbabwe_Rawalpindi_Cricket_Stadium",
+      "date": "2025-11-23",
+      "team1": "Pakistan",
+      "team2": "Zimbabwe",
+      "venue": "Rawalpindi Cricket Stadium",
+      "actual_winner": "Pakistan",
+      "odds": {
+        "winner": {
+          "Pakistan": 1.3072,
+          "Zimbabwe": 4.2553,
+          "timestamp": "2025-11-23T13:00:14Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "t20-pak-zim-2025-11-23",
+      "polymarket_volume_usd": 143354.945775,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-11-25_Zimbabwe_Sri_Lanka_Rawalpindi_Cricket_Stadium",
+      "date": "2025-11-25",
+      "team1": "Zimbabwe",
+      "team2": "Sri Lanka",
+      "venue": "Rawalpindi Cricket Stadium",
+      "actual_winner": "Sri Lanka",
+      "odds": {
+        "winner": {
+          "Zimbabwe": 4.0816,
+          "Sri Lanka": 1.3245,
+          "timestamp": "2025-11-25T13:00:08Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "t20-sri-zim-2025-11-25",
+      "polymarket_volume_usd": 46282.690573,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-11-27_Ireland_Bangladesh_Bir_Sreshtho_Flight_Lieutenant_Matiur_Rahman_Stadium,_Chattogram",
+      "date": "2025-11-27",
+      "team1": "Ireland",
+      "team2": "Bangladesh",
+      "venue": "Bir Sreshtho Flight Lieutenant Matiur Rahman Stadium, Chattogram",
+      "actual_winner": "Ireland",
+      "odds": {
+        "winner": {
+          "Ireland": 4.2918,
+          "Bangladesh": 1.3038,
+          "timestamp": "2025-11-27T11:00:37Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "t20-ban-ire-2025-11-27",
+      "polymarket_volume_usd": 52938.2919,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-11-27_Sri_Lanka_Pakistan_Rawalpindi_Cricket_Stadium",
+      "date": "2025-11-27",
+      "team1": "Sri Lanka",
+      "team2": "Pakistan",
+      "venue": "Rawalpindi Cricket Stadium",
+      "actual_winner": "Sri Lanka",
+      "odds": {
+        "winner": {
+          "Sri Lanka": 2.381,
+          "Pakistan": 1.7241,
+          "timestamp": "2025-11-27T12:00:40Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "t20-pak-sri-2025-11-27",
+      "polymarket_volume_usd": 193948.325527,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-11-29_Ireland_Bangladesh_Bir_Sreshtho_Flight_Lieutenant_Matiur_Rahman_Stadium,_Chattogram",
+      "date": "2025-11-29",
+      "team1": "Ireland",
+      "team2": "Bangladesh",
+      "venue": "Bir Sreshtho Flight Lieutenant Matiur Rahman Stadium, Chattogram",
+      "actual_winner": "Bangladesh",
+      "odds": {
+        "winner": {
+          "Ireland": 3.3333,
+          "Bangladesh": 1.4286,
+          "timestamp": "2025-11-29T11:00:32Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "t20-ban-ire-2025-11-29",
+      "polymarket_volume_usd": 111099.10554,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-12-02_Ireland_Bangladesh_Bir_Sreshtho_Flight_Lieutenant_Matiur_Rahman_Stadium,_Chattogram",
+      "date": "2025-12-02",
+      "team1": "Ireland",
+      "team2": "Bangladesh",
+      "venue": "Bir Sreshtho Flight Lieutenant Matiur Rahman Stadium, Chattogram",
+      "actual_winner": "Bangladesh",
+      "odds": {
+        "winner": {
+          "Ireland": 2000.0,
+          "Bangladesh": 1.0005,
+          "timestamp": "2025-12-02T11:00:13Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "t20-ban-ire-2025-12-02",
+      "polymarket_volume_usd": 95400.330358,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-12-09_India_South_Africa_Barabati_Stadium,_Cuttack",
+      "date": "2025-12-09",
+      "team1": "India",
+      "team2": "South Africa",
+      "venue": "Barabati Stadium, Cuttack",
+      "actual_winner": "India",
+      "odds": {
+        "winner": {
+          "India": 1.4388,
+          "South Africa": 3.2787,
+          "timestamp": "2025-12-09T13:00:17Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "t20-ind-sou-2025-12-09",
+      "polymarket_volume_usd": 303091.54674,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-12-11_South_Africa_India_Maharaja_Yadavindra_Singh_International_Cricket_Stadium,_New_Chandigarh",
+      "date": "2025-12-11",
+      "team1": "South Africa",
+      "team2": "India",
+      "venue": "Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh",
+      "actual_winner": "South Africa",
+      "odds": {
+        "winner": {
+          "South Africa": 3.2787,
+          "India": 1.4388,
+          "timestamp": "2025-12-11T13:00:17Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "t20-ind-sou-2025-12-11",
+      "polymarket_volume_usd": 131139.740379,
+      "tournament": "Other"
+    },
+    {
+      "match_id": "2025-12-13_Dubai_Capitals_Abu_Dhabi_Knight_Riders_Zayed_Cricket_Stadium,_Abu_Dhabi",
+      "date": "2025-12-13",
+      "team1": "Dubai Capitals",
+      "team2": "Abu Dhabi Knight Riders",
+      "venue": "Zayed Cricket Stadium, Abu Dhabi",
+      "actual_winner": "Dubai Capitals",
+      "odds": {
+        "winner": {
+          "Dubai Capitals": 2.5,
+          "Abu Dhabi Knight Riders": 1.6667,
+          "timestamp": "2025-12-13T14:00:39Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-abu-dub-2025-12-13",
+      "polymarket_volume_usd": 26654.709832,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-12_Gulf_Giants_Desert_Vipers_Dubai_International_Cricket_Stadium",
+      "date": "2025-12-12",
+      "team1": "Gulf Giants",
+      "team2": "Desert Vipers",
+      "venue": "Dubai International Cricket Stadium",
+      "actual_winner": "Desert Vipers",
+      "odds": {
+        "winner": {
+          "Gulf Giants": 2.0619,
+          "Desert Vipers": 1.9417,
+          "timestamp": "2025-12-12T14:00:08Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-des-gul-2025-12-12",
+      "polymarket_volume_usd": 17194.737931,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-11_Abu_Dhabi_Knight_Riders_MI_Emirates_Zayed_Cricket_Stadium,_Abu_Dhabi",
+      "date": "2025-12-11",
+      "team1": "Abu Dhabi Knight Riders",
+      "team2": "MI Emirates",
+      "venue": "Zayed Cricket Stadium, Abu Dhabi",
+      "actual_winner": "MI Emirates",
+      "odds": {
+        "winner": {
+          "Abu Dhabi Knight Riders": 2.1978,
+          "MI Emirates": 1.8349,
+          "timestamp": "2025-12-11T14:00:08Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-abu-mi-2025-12-11",
+      "polymarket_volume_usd": 4537.698365,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-10_Sharjah_Warriorz_Gulf_Giants_Dubai_International_Cricket_Stadium",
+      "date": "2025-12-10",
+      "team1": "Sharjah Warriorz",
+      "team2": "Gulf Giants",
+      "venue": "Dubai International Cricket Stadium",
+      "actual_winner": "Gulf Giants",
+      "odds": {
+        "winner": {
+          "Sharjah Warriorz": 2.1978,
+          "Gulf Giants": 1.8349,
+          "timestamp": "2025-12-10T14:00:07Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-gul-sha-2025-12-10",
+      "polymarket_volume_usd": 13251.961254,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-09_Desert_Vipers_MI_Emirates_Zayed_Cricket_Stadium,_Abu_Dhabi",
+      "date": "2025-12-09",
+      "team1": "Desert Vipers",
+      "team2": "MI Emirates",
+      "venue": "Zayed Cricket Stadium, Abu Dhabi",
+      "actual_winner": "Desert Vipers",
+      "odds": {
+        "winner": {
+          "Desert Vipers": 2.2222,
+          "MI Emirates": 1.8182,
+          "timestamp": "2025-12-09T14:00:21Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-des-mi-2025-12-09",
+      "polymarket_volume_usd": 8631.191858,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-08_Gulf_Giants_Desert_Vipers_Dubai_International_Cricket_Stadium",
+      "date": "2025-12-08",
+      "team1": "Gulf Giants",
+      "team2": "Desert Vipers",
+      "venue": "Dubai International Cricket Stadium",
+      "actual_winner": null,
+      "odds": {
+        "winner": {
+          "Gulf Giants": 2.0408,
+          "Desert Vipers": 1.9608,
+          "timestamp": "2025-12-08T14:00:13Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-des-gul-2025-12-08",
+      "polymarket_volume_usd": 9679.499556,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-07_Dubai_Capitals_Abu_Dhabi_Knight_Riders_Dubai_International_Cricket_Stadium",
+      "date": "2025-12-07",
+      "team1": "Dubai Capitals",
+      "team2": "Abu Dhabi Knight Riders",
+      "venue": "Dubai International Cricket Stadium",
+      "actual_winner": "Dubai Capitals",
+      "odds": {
+        "winner": {
+          "Dubai Capitals": 3.7736,
+          "Abu Dhabi Knight Riders": 1.3605,
+          "timestamp": "2025-12-07T14:00:15Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-dub-abu-2025-12-07",
+      "polymarket_volume_usd": 9338.027514,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-07_MI_Emirates_Sharjah_Warriorz_Sharjah_Cricket_Stadium",
+      "date": "2025-12-07",
+      "team1": "MI Emirates",
+      "team2": "Sharjah Warriorz",
+      "venue": "Sharjah Cricket Stadium",
+      "actual_winner": "MI Emirates",
+      "odds": {
+        "winner": {
+          "MI Emirates": 1.6393,
+          "Sharjah Warriorz": 2.5641,
+          "timestamp": "2025-12-07T09:00:18Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-sha-mi-2025-12-07",
+      "polymarket_volume_usd": 3845.181579,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-14_Sydney_Sixers_Perth_Scorchers_Perth_Stadium",
+      "date": "2025-12-14",
+      "team1": "Sydney Sixers",
+      "team2": "Perth Scorchers",
+      "venue": "Perth Stadium",
+      "actual_winner": "Perth Scorchers",
+      "odds": {
+        "winner": {
+          "Sydney Sixers": 2.4691,
+          "Perth Scorchers": 1.6807,
+          "timestamp": "2025-12-14T08:00:16Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-per-syd-2025-12-14",
+      "polymarket_volume_usd": 28426.522003,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-15_Melbourne_Renegades_Brisbane_Heat_GMHBA_Stadium,_South_Geelong,_Victoria",
+      "date": "2025-12-15",
+      "team1": "Melbourne Renegades",
+      "team2": "Brisbane Heat",
+      "venue": "GMHBA Stadium, South Geelong, Victoria",
+      "actual_winner": "Melbourne Renegades",
+      "odds": {
+        "winner": {
+          "Melbourne Renegades": 2.0619,
+          "Brisbane Heat": 1.9417,
+          "timestamp": "2025-12-15T08:00:11Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-mel2-bri-2025-12-15",
+      "polymarket_volume_usd": 84039.202668,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-15_Sharjah_Warriorz_Gulf_Giants_Sharjah_Cricket_Stadium",
+      "date": "2025-12-15",
+      "team1": "Sharjah Warriorz",
+      "team2": "Gulf Giants",
+      "venue": "Sharjah Cricket Stadium",
+      "actual_winner": "Sharjah Warriorz",
+      "odds": {
+        "winner": {
+          "Sharjah Warriorz": 2.2989,
+          "Gulf Giants": 1.7699,
+          "timestamp": "2025-12-15T14:00:13Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-sha-gul-2025-12-15",
+      "polymarket_volume_usd": 13324.894405,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-14_Dubai_Capitals_Desert_Vipers_Dubai_International_Cricket_Stadium",
+      "date": "2025-12-14",
+      "team1": "Dubai Capitals",
+      "team2": "Desert Vipers",
+      "venue": "Dubai International Cricket Stadium",
+      "actual_winner": "Desert Vipers",
+      "odds": {
+        "winner": {
+          "Dubai Capitals": 2.0833,
+          "Desert Vipers": 1.9231,
+          "timestamp": "2025-12-14T14:00:14Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-dub-des-2025-12-14",
+      "polymarket_volume_usd": 8813.532864,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-14_Sharjah_Warriorz_MI_Emirates_Zayed_Cricket_Stadium,_Abu_Dhabi",
+      "date": "2025-12-14",
+      "team1": "Sharjah Warriorz",
+      "team2": "MI Emirates",
+      "venue": "Zayed Cricket Stadium, Abu Dhabi",
+      "actual_winner": "Sharjah Warriorz",
+      "odds": {
+        "winner": {
+          "Sharjah Warriorz": 2.5,
+          "MI Emirates": 1.6667,
+          "timestamp": "2025-12-14T09:00:12Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-mi-sha-2025-12-14",
+      "polymarket_volume_usd": 9990.709093,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-16_Sydney_Thunder_Hobart_Hurricanes_Bellerive_Oval,_Hobart",
+      "date": "2025-12-16",
+      "team1": "Sydney Thunder",
+      "team2": "Hobart Hurricanes",
+      "venue": "Bellerive Oval, Hobart",
+      "actual_winner": "Hobart Hurricanes",
+      "odds": {
+        "winner": {
+          "Sydney Thunder": 2.9412,
+          "Hobart Hurricanes": 1.5152,
+          "timestamp": "2025-12-16T08:00:11Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-hob-syd2-2025-12-16",
+      "polymarket_volume_usd": 84463.641817,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-16_Abu_Dhabi_Knight_Riders_Desert_Vipers_Zayed_Cricket_Stadium,_Abu_Dhabi",
+      "date": "2025-12-16",
+      "team1": "Abu Dhabi Knight Riders",
+      "team2": "Desert Vipers",
+      "venue": "Zayed Cricket Stadium, Abu Dhabi",
+      "actual_winner": "Abu Dhabi Knight Riders",
+      "odds": {
+        "winner": {
+          "Abu Dhabi Knight Riders": 1.8182,
+          "Desert Vipers": 2.2222,
+          "timestamp": "2025-12-16T14:00:27Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-abu-des-2025-12-16",
+      "polymarket_volume_usd": 50677.39185,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-17_Sydney_Sixers_Adelaide_Strikers_Sydney_Cricket_Ground",
+      "date": "2025-12-17",
+      "team1": "Sydney Sixers",
+      "team2": "Adelaide Strikers",
+      "venue": "Sydney Cricket Ground",
+      "actual_winner": "Adelaide Strikers",
+      "odds": {
+        "winner": {
+          "Sydney Sixers": 1.9802,
+          "Adelaide Strikers": 2.0202,
+          "timestamp": "2025-12-17T08:00:20Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-syd-ade-2025-12-17",
+      "polymarket_volume_usd": 62331.954778,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-18_Hobart_Hurricanes_Melbourne_Stars_Melbourne_Cricket_Ground",
+      "date": "2025-12-18",
+      "team1": "Hobart Hurricanes",
+      "team2": "Melbourne Stars",
+      "venue": "Melbourne Cricket Ground",
+      "actual_winner": "Melbourne Stars",
+      "odds": {
+        "winner": {
+          "Hobart Hurricanes": 1.9231,
+          "Melbourne Stars": 2.0833,
+          "timestamp": "2025-12-18T08:00:13Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-mel-hob-2025-12-18",
+      "polymarket_volume_usd": 84686.866976,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-19_Perth_Scorchers_Brisbane_Heat_Brisbane_Cricket_Ground,_Woolloongabba,_Brisbane",
+      "date": "2025-12-19",
+      "team1": "Perth Scorchers",
+      "team2": "Brisbane Heat",
+      "venue": "Brisbane Cricket Ground, Woolloongabba, Brisbane",
+      "actual_winner": "Brisbane Heat",
+      "odds": {
+        "winner": {
+          "Perth Scorchers": 2.1978,
+          "Brisbane Heat": 1.8349,
+          "timestamp": "2025-12-19T08:00:10Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-bri-per-2025-12-19",
+      "polymarket_volume_usd": 86261.54625,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-17_MI_Emirates_Dubai_Capitals_Dubai_International_Cricket_Stadium",
+      "date": "2025-12-17",
+      "team1": "MI Emirates",
+      "team2": "Dubai Capitals",
+      "venue": "Dubai International Cricket Stadium",
+      "actual_winner": "MI Emirates",
+      "odds": {
+        "winner": {
+          "MI Emirates": 1.7094,
+          "Dubai Capitals": 2.4096,
+          "timestamp": "2025-12-17T14:00:13Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-dub-mi-2025-12-17",
+      "polymarket_volume_usd": 47390.580491,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-19_Dubai_Capitals_Sharjah_Warriorz_Dubai_International_Cricket_Stadium",
+      "date": "2025-12-19",
+      "team1": "Dubai Capitals",
+      "team2": "Sharjah Warriorz",
+      "venue": "Dubai International Cricket Stadium",
+      "actual_winner": "Dubai Capitals",
+      "odds": {
+        "winner": {
+          "Dubai Capitals": 1.9802,
+          "Sharjah Warriorz": 2.0202,
+          "timestamp": "2025-12-19T14:00:11Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-sha-dub-2025-12-19",
+      "polymarket_volume_usd": 9705.210664,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-18_Gulf_Giants_Abu_Dhabi_Knight_Riders_Zayed_Cricket_Stadium,_Abu_Dhabi",
+      "date": "2025-12-18",
+      "team1": "Gulf Giants",
+      "team2": "Abu Dhabi Knight Riders",
+      "venue": "Zayed Cricket Stadium, Abu Dhabi",
+      "actual_winner": "Abu Dhabi Knight Riders",
+      "odds": {
+        "winner": {
+          "Gulf Giants": 2.2222,
+          "Abu Dhabi Knight Riders": 1.8182,
+          "timestamp": "2025-12-18T14:00:27Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-abu-gul-2025-12-18",
+      "polymarket_volume_usd": 26087.542373,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-14_South_Africa_India_Himachal_Pradesh_Cricket_Association_Stadium,_Dharamsala",
+      "date": "2025-12-14",
+      "team1": "South Africa",
+      "team2": "India",
+      "venue": "Himachal Pradesh Cricket Association Stadium, Dharamsala",
+      "actual_winner": "India",
+      "odds": {
+        "winner": {
+          "South Africa": 3.0769,
+          "India": 1.4815,
+          "timestamp": "2025-12-14T13:00:16Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ind-zaf-2025-12-14",
+      "polymarket_volume_usd": 191236.808589,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-19_India_South_Africa_Narendra_Modi_Stadium,_Ahmedabad",
+      "date": "2025-12-19",
+      "team1": "India",
+      "team2": "South Africa",
+      "venue": "Narendra Modi Stadium, Ahmedabad",
+      "actual_winner": "India",
+      "odds": {
+        "winner": {
+          "India": 1.4599,
+          "South Africa": 3.1746,
+          "timestamp": "2025-12-19T13:00:08Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ind-zaf-2025-12-19",
+      "polymarket_volume_usd": 247031.854971,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-20_Sydney_Sixers_Sydney_Thunder_Sydney_Showground_Stadium",
+      "date": "2025-12-20",
+      "team1": "Sydney Sixers",
+      "team2": "Sydney Thunder",
+      "venue": "Sydney Showground Stadium",
+      "actual_winner": "Sydney Sixers",
+      "odds": {
+        "winner": {
+          "Sydney Sixers": 2.2222,
+          "Sydney Thunder": 1.8182,
+          "timestamp": "2025-12-20T08:00:10Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-syd2-syd-2025-12-20",
+      "polymarket_volume_usd": 81644.407725,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-20_Sharjah_Warriorz_Desert_Vipers_Dubai_International_Cricket_Stadium",
+      "date": "2025-12-20",
+      "team1": "Sharjah Warriorz",
+      "team2": "Desert Vipers",
+      "venue": "Dubai International Cricket Stadium",
+      "actual_winner": "Desert Vipers",
+      "odds": {
+        "winner": {
+          "Sharjah Warriorz": 2.4096,
+          "Desert Vipers": 1.7094,
+          "timestamp": "2025-12-20T14:00:16Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-des-sha-2025-12-20",
+      "polymarket_volume_usd": 19576.440945,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-20_MI_Emirates_Abu_Dhabi_Knight_Riders_Zayed_Cricket_Stadium,_Abu_Dhabi",
+      "date": "2025-12-20",
+      "team1": "MI Emirates",
+      "team2": "Abu Dhabi Knight Riders",
+      "venue": "Zayed Cricket Stadium, Abu Dhabi",
+      "actual_winner": "MI Emirates",
+      "odds": {
+        "winner": {
+          "MI Emirates": 1.8349,
+          "Abu Dhabi Knight Riders": 2.1978,
+          "timestamp": "2025-12-20T09:00:10Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-abu-mi-2025-12-20",
+      "polymarket_volume_usd": 27878.726368,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-21_Melbourne_Renegades_Hobart_Hurricanes_GMHBA_Stadium,_South_Geelong,_Victoria",
+      "date": "2025-12-21",
+      "team1": "Melbourne Renegades",
+      "team2": "Hobart Hurricanes",
+      "venue": "GMHBA Stadium, South Geelong, Victoria",
+      "actual_winner": "Hobart Hurricanes",
+      "odds": {
+        "winner": {
+          "Melbourne Renegades": 2.3529,
+          "Hobart Hurricanes": 1.7391,
+          "timestamp": "2025-12-21T08:00:13Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-mel2-hob-2025-12-21",
+      "polymarket_volume_usd": 58940.829624,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-21_Desert_Vipers_MI_Emirates_Dubai_International_Cricket_Stadium",
+      "date": "2025-12-21",
+      "team1": "Desert Vipers",
+      "team2": "MI Emirates",
+      "venue": "Dubai International Cricket Stadium",
+      "actual_winner": "MI Emirates",
+      "odds": {
+        "winner": {
+          "Desert Vipers": 2.0619,
+          "MI Emirates": 1.9417,
+          "timestamp": "2025-12-21T14:00:09Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-des-mi-2025-12-21",
+      "polymarket_volume_usd": 8958.76396,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-21_Gulf_Giants_Dubai_Capitals_Sheikh_Zayed_Stadium,_Abu_Dhabi",
+      "date": "2025-12-21",
+      "team1": "Gulf Giants",
+      "team2": "Dubai Capitals",
+      "venue": "Sheikh Zayed Stadium, Abu Dhabi",
+      "actual_winner": "Dubai Capitals",
+      "odds": {
+        "winner": {
+          "Gulf Giants": 1.9417,
+          "Dubai Capitals": 2.0619,
+          "timestamp": "2025-12-21T09:00:18Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-dub-gul-2025-12-21",
+      "polymarket_volume_usd": 17513.218568,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-22_Sydney_Thunder_Brisbane_Heat_Manuka_Oval,_Canberra",
+      "date": "2025-12-22",
+      "team1": "Sydney Thunder",
+      "team2": "Brisbane Heat",
+      "venue": "Manuka Oval, Canberra",
+      "actual_winner": "Sydney Thunder",
+      "odds": {
+        "winner": {
+          "Sydney Thunder": 2.0202,
+          "Brisbane Heat": 1.9802,
+          "timestamp": "2025-12-22T08:00:29Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-syd2-bri-2025-12-22",
+      "polymarket_volume_usd": 235436.427365,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-22_Abu_Dhabi_Knight_Riders_Sharjah_Warriorz_Zayed_Cricket_Stadium,_Abu_Dhabi",
+      "date": "2025-12-22",
+      "team1": "Abu Dhabi Knight Riders",
+      "team2": "Sharjah Warriorz",
+      "venue": "Zayed Cricket Stadium, Abu Dhabi",
+      "actual_winner": "Sharjah Warriorz",
+      "odds": {
+        "winner": {
+          "Abu Dhabi Knight Riders": 1.5748,
+          "Sharjah Warriorz": 2.7397,
+          "timestamp": "2025-12-22T14:00:08Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-abu-sha-2025-12-22",
+      "polymarket_volume_usd": 98101.249707,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-23_Adelaide_Strikers_Melbourne_Stars_Adelaide_Oval",
+      "date": "2025-12-23",
+      "team1": "Adelaide Strikers",
+      "team2": "Melbourne Stars",
+      "venue": "Adelaide Oval",
+      "actual_winner": "Melbourne Stars",
+      "odds": {
+        "winner": {
+          "Adelaide Strikers": 2.2989,
+          "Melbourne Stars": 1.7699,
+          "timestamp": "2025-12-23T08:00:20Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-ade-mel-2025-12-23",
+      "polymarket_volume_usd": 116030.170208,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-23_Gulf_Giants_MI_Emirates_Zayed_Cricket_Stadium,_Abu_Dhabi",
+      "date": "2025-12-23",
+      "team1": "Gulf Giants",
+      "team2": "MI Emirates",
+      "venue": "Zayed Cricket Stadium, Abu Dhabi",
+      "actual_winner": "MI Emirates",
+      "odds": {
+        "winner": {
+          "Gulf Giants": 2.5,
+          "MI Emirates": 1.6667,
+          "timestamp": "2025-12-23T14:00:17Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-gul-mi-2025-12-23",
+      "polymarket_volume_usd": 21740.899992,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-24_Sharjah_Warriorz_Dubai_Capitals_Dubai_International_Cricket_Stadium",
+      "date": "2025-12-24",
+      "team1": "Sharjah Warriorz",
+      "team2": "Dubai Capitals",
+      "venue": "Dubai International Cricket Stadium",
+      "actual_winner": "Dubai Capitals",
+      "odds": {
+        "winner": {
+          "Sharjah Warriorz": 2.439,
+          "Dubai Capitals": 1.6949,
+          "timestamp": "2025-12-24T14:00:13Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-dub-sha-2025-12-24",
+      "polymarket_volume_usd": 50555.675102,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-26_Perth_Scorchers_Hobart_Hurricanes_Perth_Stadium",
+      "date": "2025-12-26",
+      "team1": "Perth Scorchers",
+      "team2": "Hobart Hurricanes",
+      "venue": "Perth Stadium",
+      "actual_winner": "Hobart Hurricanes",
+      "odds": {
+        "winner": {
+          "Perth Scorchers": 1.9608,
+          "Hobart Hurricanes": 2.0408,
+          "timestamp": "2025-12-26T10:00:08Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-per-hob-2025-12-26",
+      "polymarket_volume_usd": 78006.899945,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-26_Sydney_Sixers_Melbourne_Stars_Sydney_Cricket_Ground",
+      "date": "2025-12-26",
+      "team1": "Sydney Sixers",
+      "team2": "Melbourne Stars",
+      "venue": "Sydney Cricket Ground",
+      "actual_winner": "Melbourne Stars",
+      "odds": {
+        "winner": {
+          "Sydney Sixers": 2.2727,
+          "Melbourne Stars": 1.7857,
+          "timestamp": "2025-12-26T07:00:09Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-syd-mel-2025-12-26",
+      "polymarket_volume_usd": 88085.7806,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-26_Durban's_Super_Giants_MI_Cape_Town_Newlands,_Cape_Town",
+      "date": "2025-12-26",
+      "team1": "Durban's Super Giants",
+      "team2": "MI Cape Town",
+      "venue": "Newlands, Cape Town",
+      "actual_winner": "Durban's Super Giants",
+      "odds": {
+        "winner": {
+          "Durban's Super Giants": 2.5641,
+          "MI Cape Town": 1.6393,
+          "timestamp": "2025-12-26T15:00:15Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-mi-dur-2025-12-26",
+      "polymarket_volume_usd": 27023.672569,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-26_Sharjah_Warriorz_Desert_Vipers_Sharjah_Cricket_Stadium",
+      "date": "2025-12-26",
+      "team1": "Sharjah Warriorz",
+      "team2": "Desert Vipers",
+      "venue": "Sharjah Cricket Stadium",
+      "actual_winner": "Desert Vipers",
+      "odds": {
+        "winner": {
+          "Sharjah Warriorz": 2.5641,
+          "Desert Vipers": 1.6393,
+          "timestamp": "2025-12-26T14:00:08Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-sha-des-2025-12-26",
+      "polymarket_volume_usd": 64161.732136,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-27_Brisbane_Heat_Adelaide_Strikers_Brisbane_Cricket_Ground,_Woolloongabba,_Brisbane",
+      "date": "2025-12-27",
+      "team1": "Brisbane Heat",
+      "team2": "Adelaide Strikers",
+      "venue": "Brisbane Cricket Ground, Woolloongabba, Brisbane",
+      "actual_winner": "Brisbane Heat",
+      "odds": {
+        "winner": {
+          "Brisbane Heat": 2.0202,
+          "Adelaide Strikers": 1.9802,
+          "timestamp": "2025-12-27T08:00:10Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-bri-ade-2025-12-27",
+      "polymarket_volume_usd": 78949.487209,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-27_Sunrisers_Eastern_Cape_Paarl_Royals_Boland_Park,_Paarl",
+      "date": "2025-12-27",
+      "team1": "Sunrisers Eastern Cape",
+      "team2": "Paarl Royals",
+      "venue": "Boland Park, Paarl",
+      "actual_winner": "Sunrisers Eastern Cape",
+      "odds": {
+        "winner": {
+          "Sunrisers Eastern Cape": 1.7391,
+          "Paarl Royals": 2.3529,
+          "timestamp": "2025-12-27T15:00:13Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-paa-sun-2025-12-27",
+      "polymarket_volume_usd": 27001.339456,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-27_Joburg_Super_Kings_Pretoria_Capitals_SuperSport_Park,_Centurion",
+      "date": "2025-12-27",
+      "team1": "Joburg Super Kings",
+      "team2": "Pretoria Capitals",
+      "venue": "SuperSport Park, Centurion",
+      "actual_winner": "Joburg Super Kings",
+      "odds": {
+        "winner": {
+          "Joburg Super Kings": 2.0833,
+          "Pretoria Capitals": 1.9231,
+          "timestamp": "2025-12-27T10:00:13Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-pre-job-2025-12-27",
+      "polymarket_volume_usd": 96567.183087,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-27_Dubai_Capitals_MI_Emirates_Zayed_Cricket_Stadium,_Abu_Dhabi",
+      "date": "2025-12-27",
+      "team1": "Dubai Capitals",
+      "team2": "MI Emirates",
+      "venue": "Zayed Cricket Stadium, Abu Dhabi",
+      "actual_winner": "MI Emirates",
+      "odds": {
+        "winner": {
+          "Dubai Capitals": 2.0408,
+          "MI Emirates": 1.9608,
+          "timestamp": "2025-12-27T14:00:16Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-dub-mi-2025-12-27",
+      "polymarket_volume_usd": 21709.689466,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-28_Sydney_Thunder_Melbourne_Stars_Manuka_Oval,_Canberra",
+      "date": "2025-12-28",
+      "team1": "Sydney Thunder",
+      "team2": "Melbourne Stars",
+      "venue": "Manuka Oval, Canberra",
+      "actual_winner": "Melbourne Stars",
+      "odds": {
+        "winner": {
+          "Sydney Thunder": 2.5,
+          "Melbourne Stars": 1.6667,
+          "timestamp": "2025-12-28T08:00:07Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-mel-syd2-2025-12-28",
+      "polymarket_volume_usd": 53003.796318,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-28_Durban's_Super_Giants_MI_Cape_Town_Kingsmead,_Durban",
+      "date": "2025-12-28",
+      "team1": "Durban's Super Giants",
+      "team2": "MI Cape Town",
+      "venue": "Kingsmead, Durban",
+      "actual_winner": null,
+      "odds": {
+        "winner": {
+          "Durban's Super Giants": 76.9231,
+          "MI Cape Town": 1.0132,
+          "timestamp": "2025-12-28T15:00:17Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-dur-mi-2025-12-28",
+      "polymarket_volume_usd": 24873.156051,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-28_Abu_Dhabi_Knight_Riders_Gulf_Giants_Dubai_International_Cricket_Stadium",
+      "date": "2025-12-28",
+      "team1": "Abu Dhabi Knight Riders",
+      "team2": "Gulf Giants",
+      "venue": "Dubai International Cricket Stadium",
+      "actual_winner": "Abu Dhabi Knight Riders",
+      "odds": {
+        "winner": {
+          "Abu Dhabi Knight Riders": 1.7699,
+          "Gulf Giants": 2.2989,
+          "timestamp": "2025-12-28T14:00:07Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cruae-gul-abu-2025-12-28",
+      "polymarket_volume_usd": 30426.78198,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-29_Melbourne_Renegades_Hobart_Hurricanes_Bellerive_Oval,_Hobart",
+      "date": "2025-12-29",
+      "team1": "Melbourne Renegades",
+      "team2": "Hobart Hurricanes",
+      "venue": "Bellerive Oval, Hobart",
+      "actual_winner": "Hobart Hurricanes",
+      "odds": {
+        "winner": {
+          "Melbourne Renegades": 2.5316,
+          "Hobart Hurricanes": 1.6529,
+          "timestamp": "2025-12-29T08:00:15Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-hob-mel2-2025-12-29",
+      "polymarket_volume_usd": 85122.707483,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-29_Sunrisers_Eastern_Cape_Pretoria_Capitals_St_George's_Park,_Gqeberha",
+      "date": "2025-12-29",
+      "team1": "Sunrisers Eastern Cape",
+      "team2": "Pretoria Capitals",
+      "venue": "St George's Park, Gqeberha",
+      "actual_winner": "Sunrisers Eastern Cape",
+      "odds": {
+        "winner": {
+          "Sunrisers Eastern Cape": 1.5625,
+          "Pretoria Capitals": 2.7778,
+          "timestamp": "2025-12-29T15:00:15Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-sun-pre-2025-12-29",
+      "polymarket_volume_usd": 41409.433806,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-30_Perth_Scorchers_Sydney_Thunder_Sydney_Showground_Stadium",
+      "date": "2025-12-30",
+      "team1": "Perth Scorchers",
+      "team2": "Sydney Thunder",
+      "venue": "Sydney Showground Stadium",
+      "actual_winner": "Perth Scorchers",
+      "odds": {
+        "winner": {
+          "Perth Scorchers": 1.7544,
+          "Sydney Thunder": 2.3256,
+          "timestamp": "2025-12-30T08:00:19Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-syd2-per-2025-12-30",
+      "polymarket_volume_usd": 75421.999846,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-30_Durban's_Super_Giants_Joburg_Super_Kings_Kingsmead,_Durban",
+      "date": "2025-12-30",
+      "team1": "Durban's Super Giants",
+      "team2": "Joburg Super Kings",
+      "venue": "Kingsmead, Durban",
+      "actual_winner": "Joburg Super Kings",
+      "odds": {
+        "winner": {
+          "Durban's Super Giants": 1.7241,
+          "Joburg Super Kings": 2.381,
+          "timestamp": "2025-12-30T15:00:21Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-dur-job-2025-12-30",
+      "polymarket_volume_usd": 23599.01208,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-01_Melbourne_Renegades_Sydney_Sixers_Docklands_Stadium,_Melbourne",
+      "date": "2026-01-01",
+      "team1": "Melbourne Renegades",
+      "team2": "Sydney Sixers",
+      "venue": "Docklands Stadium, Melbourne",
+      "actual_winner": "Sydney Sixers",
+      "odds": {
+        "winner": {
+          "Melbourne Renegades": 2.3256,
+          "Sydney Sixers": 1.7544,
+          "timestamp": "2026-01-01T04:00:24Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-mel2-syd-2026-01-01",
+      "polymarket_volume_usd": 61411.21906,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-31_Brisbane_Heat_Adelaide_Strikers_Adelaide_Oval",
+      "date": "2025-12-31",
+      "team1": "Brisbane Heat",
+      "team2": "Adelaide Strikers",
+      "venue": "Adelaide Oval",
+      "actual_winner": "Adelaide Strikers",
+      "odds": {
+        "winner": {
+          "Brisbane Heat": 2.439,
+          "Adelaide Strikers": 1.6949,
+          "timestamp": "2025-12-31T08:00:11Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-ade-bri-2025-12-31",
+      "polymarket_volume_usd": 59396.413795,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-31_Pretoria_Capitals_MI_Cape_Town_Newlands,_Cape_Town",
+      "date": "2025-12-31",
+      "team1": "Pretoria Capitals",
+      "team2": "MI Cape Town",
+      "venue": "Newlands, Cape Town",
+      "actual_winner": "Pretoria Capitals",
+      "odds": {
+        "winner": {
+          "Pretoria Capitals": 2.9851,
+          "MI Cape Town": 1.5038,
+          "timestamp": "2025-12-31T15:00:17Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-mi-pre-2025-12-31",
+      "polymarket_volume_usd": 35836.1467,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2025-12-31_Sunrisers_Eastern_Cape_Paarl_Royals_St_George's_Park,_Gqeberha",
+      "date": "2025-12-31",
+      "team1": "Sunrisers Eastern Cape",
+      "team2": "Paarl Royals",
+      "venue": "St George's Park, Gqeberha",
+      "actual_winner": "Paarl Royals",
+      "odds": {
+        "winner": {
+          "Sunrisers Eastern Cape": 1.4493,
+          "Paarl Royals": 3.2258,
+          "timestamp": "2025-12-31T10:00:20Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-sun-paa-2025-12-31",
+      "polymarket_volume_usd": 70092.720536,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-01_Perth_Scorchers_Hobart_Hurricanes_Bellerive_Oval,_Hobart",
+      "date": "2026-01-01",
+      "team1": "Perth Scorchers",
+      "team2": "Hobart Hurricanes",
+      "venue": "Bellerive Oval, Hobart",
+      "actual_winner": "Perth Scorchers",
+      "odds": {
+        "winner": {
+          "Perth Scorchers": 2.0833,
+          "Hobart Hurricanes": 1.9231,
+          "timestamp": "2026-01-01T08:00:18Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-hob-per-2026-01-01",
+      "polymarket_volume_usd": 132616.852799,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-01_Joburg_Super_Kings_Durban's_Super_Giants_The_Wanderers_Stadium,_Johannesburg",
+      "date": "2026-01-01",
+      "team1": "Joburg Super Kings",
+      "team2": "Durban's Super Giants",
+      "venue": "The Wanderers Stadium, Johannesburg",
+      "actual_winner": null,
+      "odds": {
+        "winner": {
+          "Joburg Super Kings": 2.2727,
+          "Durban's Super Giants": 1.7857,
+          "timestamp": "2026-01-01T15:00:07Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-job-dur-2026-01-01",
+      "polymarket_volume_usd": 80518.427209,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-02_Melbourne_Stars_Brisbane_Heat_Brisbane_Cricket_Ground,_Woolloongabba,_Brisbane",
+      "date": "2026-01-02",
+      "team1": "Melbourne Stars",
+      "team2": "Brisbane Heat",
+      "venue": "Brisbane Cricket Ground, Woolloongabba, Brisbane",
+      "actual_winner": "Brisbane Heat",
+      "odds": {
+        "winner": {
+          "Melbourne Stars": 1.6949,
+          "Brisbane Heat": 2.439,
+          "timestamp": "2026-01-02T08:00:17Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-bri-mel-2026-01-02",
+      "polymarket_volume_usd": 89894.312853,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-02_Paarl_Royals_MI_Cape_Town_Boland_Park,_Paarl",
+      "date": "2026-01-02",
+      "team1": "Paarl Royals",
+      "team2": "MI Cape Town",
+      "venue": "Boland Park, Paarl",
+      "actual_winner": "Paarl Royals",
+      "odds": {
+        "winner": {
+          "Paarl Royals": 2.9412,
+          "MI Cape Town": 1.5152,
+          "timestamp": "2026-01-02T15:00:22Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-paa-mi-2026-01-02",
+      "polymarket_volume_usd": 60439.53122,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-03_Sydney_Thunder_Hobart_Hurricanes_Sydney_Showground_Stadium",
+      "date": "2026-01-03",
+      "team1": "Sydney Thunder",
+      "team2": "Hobart Hurricanes",
+      "venue": "Sydney Showground Stadium",
+      "actual_winner": "Hobart Hurricanes",
+      "odds": {
+        "winner": {
+          "Sydney Thunder": 2.4691,
+          "Hobart Hurricanes": 1.6807,
+          "timestamp": "2026-01-03T08:00:09Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-syd2-hob-2026-01-03",
+      "polymarket_volume_usd": 118281.638697,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-04_Perth_Scorchers_Adelaide_Strikers_Perth_Stadium",
+      "date": "2026-01-04",
+      "team1": "Perth Scorchers",
+      "team2": "Adelaide Strikers",
+      "venue": "Perth Stadium",
+      "actual_winner": "Perth Scorchers",
+      "odds": {
+        "winner": {
+          "Perth Scorchers": 1.7544,
+          "Adelaide Strikers": 2.3256,
+          "timestamp": "2026-01-04T10:00:14Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-per-ade-2026-01-04",
+      "polymarket_volume_usd": 57390.026945,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-04_Melbourne_Stars_Melbourne_Renegades_Melbourne_Cricket_Ground",
+      "date": "2026-01-04",
+      "team1": "Melbourne Stars",
+      "team2": "Melbourne Renegades",
+      "venue": "Melbourne Cricket Ground",
+      "actual_winner": "Melbourne Renegades",
+      "odds": {
+        "winner": {
+          "Melbourne Stars": 1.6667,
+          "Melbourne Renegades": 2.5,
+          "timestamp": "2026-01-04T07:00:11Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-mel-mel2-2026-01-04",
+      "polymarket_volume_usd": 91964.706842,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-04_MI_Cape_Town_Paarl_Royals_Newlands,_Cape_Town",
+      "date": "2026-01-04",
+      "team1": "MI Cape Town",
+      "team2": "Paarl Royals",
+      "venue": "Newlands, Cape Town",
+      "actual_winner": "Paarl Royals",
+      "odds": {
+        "winner": {
+          "MI Cape Town": 1.5823,
+          "Paarl Royals": 2.7174,
+          "timestamp": "2026-01-04T13:00:10Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-mi-paa-2026-01-04",
+      "polymarket_volume_usd": 77726.003442,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-05_Brisbane_Heat_Sydney_Sixers_International_Sports_Stadium,_Coffs_Harbour",
+      "date": "2026-01-05",
+      "team1": "Brisbane Heat",
+      "team2": "Sydney Sixers",
+      "venue": "International Sports Stadium, Coffs Harbour",
+      "actual_winner": "Sydney Sixers",
+      "odds": {
+        "winner": {
+          "Brisbane Heat": 2.7778,
+          "Sydney Sixers": 1.5625,
+          "timestamp": "2026-01-05T08:00:15Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-syd-bri-2026-01-05",
+      "polymarket_volume_usd": 101644.952182,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-05_Pretoria_Capitals_Sunrisers_Eastern_Cape_SuperSport_Park,_Centurion",
+      "date": "2026-01-05",
+      "team1": "Pretoria Capitals",
+      "team2": "Sunrisers Eastern Cape",
+      "venue": "SuperSport Park, Centurion",
+      "actual_winner": "Sunrisers Eastern Cape",
+      "odds": {
+        "winner": {
+          "Pretoria Capitals": 2.5,
+          "Sunrisers Eastern Cape": 1.6667,
+          "timestamp": "2026-01-05T15:00:20Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-pre-sun-2026-01-05",
+      "polymarket_volume_usd": 60651.637834,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-06_Adelaide_Strikers_Sydney_Thunder_Adelaide_Oval",
+      "date": "2026-01-06",
+      "team1": "Adelaide Strikers",
+      "team2": "Sydney Thunder",
+      "venue": "Adelaide Oval",
+      "actual_winner": "Adelaide Strikers",
+      "odds": {
+        "winner": {
+          "Adelaide Strikers": 1.9231,
+          "Sydney Thunder": 2.0833,
+          "timestamp": "2026-01-06T08:00:11Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-ade-syd2-2026-01-06",
+      "polymarket_volume_usd": 98636.500538,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-06_Joburg_Super_Kings_MI_Cape_Town_Newlands,_Cape_Town",
+      "date": "2026-01-06",
+      "team1": "Joburg Super Kings",
+      "team2": "MI Cape Town",
+      "venue": "Newlands, Cape Town",
+      "actual_winner": "MI Cape Town",
+      "odds": {
+        "winner": {
+          "Joburg Super Kings": 2.3529,
+          "MI Cape Town": 1.7391,
+          "timestamp": "2026-01-06T15:00:28Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-mi-job-2026-01-06",
+      "polymarket_volume_usd": 52461.736857,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-07_Perth_Scorchers_Melbourne_Renegades_Perth_Stadium",
+      "date": "2026-01-07",
+      "team1": "Perth Scorchers",
+      "team2": "Melbourne Renegades",
+      "venue": "Perth Stadium",
+      "actual_winner": "Melbourne Renegades",
+      "odds": {
+        "winner": {
+          "Perth Scorchers": 1.5625,
+          "Melbourne Renegades": 2.7778,
+          "timestamp": "2026-01-07T08:00:19Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-per-mel2-2026-01-07",
+      "polymarket_volume_usd": 95406.422715,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-07_Pretoria_Capitals_Durban's_Super_Giants_Kingsmead,_Durban",
+      "date": "2026-01-07",
+      "team1": "Pretoria Capitals",
+      "team2": "Durban's Super Giants",
+      "venue": "Kingsmead, Durban",
+      "actual_winner": "Pretoria Capitals",
+      "odds": {
+        "winner": {
+          "Pretoria Capitals": 2.4691,
+          "Durban's Super Giants": 1.6807,
+          "timestamp": "2026-01-07T15:00:27Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-dur-pre-2026-01-07",
+      "polymarket_volume_usd": 64138.545623,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-08_Melbourne_Stars_Sydney_Sixers_Melbourne_Cricket_Ground",
+      "date": "2026-01-08",
+      "team1": "Melbourne Stars",
+      "team2": "Sydney Sixers",
+      "venue": "Melbourne Cricket Ground",
+      "actual_winner": "Sydney Sixers",
+      "odds": {
+        "winner": {
+          "Melbourne Stars": 2.1053,
+          "Sydney Sixers": 1.9048,
+          "timestamp": "2026-01-08T08:00:24Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-mel-syd-2026-01-08",
+      "polymarket_volume_usd": 96310.166288,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-08_Joburg_Super_Kings_Paarl_Royals_The_Wanderers_Stadium,_Johannesburg",
+      "date": "2026-01-08",
+      "team1": "Joburg Super Kings",
+      "team2": "Paarl Royals",
+      "venue": "The Wanderers Stadium, Johannesburg",
+      "actual_winner": null,
+      "odds": {
+        "winner": {
+          "Joburg Super Kings": 1.9802,
+          "Paarl Royals": 2.0202,
+          "timestamp": "2026-01-08T15:00:12Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-job-paa-2026-01-08",
+      "polymarket_volume_usd": 52375.354957,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-10_Sydney_Thunder_Brisbane_Heat_Brisbane_Cricket_Ground,_Woolloongabba,_Brisbane",
+      "date": "2026-01-10",
+      "team1": "Sydney Thunder",
+      "team2": "Brisbane Heat",
+      "venue": "Brisbane Cricket Ground, Woolloongabba, Brisbane",
+      "actual_winner": "Brisbane Heat",
+      "odds": {
+        "winner": {
+          "Sydney Thunder": 2.5316,
+          "Brisbane Heat": 1.6529,
+          "timestamp": "2026-01-10T04:00:19Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-bri-syd2-2026-01-10",
+      "polymarket_volume_usd": 103629.249657,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-09_Hobart_Hurricanes_Adelaide_Strikers_Bellerive_Oval,_Hobart",
+      "date": "2026-01-09",
+      "team1": "Hobart Hurricanes",
+      "team2": "Adelaide Strikers",
+      "venue": "Bellerive Oval, Hobart",
+      "actual_winner": "Hobart Hurricanes",
+      "odds": {
+        "winner": {
+          "Hobart Hurricanes": 1.7544,
+          "Adelaide Strikers": 2.3256,
+          "timestamp": "2026-01-09T08:00:12Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-hob-ade-2026-01-09",
+      "polymarket_volume_usd": 88459.759047,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-11_Sydney_Sixers_Hobart_Hurricanes_Sydney_Cricket_Ground",
+      "date": "2026-01-11",
+      "team1": "Sydney Sixers",
+      "team2": "Hobart Hurricanes",
+      "venue": "Sydney Cricket Ground",
+      "actual_winner": null,
+      "odds": {
+        "winner": {
+          "Sydney Sixers": 400.0,
+          "Hobart Hurricanes": 1.0025,
+          "timestamp": "2026-01-11T03:00:16Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-syd-hob-2026-01-11",
+      "polymarket_volume_usd": 13568.729675,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-10_Melbourne_Renegades_Melbourne_Stars_Docklands_Stadium,_Melbourne",
+      "date": "2026-01-10",
+      "team1": "Melbourne Renegades",
+      "team2": "Melbourne Stars",
+      "venue": "Docklands Stadium, Melbourne",
+      "actual_winner": "Melbourne Stars",
+      "odds": {
+        "winner": {
+          "Melbourne Renegades": 2.5316,
+          "Melbourne Stars": 1.6529,
+          "timestamp": "2026-01-10T08:00:32Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-mel2-mel-2026-01-10",
+      "polymarket_volume_usd": 108486.034484,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-10_MI_Cape_Town_Joburg_Super_Kings_The_Wanderers_Stadium,_Johannesburg",
+      "date": "2026-01-10",
+      "team1": "MI Cape Town",
+      "team2": "Joburg Super Kings",
+      "venue": "The Wanderers Stadium, Johannesburg",
+      "actual_winner": "MI Cape Town",
+      "odds": {
+        "winner": {
+          "MI Cape Town": 2.0619,
+          "Joburg Super Kings": 1.9417,
+          "timestamp": "2026-01-10T15:00:12Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-job-mi-2026-01-10",
+      "polymarket_volume_usd": 27207.601491,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-10_Pretoria_Capitals_Paarl_Royals_Boland_Park,_Paarl",
+      "date": "2026-01-10",
+      "team1": "Pretoria Capitals",
+      "team2": "Paarl Royals",
+      "venue": "Boland Park, Paarl",
+      "actual_winner": "Pretoria Capitals",
+      "odds": {
+        "winner": {
+          "Pretoria Capitals": 2.0202,
+          "Paarl Royals": 1.9802,
+          "timestamp": "2026-01-10T10:00:21Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-paa-pre-2026-01-10",
+      "polymarket_volume_usd": 38950.007018,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-11_Perth_Scorchers_Adelaide_Strikers_Adelaide_Oval",
+      "date": "2026-01-11",
+      "team1": "Perth Scorchers",
+      "team2": "Adelaide Strikers",
+      "venue": "Adelaide Oval",
+      "actual_winner": "Perth Scorchers",
+      "odds": {
+        "winner": {
+          "Perth Scorchers": 1.7544,
+          "Adelaide Strikers": 2.3256,
+          "timestamp": "2026-01-11T08:00:13Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-ade-per-2026-01-11",
+      "polymarket_volume_usd": 62517.703557,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-11_Sunrisers_Eastern_Cape_Durban's_Super_Giants_St_George's_Park,_Gqeberha",
+      "date": "2026-01-11",
+      "team1": "Sunrisers Eastern Cape",
+      "team2": "Durban's Super Giants",
+      "venue": "St George's Park, Gqeberha",
+      "actual_winner": "Durban's Super Giants",
+      "odds": {
+        "winner": {
+          "Sunrisers Eastern Cape": 1.9231,
+          "Durban's Super Giants": 2.0833,
+          "timestamp": "2026-01-11T13:00:18Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-sun-dur-2026-01-11",
+      "polymarket_volume_usd": 21936.747985,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-12_Melbourne_Renegades_Sydney_Thunder_Sydney_Showground_Stadium",
+      "date": "2026-01-12",
+      "team1": "Melbourne Renegades",
+      "team2": "Sydney Thunder",
+      "venue": "Sydney Showground Stadium",
+      "actual_winner": "Sydney Thunder",
+      "odds": {
+        "winner": {
+          "Melbourne Renegades": 1.8018,
+          "Sydney Thunder": 2.2472,
+          "timestamp": "2026-01-12T08:00:19Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-syd2-mel2-2026-01-12",
+      "polymarket_volume_usd": 94298.516579,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-12_Pretoria_Capitals_MI_Cape_Town_SuperSport_Park,_Centurion",
+      "date": "2026-01-12",
+      "team1": "Pretoria Capitals",
+      "team2": "MI Cape Town",
+      "venue": "SuperSport Park, Centurion",
+      "actual_winner": "Pretoria Capitals",
+      "odds": {
+        "winner": {
+          "Pretoria Capitals": 2.2472,
+          "MI Cape Town": 1.8018,
+          "timestamp": "2026-01-12T15:00:23Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-pre-mi-2026-01-12",
+      "polymarket_volume_usd": 62738.222393,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-07_Sri_Lanka_Pakistan_Rangiri_Dambulla_International_Stadium",
+      "date": "2026-01-07",
+      "team1": "Sri Lanka",
+      "team2": "Pakistan",
+      "venue": "Rangiri Dambulla International Stadium",
+      "actual_winner": "Pakistan",
+      "odds": {
+        "winner": {
+          "Sri Lanka": 1.9417,
+          "Pakistan": 2.0619,
+          "timestamp": "2026-01-07T13:00:08Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-lka-pak-2026-01-07",
+      "polymarket_volume_usd": 47008.727975,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-11_Sri_Lanka_Pakistan_Rangiri_Dambulla_International_Stadium",
+      "date": "2026-01-11",
+      "team1": "Sri Lanka",
+      "team2": "Pakistan",
+      "venue": "Rangiri Dambulla International Stadium",
+      "actual_winner": "Sri Lanka",
+      "odds": {
+        "winner": {
+          "Sri Lanka": 2.1505,
+          "Pakistan": 1.8692,
+          "timestamp": "2026-01-11T03:00:20Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-lka-pak-2026-01-10",
+      "polymarket_volume_usd": 68092.640384,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-13_Adelaide_Strikers_Melbourne_Stars_Melbourne_Cricket_Ground",
+      "date": "2026-01-13",
+      "team1": "Adelaide Strikers",
+      "team2": "Melbourne Stars",
+      "venue": "Melbourne Cricket Ground",
+      "actual_winner": "Melbourne Stars",
+      "odds": {
+        "winner": {
+          "Adelaide Strikers": 2.4691,
+          "Melbourne Stars": 1.6807,
+          "timestamp": "2026-01-13T08:00:26Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-mel-ade-2026-01-13",
+      "polymarket_volume_usd": 79946.213346,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-13_Durban's_Super_Giants_Paarl_Royals_Boland_Park,_Paarl",
+      "date": "2026-01-13",
+      "team1": "Durban's Super Giants",
+      "team2": "Paarl Royals",
+      "venue": "Boland Park, Paarl",
+      "actual_winner": "Paarl Royals",
+      "odds": {
+        "winner": {
+          "Durban's Super Giants": 1.7544,
+          "Paarl Royals": 2.3256,
+          "timestamp": "2026-01-13T15:00:18Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-paa-dur-2026-01-13",
+      "polymarket_volume_usd": 53910.918095,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-14_Brisbane_Heat_Hobart_Hurricanes_Bellerive_Oval,_Hobart",
+      "date": "2026-01-14",
+      "team1": "Brisbane Heat",
+      "team2": "Hobart Hurricanes",
+      "venue": "Bellerive Oval, Hobart",
+      "actual_winner": "Brisbane Heat",
+      "odds": {
+        "winner": {
+          "Brisbane Heat": 2.3529,
+          "Hobart Hurricanes": 1.7391,
+          "timestamp": "2026-01-14T08:00:35Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-hob-bri-2026-01-14",
+      "polymarket_volume_usd": 63946.951744,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-14_Sunrisers_Eastern_Cape_Joburg_Super_Kings_St_George's_Park,_Gqeberha",
+      "date": "2026-01-14",
+      "team1": "Sunrisers Eastern Cape",
+      "team2": "Joburg Super Kings",
+      "venue": "St George's Park, Gqeberha",
+      "actual_winner": "Sunrisers Eastern Cape",
+      "odds": {
+        "winner": {
+          "Sunrisers Eastern Cape": 1.6667,
+          "Joburg Super Kings": 2.5,
+          "timestamp": "2026-01-14T15:00:34Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-sun-job-2026-01-14",
+      "polymarket_volume_usd": 57172.890821,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-15_Perth_Scorchers_Melbourne_Renegades_Docklands_Stadium,_Melbourne",
+      "date": "2026-01-15",
+      "team1": "Perth Scorchers",
+      "team2": "Melbourne Renegades",
+      "venue": "Docklands Stadium, Melbourne",
+      "actual_winner": "Perth Scorchers",
+      "odds": {
+        "winner": {
+          "Perth Scorchers": 1.626,
+          "Melbourne Renegades": 2.5974,
+          "timestamp": "2026-01-15T08:00:17Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-mel2-per-2026-01-15",
+      "polymarket_volume_usd": 71689.047902,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-15_Pretoria_Capitals_Paarl_Royals_SuperSport_Park,_Centurion",
+      "date": "2026-01-15",
+      "team1": "Pretoria Capitals",
+      "team2": "Paarl Royals",
+      "venue": "SuperSport Park, Centurion",
+      "actual_winner": "Paarl Royals",
+      "odds": {
+        "winner": {
+          "Pretoria Capitals": 1.8018,
+          "Paarl Royals": 2.2472,
+          "timestamp": "2026-01-15T15:00:14Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-pre-paa-2026-01-15",
+      "polymarket_volume_usd": 43640.220742,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-16_Sydney_Thunder_Sydney_Sixers_Sydney_Cricket_Ground",
+      "date": "2026-01-16",
+      "team1": "Sydney Thunder",
+      "team2": "Sydney Sixers",
+      "venue": "Sydney Cricket Ground",
+      "actual_winner": "Sydney Sixers",
+      "odds": {
+        "winner": {
+          "Sydney Thunder": 3.2258,
+          "Sydney Sixers": 1.4493,
+          "timestamp": "2026-01-16T08:00:14Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-syd-syd2-2026-01-16",
+      "polymarket_volume_usd": 118545.894818,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-16_Sunrisers_Eastern_Cape_MI_Cape_Town_Newlands,_Cape_Town",
+      "date": "2026-01-16",
+      "team1": "Sunrisers Eastern Cape",
+      "team2": "MI Cape Town",
+      "venue": "Newlands, Cape Town",
+      "actual_winner": "MI Cape Town",
+      "odds": {
+        "winner": {
+          "Sunrisers Eastern Cape": 1.9417,
+          "MI Cape Town": 2.0619,
+          "timestamp": "2026-01-16T15:00:23Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-mi-sun-2026-01-16",
+      "polymarket_volume_usd": 58133.897704,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-17_Melbourne_Renegades_Adelaide_Strikers_Adelaide_Oval",
+      "date": "2026-01-17",
+      "team1": "Melbourne Renegades",
+      "team2": "Adelaide Strikers",
+      "venue": "Adelaide Oval",
+      "actual_winner": "Adelaide Strikers",
+      "odds": {
+        "winner": {
+          "Melbourne Renegades": 2.4096,
+          "Adelaide Strikers": 1.7094,
+          "timestamp": "2026-01-17T05:00:13Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-ade-mel2-2026-01-17",
+      "polymarket_volume_usd": 19425.140457,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-17_Melbourne_Stars_Perth_Scorchers_Perth_Stadium",
+      "date": "2026-01-17",
+      "team1": "Melbourne Stars",
+      "team2": "Perth Scorchers",
+      "venue": "Perth Stadium",
+      "actual_winner": "Perth Scorchers",
+      "odds": {
+        "winner": {
+          "Melbourne Stars": 2.5316,
+          "Perth Scorchers": 1.6529,
+          "timestamp": "2026-01-17T09:00:24Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-per-mel-2026-01-17",
+      "polymarket_volume_usd": 39327.688576,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-17_Pretoria_Capitals_Joburg_Super_Kings_The_Wanderers_Stadium,_Johannesburg",
+      "date": "2026-01-17",
+      "team1": "Pretoria Capitals",
+      "team2": "Joburg Super Kings",
+      "venue": "The Wanderers Stadium, Johannesburg",
+      "actual_winner": "Pretoria Capitals",
+      "odds": {
+        "winner": {
+          "Pretoria Capitals": 1.8692,
+          "Joburg Super Kings": 2.1505,
+          "timestamp": "2026-01-17T15:00:16Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-job-pre-2026-01-17",
+      "polymarket_volume_usd": 32309.728548,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-17_Durban's_Super_Giants_Paarl_Royals_Kingsmead,_Durban",
+      "date": "2026-01-17",
+      "team1": "Durban's Super Giants",
+      "team2": "Paarl Royals",
+      "venue": "Kingsmead, Durban",
+      "actual_winner": "Durban's Super Giants",
+      "odds": {
+        "winner": {
+          "Durban's Super Giants": 1.8692,
+          "Paarl Royals": 2.1505,
+          "timestamp": "2026-01-17T10:00:25Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-dur-paa-2026-01-17",
+      "polymarket_volume_usd": 43043.445479,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-18_Brisbane_Heat_Sydney_Sixers_Brisbane_Cricket_Ground,_Woolloongabba,_Brisbane",
+      "date": "2026-01-18",
+      "team1": "Brisbane Heat",
+      "team2": "Sydney Sixers",
+      "venue": "Brisbane Cricket Ground, Woolloongabba, Brisbane",
+      "actual_winner": "Sydney Sixers",
+      "odds": {
+        "winner": {
+          "Brisbane Heat": 2.6316,
+          "Sydney Sixers": 1.6129,
+          "timestamp": "2026-01-18T08:00:59Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-bri-syd-2026-01-18",
+      "polymarket_volume_usd": 25842.364496,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-18_MI_Cape_Town_Sunrisers_Eastern_Cape_St_George's_Park,_Gqeberha",
+      "date": "2026-01-18",
+      "team1": "MI Cape Town",
+      "team2": "Sunrisers Eastern Cape",
+      "venue": "St George's Park, Gqeberha",
+      "actual_winner": "Sunrisers Eastern Cape",
+      "odds": {
+        "winner": {
+          "MI Cape Town": 2.0408,
+          "Sunrisers Eastern Cape": 1.9608,
+          "timestamp": "2026-01-18T13:00:31Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-sun-mi-2026-01-18",
+      "polymarket_volume_usd": 22791.393557,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-19_Joburg_Super_Kings_Paarl_Royals_Boland_Park,_Paarl",
+      "date": "2026-01-19",
+      "team1": "Joburg Super Kings",
+      "team2": "Paarl Royals",
+      "venue": "Boland Park, Paarl",
+      "actual_winner": "Joburg Super Kings",
+      "odds": {
+        "winner": {
+          "Joburg Super Kings": 2.4691,
+          "Paarl Royals": 1.6807,
+          "timestamp": "2026-01-19T15:00:22Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-paa-job-2026-01-19",
+      "polymarket_volume_usd": 71267.725083,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-21_India_New_Zealand_Vidarbha_Cricket_Association_Stadium,_Jamtha,_Nagpur",
+      "date": "2026-01-21",
+      "team1": "India",
+      "team2": "New Zealand",
+      "venue": "Vidarbha Cricket Association Stadium, Jamtha, Nagpur",
+      "actual_winner": "India",
+      "odds": {
+        "winner": {
+          "India": 1.3793,
+          "New Zealand": 3.6364,
+          "timestamp": "2026-01-21T13:00:10Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ind-nzl-2026-01-21",
+      "polymarket_volume_usd": 457135.712888,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-23_New_Zealand_India_Shaheed_Veer_Narayan_Singh_International_Stadium,_Raipur",
+      "date": "2026-01-23",
+      "team1": "New Zealand",
+      "team2": "India",
+      "venue": "Shaheed Veer Narayan Singh International Stadium, Raipur",
+      "actual_winner": "India",
+      "odds": {
+        "winner": {
+          "New Zealand": 2.1053,
+          "India": 1.9048,
+          "timestamp": "2026-01-23T13:00:14Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ind-nzl-2026-01-23",
+      "polymarket_volume_usd": 481917.512968,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-25_New_Zealand_India_Barsapara_Cricket_Stadium,_Guwahati",
+      "date": "2026-01-25",
+      "team1": "New Zealand",
+      "team2": "India",
+      "venue": "Barsapara Cricket Stadium, Guwahati",
+      "actual_winner": "India",
+      "odds": {
+        "winner": {
+          "New Zealand": 3.9216,
+          "India": 1.3423,
+          "timestamp": "2026-01-25T13:00:32Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ind-nzl-2026-01-25",
+      "polymarket_volume_usd": 215172.476591,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-21_Hobart_Hurricanes_Melbourne_Stars_Bellerive_Oval,_Hobart",
+      "date": "2026-01-21",
+      "team1": "Hobart Hurricanes",
+      "team2": "Melbourne Stars",
+      "venue": "Bellerive Oval, Hobart",
+      "actual_winner": "Hobart Hurricanes",
+      "odds": {
+        "winner": {
+          "Hobart Hurricanes": 1.9802,
+          "Melbourne Stars": 2.0202,
+          "timestamp": "2026-01-20T23:00:13Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-hob-mel-2026-01-20",
+      "polymarket_volume_usd": 118430.29323,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-20_Perth_Scorchers_Sydney_Sixers_Perth_Stadium",
+      "date": "2026-01-20",
+      "team1": "Perth Scorchers",
+      "team2": "Sydney Sixers",
+      "venue": "Perth Stadium",
+      "actual_winner": "Perth Scorchers",
+      "odds": {
+        "winner": {
+          "Perth Scorchers": 1.7241,
+          "Sydney Sixers": 2.381,
+          "timestamp": "2026-01-20T02:00:13Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-per-syd-2026-01-19",
+      "polymarket_volume_usd": 78233.994138,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-27_West_Indies_South_Africa_Boland_Park,_Paarl",
+      "date": "2026-01-27",
+      "team1": "West Indies",
+      "team2": "South Africa",
+      "venue": "Boland Park, Paarl",
+      "actual_winner": "South Africa",
+      "odds": {
+        "winner": {
+          "West Indies": 3.3333,
+          "South Africa": 1.4286,
+          "timestamp": "2026-01-27T15:00:19Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-zaf-wst-2026-01-27",
+      "polymarket_volume_usd": 143773.321773,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-21_Sunrisers_Eastern_Cape_Pretoria_Capitals_Kingsmead,_Durban",
+      "date": "2026-01-21",
+      "team1": "Sunrisers Eastern Cape",
+      "team2": "Pretoria Capitals",
+      "venue": "Kingsmead, Durban",
+      "actual_winner": "Pretoria Capitals",
+      "odds": {
+        "winner": {
+          "Sunrisers Eastern Cape": 1.6529,
+          "Pretoria Capitals": 2.5316,
+          "timestamp": "2026-01-21T15:00:23Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-pre-sun-2026-01-21",
+      "polymarket_volume_usd": 25995.348596,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-22_Paarl_Royals_Joburg_Super_Kings_SuperSport_Park,_Centurion",
+      "date": "2026-01-22",
+      "team1": "Paarl Royals",
+      "team2": "Joburg Super Kings",
+      "venue": "SuperSport Park, Centurion",
+      "actual_winner": "Paarl Royals",
+      "odds": {
+        "winner": {
+          "Paarl Royals": 1.9048,
+          "Joburg Super Kings": 2.1053,
+          "timestamp": "2026-01-22T15:00:49Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-job-paa-2026-01-22",
+      "polymarket_volume_usd": 28377.364579,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-28_New_Zealand_India_Dr._Y.S._Rajasekhara_Reddy_ACA-VDCA_Cricket_Stadium,_Visakhapatnam",
+      "date": "2026-01-28",
+      "team1": "New Zealand",
+      "team2": "India",
+      "venue": "Dr. Y.S. Rajasekhara Reddy ACA-VDCA Cricket Stadium, Visakhapatnam",
+      "actual_winner": "New Zealand",
+      "odds": {
+        "winner": {
+          "New Zealand": 4.2553,
+          "India": 1.3072,
+          "timestamp": "2026-01-28T13:00:51Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ind-nzl-2026-01-28",
+      "polymarket_volume_usd": 788605.064177,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-23_Sydney_Sixers_Hobart_Hurricanes_Sydney_Cricket_Ground",
+      "date": "2026-01-23",
+      "team1": "Sydney Sixers",
+      "team2": "Hobart Hurricanes",
+      "venue": "Sydney Cricket Ground",
+      "actual_winner": "Sydney Sixers",
+      "odds": {
+        "winner": {
+          "Sydney Sixers": 1.8018,
+          "Hobart Hurricanes": 2.2472,
+          "timestamp": "2026-01-23T08:00:21Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-syd-hob-2026-01-23",
+      "polymarket_volume_usd": 78932.154436,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-29_West_Indies_South_Africa_SuperSport_Park,_Centurion",
+      "date": "2026-01-29",
+      "team1": "West Indies",
+      "team2": "South Africa",
+      "venue": "SuperSport Park, Centurion",
+      "actual_winner": "South Africa",
+      "odds": {
+        "winner": {
+          "West Indies": 3.5088,
+          "South Africa": 1.3986,
+          "timestamp": "2026-01-29T15:00:23Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-zaf-wst-2026-01-29",
+      "polymarket_volume_usd": 290951.685097,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-30_Sri_Lanka_England_Pallekele_International_Cricket_Stadium",
+      "date": "2026-01-30",
+      "team1": "Sri Lanka",
+      "team2": "England",
+      "venue": "Pallekele International Cricket Stadium",
+      "actual_winner": "England",
+      "odds": {
+        "winner": {
+          "Sri Lanka": 2.8209,
+          "England": 1.5492,
+          "timestamp": "2026-01-30T13:00:13Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-lka-gbr-2026-01-30",
+      "polymarket_volume_usd": 187454.992565,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-25_Sydney_Sixers_Perth_Scorchers_Perth_Stadium",
+      "date": "2026-01-25",
+      "team1": "Sydney Sixers",
+      "team2": "Perth Scorchers",
+      "venue": "Perth Stadium",
+      "actual_winner": "Perth Scorchers",
+      "odds": {
+        "winner": {
+          "Sydney Sixers": 2.6667,
+          "Perth Scorchers": 1.6,
+          "timestamp": "2026-01-25T08:00:23Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "craus-per-syd-2026-01-25",
+      "polymarket_volume_usd": 141560.962954,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-31_India_New_Zealand_Greenfield_International_Stadium,_Thiruvananthapuram",
+      "date": "2026-01-31",
+      "team1": "India",
+      "team2": "New Zealand",
+      "venue": "Greenfield International Stadium, Thiruvananthapuram",
+      "actual_winner": "India",
+      "odds": {
+        "winner": {
+          "India": 1.3699,
+          "New Zealand": 3.7037,
+          "timestamp": "2026-01-31T13:00:26Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ind-nzl-2026-01-31",
+      "polymarket_volume_usd": 480765.208128,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-25_Pretoria_Capitals_Sunrisers_Eastern_Cape_Newlands,_Cape_Town",
+      "date": "2026-01-25",
+      "team1": "Pretoria Capitals",
+      "team2": "Sunrisers Eastern Cape",
+      "venue": "Newlands, Cape Town",
+      "actual_winner": "Sunrisers Eastern Cape",
+      "odds": {
+        "winner": {
+          "Pretoria Capitals": 2.4096,
+          "Sunrisers Eastern Cape": 1.7094,
+          "timestamp": "2026-01-25T13:00:24Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crsou-pre-sun-2026-01-25",
+      "polymarket_volume_usd": 29243.154279,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-02-01_Sri_Lanka_England_Pallekele_International_Cricket_Stadium",
+      "date": "2026-02-01",
+      "team1": "Sri Lanka",
+      "team2": "England",
+      "venue": "Pallekele International Cricket Stadium",
+      "actual_winner": "England",
+      "odds": {
+        "winner": {
+          "Sri Lanka": 2.8571,
+          "England": 1.5385,
+          "timestamp": "2026-02-01T13:00:14Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-lka-gbr-2026-02-01",
+      "polymarket_volume_usd": 256852.23496,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-02-03_England_Sri_Lanka_Pallekele_International_Cricket_Stadium",
+      "date": "2026-02-03",
+      "team1": "England",
+      "team2": "Sri Lanka",
+      "venue": "Pallekele International Cricket Stadium",
+      "actual_winner": "England",
+      "odds": {
+        "winner": {
+          "England": 1.5873,
+          "Sri Lanka": 2.7027,
+          "timestamp": "2026-02-03T13:00:11Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-lka-gbr-2026-02-03",
+      "polymarket_volume_usd": 150161.518096,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-01-31_Pakistan_Australia_Gaddafi_Stadium,_Lahore",
+      "date": "2026-01-31",
+      "team1": "Pakistan",
+      "team2": "Australia",
+      "venue": "Gaddafi Stadium, Lahore",
+      "actual_winner": "Pakistan",
+      "odds": {
+        "winner": {
+          "Pakistan": 2.4691,
+          "Australia": 1.6807,
+          "timestamp": "2026-01-31T10:00:28Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-pak-aus-2026-01-31",
+      "polymarket_volume_usd": 268099.531224,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-02-01_Pakistan_Australia_Gaddafi_Stadium,_Lahore",
+      "date": "2026-02-01",
+      "team1": "Pakistan",
+      "team2": "Australia",
+      "venue": "Gaddafi Stadium, Lahore",
+      "actual_winner": "Pakistan",
+      "odds": {
+        "winner": {
+          "Pakistan": 2.381,
+          "Australia": 1.7241,
+          "timestamp": "2026-02-01T10:00:18Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-pak-aus-2026-02-01",
+      "polymarket_volume_usd": 140973.292538,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-02-07_Netherlands_Pakistan_Sinhalese_Sports_Club_Ground,_Colombo",
+      "date": "2026-02-07",
+      "team1": "Netherlands",
+      "team2": "Pakistan",
+      "venue": "Sinhalese Sports Club Ground, Colombo",
+      "actual_winner": "Pakistan",
+      "odds": {
+        "winner": {
+          "Netherlands": 11.6279,
+          "Pakistan": 1.0941,
+          "timestamp": "2026-02-07T05:00:12Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-nld-pak-2026-02-07",
+      "polymarket_volume_usd": 367605.101604,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-07_India_United_States_of_America_Wankhede_Stadium,_Mumbai",
+      "date": "2026-02-07",
+      "team1": "India",
+      "team2": "United States of America",
+      "venue": "Wankhede Stadium, Mumbai",
+      "actual_winner": "India",
+      "odds": {
+        "winner": {
+          "India": 1.9608,
+          "United States of America": 2.0408,
+          "timestamp": "2026-02-07T13:00:34Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ind-usa-2026-02-07",
+      "polymarket_volume_usd": 917326.7998,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-07_West_Indies_Scotland_Eden_Gardens,_Kolkata",
+      "date": "2026-02-07",
+      "team1": "West Indies",
+      "team2": "Scotland",
+      "venue": "Eden Gardens, Kolkata",
+      "actual_winner": "West Indies",
+      "odds": {
+        "winner": {
+          "West Indies": 1.1834,
+          "Scotland": 6.4516,
+          "timestamp": "2026-02-07T09:00:37Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-sco-wst-2026-02-07",
+      "polymarket_volume_usd": 193561.928524,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-08_Sri_Lanka_Ireland_R_Premadasa_Stadium,_Colombo",
+      "date": "2026-02-08",
+      "team1": "Sri Lanka",
+      "team2": "Ireland",
+      "venue": "R Premadasa Stadium, Colombo",
+      "actual_winner": "Sri Lanka",
+      "odds": {
+        "winner": {
+          "Sri Lanka": 1.2579,
+          "Ireland": 4.878,
+          "timestamp": "2026-02-08T13:00:32Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-lka-irl-2026-02-08",
+      "polymarket_volume_usd": 434650.079816,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-08_England_Nepal_Wankhede_Stadium,_Mumbai",
+      "date": "2026-02-08",
+      "team1": "England",
+      "team2": "Nepal",
+      "venue": "Wankhede Stadium, Mumbai",
+      "actual_winner": "England",
+      "odds": {
+        "winner": {
+          "England": 2.0202,
+          "Nepal": 1.9802,
+          "timestamp": "2026-02-08T09:00:30Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-gbr-npl-2026-02-08",
+      "polymarket_volume_usd": 1075694.282166,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-09_Oman_Zimbabwe_Sinhalese_Sports_Club_Ground,_Colombo",
+      "date": "2026-02-09",
+      "team1": "Oman",
+      "team2": "Zimbabwe",
+      "venue": "Sinhalese Sports Club Ground, Colombo",
+      "actual_winner": "Zimbabwe",
+      "odds": {
+        "winner": {
+          "Oman": 3.7736,
+          "Zimbabwe": 1.3605,
+          "timestamp": "2026-02-09T09:00:16Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-omn-zwe-2026-02-09",
+      "polymarket_volume_usd": 251203.69733,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-09_Scotland_Italy_Eden_Gardens,_Kolkata",
+      "date": "2026-02-09",
+      "team1": "Scotland",
+      "team2": "Italy",
+      "venue": "Eden Gardens, Kolkata",
+      "actual_winner": "Scotland",
+      "odds": {
+        "winner": {
+          "Scotland": 1.4388,
+          "Italy": 3.2787,
+          "timestamp": "2026-02-09T05:00:20Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ita-sco-2026-02-09",
+      "polymarket_volume_usd": 370854.288051,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-09_South_Africa_Canada_Narendra_Modi_Stadium,_Ahmedabad",
+      "date": "2026-02-09",
+      "team1": "South Africa",
+      "team2": "Canada",
+      "venue": "Narendra Modi Stadium, Ahmedabad",
+      "actual_winner": "South Africa",
+      "odds": {
+        "winner": {
+          "South Africa": 1.039,
+          "Canada": 26.6667,
+          "timestamp": "2026-02-09T13:00:21Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-can-zaf-2026-02-09",
+      "polymarket_volume_usd": 766473.858103,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-10_Namibia_Netherlands_Arun_Jaitley_Stadium,_Delhi",
+      "date": "2026-02-10",
+      "team1": "Namibia",
+      "team2": "Netherlands",
+      "venue": "Arun Jaitley Stadium, Delhi",
+      "actual_winner": "Netherlands",
+      "odds": {
+        "winner": {
+          "Namibia": 2.0619,
+          "Netherlands": 1.9417,
+          "timestamp": "2026-02-10T05:00:20Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-nam-nld-2026-02-10",
+      "polymarket_volume_usd": 903065.25854,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-10_Pakistan_United_States_of_America_Sinhalese_Sports_Club_Ground,_Colombo",
+      "date": "2026-02-10",
+      "team1": "Pakistan",
+      "team2": "United States of America",
+      "venue": "Sinhalese Sports Club Ground, Colombo",
+      "actual_winner": "Pakistan",
+      "odds": {
+        "winner": {
+          "Pakistan": 1.2121,
+          "United States of America": 5.7143,
+          "timestamp": "2026-02-10T13:00:12Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-pak-usa-2026-02-10",
+      "polymarket_volume_usd": 1354282.059537,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-10_United_Arab_Emirates_New_Zealand_MA_Chidambaram_Stadium,_Chepauk,_Chennai",
+      "date": "2026-02-10",
+      "team1": "United Arab Emirates",
+      "team2": "New Zealand",
+      "venue": "MA Chidambaram Stadium, Chepauk, Chennai",
+      "actual_winner": "New Zealand",
+      "odds": {
+        "winner": {
+          "United Arab Emirates": 2.0202,
+          "New Zealand": 1.9802,
+          "timestamp": "2026-02-10T09:00:24Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-nzl-are-2026-02-10",
+      "polymarket_volume_usd": 543458.722961,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-11_Australia_Ireland_R_Premadasa_Stadium,_Colombo",
+      "date": "2026-02-11",
+      "team1": "Australia",
+      "team2": "Ireland",
+      "venue": "R Premadasa Stadium, Colombo",
+      "actual_winner": "Australia",
+      "odds": {
+        "winner": {
+          "Australia": 1.9802,
+          "Ireland": 2.0202,
+          "timestamp": "2026-02-11T09:00:30Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-aus-irl-2026-02-11",
+      "polymarket_volume_usd": 742887.748108,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-11_West_Indies_England_Wankhede_Stadium,_Mumbai",
+      "date": "2026-02-11",
+      "team1": "West Indies",
+      "team2": "England",
+      "venue": "Wankhede Stadium, Mumbai",
+      "actual_winner": "West Indies",
+      "odds": {
+        "winner": {
+          "West Indies": 2.9412,
+          "England": 1.5152,
+          "timestamp": "2026-02-11T13:00:23Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-gbr-wst-2026-02-11",
+      "polymarket_volume_usd": 1140570.874111,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-12_India_Namibia_Arun_Jaitley_Stadium,_Delhi",
+      "date": "2026-02-12",
+      "team1": "India",
+      "team2": "Namibia",
+      "venue": "Arun Jaitley Stadium, Delhi",
+      "actual_winner": "India",
+      "odds": {
+        "winner": {
+          "India": 2.1053,
+          "Namibia": 1.9048,
+          "timestamp": "2026-02-12T13:00:20Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ind-nam-2026-02-12",
+      "polymarket_volume_usd": 1383959.688316,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-12_Sri_Lanka_Oman_Pallekele_International_Cricket_Stadium",
+      "date": "2026-02-12",
+      "team1": "Sri Lanka",
+      "team2": "Oman",
+      "venue": "Pallekele International Cricket Stadium",
+      "actual_winner": "Sri Lanka",
+      "odds": {
+        "winner": {
+          "Sri Lanka": 1.9802,
+          "Oman": 2.0202,
+          "timestamp": "2026-02-12T05:00:13Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-lka-omn-2026-02-12",
+      "polymarket_volume_usd": 607694.681908,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-12_Nepal_Italy_Wankhede_Stadium,_Mumbai",
+      "date": "2026-02-12",
+      "team1": "Nepal",
+      "team2": "Italy",
+      "venue": "Wankhede Stadium, Mumbai",
+      "actual_winner": "Italy",
+      "odds": {
+        "winner": {
+          "Nepal": 1.3889,
+          "Italy": 3.5714,
+          "timestamp": "2026-02-12T09:00:54Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ita-npl-2026-02-12",
+      "polymarket_volume_usd": 852579.774168,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-13_United_States_of_America_Netherlands_MA_Chidambaram_Stadium,_Chepauk,_Chennai",
+      "date": "2026-02-13",
+      "team1": "United States of America",
+      "team2": "Netherlands",
+      "venue": "MA Chidambaram Stadium, Chepauk, Chennai",
+      "actual_winner": "United States of America",
+      "odds": {
+        "winner": {
+          "United States of America": 2.2989,
+          "Netherlands": 1.7699,
+          "timestamp": "2026-02-13T13:00:28Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-nld-usa-2026-02-13",
+      "polymarket_volume_usd": 686025.428107,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-13_Zimbabwe_Australia_R_Premadasa_Stadium,_Colombo",
+      "date": "2026-02-13",
+      "team1": "Zimbabwe",
+      "team2": "Australia",
+      "venue": "R Premadasa Stadium, Colombo",
+      "actual_winner": "Zimbabwe",
+      "odds": {
+        "winner": {
+          "Zimbabwe": 11.7647,
+          "Australia": 1.0929,
+          "timestamp": "2026-02-13T05:00:17Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-aus-zwe-2026-02-13",
+      "polymarket_volume_usd": 1317714.88925,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-13_Canada_United_Arab_Emirates_Arun_Jaitley_Stadium,_Delhi",
+      "date": "2026-02-13",
+      "team1": "Canada",
+      "team2": "United Arab Emirates",
+      "venue": "Arun Jaitley Stadium, Delhi",
+      "actual_winner": "United Arab Emirates",
+      "odds": {
+        "winner": {
+          "Canada": 2.9412,
+          "United Arab Emirates": 1.5152,
+          "timestamp": "2026-02-13T09:00:14Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-can-are-2026-02-13",
+      "polymarket_volume_usd": 740183.269592,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-14_Ireland_Oman_Sinhalese_Sports_Club_Ground,_Colombo",
+      "date": "2026-02-14",
+      "team1": "Ireland",
+      "team2": "Oman",
+      "venue": "Sinhalese Sports Club Ground, Colombo",
+      "actual_winner": "Ireland",
+      "odds": {
+        "winner": {
+          "Ireland": 1.3072,
+          "Oman": 4.2553,
+          "timestamp": "2026-02-14T05:00:21Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-irl-omn-2026-02-14",
+      "polymarket_volume_usd": 635704.872358,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-14_Scotland_England_Eden_Gardens,_Kolkata",
+      "date": "2026-02-14",
+      "team1": "Scotland",
+      "team2": "England",
+      "venue": "Eden Gardens, Kolkata",
+      "actual_winner": "England",
+      "odds": {
+        "winner": {
+          "Scotland": 8.0,
+          "England": 1.1429,
+          "timestamp": "2026-02-14T09:00:20Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-gbr-sco-2026-02-14",
+      "polymarket_volume_usd": 623185.823528,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-14_New_Zealand_South_Africa_Narendra_Modi_Stadium,_Ahmedabad",
+      "date": "2026-02-14",
+      "team1": "New Zealand",
+      "team2": "South Africa",
+      "venue": "Narendra Modi Stadium, Ahmedabad",
+      "actual_winner": "South Africa",
+      "odds": {
+        "winner": {
+          "New Zealand": 2.1053,
+          "South Africa": 1.9048,
+          "timestamp": "2026-02-14T13:00:26Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-nzl-zaf-2026-02-14",
+      "polymarket_volume_usd": 607734.499436,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-15_United_States_of_America_Namibia_MA_Chidambaram_Stadium,_Chepauk,_Chennai",
+      "date": "2026-02-15",
+      "team1": "United States of America",
+      "team2": "Namibia",
+      "venue": "MA Chidambaram Stadium, Chepauk, Chennai",
+      "actual_winner": "United States of America",
+      "odds": {
+        "winner": {
+          "United States of America": 2.0202,
+          "Namibia": 1.9802,
+          "timestamp": "2026-02-15T09:00:27Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-nam-usa-2026-02-15",
+      "polymarket_volume_usd": 848124.131729,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-15_India_Pakistan_R_Premadasa_Stadium,_Colombo",
+      "date": "2026-02-15",
+      "team1": "India",
+      "team2": "Pakistan",
+      "venue": "R Premadasa Stadium, Colombo",
+      "actual_winner": "India",
+      "odds": {
+        "winner": {
+          "India": 1.3793,
+          "Pakistan": 3.6364,
+          "timestamp": "2026-02-15T13:00:12Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ind-pak-2026-02-15",
+      "polymarket_volume_usd": 1663347.747069,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-15_Nepal_West_Indies_Wankhede_Stadium,_Mumbai",
+      "date": "2026-02-15",
+      "team1": "Nepal",
+      "team2": "West Indies",
+      "venue": "Wankhede Stadium, Mumbai",
+      "actual_winner": "West Indies",
+      "odds": {
+        "winner": {
+          "Nepal": 6.0606,
+          "West Indies": 1.1976,
+          "timestamp": "2026-02-15T05:00:23Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-npl-wst-2026-02-15",
+      "polymarket_volume_usd": 661775.292941,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-16_Australia_Sri_Lanka_Pallekele_International_Cricket_Stadium",
+      "date": "2026-02-16",
+      "team1": "Australia",
+      "team2": "Sri Lanka",
+      "venue": "Pallekele International Cricket Stadium",
+      "actual_winner": "Sri Lanka",
+      "odds": {
+        "winner": {
+          "Australia": 1.5038,
+          "Sri Lanka": 2.9851,
+          "timestamp": "2026-02-16T13:00:19Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-aus-lka-2026-02-16",
+      "polymarket_volume_usd": 1337330.532437,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-16_England_Italy_Eden_Gardens,_Kolkata",
+      "date": "2026-02-16",
+      "team1": "England",
+      "team2": "Italy",
+      "venue": "Eden Gardens, Kolkata",
+      "actual_winner": "England",
+      "odds": {
+        "winner": {
+          "England": 1.9802,
+          "Italy": 2.0202,
+          "timestamp": "2026-02-16T08:00:27Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-gbr-ita-2026-02-16",
+      "polymarket_volume_usd": 1157021.506143,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-17_Scotland_Nepal_Wankhede_Stadium,_Mumbai",
+      "date": "2026-02-17",
+      "team1": "Scotland",
+      "team2": "Nepal",
+      "venue": "Wankhede Stadium, Mumbai",
+      "actual_winner": "Nepal",
+      "odds": {
+        "winner": {
+          "Scotland": 1.5748,
+          "Nepal": 2.7397,
+          "timestamp": "2026-02-17T13:00:26Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-npl-sco-2026-02-17",
+      "polymarket_volume_usd": 1083635.55009,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-17_Canada_New_Zealand_MA_Chidambaram_Stadium,_Chepauk,_Chennai",
+      "date": "2026-02-17",
+      "team1": "Canada",
+      "team2": "New Zealand",
+      "venue": "MA Chidambaram Stadium, Chepauk, Chennai",
+      "actual_winner": "New Zealand",
+      "odds": {
+        "winner": {
+          "Canada": 1.9608,
+          "New Zealand": 2.0408,
+          "timestamp": "2026-02-17T05:00:24Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-can-nzl-2026-02-17",
+      "polymarket_volume_usd": 525830.821914,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-18_Pakistan_Namibia_Sinhalese_Sports_Club_Ground,_Colombo",
+      "date": "2026-02-18",
+      "team1": "Pakistan",
+      "team2": "Namibia",
+      "venue": "Sinhalese Sports Club Ground, Colombo",
+      "actual_winner": "Pakistan",
+      "odds": {
+        "winner": {
+          "Pakistan": 1.9802,
+          "Namibia": 2.0202,
+          "timestamp": "2026-02-18T09:00:50Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-nam-pak-2026-02-18",
+      "polymarket_volume_usd": 884770.596229,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-18_India_Netherlands_Narendra_Modi_Stadium,_Ahmedabad",
+      "date": "2026-02-18",
+      "team1": "India",
+      "team2": "Netherlands",
+      "venue": "Narendra Modi Stadium, Ahmedabad",
+      "actual_winner": "India",
+      "odds": {
+        "winner": {
+          "India": 1.9802,
+          "Netherlands": 2.0202,
+          "timestamp": "2026-02-18T13:00:16Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ind-nld-2026-02-18",
+      "polymarket_volume_usd": 1302154.771688,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-18_United_Arab_Emirates_South_Africa_Arun_Jaitley_Stadium,_Delhi",
+      "date": "2026-02-18",
+      "team1": "United Arab Emirates",
+      "team2": "South Africa",
+      "venue": "Arun Jaitley Stadium, Delhi",
+      "actual_winner": "South Africa",
+      "odds": {
+        "winner": {
+          "United Arab Emirates": 2.0408,
+          "South Africa": 1.9608,
+          "timestamp": "2026-02-18T05:00:40Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-zaf-are-2026-02-18",
+      "polymarket_volume_usd": 670970.529331,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-19_Sri_Lanka_Zimbabwe_R_Premadasa_Stadium,_Colombo",
+      "date": "2026-02-19",
+      "team1": "Sri Lanka",
+      "team2": "Zimbabwe",
+      "venue": "R Premadasa Stadium, Colombo",
+      "actual_winner": "Zimbabwe",
+      "odds": {
+        "winner": {
+          "Sri Lanka": 1.3605,
+          "Zimbabwe": 3.7736,
+          "timestamp": "2026-02-19T09:00:43Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-lka-zwe-2026-02-19",
+      "polymarket_volume_usd": 1006822.616436,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-19_West_Indies_Italy_Eden_Gardens,_Kolkata",
+      "date": "2026-02-19",
+      "team1": "West Indies",
+      "team2": "Italy",
+      "venue": "Eden Gardens, Kolkata",
+      "actual_winner": "West Indies",
+      "odds": {
+        "winner": {
+          "West Indies": 1.1173,
+          "Italy": 9.5238,
+          "timestamp": "2026-02-19T05:00:21Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ita-wst-2026-02-19",
+      "polymarket_volume_usd": 781108.822617,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-20_Oman_Australia_Pallekele_International_Cricket_Stadium",
+      "date": "2026-02-20",
+      "team1": "Oman",
+      "team2": "Australia",
+      "venue": "Pallekele International Cricket Stadium",
+      "actual_winner": "Australia",
+      "odds": {
+        "winner": {
+          "Oman": 2.0202,
+          "Australia": 1.9802,
+          "timestamp": "2026-02-20T13:00:33Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-aus-omn-2026-02-20",
+      "polymarket_volume_usd": 262759.759575,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-22_South_Africa_India_Narendra_Modi_Stadium,_Ahmedabad",
+      "date": "2026-02-22",
+      "team1": "South Africa",
+      "team2": "India",
+      "venue": "Narendra Modi Stadium, Ahmedabad",
+      "actual_winner": "South Africa",
+      "odds": {
+        "winner": {
+          "South Africa": 3.0769,
+          "India": 1.4815,
+          "timestamp": "2026-02-22T13:00:14Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ind-zaf-2026-02-22",
+      "polymarket_volume_usd": 1564597.093112,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-22_England_Sri_Lanka_Pallekele_International_Cricket_Stadium",
+      "date": "2026-02-22",
+      "team1": "England",
+      "team2": "Sri Lanka",
+      "venue": "Pallekele International Cricket Stadium",
+      "actual_winner": "England",
+      "odds": {
+        "winner": {
+          "England": 1.7241,
+          "Sri Lanka": 2.381,
+          "timestamp": "2026-02-22T09:00:24Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-lka-gbr-2026-02-22",
+      "polymarket_volume_usd": 1167821.672231,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-23_West_Indies_Zimbabwe_Wankhede_Stadium,_Mumbai",
+      "date": "2026-02-23",
+      "team1": "West Indies",
+      "team2": "Zimbabwe",
+      "venue": "Wankhede Stadium, Mumbai",
+      "actual_winner": "West Indies",
+      "odds": {
+        "winner": {
+          "West Indies": 1.4184,
+          "Zimbabwe": 3.3898,
+          "timestamp": "2026-02-23T13:00:14Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-zwe-wst-2026-02-23",
+      "polymarket_volume_usd": 1482399.758394,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-24_Pakistan_England_Pallekele_International_Cricket_Stadium",
+      "date": "2026-02-24",
+      "team1": "Pakistan",
+      "team2": "England",
+      "venue": "Pallekele International Cricket Stadium",
+      "actual_winner": "England",
+      "odds": {
+        "winner": {
+          "Pakistan": 2.4096,
+          "England": 1.7094,
+          "timestamp": "2026-02-24T13:00:20Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-gbr-pak-2026-02-24",
+      "polymarket_volume_usd": 1530049.694595,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-25_New_Zealand_Sri_Lanka_R_Premadasa_Stadium,_Colombo",
+      "date": "2026-02-25",
+      "team1": "New Zealand",
+      "team2": "Sri Lanka",
+      "venue": "R Premadasa Stadium, Colombo",
+      "actual_winner": "New Zealand",
+      "odds": {
+        "winner": {
+          "New Zealand": 1.626,
+          "Sri Lanka": 2.5974,
+          "timestamp": "2026-02-25T13:00:25Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-lka-nzl-2026-02-25",
+      "polymarket_volume_usd": 1256619.458018,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-26_West_Indies_South_Africa_Narendra_Modi_Stadium,_Ahmedabad",
+      "date": "2026-02-26",
+      "team1": "West Indies",
+      "team2": "South Africa",
+      "venue": "Narendra Modi Stadium, Ahmedabad",
+      "actual_winner": "South Africa",
+      "odds": {
+        "winner": {
+          "West Indies": 3.0769,
+          "South Africa": 1.4815,
+          "timestamp": "2026-02-26T09:00:35Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-wst-zaf-2026-02-26",
+      "polymarket_volume_usd": 866800.846474,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-26_India_Zimbabwe_MA_Chidambaram_Stadium,_Chepauk,_Chennai",
+      "date": "2026-02-26",
+      "team1": "India",
+      "team2": "Zimbabwe",
+      "venue": "MA Chidambaram Stadium, Chepauk, Chennai",
+      "actual_winner": "India",
+      "odds": {
+        "winner": {
+          "India": 1.9802,
+          "Zimbabwe": 2.0202,
+          "timestamp": "2026-02-26T13:00:20Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ind-zwe-2026-02-26",
+      "polymarket_volume_usd": 858762.409217,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-25_Japan_Thailand_Terdthai_Cricket_Ground,_Bangkok",
+      "date": "2026-02-25",
+      "team1": "Japan",
+      "team2": "Thailand",
+      "venue": "Terdthai Cricket Ground, Bangkok",
+      "actual_winner": "Japan",
+      "odds": {
+        "winner": {
+          "Japan": 1.2903,
+          "Thailand": 4.4444,
+          "timestamp": "2026-02-25T01:00:31Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-tha-jpn-2026-02-24",
+      "polymarket_volume_usd": 23669.851069,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-02-25_Bhutan_Bahrain_Terdthai_Cricket_Ground,_Bangkok",
+      "date": "2026-02-25",
+      "team1": "Bhutan",
+      "team2": "Bahrain",
+      "venue": "Terdthai Cricket Ground, Bangkok",
+      "actual_winner": "Bahrain",
+      "odds": {
+        "winner": {
+          "Bhutan": 8.0,
+          "Bahrain": 1.1429,
+          "timestamp": "2026-02-25T06:00:16Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-btn-bhr-2026-02-25",
+      "polymarket_volume_usd": 18115.164549,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-02-26_Thailand_Bhutan_Terdthai_Cricket_Ground,_Bangkok",
+      "date": "2026-02-26",
+      "team1": "Thailand",
+      "team2": "Bhutan",
+      "venue": "Terdthai Cricket Ground, Bangkok",
+      "actual_winner": "Thailand",
+      "odds": {
+        "winner": {
+          "Thailand": 1.3245,
+          "Bhutan": 4.0816,
+          "timestamp": "2026-02-26T01:00:19Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-tha-btn-2026-02-25",
+      "polymarket_volume_usd": 21569.056612,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-02-26_Bahrain_Japan_Terdthai_Cricket_Ground,_Bangkok",
+      "date": "2026-02-26",
+      "team1": "Bahrain",
+      "team2": "Japan",
+      "venue": "Terdthai Cricket Ground, Bangkok",
+      "actual_winner": "Japan",
+      "odds": {
+        "winner": {
+          "Bahrain": 1.4184,
+          "Japan": 3.3898,
+          "timestamp": "2026-02-26T06:00:40Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-jpn-bhr-2026-02-26",
+      "polymarket_volume_usd": 14745.301455,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-02-27_New_Zealand_England_R_Premadasa_Stadium,_Colombo",
+      "date": "2026-02-27",
+      "team1": "New Zealand",
+      "team2": "England",
+      "venue": "R Premadasa Stadium, Colombo",
+      "actual_winner": "England",
+      "odds": {
+        "winner": {
+          "New Zealand": 2.0619,
+          "England": 1.9417,
+          "timestamp": "2026-02-27T13:00:30Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-gbr-nzl-2026-02-27",
+      "polymarket_volume_usd": 1720269.709624,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-28_Pakistan_Sri_Lanka_Pallekele_International_Cricket_Stadium",
+      "date": "2026-02-28",
+      "team1": "Pakistan",
+      "team2": "Sri Lanka",
+      "venue": "Pallekele International Cricket Stadium",
+      "actual_winner": "Pakistan",
+      "odds": {
+        "winner": {
+          "Pakistan": 1.6529,
+          "Sri Lanka": 2.5316,
+          "timestamp": "2026-02-28T13:00:32Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-lka-pak-2026-02-28",
+      "polymarket_volume_usd": 997582.206473,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-02-27_Japan_Bhutan_Terdthai_Cricket_Ground,_Bangkok",
+      "date": "2026-02-27",
+      "team1": "Japan",
+      "team2": "Bhutan",
+      "venue": "Terdthai Cricket Ground, Bangkok",
+      "actual_winner": "Japan",
+      "odds": {
+        "winner": {
+          "Japan": 1.0929,
+          "Bhutan": 11.7647,
+          "timestamp": "2026-02-27T01:00:35Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-jpn-btn-2026-02-26",
+      "polymarket_volume_usd": 20483.158667,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-02-27_Bahrain_Thailand_Terdthai_Cricket_Ground,_Bangkok",
+      "date": "2026-02-27",
+      "team1": "Bahrain",
+      "team2": "Thailand",
+      "venue": "Terdthai Cricket Ground, Bangkok",
+      "actual_winner": "Bahrain",
+      "odds": {
+        "winner": {
+          "Bahrain": 1.2739,
+          "Thailand": 4.6512,
+          "timestamp": "2026-02-27T06:00:27Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-tha-bhr-2026-02-27",
+      "polymarket_volume_usd": 50362.559075,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-02-25_Kuwait_Hong_Kong_Mission_Road_Ground,_Mong_Kok,_Hong_Kong",
+      "date": "2026-02-25",
+      "team1": "Kuwait",
+      "team2": "Hong Kong",
+      "venue": "Mission Road Ground, Mong Kok, Hong Kong",
+      "actual_winner": "Hong Kong",
+      "odds": {
+        "winner": {
+          "Kuwait": 1.8692,
+          "Hong Kong": 2.1505,
+          "timestamp": "2026-02-25T05:00:22Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-hon-kwt-2026-02-25",
+      "polymarket_volume_usd": 79198.232207,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-02-26_Hong_Kong_Kuwait_Mission_Road_Ground,_Mong_Kok,_Hong_Kong",
+      "date": "2026-02-26",
+      "team1": "Hong Kong",
+      "team2": "Kuwait",
+      "venue": "Mission Road Ground, Mong Kok, Hong Kong",
+      "actual_winner": "Hong Kong",
+      "odds": {
+        "winner": {
+          "Hong Kong": 1.8349,
+          "Kuwait": 2.1978,
+          "timestamp": "2026-02-26T05:00:27Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-hon-kwt-2026-02-26",
+      "polymarket_volume_usd": 47529.357089,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-03-01_Zimbabwe_South_Africa_Arun_Jaitley_Stadium,_Delhi",
+      "date": "2026-03-01",
+      "team1": "Zimbabwe",
+      "team2": "South Africa",
+      "venue": "Arun Jaitley Stadium, Delhi",
+      "actual_winner": "South Africa",
+      "odds": {
+        "winner": {
+          "Zimbabwe": 10.5263,
+          "South Africa": 1.105,
+          "timestamp": "2026-03-01T09:00:40Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-zwe-zaf-2026-03-01",
+      "polymarket_volume_usd": 928892.867343,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-03-01_West_Indies_India_Eden_Gardens,_Kolkata",
+      "date": "2026-03-01",
+      "team1": "West Indies",
+      "team2": "India",
+      "venue": "Eden Gardens, Kolkata",
+      "actual_winner": "India",
+      "odds": {
+        "winner": {
+          "West Indies": 4.4444,
+          "India": 1.2903,
+          "timestamp": "2026-03-01T13:00:31Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ind-wst-2026-03-01",
+      "polymarket_volume_usd": 1314391.865765,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-03-01_Hong_Kong_Kuwait_Mission_Road_Ground,_Mong_Kok,_Hong_Kong",
+      "date": "2026-03-01",
+      "team1": "Hong Kong",
+      "team2": "Kuwait",
+      "venue": "Mission Road Ground, Mong Kok, Hong Kong",
+      "actual_winner": "Kuwait",
+      "odds": {
+        "winner": {
+          "Hong Kong": 1.7857,
+          "Kuwait": 2.2727,
+          "timestamp": "2026-03-01T05:00:36Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-hon-kwt-2026-03-01",
+      "polymarket_volume_usd": 69370.416407,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-03-04_South_Africa_New_Zealand_Eden_Gardens,_Kolkata",
+      "date": "2026-03-04",
+      "team1": "South Africa",
+      "team2": "New Zealand",
+      "venue": "Eden Gardens, Kolkata",
+      "actual_winner": "New Zealand",
+      "odds": {
+        "winner": {
+          "South Africa": 1.6,
+          "New Zealand": 2.6667,
+          "timestamp": "2026-03-04T13:00:29Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-zaf-nzl-2026-03-04",
+      "polymarket_volume_usd": 1461301.6238829964,
+      "tournament": "T20 World Cup 2026"
+    },
+    {
+      "match_id": "2026-03-15_New_Zealand_South_Africa_Bay_Oval,_Mount_Maunganui",
+      "date": "2026-03-15",
+      "team1": "New Zealand",
+      "team2": "South Africa",
+      "venue": "Bay Oval, Mount Maunganui",
+      "actual_winner": "South Africa",
+      "odds": {
+        "winner": {
+          "New Zealand": 1.5504,
+          "South Africa": 2.8169,
+          "timestamp": "2026-03-15T06:00:47Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-nzl-zaf-2026-03-15",
+      "polymarket_volume_usd": 7622.79,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-03-29_Kolkata_Knight_Riders_Mumbai_Indians_Wankhede_Stadium,_Mumbai",
+      "date": "2026-03-29",
+      "team1": "Kolkata Knight Riders",
+      "team2": "Mumbai Indians",
+      "venue": "Wankhede Stadium, Mumbai",
+      "actual_winner": "Mumbai Indians",
+      "odds": {
+        "winner": {
+          "Kolkata Knight Riders": 2.8986,
+          "Mumbai Indians": 1.5267,
+          "timestamp": "2026-03-29T13:00:57Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-mum-kol-2026-03-29",
+      "polymarket_volume_usd": 1711383.366243002,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-03-29_Quetta_Gladiators_Hyderabad_Kingsmen_Gaddafi_Stadium,_Lahore",
+      "date": "2026-03-29",
+      "team1": "Quetta Gladiators",
+      "team2": "Hyderabad Kingsmen",
+      "venue": "Gaddafi Stadium, Lahore",
+      "actual_winner": "Quetta Gladiators",
+      "odds": {
+        "winner": {
+          "Quetta Gladiators": 1.7094,
+          "Hyderabad Kingsmen": 2.4096,
+          "timestamp": "2026-03-29T09:00:44Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-que-hyd-2026-03-29",
+      "polymarket_volume_usd": 191291.79203299945,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-03-29_Lahore_Qalandars_Karachi_Kings_Gaddafi_Stadium,_Lahore",
+      "date": "2026-03-29",
+      "team1": "Lahore Qalandars",
+      "team2": "Karachi Kings",
+      "venue": "Gaddafi Stadium, Lahore",
+      "actual_winner": "Karachi Kings",
+      "odds": {
+        "winner": {
+          "Lahore Qalandars": 1.9048,
+          "Karachi Kings": 2.1053,
+          "timestamp": "2026-03-29T14:00:48Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-lah-kar-2026-03-29",
+      "polymarket_volume_usd": 48950.76171599997,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-03-30_Chennai_Super_Kings_Rajasthan_Royals_Barsapara_Cricket_Stadium,_Guwahati",
+      "date": "2026-03-30",
+      "team1": "Chennai Super Kings",
+      "team2": "Rajasthan Royals",
+      "venue": "Barsapara Cricket Stadium, Guwahati",
+      "actual_winner": "Rajasthan Royals",
+      "odds": {
+        "winner": {
+          "Chennai Super Kings": 2.0619,
+          "Rajasthan Royals": 1.9417,
+          "timestamp": "2026-03-30T11:00:48Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-raj-che-2026-03-30",
+      "polymarket_volume_usd": 1589679.611857999,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-03-31_Gujarat_Titans_Punjab_Kings_Maharaja_Yadavindra_Singh_International_Cricket_Stadium,_New_Chandigarh",
+      "date": "2026-03-31",
+      "team1": "Gujarat Titans",
+      "team2": "Punjab Kings",
+      "venue": "Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh",
+      "actual_winner": "Punjab Kings",
+      "odds": {
+        "winner": {
+          "Gujarat Titans": 1.9417,
+          "Punjab Kings": 2.0619,
+          "timestamp": "2026-03-31T08:00:58Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-pun-guj-2026-03-31",
+      "polymarket_volume_usd": 1380342.289218001,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-04-01_Lucknow_Super_Giants_Delhi_Capitals_Bharat_Ratna_Shri_Atal_Bihari_Vajpayee_Ekana_Cricket_Stadium,_Lucknow",
+      "date": "2026-04-01",
+      "team1": "Lucknow Super Giants",
+      "team2": "Delhi Capitals",
+      "venue": "Bharat Ratna Shri Atal Bihari Vajpayee Ekana Cricket Stadium, Lucknow",
+      "actual_winner": "Delhi Capitals",
+      "odds": {
+        "winner": {
+          "Lucknow Super Giants": 1.9802,
+          "Delhi Capitals": 2.0202,
+          "timestamp": "2026-04-01T13:00:35Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-luc-del-2026-04-01",
+      "polymarket_volume_usd": 832419.754790002,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-04-01_Hyderabad_Kingsmen_Multan_Sultans_Gaddafi_Stadium,_Lahore",
+      "date": "2026-04-01",
+      "team1": "Hyderabad Kingsmen",
+      "team2": "Multan Sultans",
+      "venue": "Gaddafi Stadium, Lahore",
+      "actual_winner": "Multan Sultans",
+      "odds": {
+        "winner": {
+          "Hyderabad Kingsmen": 2.5316,
+          "Multan Sultans": 1.6529,
+          "timestamp": "2026-04-01T14:00:55Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-mul-hyd-2026-04-01",
+      "polymarket_volume_usd": 118979.9099449998,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-02_Sunrisers_Hyderabad_Kolkata_Knight_Riders_Eden_Gardens,_Kolkata",
+      "date": "2026-04-02",
+      "team1": "Sunrisers Hyderabad",
+      "team2": "Kolkata Knight Riders",
+      "venue": "Eden Gardens, Kolkata",
+      "actual_winner": "Sunrisers Hyderabad",
+      "odds": {
+        "winner": {
+          "Sunrisers Hyderabad": 2.1053,
+          "Kolkata Knight Riders": 1.9048,
+          "timestamp": "2026-04-02T13:00:55Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-kol-sun-2026-04-02",
+      "polymarket_volume_usd": 1519784.503634996,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-04-02_Quetta_Gladiators_Islamabad_United_Gaddafi_Stadium,_Lahore",
+      "date": "2026-04-02",
+      "team1": "Quetta Gladiators",
+      "team2": "Islamabad United",
+      "venue": "Gaddafi Stadium, Lahore",
+      "actual_winner": "Islamabad United",
+      "odds": {
+        "winner": {
+          "Quetta Gladiators": 1.8868,
+          "Islamabad United": 2.1277,
+          "timestamp": "2026-04-02T09:00:57Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-isl-que-2026-04-02",
+      "polymarket_volume_usd": 148585.27654599983,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-02_Rawalpindiz_Karachi_Kings_Gaddafi_Stadium,_Lahore",
+      "date": "2026-04-02",
+      "team1": "Rawalpindiz",
+      "team2": "Karachi Kings",
+      "venue": "Gaddafi Stadium, Lahore",
+      "actual_winner": "Karachi Kings",
+      "odds": {
+        "winner": {
+          "Rawalpindiz": 2.3256,
+          "Karachi Kings": 1.7544,
+          "timestamp": "2026-04-02T10:00:54Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-raw-kar-2026-04-02",
+      "polymarket_volume_usd": 101013.4953439998,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-02_Mexico_Costa_Rica_Reforma_Athletic_Club,_Naucalpan",
+      "date": "2026-04-02",
+      "team1": "Mexico",
+      "team2": "Costa Rica",
+      "venue": "Reforma Athletic Club, Naucalpan",
+      "actual_winner": "Mexico",
+      "odds": {
+        "winner": {
+          "Mexico": 1.2821,
+          "Costa Rica": 4.5455,
+          "timestamp": "2026-04-02T19:00:43Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-mex-cri-2026-04-02",
+      "polymarket_volume_usd": 3315.245806,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-03_Costa_Rica_Brazil_Reforma_Athletic_Club,_Naucalpan",
+      "date": "2026-04-03",
+      "team1": "Costa Rica",
+      "team2": "Brazil",
+      "venue": "Reforma Athletic Club, Naucalpan",
+      "actual_winner": "Brazil",
+      "odds": {
+        "winner": {
+          "Costa Rica": 5.0,
+          "Brazil": 1.25,
+          "timestamp": "2026-04-03T14:00:41Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-bra-cri-2026-04-03",
+      "polymarket_volume_usd": 14705.462100999994,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-03_Mexico_Brazil_Reforma_Athletic_Club,_Naucalpan",
+      "date": "2026-04-03",
+      "team1": "Mexico",
+      "team2": "Brazil",
+      "venue": "Reforma Athletic Club, Naucalpan",
+      "actual_winner": "Mexico",
+      "odds": {
+        "winner": {
+          "Mexico": 1.4599,
+          "Brazil": 3.1746,
+          "timestamp": "2026-04-03T17:00:51Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-mex-bra-2026-04-03",
+      "polymarket_volume_usd": 2832.9605600000004,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-04_Brazil_Costa_Rica_Reforma_Athletic_Club,_Naucalpan",
+      "date": "2026-04-04",
+      "team1": "Brazil",
+      "team2": "Costa Rica",
+      "venue": "Reforma Athletic Club, Naucalpan",
+      "actual_winner": "Brazil",
+      "odds": {
+        "winner": {
+          "Brazil": 1.105,
+          "Costa Rica": 10.5263,
+          "timestamp": "2026-04-04T13:00:40Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-cri-bra-2026-04-04",
+      "polymarket_volume_usd": 3155.4042780000013,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-03_Chennai_Super_Kings_Punjab_Kings_MA_Chidambaram_Stadium,_Chepauk,_Chennai",
+      "date": "2026-04-03",
+      "team1": "Chennai Super Kings",
+      "team2": "Punjab Kings",
+      "venue": "MA Chidambaram Stadium, Chepauk, Chennai",
+      "actual_winner": "Punjab Kings",
+      "odds": {
+        "winner": {
+          "Chennai Super Kings": 2.1978,
+          "Punjab Kings": 1.8349,
+          "timestamp": "2026-04-03T11:00:48Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-che-pun-2026-04-03",
+      "polymarket_volume_usd": 1649676.4517420046,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-04-04_Mumbai_Indians_Delhi_Capitals_Arun_Jaitley_Stadium,_Delhi",
+      "date": "2026-04-04",
+      "team1": "Mumbai Indians",
+      "team2": "Delhi Capitals",
+      "venue": "Arun Jaitley Stadium, Delhi",
+      "actual_winner": "Delhi Capitals",
+      "odds": {
+        "winner": {
+          "Mumbai Indians": 1.5748,
+          "Delhi Capitals": 2.7397,
+          "timestamp": "2026-04-04T09:00:44Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-del-mum-2026-04-04",
+      "polymarket_volume_usd": 1533051.2131889986,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-04-04_Rajasthan_Royals_Gujarat_Titans_Narendra_Modi_Stadium,_Ahmedabad",
+      "date": "2026-04-04",
+      "team1": "Rajasthan Royals",
+      "team2": "Gujarat Titans",
+      "venue": "Narendra Modi Stadium, Ahmedabad",
+      "actual_winner": "Rajasthan Royals",
+      "odds": {
+        "winner": {
+          "Rajasthan Royals": 2.0202,
+          "Gujarat Titans": 1.9802,
+          "timestamp": "2026-04-04T13:00:41Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-guj-raj-2026-04-04",
+      "polymarket_volume_usd": 1460004.0300479936,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-04-04_Rawalpindiz_Islamabad_United_Gaddafi_Stadium,_Lahore",
+      "date": "2026-04-04",
+      "team1": "Rawalpindiz",
+      "team2": "Islamabad United",
+      "venue": "Gaddafi Stadium, Lahore",
+      "actual_winner": "Islamabad United",
+      "odds": {
+        "winner": {
+          "Rawalpindiz": 2.2222,
+          "Islamabad United": 1.8182,
+          "timestamp": "2026-04-04T08:00:54Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-raw-isl-2026-04-04",
+      "polymarket_volume_usd": 71443.150095,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-04_Costa_Rica_Mexico_Reforma_Athletic_Club,_Naucalpan",
+      "date": "2026-04-04",
+      "team1": "Costa Rica",
+      "team2": "Mexico",
+      "venue": "Reforma Athletic Club, Naucalpan",
+      "actual_winner": "Mexico",
+      "odds": {
+        "winner": {
+          "Costa Rica": 13.3333,
+          "Mexico": 1.0811,
+          "timestamp": "2026-04-04T18:00:54Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-mex-cri-2026-04-04",
+      "polymarket_volume_usd": 2806.806664,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-05_Norway_France_Santarem_Cricket_Ground",
+      "date": "2026-04-05",
+      "team1": "Norway",
+      "team2": "France",
+      "venue": "Santarem Cricket Ground",
+      "actual_winner": "Norway",
+      "odds": {
+        "winner": {
+          "Norway": 2.0833,
+          "France": 1.9231,
+          "timestamp": "2026-04-05T01:00:01Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-nor-fra-2026-04-05",
+      "polymarket_volume_usd": 17481.89189299999,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-05_France_Portugal_Santarem_Cricket_Ground",
+      "date": "2026-04-05",
+      "team1": "France",
+      "team2": "Portugal",
+      "venue": "Santarem Cricket Ground",
+      "actual_winner": "Portugal",
+      "odds": {
+        "winner": {
+          "France": 2.5641,
+          "Portugal": 1.6393,
+          "timestamp": "2026-04-05T04:00:58Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-prt-fra-2026-04-05",
+      "polymarket_volume_usd": 8140.211648999988,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-05_Sunrisers_Hyderabad_Lucknow_Super_Giants_Rajiv_Gandhi_International_Stadium,_Uppal,_Hyderabad",
+      "date": "2026-04-05",
+      "team1": "Sunrisers Hyderabad",
+      "team2": "Lucknow Super Giants",
+      "venue": "Rajiv Gandhi International Stadium, Uppal, Hyderabad",
+      "actual_winner": "Lucknow Super Giants",
+      "odds": {
+        "winner": {
+          "Sunrisers Hyderabad": 1.7699,
+          "Lucknow Super Giants": 2.2989,
+          "timestamp": "2026-04-05T01:00:00Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-sun-luc-2026-04-05",
+      "polymarket_volume_usd": 1837773.1039679905,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-04-05_Royal_Challengers_Bengaluru_Chennai_Super_Kings_M_Chinnaswamy_Stadium,_Bengaluru",
+      "date": "2026-04-05",
+      "team1": "Royal Challengers Bengaluru",
+      "team2": "Chennai Super Kings",
+      "venue": "M Chinnaswamy Stadium, Bengaluru",
+      "actual_winner": "Royal Challengers Bengaluru",
+      "odds": {
+        "winner": {
+          "Royal Challengers Bengaluru": 1.6667,
+          "Chennai Super Kings": 2.5,
+          "timestamp": "2026-04-05T11:00:56Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-roy-che-2026-04-05",
+      "polymarket_volume_usd": 1606311.0866280014,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-04-05_Quetta_Gladiators_Multan_Sultans_Gaddafi_Stadium,_Lahore",
+      "date": "2026-04-05",
+      "team1": "Quetta Gladiators",
+      "team2": "Multan Sultans",
+      "venue": "Gaddafi Stadium, Lahore",
+      "actual_winner": "Multan Sultans",
+      "odds": {
+        "winner": {
+          "Quetta Gladiators": 2.2472,
+          "Multan Sultans": 1.8018,
+          "timestamp": "2026-04-05T10:00:56Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-que-mul-2026-04-05",
+      "polymarket_volume_usd": 17011.057633,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-06_Portugal_Norway_Santarem_Cricket_Ground",
+      "date": "2026-04-06",
+      "team1": "Portugal",
+      "team2": "Norway",
+      "venue": "Santarem Cricket Ground",
+      "actual_winner": "Portugal",
+      "odds": {
+        "winner": {
+          "Portugal": 2.0619,
+          "Norway": 1.9417,
+          "timestamp": "2026-04-06T08:00:39Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-prt-nor-2026-04-06",
+      "polymarket_volume_usd": 22195.063321000027,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-07_France_Norway_Santarem_Cricket_Ground",
+      "date": "2026-04-07",
+      "team1": "France",
+      "team2": "Norway",
+      "venue": "Santarem Cricket Ground",
+      "actual_winner": "France",
+      "odds": {
+        "winner": {
+          "France": 1.9231,
+          "Norway": 2.0833,
+          "timestamp": "2026-04-07T08:00:54Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-nor-fra-2026-04-07",
+      "polymarket_volume_usd": 50603.27624500006,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-08_Portugal_Norway_Santarem_Cricket_Ground",
+      "date": "2026-04-08",
+      "team1": "Portugal",
+      "team2": "Norway",
+      "venue": "Santarem Cricket Ground",
+      "actual_winner": "Portugal",
+      "odds": {
+        "winner": {
+          "Portugal": 1.9802,
+          "Norway": 2.0202,
+          "timestamp": "2026-04-08T02:00:42Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-prt-nor-2026-04-08",
+      "polymarket_volume_usd": 9163.814218000003,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-08_Portugal_France_Santarem_Cricket_Ground",
+      "date": "2026-04-08",
+      "team1": "Portugal",
+      "team2": "France",
+      "venue": "Santarem Cricket Ground",
+      "actual_winner": "France",
+      "odds": {
+        "winner": {
+          "Portugal": 1.0526,
+          "France": 20.0,
+          "timestamp": "2026-04-08T12:00:54Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-prt-fra-2026-04-08",
+      "polymarket_volume_usd": 16935.791304,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-09_Norway_France_Santarem_Cricket_Ground",
+      "date": "2026-04-09",
+      "team1": "Norway",
+      "team2": "France",
+      "venue": "Santarem Cricket Ground",
+      "actual_winner": "France",
+      "odds": {
+        "winner": {
+          "Norway": 1.9048,
+          "France": 2.1053,
+          "timestamp": "2026-04-09T08:00:55Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-fra-nor-2026-04-09",
+      "polymarket_volume_usd": 16029.663171000006,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-07_Rajasthan_Royals_Mumbai_Indians_Barsapara_Cricket_Stadium,_Guwahati",
+      "date": "2026-04-07",
+      "team1": "Rajasthan Royals",
+      "team2": "Mumbai Indians",
+      "venue": "Barsapara Cricket Stadium, Guwahati",
+      "actual_winner": "Rajasthan Royals",
+      "odds": {
+        "winner": {
+          "Rajasthan Royals": 2.2989,
+          "Mumbai Indians": 1.7699,
+          "timestamp": "2026-04-07T13:00:44Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-raj-mum-2026-04-07",
+      "polymarket_volume_usd": 2198721.55383199,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-04-08_Gujarat_Titans_Delhi_Capitals_Arun_Jaitley_Stadium,_Delhi",
+      "date": "2026-04-08",
+      "team1": "Gujarat Titans",
+      "team2": "Delhi Capitals",
+      "venue": "Arun Jaitley Stadium, Delhi",
+      "actual_winner": "Gujarat Titans",
+      "odds": {
+        "winner": {
+          "Gujarat Titans": 2.1053,
+          "Delhi Capitals": 1.9048,
+          "timestamp": "2026-04-08T13:00:32Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-del-guj-2026-04-08",
+      "polymarket_volume_usd": 2338069.240494009,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-04-09_Kolkata_Knight_Riders_Lucknow_Super_Giants_Eden_Gardens,_Kolkata",
+      "date": "2026-04-09",
+      "team1": "Kolkata Knight Riders",
+      "team2": "Lucknow Super Giants",
+      "venue": "Eden Gardens, Kolkata",
+      "actual_winner": "Lucknow Super Giants",
+      "odds": {
+        "winner": {
+          "Kolkata Knight Riders": 2.0619,
+          "Lucknow Super Giants": 1.9417,
+          "timestamp": "2026-04-09T13:00:54Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-kol-luc-2026-04-09",
+      "polymarket_volume_usd": 3047467.1513239974,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-04-03_Lahore_Qalandars_Multan_Sultans_Gaddafi_Stadium,_Lahore",
+      "date": "2026-04-03",
+      "team1": "Lahore Qalandars",
+      "team2": "Multan Sultans",
+      "venue": "Gaddafi Stadium, Lahore",
+      "actual_winner": "Lahore Qalandars",
+      "odds": {
+        "winner": {
+          "Lahore Qalandars": 2.1505,
+          "Multan Sultans": 1.8692,
+          "timestamp": "2026-04-03T13:00:58Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-lah-mul-2026-04-03",
+      "polymarket_volume_usd": 37732.17455599995,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-06_Rawalpindiz_Multan_Sultans_Gaddafi_Stadium,_Lahore",
+      "date": "2026-04-06",
+      "team1": "Rawalpindiz",
+      "team2": "Multan Sultans",
+      "venue": "Gaddafi Stadium, Lahore",
+      "actual_winner": "Multan Sultans",
+      "odds": {
+        "winner": {
+          "Rawalpindiz": 2.5974,
+          "Multan Sultans": 1.626,
+          "timestamp": "2026-04-06T14:00:44Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-mul-raw-2026-04-06",
+      "polymarket_volume_usd": 48727.27488899996,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-08_Hyderabad_Kingsmen_Peshawar_Zalmi_National_Stadium,_Karachi",
+      "date": "2026-04-08",
+      "team1": "Hyderabad Kingsmen",
+      "team2": "Peshawar Zalmi",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Peshawar Zalmi",
+      "odds": {
+        "winner": {
+          "Hyderabad Kingsmen": 2.1978,
+          "Peshawar Zalmi": 1.8349,
+          "timestamp": "2026-04-08T13:00:45Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-hyd-pes-2026-04-08",
+      "polymarket_volume_usd": 109480.16614600006,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-09_Lahore_Qalandars_Islamabad_United_National_Stadium,_Karachi",
+      "date": "2026-04-09",
+      "team1": "Lahore Qalandars",
+      "team2": "Islamabad United",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Islamabad United",
+      "odds": {
+        "winner": {
+          "Lahore Qalandars": 1.9417,
+          "Islamabad United": 2.0619,
+          "timestamp": "2026-04-09T09:00:53Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-lah-isl-2026-04-09",
+      "polymarket_volume_usd": 58227.14321199993,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-09_Peshawar_Zalmi_Karachi_Kings_National_Stadium,_Karachi",
+      "date": "2026-04-09",
+      "team1": "Peshawar Zalmi",
+      "team2": "Karachi Kings",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Peshawar Zalmi",
+      "odds": {
+        "winner": {
+          "Peshawar Zalmi": 2.4096,
+          "Karachi Kings": 1.7094,
+          "timestamp": "2026-04-09T11:00:54Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-kar-pes-2026-04-09",
+      "polymarket_volume_usd": 124705.16250399998,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-10_Royal_Challengers_Bengaluru_Rajasthan_Royals_Barsapara_Cricket_Stadium,_Guwahati",
+      "date": "2026-04-10",
+      "team1": "Royal Challengers Bengaluru",
+      "team2": "Rajasthan Royals",
+      "venue": "Barsapara Cricket Stadium, Guwahati",
+      "actual_winner": "Rajasthan Royals",
+      "odds": {
+        "winner": {
+          "Royal Challengers Bengaluru": 2.0202,
+          "Rajasthan Royals": 1.9802,
+          "timestamp": "2026-04-10T13:00:03Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-raj-roy-2026-04-10",
+      "polymarket_volume_usd": 2842386.2973469705,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-04-10_Quetta_Gladiators_Rawalpindiz_National_Stadium,_Karachi",
+      "date": "2026-04-10",
+      "team1": "Quetta Gladiators",
+      "team2": "Rawalpindiz",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Quetta Gladiators",
+      "odds": {
+        "winner": {
+          "Quetta Gladiators": 1.7699,
+          "Rawalpindiz": 2.2989,
+          "timestamp": "2026-04-10T13:00:07Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-que-raw-2026-04-10",
+      "polymarket_volume_usd": 124022.46899100007,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-11_Sunrisers_Hyderabad_Punjab_Kings_Maharaja_Yadavindra_Singh_International_Cricket_Stadium,_New_Chandigarh",
+      "date": "2026-04-11",
+      "team1": "Sunrisers Hyderabad",
+      "team2": "Punjab Kings",
+      "venue": "Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh",
+      "actual_winner": "Punjab Kings",
+      "odds": {
+        "winner": {
+          "Sunrisers Hyderabad": 2.1978,
+          "Punjab Kings": 1.8349,
+          "timestamp": "2026-04-11T09:00:57Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-pun-sun-2026-04-11",
+      "polymarket_volume_usd": 1498415.2626289981,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-04-11_Chennai_Super_Kings_Delhi_Capitals_MA_Chidambaram_Stadium,_Chepauk,_Chennai",
+      "date": "2026-04-11",
+      "team1": "Chennai Super Kings",
+      "team2": "Delhi Capitals",
+      "venue": "MA Chidambaram Stadium, Chepauk, Chennai",
+      "actual_winner": "Chennai Super Kings",
+      "odds": {
+        "winner": {
+          "Chennai Super Kings": 2.1505,
+          "Delhi Capitals": 1.8692,
+          "timestamp": "2026-04-11T11:00:58Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-che-del-2026-04-11",
+      "polymarket_volume_usd": 1597338.4864819918,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-04-11_Peshawar_Zalmi_Lahore_Qalandars_National_Stadium,_Karachi",
+      "date": "2026-04-11",
+      "team1": "Peshawar Zalmi",
+      "team2": "Lahore Qalandars",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Peshawar Zalmi",
+      "odds": {
+        "winner": {
+          "Peshawar Zalmi": 2.0408,
+          "Lahore Qalandars": 1.9608,
+          "timestamp": "2026-04-11T08:00:49Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-pes-lah-2026-04-11",
+      "polymarket_volume_usd": 52491.41145399996,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-11_Karachi_Kings_Hyderabad_Kingsmen_National_Stadium,_Karachi",
+      "date": "2026-04-11",
+      "team1": "Karachi Kings",
+      "team2": "Hyderabad Kingsmen",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Hyderabad Kingsmen",
+      "odds": {
+        "winner": {
+          "Karachi Kings": 1.7391,
+          "Hyderabad Kingsmen": 2.3529,
+          "timestamp": "2026-04-11T10:00:27Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-kar-hyd-2026-04-11",
+      "polymarket_volume_usd": 116199.67698099998,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-12_Lucknow_Super_Giants_Gujarat_Titans_Bharat_Ratna_Shri_Atal_Bihari_Vajpayee_Ekana_Cricket_Stadium,_Lucknow",
+      "date": "2026-04-12",
+      "team1": "Lucknow Super Giants",
+      "team2": "Gujarat Titans",
+      "venue": "Bharat Ratna Shri Atal Bihari Vajpayee Ekana Cricket Stadium, Lucknow",
+      "actual_winner": "Gujarat Titans",
+      "odds": {
+        "winner": {
+          "Lucknow Super Giants": 2.1053,
+          "Gujarat Titans": 1.9048,
+          "timestamp": "2026-04-12T09:00:55Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-luc-guj-2026-04-12",
+      "polymarket_volume_usd": 1380080.5592319977,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-04-12_Royal_Challengers_Bengaluru_Mumbai_Indians_Wankhede_Stadium,_Mumbai",
+      "date": "2026-04-12",
+      "team1": "Royal Challengers Bengaluru",
+      "team2": "Mumbai Indians",
+      "venue": "Wankhede Stadium, Mumbai",
+      "actual_winner": "Royal Challengers Bengaluru",
+      "odds": {
+        "winner": {
+          "Royal Challengers Bengaluru": 2.2989,
+          "Mumbai Indians": 1.7699,
+          "timestamp": "2026-04-12T07:00:59Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-mum-roy-2026-04-12",
+      "polymarket_volume_usd": 2879926.3731770106,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-04-13_Sunrisers_Hyderabad_Rajasthan_Royals_Rajiv_Gandhi_International_Stadium,_Uppal,_Hyderabad",
+      "date": "2026-04-13",
+      "team1": "Sunrisers Hyderabad",
+      "team2": "Rajasthan Royals",
+      "venue": "Rajiv Gandhi International Stadium, Uppal, Hyderabad",
+      "actual_winner": "Sunrisers Hyderabad",
+      "odds": {
+        "winner": {
+          "Sunrisers Hyderabad": 2.2472,
+          "Rajasthan Royals": 1.8018,
+          "timestamp": "2026-04-13T04:00:54Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-sun-raj-2026-04-13",
+      "polymarket_volume_usd": 3048886.151949997,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-04-14_Chennai_Super_Kings_Kolkata_Knight_Riders_MA_Chidambaram_Stadium,_Chepauk,_Chennai",
+      "date": "2026-04-14",
+      "team1": "Chennai Super Kings",
+      "team2": "Kolkata Knight Riders",
+      "venue": "MA Chidambaram Stadium, Chepauk, Chennai",
+      "actual_winner": "Chennai Super Kings",
+      "odds": {
+        "winner": {
+          "Chennai Super Kings": 1.8018,
+          "Kolkata Knight Riders": 2.2472,
+          "timestamp": "2026-04-14T10:00:50Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-che-kol-2026-04-14",
+      "polymarket_volume_usd": 2976367.429037003,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-04-15_Lucknow_Super_Giants_Royal_Challengers_Bengaluru_M_Chinnaswamy_Stadium,_Bengaluru",
+      "date": "2026-04-15",
+      "team1": "Lucknow Super Giants",
+      "team2": "Royal Challengers Bengaluru",
+      "venue": "M Chinnaswamy Stadium, Bengaluru",
+      "actual_winner": "Royal Challengers Bengaluru",
+      "odds": {
+        "winner": {
+          "Lucknow Super Giants": 2.6667,
+          "Royal Challengers Bengaluru": 1.6,
+          "timestamp": "2026-04-15T11:00:58Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-roy-luc-2026-04-15",
+      "polymarket_volume_usd": 2459155.951745997,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-04-12_Islamabad_United_Hyderabad_Kingsmen_National_Stadium,_Karachi",
+      "date": "2026-04-12",
+      "team1": "Islamabad United",
+      "team2": "Hyderabad Kingsmen",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Hyderabad Kingsmen",
+      "odds": {
+        "winner": {
+          "Islamabad United": 1.6,
+          "Hyderabad Kingsmen": 2.6667,
+          "timestamp": "2026-04-12T00:00:14Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-hyd-isl-2026-04-12",
+      "polymarket_volume_usd": 121191.6014199999,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-13_Peshawar_Zalmi_Multan_Sultans_National_Stadium,_Karachi",
+      "date": "2026-04-13",
+      "team1": "Peshawar Zalmi",
+      "team2": "Multan Sultans",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Peshawar Zalmi",
+      "odds": {
+        "winner": {
+          "Peshawar Zalmi": 1.9048,
+          "Multan Sultans": 2.1053,
+          "timestamp": "2026-04-13T08:00:57Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-pes-mul-2026-04-13",
+      "polymarket_volume_usd": 187495.81720099982,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-15_Quetta_Gladiators_Peshawar_Zalmi_National_Stadium,_Karachi",
+      "date": "2026-04-15",
+      "team1": "Quetta Gladiators",
+      "team2": "Peshawar Zalmi",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Peshawar Zalmi",
+      "odds": {
+        "winner": {
+          "Quetta Gladiators": 2.0202,
+          "Peshawar Zalmi": 1.9802,
+          "timestamp": "2026-04-15T13:00:14Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-pes-que-2026-04-15",
+      "polymarket_volume_usd": 111790.59503499982,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-16_Mumbai_Indians_Punjab_Kings_Wankhede_Stadium,_Mumbai",
+      "date": "2026-04-16",
+      "team1": "Mumbai Indians",
+      "team2": "Punjab Kings",
+      "venue": "Wankhede Stadium, Mumbai",
+      "actual_winner": "Punjab Kings",
+      "odds": {
+        "winner": {
+          "Mumbai Indians": 1.8349,
+          "Punjab Kings": 2.1978,
+          "timestamp": "2026-04-16T06:00:06Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-mum-pun-2026-04-16",
+      "polymarket_volume_usd": 2590995.5658399975,
+      "tournament": "IPL"
+    },
+    {
+      "match_id": "2026-04-16_Rawalpindiz_Hyderabad_Kingsmen_National_Stadium,_Karachi",
+      "date": "2026-04-16",
+      "team1": "Rawalpindiz",
+      "team2": "Hyderabad Kingsmen",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Hyderabad Kingsmen",
+      "odds": {
+        "winner": {
+          "Rawalpindiz": 2.2472,
+          "Hyderabad Kingsmen": 1.8018,
+          "timestamp": "2026-04-15T21:00:41Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-hyd-raw-2026-04-16",
+      "polymarket_volume_usd": 112870.37246500007,
+      "tournament": "International"
+    },
+    {
+      "match_id": "2026-04-16_Karachi_Kings_Islamabad_United_National_Stadium,_Karachi",
+      "date": "2026-04-16",
+      "team1": "Karachi Kings",
+      "team2": "Islamabad United",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Islamabad United",
+      "odds": {
+        "winner": {
+          "Karachi Kings": 2.1505,
+          "Islamabad United": 1.8692,
+          "timestamp": "2026-04-16T11:00:54Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-kar-isl-2026-04-16",
+      "polymarket_volume_usd": 56931.24204799997,
+      "tournament": "International"
+    }
+  ]
+}

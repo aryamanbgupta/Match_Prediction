@@ -8,8 +8,8 @@ table: one row per model, one column group per slice, showing log loss
 
 Usage:
     uv run python scripts/sim_eval/compare_slices.py \\
-        --label "v4 baseline"  --files eval_out_phase1_sliced_v4/*.json \\
-        --label "v6 outcome-dist" --files eval_out_phase1_sliced/*.json
+        --label "v4 baseline"  --files eval_out/phase1_sliced_v4/*.json \\
+        --label "v6 outcome-dist" --files eval_out/phase1_sliced/*.json
 """
 
 import argparse

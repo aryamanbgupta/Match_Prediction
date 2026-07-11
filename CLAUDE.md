@@ -135,18 +135,18 @@ uv run python scripts/xgboost_match_v1.py \
     --model-dir models/xgb_match_v2_clean
 # Blend with v7 sim eval JSON + reslice + report:
 uv run python scripts/sim_eval/blend_eval_json.py \
-    --sim-json eval_out_phase5_hier/hier_all_20260425_165622.json \
+    --sim-json eval_out/phase5_hier/hier_all_20260425_165622.json \
     --direct-json models/xgb_match_v2_clean/test_predictions.json \
     --w 0.0 0.2 0.5 0.8 1.0 \
-    --out-dir eval_out_blend_a2_clean
+    --out-dir eval_out/blend_a2_clean
 for w in w0p00 w0p20 w0p50 w0p80 w1p00; do
   uv run python scripts/sim_eval/reslice_eval_json.py \
-    --in eval_out_blend_a2_clean/hier_all_20260425_165622_${w}.json \
+    --in eval_out/blend_a2_clean/hier_all_20260425_165622_${w}.json \
     --odds betting_odds_polymarket.json \
-    --out-dir eval_out_blend_a2_clean/sliced
+    --out-dir eval_out/blend_a2_clean/sliced
 done
 uv run python scripts/sim_eval/blend_report.py \
-    --sliced-dir eval_out_blend_a2_clean/sliced \
+    --sliced-dir eval_out/blend_a2_clean/sliced \
     --direct-json models/xgb_match_v2_clean/test_predictions.json \
     --out reports/blend_a2_clean_report.md
 
@@ -283,6 +283,10 @@ Match_Prediction/
 │   └── tests/                                            # parity harness + benches
 ├── experiments/configs/  # YAML experiment definitions
 ├── experiments/results/  # per-run artifacts (auto-generated)
+├── eval_out/             # ALL eval run outputs (eval_out/<tag>/); gitignored, regenerable.
+│                         #   Never write eval output anywhere else. Retired → archive/eval_results/
+├── research/             # autonomous overnight loop: IDEAS.md queue, results.tsv verdict log,
+│                         #   night.sh runner, reports/auto/<id>.md. Constitution: program.md
 ├── docs/                 # ARCHITECTURE / OPERATIONS / ADDING_NEW_MODELS / archive
 └── archive/              # local-only; gitignored. Old logs / eval JSONs / superseded scripts
 ```

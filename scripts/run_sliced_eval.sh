@@ -7,7 +7,7 @@
 #
 # Usage:
 #   bash scripts/run_sliced_eval.sh [--model-version v3] [--n-sims 100]
-#                                   [--output-dir eval_out_sliced]
+#                                   [--output-dir eval_out/sliced]
 #                                   [extra args passed through]
 #
 # Defaults are tuned for v6 outcome-dist eval against polymarket_test.
@@ -16,7 +16,7 @@ set -euo pipefail
 
 TEST_DIR="${TEST_DIR:-data/polymarket_test}"
 ODDS_FILE="${ODDS_FILE:-betting_odds_polymarket.json}"
-OUTPUT_DIR="${OUTPUT_DIR:-eval_out_sliced/$(date +%Y%m%d_%H%M%S)}"
+OUTPUT_DIR="${OUTPUT_DIR:-eval_out/sliced/$(date +%Y%m%d_%H%M%S)}"
 
 mkdir -p "$OUTPUT_DIR"
 

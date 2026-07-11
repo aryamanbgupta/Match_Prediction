@@ -93,7 +93,7 @@ uv run python scripts/xgboost_match_v1.py \
 
 # 2. Convert direct predictions to an eval envelope (--w 0.0 = 100% direct model)
 uv run python scripts/sim_eval/blend_eval_json.py \
-    --sim-json eval_out_phase5_hier/hier_all_20260425_165622.json \
+    --sim-json eval_out/phase5_hier/hier_all_20260425_165622.json \
     --direct-json models/auto/<idea-id>/test_predictions.json \
     --w 0.0 --out-dir models/auto/<idea-id>/eval
 

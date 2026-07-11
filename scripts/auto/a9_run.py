@@ -34,7 +34,7 @@ SEEDS = [29, 7, 13, 42, 101]
 SURV = ["team2_top6_bat_elo_max", "team1_bowl_elo_max", "team1_bowl_elo_top2",
         "team2_bowl_elo_max", "team2_bowl_elo_top2", "top6_bat_elo_spread_diff",
         "bowl_elo_max_diff", "bowl_elo_top2_diff"]
-SIM_ENVELOPE = ROOT / "eval_out_phase5_hier/hier_all_20260425_165622.json"
+SIM_ENVELOPE = ROOT / "eval_out/phase5_hier/hier_all_20260425_165622.json"
 ODDS = ROOT / "betting_odds_polymarket.json"
 A9_DATA = ROOT / "data/auto/a9"
 A9_MODELS = ROOT / "models/auto/a9"

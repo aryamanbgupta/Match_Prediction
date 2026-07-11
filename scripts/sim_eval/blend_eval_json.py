@@ -16,10 +16,10 @@ recomputed.
 
 Usage:
     uv run python scripts/sim_eval/blend_eval_json.py \\
-        --sim-json eval_out_phase5_hier/hier_all_20260425_165622.json \\
+        --sim-json eval_out/phase5_hier/hier_all_20260425_165622.json \\
         --direct-json models/xgb_match_v1/test_predictions.json \\
         --w 0.0 0.2 0.35 0.5 0.65 0.8 1.0 \\
-        --out-dir eval_out_blend_a1
+        --out-dir eval_out/blend_a1
 """
 from __future__ import annotations
 
@@ -223,7 +223,7 @@ def blend(sim_json: dict, direct_preds: dict, w: float) -> dict:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sim-json", required=True, type=Path,
-                    help="Existing v7 sim eval JSON (e.g. eval_out_phase5_hier/hier_all_*.json)")
+                    help="Existing v7 sim eval JSON (e.g. eval_out/phase5_hier/hier_all_*.json)")
     ap.add_argument("--direct-json", required=True, type=Path,
                     help="Direct-model predictions (models/xgb_match_v1/test_predictions.json)")
     ap.add_argument("--w", type=float, nargs="+", required=True,

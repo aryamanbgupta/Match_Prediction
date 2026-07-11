@@ -16,9 +16,9 @@ predictions JSON. --stratify-by tier_x_half enables stratified bootstrap
 
 Usage:
     uv run python scripts/sim_eval/reslice_eval_json.py \\
-        --in  eval_out_postfix/xgboost_20260421_220541.json \\
+        --in  eval_out/postfix/xgboost_20260421_220541.json \\
         --odds betting_odds_polymarket.json \\
-        --out-dir eval_out_phase1_sliced_v4
+        --out-dir eval_out/phase1_sliced_v4
     uv run python scripts/sim_eval/reslice_eval_json.py \\
         --in  ... --odds ... --out-dir ... \\
         --slice ipl --feature-parquet data/xgb_match_data_v2_clean/test.parquet \\

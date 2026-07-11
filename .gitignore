@@ -41,8 +41,8 @@ venv/
 *.log
 logs/
 
-# Autoresearch experiment log
-results.tsv
+# Autoresearch verdict log (research/results.tsv) is tracked — it is the
+# loop's only cross-run memory.
 
 docs/CLOUD_GPU_TESTING.md
 
@@ -66,10 +66,12 @@ perf_runs/*
 
 # Local scratch space for forward-fixture prediction (refreshed SQLite,
 # tracker snapshots, sweep outputs). Never load-bearing for the pipeline.
-tmp/eval_out_e1/
-eval_out_e3/
-eval_out_e4/
-eval_out_e6_summary.json
+tmp/
+
+# Eval run outputs: all winner-market eval runs write to eval_out/<tag>/.
+# Derived + regenerable; the durable record is the tracked report .md.
+# Retired runs move to archive/eval_results/ (ignored above).
+eval_out/
 models/xgb_match_e4_*/
 models/inplay_winprob_v1*/
 models/match_winner_map.json

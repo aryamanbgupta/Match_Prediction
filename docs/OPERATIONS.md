@@ -103,21 +103,21 @@ uv run python scripts/sim_eval/run_sim_eval.py \
     --odds betting_odds_polymarket.json \
     --n-sims 100 --min-volume 50000 \
     --bootstrap-resamples 1000 \
-    --output-dir eval_out_sliced
+    --output-dir eval_out/sliced
 
 # All 3 slices in one shot (all / >=$50k / >=$100k):
 bash scripts/run_sliced_eval.sh
 
 # Cross-model comparison table:
 uv run python scripts/sim_eval/compare_slices.py \
-    --group "v6" eval_out_phase1_sliced/xgboost_*_*.json \
-    --group "v7" eval_out_phase5_hier/*.json
+    --group "v6" eval_out/phase1_sliced/xgboost_*_*.json \
+    --group "v7" eval_out/phase5_hier/*.json
 
 # Post-hoc reslice an existing eval JSON (avoids re-running sims):
 uv run python scripts/sim_eval/reslice_eval_json.py \
-    --in  eval_out_postfix/xgboost_20260421_220541.json \
+    --in  eval_out/postfix/xgboost_20260421_220541.json \
     --odds betting_odds_polymarket.json \
-    --out-dir eval_out_phase1_sliced_v4
+    --out-dir eval_out/phase1_sliced_v4
 ```
 
 YAML wiring: set `evaluation.min_volume` and `evaluation.bootstrap_resamples` in the experiment config to make the auto-eval inside `run_experiment.py` produce a single sliced result. To get all three slices, run `run_sliced_eval.sh` after training completes (use `--skip-training` or fresh `--only-eval` invocations).
