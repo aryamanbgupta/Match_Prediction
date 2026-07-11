@@ -266,7 +266,7 @@ vs the single-vector run, with no regression of `batter_runs_mae`. **Budget:** ~
 (two n=261 sim runs; the vec baseline `detail_vec_n261.json` may be reused if unchanged).
 **Result:** —
 
-## A14 [P3] [PENDING] Per-over (not per-3-phase) ball calibrator for single-over props (A8 follow-up)
+## A14 [P3] [RUNNING 2026-07-11T10:18:51Z] Per-over (not per-3-phase) ball calibrator for single-over props (A8 follow-up)
 **Hypothesis:** A8's 3-bucket phase calibrator netted to null on multi-phase aggregate
 props because a bowler's/team's balls span phases and the small per-ball corrections
 wash out. But **single-over** props (`team_first_over_mae`, `highest_over_runs_ou_*`)
