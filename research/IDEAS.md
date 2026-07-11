@@ -76,7 +76,7 @@ auto/a4/` JSONs kept on disk. **Combine candidate** (C-series once PENDING dry):
 3-way logit-avg {logistic, A1 seed-bag mean, M7} to keep ROI decorrelation
 while averaging out the seed-luck confound. See `research/reports/auto/A4.md`.
 
-## A5 [P2] [RUNNING 2026-07-11T06:17:02Z] Feature interactions: ELO × venue, toss × venue
+## A5 [P2] [FAILED] Feature interactions: ELO × venue, toss × venue
 **Hypothesis:** matchup strength conditioned on venue character (chase bias,
 scoring dist) carries signal the additive features miss.
 **Method:** BEFORE training, run the correlation check (per repo discipline:
@@ -84,7 +84,19 @@ scoring dist) carries signal the additive features miss.
 correlation — see `feedback_correlation_check_before_features`). If it
 passes: re-materialize to `data/auto/a5/`, train, recipe A.
 **Gate:** LL + ROI vs fresh baseline. **Budget:** ~2 h (materialization).
-**Result:** —
+**Result:** FAILED 2026-07-11. Interactions are products of existing columns →
+no re-materialization needed (built 6 mean-centered ELO/toss × venue terms,
+train-only centering). Correlation check: all 6 PASS redundancy (max |r_existing|
+0.06–0.12) but FAIL the M6 target-corr floor — |r_target| 0.005–0.032, only
+`ix_elo_top6_x_avgscore` (0.032) clears 0.03, every one weaker than the weakest
+meaningful existing feature. Trained anyway (materialization free) at A1's same
+5 seeds for a paired test: mean LL 0.6322 vs A1 base 0.6318 (ΔLL +0.0004,
+sub-floor → not improved); mean ROI +18.08% vs +20.56% (ΔROI −2.48pp, beyond
+floor, down in 4/5 seeds → declined). Neither gate metric improved. Depth-4 XGB
+already captures interactions natively; explicit products only add variance.
+5th match-level feature direction to die at the corr-check (M3–M6, A5) —
+additive frontier exhausted. Eval-only (gitignored scratch), nothing to revert.
+See `research/reports/auto/A5.md`.
 
 ## A6 [P2] [PENDING] New data: historical weather (dew proxy)
 **Hypothesis:** evening humidity/dew at the venue affects chase advantage
