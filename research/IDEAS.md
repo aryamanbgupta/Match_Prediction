@@ -142,7 +142,7 @@ slice-conditional (wiring into a live betting harness is human follow-up;
 stack on A4's logit-avg (orthogonal — probability ensemble × bet filter). See
 `research/reports/auto/A7.md`.
 
-## A8 [P3] [RUNNING 2026-07-11T07:15:31Z] Sim: phase-conditional vector scaling (E5 follow-up)
+## A8 [P3] [FAILED] Sim: phase-conditional vector scaling (E5 follow-up)
 **Hypothesis:** one global vector calibrator over/under-corrects by phase;
 per-phase (PP/mid/death) scaling removes the residual bowler-wicket overshoot
 without breaking what E5 fixed.
@@ -151,7 +151,20 @@ without breaking what E5 fixed.
 recipe B on n=261.
 **Gate (sim pair):** wicket/PP overshoot vs single-vector run AND top_bowler
 margin over fair baseline must not regress. **Budget:** ~2.5 h.
-**Result:** —
+**Result:** FAILED 2026-07-11. Null-effect refinement. Implemented cleanly
+(global fallback == v1 exactly, max abs diff 0; per-phase vectors diverge 3–7%
+from global; selected via `--ball-calibrator-path` with NO eval-framework edit).
+Paired Brier_sim (phase − vec), n=261×100 seed 42, cluster-boot by match: GATE 1
+tail overshoot (pp_total + bowler_wkts, want DOWN) = pooled dBrier **−0.0001, CI
+[−0.0008, +0.0006]** → indistinguishable from 0, mixed per-family signs → NOT
+improved. GATE 2 top_bowler (must not regress) = **+0.0002, CI [−0.0003, +0.0007]**
+→ flat (no regress, no improve). E5 regressors unchanged (team_first_over_mae
++0.003, batter_runs_mae +0.003, both noise). **Neither gate up → FAILED.** The
+global vector already captures the marginal correction; a 3-bucket linear scaler
+lacks resolution for the residual (which is plausibly per-over or a dispersion
+problem — see report). n=30 smoke looked all-worse but was pure sampling noise.
+Code reverted (f532396); scratch kept at `models/auto/a8/` (gitignored). See
+`research/reports/auto/A8.md`.
 
 ## A9 [P3] [PENDING] E4 quantile pooling forward test
 **Hypothesis:** pooling across the quantile ensemble (filed at E4 as a
@@ -207,6 +220,46 @@ bowling economy / wicket prob). Recipe B on n=261 with `--ball-calibrator vector
 single-vector run AND no regression of an established sim skill (team-fours or
 `top_bowler` margin vs fair baseline). **Budget:** ~2.5 h (data free; sim eval
 is the cost).
+**Result:** —
+
+## A13 [P3] [PENDING] Sim dispersion calibration on sampled score totals (A8 follow-up)
+**Hypothesis:** A8 showed vector scaling (a *marginal-rate* correction) cannot move
+the tail-overshoot props — but the vec baseline report shows the sim **under-disperses**
+score totals (`team_first_over` P10–P90 coverage 53% vs ideal 80%; `batter_runs`
+72%). Under-dispersion is a *variance* defect, orthogonal to marginal calibration,
+and it's exactly what inflates over/under Brier on `pp_total`/`first_wicket`/`highest_over`.
+E2's standing result says the sim's only real skill is continuous score forecasts, so
+widening the predictive spread to nominal coverage is the validated-ceiling lever.
+**Method:** fit a per-family dispersion/temperature scalar on the *validation* sim
+(inflate the sampled total's spread around its mean to hit ~80% P10–P90 coverage —
+e.g. a multiplicative fan-out on centered per-sim totals, or resampling the per-ball
+outcome with a small negative-binomial dispersion). Apply at eval only; recipe B on
+n=261 with `--ball-calibrator vector`. Pair vec-vs-dispersion via
+`scripts/auto/a8_gate_analysis.py` (reuse the paired-Brier tooling). NO eval-framework
+edit — implement inside `sim_v1_2.py` aggregation or a post-hoc transform.
+**Gate (sim pair):** P10–P90 coverage moves toward 80% (calibration) AND over/under
+tail Brier (`pp_total` + `first_wicket_runs` + `highest_over_runs`) improves paired
+vs the single-vector run, with no regression of `batter_runs_mae`. **Budget:** ~2 h
+(two n=261 sim runs; the vec baseline `detail_vec_n261.json` may be reused if unchanged).
+**Result:** —
+
+## A14 [P3] [PENDING] Per-over (not per-3-phase) ball calibrator for single-over props (A8 follow-up)
+**Hypothesis:** A8's 3-bucket phase calibrator netted to null on multi-phase aggregate
+props because a bowler's/team's balls span phases and the small per-ball corrections
+wash out. But **single-over** props (`team_first_over_mae`, `highest_over_runs_ou_*`)
+live inside one over — and the first over is lumped with overs 2–6 in A8's PP bucket,
+so a per-over (or smooth spline on `balls_bowled`) scaler has resolution A8's flat
+buckets lacked *precisely where it can't wash out*. Lower conviction than A13 (still
+linear marginal scaling, which A8 showed is weak), so scoped tightly to the props
+where finer indexing is mechanically distinct.
+**Method:** fit a scaling vector indexed by over (0–19), or a monotone spline on
+`balls_bowled`, on the same val balls as v1; global fallback == v1. Dispatch off the
+feature buffer like A8 did (no eval-framework edit). Recipe B on n=261; pair vs the
+single-vector run with `a8_gate_analysis.py`.
+**Gate (sim pair):** `team_first_over_mae` / `highest_over_runs` Brier|MAE improves
+paired vs single-vector AND `top_bowler` + `bowler_wkts` do not regress. If it only
+matches A8 (null on single-over props too), FAILED — linear ball-prob scaling is
+exhausted, pivot to A13's dispersion lever. **Budget:** ~2 h.
 **Result:** —
 
 ---
