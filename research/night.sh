@@ -15,7 +15,9 @@ i=0
 while (( $(date +%s) < END )) && [[ ! -f research/STOP ]]; do
   i=$((i + 1))
   echo "=== iter $i start $(date '+%F %T') ===" >> research/night.log
-  timeout "${ITER_TIMEOUT:-7200}" claude -p "$(cat research/RUNNER_PROMPT.md)" \
+  # perl alarm = portable timeout (macOS has no GNU `timeout`)
+  perl -e 'alarm shift; exec @ARGV' "${ITER_TIMEOUT:-7200}" \
+      claude -p "$(cat research/RUNNER_PROMPT.md)" \
       --permission-mode auto >> research/night.log 2>&1
   rc=$?
   echo "=== iter $i exit=$rc $(date '+%F %T') ===" >> research/night.log
