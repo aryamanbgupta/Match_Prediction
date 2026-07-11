@@ -316,7 +316,7 @@ engine edit (not eval framework); default v1 path byte-unchanged. Kept `0e1bbb0`
 artifact `models/auto/a14/over_vector_calibrator.pkl` (gitignored, reproducible via
 `scripts/auto/a14_fit_over_calibrator.py`). See `research/reports/auto/A14.md`.
 
-## A15 [P3] [PENDING] Minimal over-0-only ball calibrator (A14 parsimony follow-up)
+## A15 [P3] [RUNNING 2026-07-11T12:34:18Z] Minimal over-0-only ball calibrator (A14 parsimony follow-up)
 **Hypothesis:** A14 LANDED a 20-vector per-over calibrator, but the entire
 `team_first_over_mae` win is concentrated in **over 0** (its vector diverges most
 from global, six/wicket ×1.23); the other 19 per-over vectors buy nothing
