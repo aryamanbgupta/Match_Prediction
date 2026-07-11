@@ -665,17 +665,6 @@ class XGBoostModelV2(PredictionModel):
         with open(feature_columns_path, 'r') as f:
             self.feature_columns = [line.strip() for line in f.readlines()]
 
-        # Phase indicator indices for a phase-aware ball calibrator (A8).
-        # Read straight off the feature buffer so predict_next_ball can pass
-        # the ball's phase without threading state through the signature.
-        # None → column absent (older feature sets); phase dispatch no-ops.
-        self._idx_is_powerplay = (
-            self.feature_columns.index('is_powerplay')
-            if 'is_powerplay' in self.feature_columns else None)
-        self._idx_is_death = (
-            self.feature_columns.index('is_death_overs')
-            if 'is_death_overs' in self.feature_columns else None)
-
         # Phase 6: load k_player / k_venue from a sidecar JSON next to
         # the model. Missing file → use defaults (30 / 200), preserving
         # behavior for v6 / Phase-5 artifacts that don't carry the file.
@@ -1073,30 +1062,13 @@ class XGBoostModelV2(PredictionModel):
             'boundary_percentage_recent': boundary_pct,
         }
     
-    def _phase_from_features(self, features: np.ndarray) -> str:
-        """Map the ball's phase indicators (already in the feature buffer) to
-        'pp' / 'mid' / 'death'. Matches extract_features and the empirical
-        bowler selector: pp = balls<36, mid = 36<=balls<96, death = balls>=96."""
-        if self._idx_is_powerplay is not None and features[self._idx_is_powerplay] > 0.5:
-            return 'pp'
-        if self._idx_is_death is not None and features[self._idx_is_death] > 0.5:
-            return 'death'
-        return 'mid'
-
     def predict_next_ball(self, features: np.ndarray) -> Dict[str, float]:
         """Get probabilities from model. `features` is a 1-D np.float64 row."""
         probs = self.model.predict_proba(features.reshape(1, -1))[0]
 
-        # Apply ball-level calibration if available. A phase-aware calibrator
-        # (A8) reads the ball's phase off the feature buffer; the default
-        # global VectorScalingCalibrator (E5) keeps the plain 1-arg call and
-        # is byte-for-byte unchanged.
+        # Apply ball-level calibration if available
         if self.ball_calibrator:
-            if getattr(self.ball_calibrator, 'phase_aware', False):
-                probs = self.ball_calibrator.calibrate_probs(
-                    probs, phase=self._phase_from_features(features))
-            else:
-                probs = self.ball_calibrator.calibrate_probs(probs)
+            probs = self.ball_calibrator.calibrate_probs(probs)
 
         # Initialize all outcomes with 0 probability
         outcome_probs = {
