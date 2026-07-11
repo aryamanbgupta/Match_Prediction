@@ -191,7 +191,7 @@ def train_model(args) -> tuple:
         reg_lambda=args.reg_lambda,
         early_stopping_rounds=args.early_stopping_rounds,
         monotone_constraints=monotone,
-        random_state=29,
+        random_state=args.seed,
     )
 
     model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=50)
@@ -298,6 +298,7 @@ def main():
     ap.add_argument("--reg-alpha", type=float, default=0.1)
     ap.add_argument("--reg-lambda", type=float, default=1.0)
     ap.add_argument("--early-stopping-rounds", type=int, default=30)
+    ap.add_argument("--seed", type=int, default=29)
     ap.add_argument("--monotone", action="store_true",
                     help="Apply per-feature monotone constraints from "
                     "_MONOTONE_SIGNS. Off by default for back-compat with "

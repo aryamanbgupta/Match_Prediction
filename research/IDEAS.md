@@ -10,7 +10,7 @@ FAILED.
 
 ---
 
-## A1 [P0] [PENDING] Fresh baseline + seed-variance floor
+## A1 [P0] [RUNNING 2026-07-11T00:45Z] Fresh baseline + seed-variance floor
 **Hypothesis:** the M7 headline (LL 0.6299 / ROI +21.90%) carries seed luck;
 every later verdict needs an honest noise floor.
 **Method:** retrain the M7 config (trainer defaults) 5× with different seeds
