@@ -39,7 +39,7 @@ models; if A1 hasn't run, do its training step first).
 threshold function, not a smooth mean). Code reverted (d994bbd); models kept at
 `models/auto/a2/`. See `research/reports/auto/A2.md`.
 
-## A3 [P1] [PENDING] Direct + v7 sim blend, fine w-sweep
+## A3 [P1] [RUNNING 2026-07-11T06:03:44Z] Direct + v7 sim blend, fine w-sweep
 **Hypothesis:** a small sim weight (w ∈ 0.05–0.3) adds ball-level information
 the direct model lacks, helping the close-match slice without hurting the
 headline.
