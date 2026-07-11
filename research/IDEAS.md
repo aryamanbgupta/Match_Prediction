@@ -202,7 +202,7 @@ exists; join is cheap, retrain is fast — no full re-materialization of the
 career trackers needed if only appending sim columns).
 **Result:** —
 
-## A11 [P3] [RUNNING 2026-07-11T10:05:50Z] A7 boundary sweep — is |elo_diff|=5 the right mismatch cut?
+## A11 [P3] [FAILED] A7 boundary sweep — is |elo_diff|=5 the right mismatch cut?
 **Hypothesis:** A7 landed the slice-conditional threshold with the mismatch/close
 boundary fixed at |top6_batting_elo_diff|=5 (inherited from the M8 write-up) and
 edge>10%. The edge threshold is robust (A7's 0.05/0.10/0.15 sweep all improved),
@@ -216,7 +216,18 @@ more than the 2pp floor AND keeps ≥$50k CI excluding 0. Report the full curve.
 **Gate:** betting-layer rule — a challenger boundary must clear the pre-committed
 dual-slice bar to replace 5; else A7's rule stands (idea = FAILED, no change).
 **Budget:** ~20 min (reuses A7 tooling + existing eval JSONs, no retraining).
-**Result:** —
+**Result:** FAILED 2026-07-11. Swept boundary {3,5,8,12} @edge>10% fixed on BOTH
+slices (`scripts/auto/a11_boundary_sweep.py`, betting-layer, LL unchanged 0.6299;
+incumbent b5 reproduces A7 exactly: ≥$50k 109 bets +36.93 [+12.06,+68.89], ≥$100k
+72 bets +35.86 [-0.99,+80.58]). The two slices point OPPOSITE: ≥$50k ROI is
+monotone-DECREASING in boundary (b3 +40.96 → b12 +27.73), but ≥$100k ROI PEAKS at
+b5 (+35.86; b3 +32.56 is −3.30pp WORSE and its CI reopens across 0). Only b3 beats
+b5 on ≥$50k (+4.03pp) — by over-filtering (n 168→90) — and loses ≥$100k, so NO
+challenger clears the pre-committed dual-slice bar → boundary 5 stands (A7 rule
+unchanged). Boundary 5 is CONFIRMED robust: it is the ≥$100k optimum, and win rate
+is flat ~54–56% across all boundaries (ROI deltas are pnl-mix, not sharper
+discrimination). No production code changed; analysis harness kept (cf. A9). See
+`research/reports/auto/A11.md`.
 
 ## A12 [P3] [PENDING] Dew as a ball-level second-innings covariate (A6 follow-up)
 **Hypothesis:** A6 showed dew carries no *match-level* winner signal, but the
