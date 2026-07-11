@@ -665,6 +665,14 @@ class XGBoostModelV2(PredictionModel):
         with open(feature_columns_path, 'r') as f:
             self.feature_columns = [line.strip() for line in f.readlines()]
 
+        # balls_bowled column index for an over-aware ball calibrator (A14).
+        # Read straight off the feature buffer so predict_next_ball can derive
+        # the current over (balls_bowled // 6) without threading state through
+        # the signature. None → column absent; over dispatch no-ops to global.
+        self._idx_balls_bowled = (
+            self.feature_columns.index('balls_bowled')
+            if 'balls_bowled' in self.feature_columns else None)
+
         # Phase 6: load k_player / k_venue from a sidecar JSON next to
         # the model. Missing file → use defaults (30 / 200), preserving
         # behavior for v6 / Phase-5 artifacts that don't carry the file.
@@ -1062,13 +1070,28 @@ class XGBoostModelV2(PredictionModel):
             'boundary_percentage_recent': boundary_pct,
         }
     
+    def _over_from_features(self, features: np.ndarray) -> int:
+        """Current over index 0-19 from balls_bowled in the feature buffer
+        (over = balls_bowled // 6, clamped). Matches the sim's ball counter.
+        Returns None if balls_bowled is absent (over dispatch then no-ops)."""
+        if self._idx_balls_bowled is None:
+            return None
+        return min(int(features[self._idx_balls_bowled] // 6), 19)
+
     def predict_next_ball(self, features: np.ndarray) -> Dict[str, float]:
         """Get probabilities from model. `features` is a 1-D np.float64 row."""
         probs = self.model.predict_proba(features.reshape(1, -1))[0]
 
-        # Apply ball-level calibration if available
+        # Apply ball-level calibration if available. An over-aware calibrator
+        # (A14) reads the ball's over off the feature buffer; the default
+        # global VectorScalingCalibrator (E5) keeps the plain 1-arg call and
+        # is byte-for-byte unchanged.
         if self.ball_calibrator:
-            probs = self.ball_calibrator.calibrate_probs(probs)
+            if getattr(self.ball_calibrator, 'over_aware', False):
+                probs = self.ball_calibrator.calibrate_probs(
+                    probs, over=self._over_from_features(features))
+            else:
+                probs = self.ball_calibrator.calibrate_probs(probs)
 
         # Initialize all outcomes with 0 probability
         outcome_probs = {

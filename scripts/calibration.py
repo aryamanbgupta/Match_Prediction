@@ -452,6 +452,90 @@ class VectorScalingCalibrator:
         return corrected[0] if single else corrected
 
 
+def _fit_scaling_vector(raw_probs: np.ndarray, labels: np.ndarray,
+                        n_iter: int = 50, tol: float = 1e-8) -> np.ndarray:
+    """Iterative marginal-matching scaling vector (same fixed point as
+    VectorScalingCalibrator.fit), factored out so a bucketed calibrator can
+    reuse it per bucket without touching the landed VectorScalingCalibrator
+    code path."""
+    raw_probs = np.asarray(raw_probs, float)
+    k = raw_probs.shape[1]
+    actual = np.bincount(np.asarray(labels), minlength=k) / len(labels)
+    v = np.ones(k)
+    for _ in range(n_iter):
+        corr = raw_probs * v
+        corr /= corr.sum(axis=1, keepdims=True)
+        pred = corr.mean(axis=0)
+        ratio = actual / np.maximum(pred, 1e-12)
+        v = v * ratio
+        v = v / v.sum()
+        if np.max(np.abs(ratio - 1)) < tol:
+            break
+    return v
+
+
+class OverVectorScalingCalibrator:
+    """Per-over vector scaling (A14, 2026-07-11; follow-up to E5 / A8).
+
+    Twenty independent 6-vectors — one per over (0-19) — each fit by the same
+    iterative marginal-matching as `VectorScalingCalibrator` but on the
+    validation balls of one over only, plus a global fallback vector (which
+    must reproduce v1 exactly — the fitting pipeline is validated by that
+    identity).
+
+    A8 (`reports/a8...`) found a 3-bucket *phase* calibrator nets to null on
+    multi-phase aggregate props because a bowler's/team's balls span phases and
+    the small per-ball corrections wash out. But **single-over** props
+    (`team_first_over_mae`, `highest_over_runs_*`) live inside one over — and
+    A8's powerplay bucket lumps over 1 with overs 2-6, so a per-over scaler has
+    resolution A8's flat buckets lacked *precisely where it can't wash out*.
+
+    Over index follows the sim's ball counter: over = balls_bowled // 6
+    (clamped to 0-19). Interface: `calibrate_probs(raw_probs, over=...)`.
+    `over_aware = True` signals the sim wrapper
+    (`XGBoostModelV2.predict_next_ball`) to pass the current ball's over. If
+    `over` is None/unknown it falls back to the global vector, degrading
+    gracefully to the E5 behaviour rather than crashing.
+    """
+
+    over_aware = True
+    N_OVERS = 20
+
+    def __init__(self, weights=None, global_weights=None):
+        # weights: {over_int: 6-vector}; global_weights: 6-vector fallback.
+        self._v = ({} if weights is None
+                   else {int(k): np.asarray(w, float) for k, w in weights.items()})
+        self._global = (None if global_weights is None
+                        else np.asarray(global_weights, float))
+
+    def fit_over(self, over: int, raw_probs: np.ndarray, labels: np.ndarray,
+                 n_iter: int = 50, tol: float = 1e-8) -> np.ndarray:
+        v = _fit_scaling_vector(raw_probs, labels, n_iter, tol)
+        self._v[int(over)] = v
+        return v
+
+    def set_global(self, raw_probs: np.ndarray, labels: np.ndarray,
+                   n_iter: int = 50, tol: float = 1e-8) -> np.ndarray:
+        self._global = _fit_scaling_vector(raw_probs, labels, n_iter, tol)
+        return self._global
+
+    def _vector_for(self, over):
+        v = self._v.get(int(over)) if over is not None else None
+        if v is None:
+            v = (self._global if self._global is not None
+                 else next(iter(self._v.values())))
+        return v
+
+    def calibrate_probs(self, raw_probs: np.ndarray, over=None) -> np.ndarray:
+        single = raw_probs.ndim == 1
+        probs = raw_probs.reshape(1, -1) if single else raw_probs
+        v = self._vector_for(over)
+        corrected = probs * v
+        corrected = corrected / np.maximum(
+            corrected.sum(axis=1, keepdims=True), 1e-12)
+        return corrected[0] if single else corrected
+
+
 class BallLevelCalibrator:
     """Per-class isotonic regression for ball-level 6-class predictions.
 
