@@ -630,8 +630,7 @@ class PredictionModel(ABC):
 class XGBoostModelV2(PredictionModel):
     def __init__(self, model_path: str, batter_encoder_path: str, bowler_encoder_path: str,
                  feature_columns_path: str, stats_provider=None, player_metadata=None,
-                 matchup_encoder_path: str = None, ball_calibrator=None,
-                 venue_encoder_path: str = None):
+                 matchup_encoder_path: str = None, ball_calibrator=None):
         import joblib
         self.model = joblib.load(model_path)
         self.batter_encoder = joblib.load(batter_encoder_path)
@@ -648,24 +647,6 @@ class XGBoostModelV2(PredictionModel):
             except:
                 print(f"  Warning: Could not load matchup encoder from {matchup_encoder_path}")
 
-        # B1: venue encoder — training fits le_venue but historically never
-        # saved it, so venue_encoded silently scored as 0 on every sim ball
-        # (out-of-distribution vs the real codes seen in training). Explicit
-        # path wins; else auto-detect a venue_encoder_v3.pkl sidecar next to
-        # the model (same pattern as outcome_dist_config_v3.json). No encoder
-        # found → legacy behavior (venue_encoded stays 0).
-        self.venue_encoder = None
-        if venue_encoder_path is None:
-            from pathlib import Path as _P
-            _ve = _P(model_path).parent / 'venue_encoder_v3.pkl'
-            if _ve.exists():
-                venue_encoder_path = str(_ve)
-        if venue_encoder_path:
-            try:
-                self.venue_encoder = joblib.load(venue_encoder_path)
-            except Exception as _e:
-                print(f"  Warning: Could not load venue encoder from {venue_encoder_path}: {_e}")
-
         # Encoder lookup caches: replaces sklearn LabelEncoder.transform per ball
         # (the 37% hot spot profiled on 2026-04-18). Verified bit-exact against
         # transform() over all classes_ in scripts/scratch/verify_encoder_cache.py.
@@ -678,10 +659,6 @@ class XGBoostModelV2(PredictionModel):
         self._matchup_to_code = (
             {str(c): int(i) for i, c in enumerate(self.matchup_encoder.classes_)}
             if self.matchup_encoder is not None else None
-        )
-        self._venue_to_code = (
-            {str(c): int(i) for i, c in enumerate(self.venue_encoder.classes_)}
-            if self.venue_encoder is not None else None
         )
 
         # Load feature columns to ensure consistency
@@ -735,9 +712,7 @@ class XGBoostModelV2(PredictionModel):
 
         stats_mode = "with real player stats" if stats_provider else "with zero stats (fallback)"
         metadata_mode = "with player metadata" if player_metadata else "without player metadata"
-        venue_mode = (f"venue encoder ACTIVE ({len(self.venue_encoder.classes_)} venues)"
-                      if self.venue_encoder is not None else "venue encoder absent (venue_encoded=0)")
-        print(f"Loaded XGBoost v2 model with {len(self.feature_columns)} features {stats_mode} {metadata_mode}; {venue_mode}")
+        print(f"Loaded XGBoost v2 model with {len(self.feature_columns)} features {stats_mode} {metadata_mode}")
 
     def extract_features(self, state: MatchState) -> np.ndarray:
         """Extract comprehensive feature set matching v2 training.
@@ -774,13 +749,6 @@ class XGBoostModelV2(PredictionModel):
         # Player encoding (cached dict lookup; -1 sentinel for unknown IDs)
         features['batter_encoded'] = self._batter_id_to_code.get(str(striker.player_id), -1)
         features['bowler_encoded'] = self._bowler_id_to_code.get(str(bowler.player_id), -1)
-
-        # Venue encoding (B1): training-time LabelEncoder code for the match
-        # venue; -1 sentinel for venues unseen in training (matches the
-        # batter/bowler unknown convention). No encoder loaded → key unset →
-        # buffer default 0 (legacy pre-B1 behavior).
-        if self._venue_to_code is not None:
-            features['venue_encoded'] = self._venue_to_code.get(str(state.venue), -1)
 
         # NEW: Per-innings batter stats (from batsman_stats tracking)
         batsman_key = (team_idx, state.striker_idx)
