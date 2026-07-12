@@ -524,7 +524,7 @@ plumbing; if that plumbing doesn't exist, scope THIS iteration to building +
 unit-testing it and mark the idea `TABLED (plumbing done, eval next)`.
 **Result:** —
 
-## B6 [P1] [RUNNING 2026-07-12T09:46Z] Venue-encoder fix re-gated on batter-level continuous primary at a fresh seed (B1 follow-up)
+## B6 [P1] [LANDED] Venue-encoder fix re-gated on batter-level continuous primary at a fresh seed (B1 follow-up)
 **Hypothesis:** B1 (TABLED) fixed the sim's venue blindness but its pre-committed
 venue-binary pooled primary straddled 0 (−0.0025 [−0.0074,+0.0024]); the fix's
 CI-clean effect concentrated instead in **batter-level** families —
@@ -547,6 +547,51 @@ regression. Both → LANDED (ship the sidecar into `models/xgb_v3/` as the
 default sim path and RE-BASELINE all future sim comparisons — B1's warning
 applies); exactly one → TABLED; none → FAILED (B1's batter-level signal was
 seed-42 selection noise). **Budget:** ~2 h (two n=261×100 runs, ~37 min each).
+**Result:** LANDED 2026-07-12 (prior iteration's seed-43 runs were wall-clock-
+killed at startup; this iteration re-ran both from scratch). Two fresh n=261×100
+seed-43 runs (blind 2226.3 s / venue 2215.9 s; startup logs confirm "venue
+encoder absent" vs "venue encoder ACTIVE (467 venues)"), paired via pre-committed
+`scripts/auto/b6_gate_analysis.py` (422c266, written before any seed-43 result).
+**GATE 1 PRIMARY** `batter_runs_mae` (3176 obs): dMAE **−0.162 CI
+[−0.287, −0.036] EXCLUDES 0 → IMPROVED** — B1's seed-42 −0.175 [−0.298, −0.048]
+reproduces on fresh draws; the batter-level signal was real, not selection
+noise. **GATE 2 guards ALL HELD**: top_bowler +0.0004 [−0.0002,+0.0011],
+bowler_wkts_1plus IMPROVED −0.0037 [−0.0064,−0.0008], 2/3plus noise,
+team_first_over_mae +0.012 [−0.031,+0.055], fours/sixes MAE noise. Both →
+LANDED. Context scan one-sided again: 0 families significantly worse; CI-clean
+better incl. batter_50plus −0.0020, batter_fours_3plus −0.0030, batter_fours_mae
+−0.016, team_highest_individual 29_5/34_5 −0.0026/−0.0053, highest_over_18_5
+−0.0150, pp_total_50_5 −0.0081. **SHIPPED**: sidecar copied to
+`models/xgb_v3/venue_encoder_v3.pkl` (new file; smoke confirms default sim path
+now venue-ON). **RE-BASELINE IN FORCE**: all pre-B6 sim detail JSONs (a8 vec,
+A14/A15/A16) are venue-blind; canonical venue-ON baseline =
+`models/auto/b6/detail_venue_s43_n261.json` (seed 43; blind twin kept). Kept
+11a19ea + 422c266. Follow-up B7 appended (stale ball calibrators). See
+`research/reports/auto/B6.md`.
+
+## B7 [P1] [PENDING] Refit ball calibrators on the venue-ON sim (B6 re-baseline follow-up)
+**Hypothesis:** B6 shipped the venue encoder into the default sim path, changing
+the model's input distribution — but both production ball calibrators were fit
+on *venue-blind* val predictions: `vector_scaling_calibrator_v1.pkl` (E5) and
+the A15 over-0 calibrator (`models/auto/a15/over0_calibrator.pkl`). Their
+corrections may now be stale (over- or under-correcting the venue-aware
+probabilities); refitting on venue-on val balls should recover any headroom and
+re-validates that A15's first-over gain survives the re-baseline.
+**Method:** refit the global vector calibrator and the over-0 vector on the same
+val ball construction as E5/A15 but with the venue encoder ACTIVE (loaders in
+`scripts/auto/a14_fit_over_calibrator.py` / `a15_fit_over0_calibrator.py`; save
+to `models/auto/b7/`, do NOT overwrite `models/xgb_v3/vector_scaling_calibrator_v1.pkl`
+until LANDED). Recipe B n=261 seed 43 with the refit calibrators, paired vs the
+new canonical venue-ON baseline `models/auto/b6/detail_venue_s43_n261.json`
+(same seed → clean pairing) via the a8/b6 gate tooling. Pre-commit the gate
+script before the run.
+**Gate (sim pair):** PRIMARY = `batter_runs_mae` AND `team_first_over_mae` do
+not regress vs the venue-ON baseline while ≥1 of {pooled tail Brier
+(pp_total/first_wicket/highest_over), bowler_wkts_1plus} improves CI-clean;
+guards = top_bowler + team_total_{fours,sixes}_mae no CI-clean regression. If
+the refit calibrators are byte-close to the stale ones (max ratio diff < the
+~0.05 washout threshold), expect null and say so pre-run. **Budget:** ~1.5 h
+(one n=261 run; baseline reused).
 **Result:** —
 
 ---
