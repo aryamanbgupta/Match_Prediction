@@ -431,7 +431,7 @@ Strategic shift: the match-level model is essentially at market (LL 0.6299 vs
 sim is the compounding asset (props, in-play, analytics). B-series priorities
 outrank remaining A/C ideas.
 
-## B1 [P0] [PENDING] Fix sim venue blindness: `venue_encoded=0` on every sim ball
+## B1 [P0] [RUNNING 2026-07-11T09:35Z] Fix sim venue blindness: `venue_encoded=0` on every sim ball
 **Hypothesis:** `sim_v1_2.py` `XGBoostModelV2._feat_buf` defaults missing keys
 to 0, so every simulated ball scores as venue code 0 while training saw real
 codes (TODO.md:337, filed at E5). The sim literally cannot see the venue — an
