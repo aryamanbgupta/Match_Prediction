@@ -431,7 +431,7 @@ Strategic shift: the match-level model is essentially at market (LL 0.6299 vs
 sim is the compounding asset (props, in-play, analytics). B-series priorities
 outrank remaining A/C ideas.
 
-## B1 [P0] [RUNNING 2026-07-11T09:35Z] Fix sim venue blindness: `venue_encoded=0` on every sim ball
+## B1 [P0] [TABLED] Fix sim venue blindness: `venue_encoded=0` on every sim ball
 **Hypothesis:** `sim_v1_2.py` `XGBoostModelV2._feat_buf` defaults missing keys
 to 0, so every simulated ball scores as venue code 0 while training saw real
 codes (TODO.md:337, filed at E5). The sim literally cannot see the venue — an
@@ -446,7 +446,30 @@ venue-sensitive families (team totals, PP totals, fours/sixes) AND `top_bowler`
 + `bowler_wkts` guards hold. **Budget:** ~2.5 h. **Note:** this changes the
 sim's input distribution — re-baseline before comparing anything else to
 history; do NOT run the same night as other sim-engine ideas.
-**Result:** —
+**Result:** TABLED 2026-07-12 (implemented + gate pre-committed 2026-07-11;
+that iteration was wall-clock-killed at eval startup — this one re-ran the
+n=261×100 seed-42 eval, 2198.6 s, startup log confirms "venue encoder ACTIVE
+(467 venues)"). Encoder rebuild proven training-exact (byte-match of refit
+batter/bowler encoders vs saved artifacts); 261/261 test venues covered.
+Paired vs `models/auto/a8/detail_vec_n261.json` via pre-committed
+`scripts/auto/b1_gate_analysis.py` (230427a). **GATE 1** (PRIMARY = pooled
+dBrier over 8 venue-sensitive binary lines): **−0.0025 CI [−0.0074, +0.0024]
+STRADDLES 0 → NOT met** (direction favorable, 6/8 lines down;
+`pp_total_ou_50_5` alone −0.0084 [−0.0153,−0.0017]; venue-MAE non-regress
+held). **GATE 2** guards **HELD** — none regress; two IMPROVE with CI
+excluding 0: `bowler_wkts_1plus` −0.0044 [−0.0071,−0.0016] and
+`batter_runs_mae` **−0.175 [−0.298,−0.048]**. Exactly one gate satisfied →
+TABLED per the pre-committed mapping. Off-gate scan is ONE-SIDED positive
+(0 families significantly worse anywhere, ~9 better), concentrated at the
+**batter level** (batter_runs_mae = E2's validated continuous skill;
+batter_50plus, batter_fours_1/3plus, batter_fours_mae, highest_over_18_5,
+team_highest_individual 29_5/34_5) — the gate pooled the wrong families:
+venue codes sharpen per-batter forecasts; team-total lines aggregate the
+per-ball correction away (A8/A12/A16 washout pattern). Reverted `c37f1b0`
+(default sim path was byte-unchanged anyway — encoder loads only via the
+`models/auto/b1/` sidecar); gate script + scratch kept. Follow-up: B6
+(re-gate on batter_runs_mae primary @ fresh seed). See
+`research/reports/auto/B1.md`.
 
 ## B2 [P1] [PENDING] Fix `innings_id` unstable hash (blocks parquet↔cricsheet joins)
 **Hypothesis:** `parsing_v2.py:1255` sets `innings_id = hash(json) % 100000` —
@@ -499,6 +522,31 @@ run-rate-extrapolation baseline.
 [70%, 90%] at all three checkpoints. **Budget:** ~3 h — needs sim-from-state
 plumbing; if that plumbing doesn't exist, scope THIS iteration to building +
 unit-testing it and mark the idea `TABLED (plumbing done, eval next)`.
+**Result:** —
+
+## B6 [P1] [PENDING] Venue-encoder fix re-gated on batter-level continuous primary at a fresh seed (B1 follow-up)
+**Hypothesis:** B1 (TABLED) fixed the sim's venue blindness but its pre-committed
+venue-binary pooled primary straddled 0 (−0.0025 [−0.0074,+0.0024]); the fix's
+CI-clean effect concentrated instead in **batter-level** families —
+`batter_runs_mae` −0.175 [−0.298,−0.048], E2's single validated sim skill, plus
+batter_50plus / batter_fours binaries and MAE — with ZERO families significantly
+worse anywhere in the scan. B1's gate targeted the wrong families: venue codes
+sharpen per-batter forecasts; team-total lines aggregate the per-ball correction
+away. Because the batter-level primary was identified *post hoc* on B1's seed-42
+run, it must be confirmed on fresh Monte Carlo draws before it can land.
+**Method:** re-apply B1's implementation (`git revert c37f1b0` or cherry-pick
+`112c59e`; encoder artifact already at `models/auto/b1/venue_encoder_v3.pkl`,
+rebuildable via `b1_build_venue_encoder.py`). TWO recipe-B runs at a **fresh
+seed (43)**: venue-on and venue-blind (both new, so B1's seed-42 selection
+cannot leak into the comparison); pair with the a8/b1 gate tooling. Write the
+gate script BEFORE the runs (A-series discipline).
+**Gate (sim pair):** PRE-COMMITTED PRIMARY = `batter_runs_mae` improves paired
+(CI excludes 0) at seed 43. Guards = `top_bowler`, `bowler_wkts_{1,2,3}plus`,
+`team_first_over_mae`, `team_total_{fours,sixes}_mae`: no CI-excludes-0
+regression. Both → LANDED (ship the sidecar into `models/xgb_v3/` as the
+default sim path and RE-BASELINE all future sim comparisons — B1's warning
+applies); exactly one → TABLED; none → FAILED (B1's batter-level signal was
+seed-42 selection noise). **Budget:** ~2 h (two n=261×100 runs, ~37 min each).
 **Result:** —
 
 ---
