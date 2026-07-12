@@ -524,7 +524,7 @@ plumbing; if that plumbing doesn't exist, scope THIS iteration to building +
 unit-testing it and mark the idea `TABLED (plumbing done, eval next)`.
 **Result:** —
 
-## B6 [P1] [PENDING] Venue-encoder fix re-gated on batter-level continuous primary at a fresh seed (B1 follow-up)
+## B6 [P1] [RUNNING 2026-07-12T09:46Z] Venue-encoder fix re-gated on batter-level continuous primary at a fresh seed (B1 follow-up)
 **Hypothesis:** B1 (TABLED) fixed the sim's venue blindness but its pre-committed
 venue-binary pooled primary straddled 0 (−0.0025 [−0.0074,+0.0024]); the fix's
 CI-clean effect concentrated instead in **batter-level** families —
