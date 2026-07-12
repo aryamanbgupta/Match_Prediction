@@ -569,7 +569,7 @@ A14/A15/A16) are venue-blind; canonical venue-ON baseline =
 11a19ea + 422c266. Follow-up B7 appended (stale ball calibrators). See
 `research/reports/auto/B6.md`.
 
-## B7 [P1] [PENDING] Refit ball calibrators on the venue-ON sim (B6 re-baseline follow-up)
+## B7 [P1] [RUNNING 2026-07-12T11:34:44Z] Refit ball calibrators on the venue-ON sim (B6 re-baseline follow-up)
 **Hypothesis:** B6 shipped the venue encoder into the default sim path, changing
 the model's input distribution — but both production ball calibrators were fit
 on *venue-blind* val predictions: `vector_scaling_calibrator_v1.pkl` (E5) and
