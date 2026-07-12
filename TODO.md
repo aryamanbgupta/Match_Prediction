@@ -348,20 +348,48 @@ Full reference: `reports/m8_sizing_rules_eval.md`.
   `--ball-calibrator vector` in `prop_backtest.py`. See
   `reports/e5_teacher_forced_bias.md`.
 
+## Prop-odds source landscape (researched 2026-07-11) — CONCLUSION
+
+Every candidate source investigated. **No hobbyist-priced, ToS-clean, US-legal
+source of cricket PROP odds exists.** The wall is structural and identical
+across sources: rich-prop books either block US IPs, ban scraping in ToS, or
+gate real props behind ~$5k+/mo enterprise aggregators.
+
+| Source | Cricket props? | Legit US access | Verdict |
+|---|---|---|---|
+| **Polymarket** | Team-level only (top-batter, most-sixes; NO player lines/totals) | Yes (public API) | **USE — forward capture, free, built 2026-07-11** |
+| Betfair (hist + API) | Yes (innings runs, top batsman) | **No — US barred from account** | SKIP |
+| UK books (bet365 etc.) | Richest (top bat/bowl, player lines, totals) | **No — geo-block US at page load + ToS bans scraping** | SKIP (both walls) |
+| **DraftKings** | **Deep & US-legal** (batter runs/fours/sixes, top batter/bowler, wickets, highest score — IPL & MLC) | Odds viewable in ~25 states, **but no public API + ToS bans automated collection + bot detection** | No legit programmatic path |
+| FanDuel | Thin (mostly moneyline) | Same ToS/geo posture as DK | SKIP |
+| the-odds-api | **Match-winner only** (cricket props = US-sports only) | Yes, cheap ($0–30/mo) | USE for winner odds; not props |
+| OpticOdds / OddsJam | Yes (licenses DK/FD/UK cricket props) | Yes | ~$5k/mo enterprise — revisit only if prop edge is proven |
+| Sportradar | Yes | Yes | ~$10k+/mo — out of scope |
+
+**Notable**: DraftKings is the one US-legal book with genuinely deep cricket
+props (the exact families we model). No API and ToS forbids scraping, so no
+compliant automated capture — but the odds are viewable by a logged-in user in
+legal states, which keeps a *manual/licensed* path theoretically open if prop
+edge ever justifies the effort. **Standing decision: forward-capture Polymarket
+(free) for calibration data now; treat OpticOdds trial as the gate to any paid
+prop feed, contingent on the ball-model showing prop edge first (B3/B4).**
+
 ## Data acquisition — prop odds & eval expansion (2026-07-11)
 - [ ] **Rebuild the odds-capture scraper as a respectful capture daemon**
   (replaces dead `run_scraper_cron.sh` → `src/bet_scraper.py`, whose crontab
   entry still fires daily at 18:00 and fails — remove that entry when this
   lands). Requirements: **official APIs first, GET-only, conservative rate
-  limits, honor ToS/robots** (design goal: never banned). Targets pending the
-  Betfair research brief (2026-07-11): Polymarket cricket markets (existing
-  capture repo pattern), Betfair exchange prop markets if API access works
-  from the US, Smarkets as fallback. Daily pre-match snapshot per market →
-  `data/external/odds_capture/<source>/<date>.json`. Forward capture
-  compounds — every captured day is prop eval data that can't be bought
-  retroactively. Semi-interactive build preferred (needs account setup +
-  live-endpoint verification); a tightly-scoped overnight iteration can do
-  the backtest wiring once capture exists.
+  limits, honor ToS/robots** (design goal: never banned). Target = **Polymarket
+  props only** (the source landscape above ruled out all others for US-legal
+  prop capture). `capture_props.py` PROTOTYPE built + test-run 2026-07-11 in
+  `~/Projects/polymarket-cricket` (Gamma discovery + CLOB backfill; writes
+  `data/polymarket_props_<date>.json`; 5 team-level families, YES/NO dedup +
+  placeholder-price guard). Remaining: review the prototype, then wire the
+  daily + T-60min launchd job (standing machine config → supervised, not
+  overnight). Forward capture compounds — Polymarket historical prop odds
+  can't be bought retroactively, so start the daily job soon even though
+  current prop liquidity is thin (~$0–13k, mostly minor leagues off-IPL-season).
+  Backtest wiring against captured props = good overnight idea once data exists.
 - [x] ~~**Betfair historical data purchase decision**~~ — **resolved SKIP
   2026-07-11**: Betfair (historical + exchange API) is the only source
   confirmed to carry real cricket prop markets (Innings Runs, Top Batsman),
