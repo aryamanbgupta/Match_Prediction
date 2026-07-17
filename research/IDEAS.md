@@ -871,7 +871,7 @@ deliberately not done (different parquet/config) → D12. Follow-ups appended:
 D11 (inference-time symmetrization), D12 (production-config transfer). See
 `research/reports/auto/D7.md`.
 
-## D8 [P1] [RUNNING 2026-07-17T23:07:09Z] Recency-weighted training (match model)
+## D8 [P1] [TABLED] Recency-weighted training (match model)
 **Hypothesis:** train spans 2005–2024 equally weighted (`model.fit` passes no
 sample_weight — `xgboost_match_v1.py:197`); T20 is non-stationary (base-rate
 drift, scoring-era shift). Exponential time-decay concentrates capacity on
@@ -882,7 +882,20 @@ the loss and adds no features, so the correlation discipline doesn't apply.
 LL ONLY (pre-commit: no iteration-set shopping); paired 5-seed at the chosen
 HL vs fresh baseline; recipe A.
 **Gate:** LL + ROI vs fresh baseline mean, standard floors. **Budget:** ~2 h.
-**Result:** —
+**Result:** TABLED 2026-07-17. Mean-1-normalized decay weights on the TRAIN
+loss only (val raw for early stopping). Pre-committed val-LL-only sweep
+(HL {3,6,10,∞} × A1 seeds on v2_clean; ∞ arm = D7 base models): clean
+**interior optimum HL\*=6** (mean val LL 0.6433 vs ∞ 0.6466; every decayed
+arm beats uniform). Paired 5-seed ≥$50k vs D7's logged base: **ΔLL −0.0093**
+(0.6318 → 0.6225, floor 0.007, better 5/5 seeds; mean **beats market
+0.6267**, 3/5 seeds individually — second retrain idea below market after
+D7; LL seed-std halves 0.0061 → 0.0032) / **ΔROI −1.46pp** (+20.56 →
++19.11, down 3/5, win rate flat) → exactly one gate → TABLED. ≥$100k: ΔLL
+−0.0167 (5/5 better), ROI dead flat. A4 pattern: sharper probabilities,
+threshold-function ROI unmoved. Trainer flag reverted (`9702450`; re-revert
+to reuse); harness `scripts/auto/d8_run.py` + `models/auto/d8/` scratch
+kept. **Combine candidate**: with D7 swap-augment (supplies the ROI arm) —
+appended as D13. See `research/reports/auto/D8.md`.
 
 ## D9 [P2] [PENDING] Decayed margin-aware team-results ELO (replacement test for win_rate features)
 **Hypothesis:** `win_rate_diff` (crude last-10) is the single highest-gain
@@ -993,6 +1006,33 @@ in the report. Kept `998cad7`+`8a03cd9`; `models/auto/d12/` +
 `data/auto/d12/` scratch kept (gitignored). D11 gains a free second arm
 (production-config swap models at `models/auto/d12/swap_seed*`). See
 `research/reports/auto/D12.md`.
+
+## D13 [P1] [PENDING] Swap augmentation + recency decay combined (D7 × D8)
+**Hypothesis:** D7 (LANDED, ΔLL −0.0121 / ΔROI +3.01pp) and D8 (TABLED, ΔLL
+−0.0093 / ΔROI −1.46pp) are training-procedure changes with disjoint
+mechanisms — data augmentation (antisymmetry) vs loss weighting (recency) —
+and both independently push LL below market on v2_clean (0.6196 / 0.6225).
+If the LL gains even partially stack while swap's ROI arm survives, the
+combination beats the best single component and becomes the strongest
+training recipe in the loop. Decay weights extend to mirrored rows
+trivially (same match_date → same weight; mean-1 normalization unchanged
+since the mirror doubles every weight exactly once).
+**Method:** re-revert D8's revert (`git revert 9702450`) to restore
+`--decay-half-life-years`; run both flags together (`--swap-augment
+--decay-half-life-years 6` — HL fixed at 6 from D8's val sweep, no new
+sweep = no extra selection) at the A1 seeds on v2_clean, trainer defaults.
+Weight computation must run on the AUGMENTED frame (order the code so
+weights are computed after `_swap_augment_train`; verify mirrored rows get
+identical weights). Paired 5-seed recipe A vs the **D7 swap arm** per-seed
+results (`models/auto/d7/d7_results.json` "swap" — the stronger parent is
+the control, not the plain base).
+**Gate:** LL + ROI vs the D7 swap-arm mean (0.6196 / +23.57), retrain
+floors (0.007 LL / 2.3pp ROI — conservative: D7 measured swap-arm LL
+seed-std at 0.0027, so an LL gain may be real below the generic floor;
+report per-seed direction counts either way). Both → LANDED; one → TABLED;
+none → FAILED. **Budget:** ~45 min (10 trainings already exist for one arm;
+5 new trainings + 5 evals).
+**Result:** —
 
 ---
 
