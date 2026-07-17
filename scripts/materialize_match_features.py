@@ -676,9 +676,12 @@ def _split_elo(lineup_ids: List[str], elo_tracker,
     if not lineup_ids:
         return 0.0, 0.0
     top = lineup_ids[:top_n]
-    bottom = lineup_ids[top_n:]
+    # Short lineup (≤ top_n entries): fall back to BOWLING elos of the full
+    # lineup — never batting elos, which would silently alias
+    # bottom5_bowling_elo_avg to top6_batting_elo_avg (2026-07-16 review I2).
+    bottom = lineup_ids[top_n:] or lineup_ids
     top_bat_elos = [elo_tracker.get_batting_elo(p) for p in top]
-    bot_bow_elos = [elo_tracker.get_bowling_elo(p) for p in bottom] if bottom else top_bat_elos
+    bot_bow_elos = [elo_tracker.get_bowling_elo(p) for p in bottom]
     return (
         sum(top_bat_elos) / len(top_bat_elos) if top_bat_elos else 0.0,
         sum(bot_bow_elos) / len(bot_bow_elos) if bot_bow_elos else 0.0,

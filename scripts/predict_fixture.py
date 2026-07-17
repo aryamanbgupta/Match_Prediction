@@ -207,17 +207,30 @@ def compute_features(fixture: dict,
     team1_lineup = _resolve_player_ids(fixture["team1_lineup"], metadata)
     team2_lineup = _resolve_player_ids(fixture["team2_lineup"], metadata)
 
-    # Toss handling — defaults to neutral if unknown pre-toss.
+    # Lineup-length guard: the top6/bottom5 ELO splits need ≥7 players to be
+    # meaningful (2026-07-16 review I2).
+    for side, lu in (("team1", team1_lineup), ("team2", team2_lineup)):
+        if len(lu) < 7:
+            raise ValueError(
+                f"{side}_lineup has only {len(lu)} players; need ≥7 for the "
+                f"top6/bottom5 ELO split features")
+        if len(lu) < 11:
+            print(f"  WARN: {side}_lineup has {len(lu)} players (expected 11)")
+
+    # Toss handling. When the toss is unknown (pre-toss fixture), the caller
+    # predicts BOTH bat-first branches and averages (see main) — a fixed
+    # default here would be a train/serve skew: training rows always carry
+    # the real toss (materializer defaults the rare missing case to True,
+    # the old inference default was False). 2026-07-16 review I1.
     toss_winner = fixture.get("toss_winner")
     toss_decision = fixture.get("toss_decision") or "field"
+    toss_known = toss_winner in (team1, team2)
     if toss_winner == team1:
         team1_batting_first = (toss_decision == "bat")
     elif toss_winner == team2:
         team1_batting_first = (toss_decision == "field")
     else:
-        # Unknown toss: model has shown ~zero toss-winner effect; default
-        # to team1 chasing (modal in IPL recent seasons).
-        team1_batting_first = False
+        team1_batting_first = False  # placeholder; overridden by branch-averaging
 
     # Rehydrate per-player ELO + venue trackers as-of the fixture date.
     # SQLite returns state strictly before this date (first-write-wins),
@@ -326,6 +339,8 @@ def compute_features(fixture: dict,
         # Categorical raw values — get encoded below.
         "venue": venue,
         "competition_tier": competition_tier_code,
+        # Metadata (popped by the caller before prediction, not a feature).
+        "_toss_known": toss_known,
     }
     return record
 
@@ -416,7 +431,23 @@ def main() -> int:
     record = compute_features(fixture, provider, metadata, form, h2h, home)
 
     print("Applying model...")
-    p_team1, debug = apply_encoders_and_predict(record, args.model_dir)
+    toss_known = bool(record.pop("_toss_known", True))
+    toss_branch_probs = None
+    if toss_known:
+        p_team1, debug = apply_encoders_and_predict(record, args.model_dir)
+    else:
+        # Unknown toss: predict both bat-first branches and average
+        # (2026-07-16 review I1 — removes the fixed team1-chasing default,
+        # which was a systematic train/serve skew on every pre-toss fixture).
+        branch = dict(record)
+        branch["team1_batting_first"] = 1
+        p_bat, debug = apply_encoders_and_predict(branch, args.model_dir)
+        branch["team1_batting_first"] = 0
+        p_chase, _ = apply_encoders_and_predict(branch, args.model_dir)
+        p_team1 = 0.5 * (p_bat + p_chase)
+        toss_branch_probs = {"team1_bats_first": p_bat, "team1_chases": p_chase}
+        print(f"  (toss unknown — averaged bat-first branches: "
+              f"{p_bat*100:.1f}% / {p_chase*100:.1f}%)")
     p_team2 = 1.0 - p_team1
 
     bet_info = compute_bet(fixture["team1"], fixture["team2"], p_team1,
@@ -437,6 +468,8 @@ def main() -> int:
             "model": str(args.model_dir),
             "rehydrate_as_of": fixture["date"],
             "tracker_snapshot_as_of": _peek_snapshot_as_of(),
+            "toss_known": toss_known,
+            "toss_branch_probs": toss_branch_probs,
             "encoder_warnings": debug["encoder_warnings"],
             "h2h_n_meetings": record["h2h_n_meetings"],
             "is_team1_home": record["is_team1_home"],

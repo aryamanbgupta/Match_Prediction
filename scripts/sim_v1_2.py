@@ -3517,32 +3517,6 @@ class SimulationEngine:
             winner = "Tie"
             margin = "Tied"
         
-        # In sim_v1_2.py, inside the simulate_match method
-
-        # --- DEBUGGING TRIPWIRE START ---
-        # This block will crash the program if a non-integer is found,
-        # telling us exactly when the data corruption happens.
-        if not all(isinstance(val, int) for val in [team1_score, team1_wickets, team2_score, team2_wickets]):
-            
-            t1s_type = type(team1_score).__name__
-            t1w_type = type(team1_wickets).__name__
-            t2s_type = type(team2_score).__name__
-            t2w_type = type(team2_wickets).__name__
-            
-            error_message = (
-                f"\n\nFATAL: Data type corruption detected in simulation result!\n"
-                f"----------------------------------------------------------\n"
-                f"Match ID: {match_id}\n"
-                f"  Team 1 Score:   {team1_score} (Type: {t1s_type})\n"
-                f"  Team 1 Wickets: {team1_wickets} (Type: {t1w_type})\n"
-                f"  Team 2 Score:   {team2_score} (Type: {t2s_type})\n"
-                f"  Team 2 Wickets: {team2_wickets} (Type: {t2w_type})\n"
-                f"----------------------------------------------------------\n"
-                f"This error was triggered intentionally to pinpoint the source of the bug.\n"
-            )
-            raise TypeError(error_message)
-        # --- DEBUGGING TRIPWIRE END ---
-        
         return MatchResult(
             match_id=match_id,
             team1=state.team1,
@@ -3654,7 +3628,7 @@ class SimulationEngine:
         """Sequential simulation"""
         results = []
         for i in range(config.n_simulations):
-            if config.random_seed:
+            if config.random_seed is not None:
                 random.seed(config.random_seed + i)
                 np.random.seed(config.random_seed + i)
             
@@ -3671,7 +3645,7 @@ class SimulationEngine:
         # Create tasks
         tasks = []
         for i in range(config.n_simulations):
-            seed = (config.random_seed + i) if config.random_seed else None
+            seed = (config.random_seed + i) if config.random_seed is not None else None
             tasks.append((initial_state, f"sim_{i}", seed))
         
         # Run in parallel
@@ -3683,7 +3657,7 @@ class SimulationEngine:
     def _simulate_match_with_seed(self, state: MatchState, match_id: str, 
                                  seed: Optional[int]) -> MatchResult:
         """Simulate match with specific seed (for parallel execution)"""
-        if seed:
+        if seed is not None:
             random.seed(seed)
             np.random.seed(seed)
         

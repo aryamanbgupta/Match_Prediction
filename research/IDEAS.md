@@ -824,18 +824,26 @@ These touch loop-forbidden surfaces (`parsing_v2.py`, stats backends,
 gate (live-inference behavior). Loop: never claim these — statuses here are
 intentionally not PENDING.
 
-## I1 [INTERACTIVE] Toss both-branch averaging in predict_fixture
+## I1 [DONE 2026-07-16] Toss both-branch averaging in predict_fixture
 Materializer defaults unknown toss to team1-bats-first
 (`materialize_match_features.py:770`); `predict_fixture.py:220` defaults to
 False — systematic train/serve skew on every pre-toss live prediction.
 Approved design: predict both bat-first branches and average.
+**Done:** unknown-toss fixtures now predict both `team1_batting_first`
+branches and average; branch probs surfaced in diagnostics
+(`toss_known`/`toss_branch_probs`). Smoke-tested on 2026-05-10 CSK-LSG
+(branches 56.6%/57.5% → 57.1%).
 
-## I2 [INTERACTIVE] `_split_elo` bowling fallback
+## I2 [DONE 2026-07-16] `_split_elo` bowling fallback
 `materialize_match_features.py::_split_elo`: lineups ≤6 make
 `bottom5_bowling_elo_avg` (top-4 importance) silently equal the top-6
 BATTING elos (`bot_bow_elos = ... if bottom else top_bat_elos`). Replace
 with a neutral/guarded path + a predict-time lineup-length assertion;
 verify zero training rows change (full-XI lineups never hit the branch).
+**Done:** short lineups now fall back to bowling elos of the full lineup;
+predict-time guard raises <7 / warns <11. Corpus scan: 0 of 9,519 male
+matches have a ≤6 lineup → zero training rows change, no re-materialization
+needed.
 
 ## I3 [INTERACTIVE] Eval statistics hardening (`scripts/sim_eval/`)
 Cluster/block bootstrap by tournament/team (current i.i.d. per-match
@@ -888,10 +896,13 @@ stays a soft warning per user decision (no hard fail); wire the A7
 slice-conditional sizing rule into the live betting path; judge forward
 results against the seed-tempered ~+16% ROI, not the +21.9% headline.
 
-## I11 [INTERACTIVE] Sim micro-hygiene (`sim_v1_2.py`, two-liners)
+## I11 [DONE 2026-07-16] Sim micro-hygiene (`sim_v1_2.py`, two-liners)
 `if config.random_seed:` / `if seed:` treat seed 0 as unseeded (:3657,
 :3686) — compare against None instead; remove the shipped TypeError
 debugging tripwire in `simulate_match` (:3522-3544).
+**Done:** all three seed checks now `is not None`; tripwire removed.
+Byte-identical numerics for any seed ≠ 0 (guard-only changes);
+`test_lineup_extraction.py` 10/10 pass.
 
 ## I12 [INTERACTIVE] Women's-corpus model (new track)
 1,745 women's matches already on disk are filtered out of everything; a
