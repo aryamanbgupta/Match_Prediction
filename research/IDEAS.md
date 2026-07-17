@@ -828,7 +828,7 @@ Guards: top_bowler, team_first_over_mae. Both → LANDED (promotion to default
 sim model is a human follow-up decision). **Budget:** ~5 h.
 **Result:** —
 
-## D7 [P1] [PENDING] Team-swap symmetry augmentation (match model)
+## D7 [P1] [RUNNING 2026-07-17T22:49:05Z] Team-swap symmetry augmentation (match model)
 **Hypothesis:** the match model consumes absolute team1_/team2_ features and
 team assignment is arbitrary cricsheet order, so it is not antisymmetric —
 and it shows: train/val/test base rate drifts 0.488/0.476/0.472 and
