@@ -94,6 +94,86 @@ def _build_monotone_constraints(feat_cols: list) -> tuple:
     return tuple(_MONOTONE_SIGNS.get(c, 0) for c in feat_cols)
 
 
+# D7 (2026-07-17): team-swap symmetry augmentation. Each train row gets a
+# mirrored copy with the two teams exchanged and the label flipped, enforcing
+# P(team1 wins | A, B) = 1 - P(team1 wins | B, A) by construction. The
+# mapping is exhaustive over the v2_clean schema; _swap_frame refuses to run
+# on any column it cannot classify. h2h uses a Beta(1,1) prior (k=2 -> 0.5),
+# so 1-x is its exact mirror; no-result/tie matches are dropped at
+# materialization, so the label flip is always valid.
+_SWAP_PAIRS = [
+    ("team1_batting_elo", "team2_batting_elo"),
+    ("team1_bowling_elo", "team2_bowling_elo"),
+    ("team1_batting_avg", "team2_batting_avg"),
+    ("team1_batting_sr", "team2_batting_sr"),
+    ("team1_bowling_avg", "team2_bowling_avg"),
+    ("team1_bowling_econ", "team2_bowling_econ"),
+    ("team1_win_rate_last_10", "team2_win_rate_last_10"),
+    ("team1_lhb_count", "team2_lhb_count"),
+    ("team1_pace_count", "team2_pace_count"),
+    ("team1_spinner_count", "team2_spinner_count"),
+    ("is_team1_home", "is_team2_home"),
+    ("team1_top6_batting_elo_avg", "team2_top6_batting_elo_avg"),
+    ("team1_bottom5_bowling_elo_avg", "team2_bottom5_bowling_elo_avg"),
+    ("team1", "team2"),
+]
+_SWAP_NEGATE = [
+    "elo_diff_batting", "elo_diff_bowling", "batting_avg_diff",
+    "bowling_econ_diff", "win_rate_diff", "top6_batting_elo_diff",
+    "bottom5_bowling_elo_diff",
+]
+_SWAP_ONE_MINUS = [
+    "h2h_team1_win_rate_shrunk", "toss_winner_is_team1",
+    "team1_batting_first", "team1_wins",
+]
+_SWAP_INVARIANT = [
+    "match_id", "cricsheet_id", "match_date", "venue", "competition_tier",
+    "venue_avg_score", "venue_chase_win_pct", "venue_dot_pct",
+    "venue_boundary_pct", "is_international", "toss_decision_bat",
+    "h2h_n_meetings",
+]
+
+
+def _swap_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Return the team-swapped mirror of df (same column order/dtypes)."""
+    covered = set(_SWAP_INVARIANT) | set(_SWAP_NEGATE) | set(_SWAP_ONE_MINUS)
+    for a, b in _SWAP_PAIRS:
+        covered |= {a, b}
+    unclassified = [c for c in df.columns if c not in covered]
+    if unclassified:
+        raise ValueError(
+            f"swap-augment: unclassified columns {unclassified} — extend the "
+            "_SWAP_* mapping before augmenting this schema")
+    sw = df.copy()
+    for a, b in _SWAP_PAIRS:
+        if a in df.columns and b in df.columns:
+            sw[a] = df[b].to_numpy()
+            sw[b] = df[a].to_numpy()
+    for c in _SWAP_NEGATE:
+        if c in df.columns:
+            sw[c] = -df[c]
+    for c in _SWAP_ONE_MINUS:
+        if c in df.columns:
+            sw[c] = 1 - df[c]
+    return sw
+
+
+def _swap_augment_train(train: pd.DataFrame) -> pd.DataFrame:
+    """Append the mirrored copy of every train row (label flipped)."""
+    sw = _swap_frame(train)
+    back = _swap_frame(sw)
+    num_cols = [c for c in train.columns
+                if pd.api.types.is_numeric_dtype(train[c])]
+    obj_cols = [c for c in train.columns if c not in num_cols]
+    if not np.allclose(back[num_cols].to_numpy(dtype=float),
+                       train[num_cols].to_numpy(dtype=float),
+                       rtol=0, atol=1e-12):
+        raise AssertionError("swap involution failed on numeric columns")
+    if not back[obj_cols].equals(train[obj_cols]):
+        raise AssertionError("swap involution failed on non-numeric columns")
+    return pd.concat([train, sw], ignore_index=True)
+
+
 def _load_split(data_dir: Path, name: str) -> pd.DataFrame:
     path = data_dir / f"{name}.parquet"
     if not path.exists():
@@ -148,6 +228,12 @@ def train_model(args) -> tuple:
     test = _load_split(data_dir, "test")
 
     print(f"  train: {len(train):,}   val: {len(val):,}   test: {len(test):,}")
+
+    if args.swap_augment:
+        train = _swap_augment_train(train)
+        print(f"  swap-augment: train doubled → {len(train):,} rows "
+              f"(base rate {train['team1_wins'].mean():.4f}); "
+              "val/test untouched")
 
     # Detect numeric features BEFORE encoders run, so the encoded columns
     # don't double-count.
@@ -299,6 +385,10 @@ def main():
     ap.add_argument("--reg-lambda", type=float, default=1.0)
     ap.add_argument("--early-stopping-rounds", type=int, default=30)
     ap.add_argument("--seed", type=int, default=29)
+    ap.add_argument("--swap-augment", action="store_true",
+                    help="D7: append a team-swapped mirror of every TRAIN row "
+                    "(label flipped) to enforce antisymmetry. Val/test are "
+                    "never augmented.")
     ap.add_argument("--monotone", action="store_true",
                     help="Apply per-feature monotone constraints from "
                     "_MONOTONE_SIGNS. Off by default for back-compat with "
