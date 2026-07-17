@@ -116,11 +116,22 @@ _SWAP_PAIRS = [
     ("team1_top6_batting_elo_avg", "team2_top6_batting_elo_avg"),
     ("team1_bottom5_bowling_elo_avg", "team2_bottom5_bowling_elo_avg"),
     ("team1", "team2"),
+    # D12: M2 outcome-dist expected columns (verified exact t1/t2 mirrors on
+    # the m3_unfrozen parquet; absent from v2_clean, so no-ops there).
+    ("team1_top6_p4_expected", "team2_top6_p4_expected"),
+    ("team1_top6_p6_expected", "team2_top6_p6_expected"),
+    ("team1_top6_pw_expected", "team2_top6_pw_expected"),
+    ("team1_bowlers_p4_expected", "team2_bowlers_p4_expected"),
+    ("team1_bowlers_p6_expected", "team2_bowlers_p6_expected"),
+    ("team1_bowlers_pw_expected", "team2_bowlers_pw_expected"),
 ]
 _SWAP_NEGATE = [
     "elo_diff_batting", "elo_diff_bowling", "batting_avg_diff",
     "bowling_econ_diff", "win_rate_diff", "top6_batting_elo_diff",
     "bottom5_bowling_elo_diff",
+    # D12: M2 diffs, all verified exactly t1 - t2 on the m3_unfrozen parquet.
+    "p4_batting_diff", "p6_batting_diff", "pw_batting_diff",
+    "p4_bowling_diff", "p6_bowling_diff", "pw_bowling_diff",
 ]
 _SWAP_ONE_MINUS = [
     "h2h_team1_win_rate_shrunk", "toss_winner_is_team1",
@@ -131,6 +142,9 @@ _SWAP_INVARIANT = [
     "venue_avg_score", "venue_chase_win_pct", "venue_dot_pct",
     "venue_boundary_pct", "is_international", "toss_decision_bat",
     "h2h_n_meetings",
+    # D12: venue outcome-dist rates (M2 venue-only; properties of the venue,
+    # team-order invariant).
+    "venue_p4", "venue_p6", "venue_pw",
 ]
 
 
