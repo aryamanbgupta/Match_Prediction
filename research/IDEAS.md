@@ -828,7 +828,7 @@ Guards: top_bowler, team_first_over_mae. Both → LANDED (promotion to default
 sim model is a human follow-up decision). **Budget:** ~5 h.
 **Result:** —
 
-## D7 [P1] [RUNNING 2026-07-17T22:49:05Z] Team-swap symmetry augmentation (match model)
+## D7 [P1] [LANDED] Team-swap symmetry augmentation (match model)
 **Hypothesis:** the match model consumes absolute team1_/team2_ features and
 team assignment is arbitrary cricsheet order, so it is not antisymmetric —
 and it shows: train/val/test base rate drifts 0.488/0.476/0.472 and
@@ -850,7 +850,26 @@ stopping). Paired 5-seed (A1 seeds) vs fresh baseline; recipe A.
 **Gate:** LL + ROI vs fresh baseline mean, retraining noise floors (>1
 seed-std). If LANDED, flag inference-time symmetrization (average p(A,B) and
 1 − p(B,A)) as the follow-up idea. **Budget:** ~1.5 h.
-**Result:** —
+**Result:** LANDED 2026-07-17. `--swap-augment` (opt-in) in
+`xgboost_match_v1.py`: TRAIN-only mirrored copies — 13 team1/team2 pairs
+exchanged, 7 signed diffs negated, h2h/toss/bat-first/label 1−x, 12
+invariants; coverage + swap(swap)==id hard-fail guards. Pre-run checks all
+EXACT: 7/7 diff identities dev 0.0, h2h Beta(1,1) prior 0.5 at n=0 (1,728
+rows), ties dropped at materialization → label flip valid; train 7,912 →
+15,824 rows at base rate exactly 0.5. Paired 5-seed (A1 seeds, v2_clean,
+trainer defaults); same-session base reproduces A1's logged numbers EXACTLY
+on all 5 seeds. ≥$50k paired MEAN: **ΔLL −0.0121** (0.6318 → 0.6196, floor
+0.007, better 5/5 seeds) / **ΔROI +3.01pp** (+20.56 → +23.57, floor 2.3, up
+4/5). **Both → LANDED.** Swap mean LL **0.6196 beats market 0.6267** (every
+seed does; max 0.6244) — first retrain idea in the loop below market LL.
+Seed LL std collapses 0.0068 → 0.0027 (symmetry removes most seed luck —
+re-measure the floor before gating on a swap-augmented baseline); ROI CI lo
+> 0 on 5/5 swap seeds (base 2/5). ≥$100k consistent: ΔLL −0.0233, ROI
++26.14 → +30.02%, CI lo > 0 on 4/5. Kept `9a3eb17`; default trainer path +
+recipe-A baseline semantics unchanged (flag is opt-in). Production adoption
+deliberately not done (different parquet/config) → D12. Follow-ups appended:
+D11 (inference-time symmetrization), D12 (production-config transfer). See
+`research/reports/auto/D7.md`.
 
 ## D8 [P1] [PENDING] Recency-weighted training (match model)
 **Hypothesis:** train spans 2005–2024 equally weighted (`model.fit` passes no
@@ -900,6 +919,54 @@ mark the test xfail with a comment — do NOT fix (forbidden files); flag it
 for the Interactive backlog.
 **Gate:** instrumentation (A1-style) — LANDED if the suite passes (xfails
 allowed and reported) and covers the named functions. **Budget:** ~2 h.
+**Result:** —
+
+## D11 [P2] [PENDING] Inference-time symmetrization on the swap-augmented model (D7 follow-up)
+**Hypothesis:** D7's augmentation makes the model *approximately*
+antisymmetric but not exactly (trees on augmented data still fit residual
+orientation noise). Averaging the two orientations at predict time —
+p_sym = (p(A,B) + 1 − p(B,A)) / 2 via the D7 `_swap_frame` mapping applied
+to the TEST parquet — enforces exact antisymmetry and is a free eval-only
+variance cut on top of D7 (flagged by D7's own gate note). Cheap: reuses the
+5 trained swap models at `models/auto/d7/swap_seed*`; no retraining.
+**Method:** script under `scripts/auto/`: load each D7 swap model, score
+test.parquet both raw and swapped (re-encode venue/tier for the swapped
+frame with the saved encoders — team columns don't touch the encoded
+features, so encoding is unchanged; verify), write symmetrized
+test_predictions.json per seed → recipe A steps 2–3 per seed. Paired
+symmetrized-vs-raw over the same 5 seeds. Also report the same transform on
+the base (non-augmented) models `models/auto/d7/base_seed*` as a second arm
+(does symmetrization alone recover part of D7's gain?).
+**Gate:** eval-only floors (ΔLL 0.002 / ΔROI 2pp) vs the D7 swap per-seed
+results (primary arm). Both → LANDED; one → TABLED; none → FAILED.
+**Budget:** ~45 min (no training).
+**Result:** —
+
+## D12 [P1] [PENDING] Swap augmentation on the production config (D7 transfer confirmation)
+**Hypothesis:** D7 landed on the loop's recipe-A baseline (v2_clean frozen
+parquet, 45 features), but production
+(`models/xgb_match_v3_m7_production`) trains on an unfrozen parquet with
+the 48-feature M2-venue set. If the augmentation gain transfers there, the
+production-adoption case is complete (adoption itself stays a human
+decision). The swap mapping extends cleanly: venue_p4/p6/pw are
+swap-INVARIANT; the M2 expected/diff columns pair/negate exactly like the
+M1 families (`team{1,2}_top6_p*_expected`, `team{1,2}_bowlers_p*_expected`
+pairs; `p*_batting_diff`/`p*_bowling_diff` negations) — the hard-fail
+coverage guard forces the extension to be explicit and total.
+**Method:** extend the `_SWAP_*` mapping in `xgboost_match_v1.py` for the
+M2 columns (guard makes omissions impossible); subset
+`data/xgb_match_data_v3_m3_unfrozen` (90 cols, superset) to metadata + the
+production 48-feature list from
+`models/xgb_match_v3_m7_production/feature_columns.txt` in that exact
+column order (A9 pattern — colsample makes order load-bearing) →
+`data/auto/d12/`; re-run the D7 pre-run verification (diff identities on
+the NEW parquet, involution, coverage); paired 5-seed base-vs-swap
+(`scripts/auto/d7_run.py` generalized), recipe A, ≥$50k gate.
+**Gate:** LL + ROI paired vs the same-parquet base mean, retraining floors
+(>1 seed-std: 0.007 LL / 2.3pp ROI). Both → LANDED (production retrain
+recommendation goes in the report; not executed by the loop); one → TABLED;
+none → FAILED. **Budget:** ~1.5 h (no re-materialization — parquet subset
+only).
 **Result:** —
 
 ---
