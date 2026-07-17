@@ -583,7 +583,7 @@ A14/A15/A16) are venue-blind; canonical venue-ON baseline =
 11a19ea + 422c266. Follow-up B7 appended (stale ball calibrators). See
 `research/reports/auto/B6.md`.
 
-## B7 [P1] [PENDING] Refit ball calibrators on the venue-ON sim (B6 re-baseline follow-up)
+## B7 [P1] [RUNNING 2026-07-17T12:51:34Z] Refit ball calibrators on the venue-ON sim (B6 re-baseline follow-up)
 *(claim reset by supervisor 2026-07-12: iteration was cut by end-of-night quota
 exhaustion after implement + pre-commit gate; calibrator artifacts already built
 at `models/auto/b7/` — the re-run only needs the paired recipe-B eval + verdict)*
