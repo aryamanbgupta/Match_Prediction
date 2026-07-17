@@ -871,7 +871,7 @@ deliberately not done (different parquet/config) → D12. Follow-ups appended:
 D11 (inference-time symmetrization), D12 (production-config transfer). See
 `research/reports/auto/D7.md`.
 
-## D8 [P1] [PENDING] Recency-weighted training (match model)
+## D8 [P1] [RUNNING 2026-07-17T23:07:09Z] Recency-weighted training (match model)
 **Hypothesis:** train spans 2005–2024 equally weighted (`model.fit` passes no
 sample_weight — `xgboost_match_v1.py:197`); T20 is non-stationary (base-rate
 drift, scoring-era shift). Exponential time-decay concentrates capacity on
