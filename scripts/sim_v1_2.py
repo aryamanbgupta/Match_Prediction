@@ -758,7 +758,9 @@ class XGBoostModelV2(PredictionModel):
             'score': int(state.runs[team_idx]),
             'wickets': int(state.wickets[team_idx]),
             'balls_bowled': state.balls,
-            'run_rate': float(state.runs[team_idx]) / float(state.balls + 1),
+            # Runs per over, matching the training formula exactly
+            # (parsing_v2.calculate_basic_features: score / max(overs, 0.1)).
+            'run_rate': float(state.runs[team_idx]) / max(state.balls / 6.0, 0.1),
             'wickets_ratio': float(state.wickets[team_idx]) / 10.0,
             'balls_ratio': float(state.balls) / 120.0,
             'wickets_in_hand': wickets_in_hand,
@@ -1187,7 +1189,7 @@ class XGBoostModel(PredictionModel):
 
         
         # Derived features
-        run_rate = score / (balls_bowled + 1)
+        run_rate = score / max(balls_bowled / 6.0, 0.1)  # runs per over (training formula)
         wickets_ratio = wickets / 10.0
         balls_ratio = balls_bowled / 120.0
         
@@ -1355,7 +1357,7 @@ class LSTMModelV1(PredictionModel):
             'score': int(state.runs[team_idx]),
             'wickets': int(state.wickets[team_idx]),
             'balls_bowled': state.balls,
-            'run_rate': float(state.runs[team_idx]) / max(float(state.balls), 1) * 6,  # runs per over
+            'run_rate': float(state.runs[team_idx]) / max(state.balls / 6.0, 0.1),  # runs per over (training formula)
             'wickets_ratio': float(state.wickets[team_idx]) / 10.0,
             'balls_ratio': float(state.balls) / 120.0,
             'wickets_in_hand': wickets_in_hand,
@@ -1820,7 +1822,7 @@ class MLPModelV1(PredictionModel):
             'score': int(state.runs[team_idx]),
             'wickets': int(state.wickets[team_idx]),
             'balls_bowled': state.balls,
-            'run_rate': float(state.runs[team_idx]) / max(float(state.balls), 1) * 6,
+            'run_rate': float(state.runs[team_idx]) / max(state.balls / 6.0, 0.1),  # runs per over (training formula)
             'wickets_ratio': float(state.wickets[team_idx]) / 10.0,
             'balls_ratio': float(state.balls) / 120.0,
             'wickets_in_hand': wickets_in_hand,
@@ -2252,7 +2254,7 @@ class MLPModelV2(PredictionModel):
             'score': int(state.runs[team_idx]),
             'wickets': int(state.wickets[team_idx]),
             'balls_bowled': state.balls,
-            'run_rate': float(state.runs[team_idx]) / max(float(state.balls), 1) * 6,
+            'run_rate': float(state.runs[team_idx]) / max(state.balls / 6.0, 0.1),  # runs per over (training formula)
             'wickets_ratio': float(state.wickets[team_idx]) / 10.0,
             'balls_ratio': float(state.balls) / 120.0,
             'wickets_in_hand': wickets_in_hand,
@@ -2750,7 +2752,7 @@ class TransformerModelV1(PredictionModel):
             'score': int(state.runs[team_idx]),
             'wickets': int(state.wickets[team_idx]),
             'balls_bowled': state.balls,
-            'run_rate': float(state.runs[team_idx]) / max(float(state.balls), 1) * 6,
+            'run_rate': float(state.runs[team_idx]) / max(state.balls / 6.0, 0.1),  # runs per over (training formula)
             'wickets_ratio': float(state.wickets[team_idx]) / 10.0,
             'balls_ratio': float(state.balls) / 120.0,
             'wickets_in_hand': wickets_in_hand,
