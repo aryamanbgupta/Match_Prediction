@@ -599,6 +599,301 @@ the refit calibrators are byte-close to the stale ones (max ratio diff < the
 
 ---
 
+# D-series: 2026-07-16 full-review seeds (supervisor)
+
+Source: 2026-07-16 four-agent project review (match-level code, sim
+internals, research history, data/eval integrity), user-approved. D1–D3 are
+mandated sim correctness fixes; D4–D10 are approved improvements. Ordering:
+- Every sim-engine change re-baselines. Pair each verdict against a fresh
+  same-seed baseline run under the CURRENT default sim path, identical
+  calibrator settings on both sides. `models/auto/b6/detail_venue_s43_n261.json`
+  (seed 43) is a valid baseline ONLY while no sim-engine idea has landed
+  after B6 — otherwise re-run the baseline first.
+- Preferred sim order: B7 (already staged) → D1 → D2 → D3 → D4/D5 → D6 last
+  (D6 retrains the ball model and, if it lands, obsoletes the calibrator
+  chain). One sim idea per night.
+- D7/D8 (match-level, cheap) can interleave on any night; D9/D10 after.
+- Review items touching loop-forbidden surfaces (`parsing_v2.py`, stats
+  backends, `scripts/sim_eval/`, the odds builder, production caches) are
+  NOT queued as PENDING — they live in the Interactive backlog at the
+  bottom of this file. Never claim those.
+
+## D1 [P1] [PENDING] Fix sim-side `run_rate` scale skew (runs-per-over vs runs-per-ball)
+**Hypothesis:** training computes `run_rate` as runs-per-OVER
+(`parsing_v2.py:938`: `score / max(overs, 0.1)`) but the sim wrappers compute
+runs-per-BALL (`sim_v1_2.py:761`: `runs/(balls+1)`; second site at `:1190`) —
+a ~6× scale skew on every simulated ball, the same OOD-input bug class as
+B1/B6 venue blindness. `run_rate` ranks ~104/114 by gain so expect a small
+effect — a correctness fix; B6 showed this bug class can still carry a
+CI-clean batter-level win.
+**Method:** align ALL sim-side feature-assembly sites to the training formula
+(runs per over, same 0.1 zero-guard) — sim_v1_2.py has duplicated
+feature-build blocks (~601/1153/1596/2017 per TODO); grep every `run_rate`
+assignment. Do NOT touch the `run_rate_required` chase features (:805 —
+already correct). Teacher-forced spot check: rebuild features for a few
+recorded states and match `run_rate` against the training parquet. Recipe B
+paired vs fresh same-seed venue-ON baseline.
+**Gate (sim pair):** correctness — LANDED if the teacher-forced check matches
+training AND no guard regresses CI-clean paired (batter_runs_mae,
+team_first_over_mae, top_bowler, bowler_wkts_1plus,
+team_total_{fours,sixes}_mae); CI-clean improvements are a bonus, not
+required. **Budget:** ~2 h.
+**Result:** —
+
+## D2 [P1] [PENDING] Fix strike rotation + balls-faced on extras in the sim
+**Hypothesis:** `update()` rotates strike on any odd `runs`
+(`sim_v1_2.py:331-332`) and WIDE/NO_BALL both carry runs=1 (`process_ball`
+:560-563), so ~2% of deliveries wrongly swap the striker; and balls-faced
+excludes only WIDE (:315-318), so NO_BALL increments the striker's ball
+count. Misattributes batter exposure; biases batter-level props at the
+margin.
+**Method:** in `sim_v1_2.py` only: rotate strike on odd off-the-bat runs
+(never on wide/no-ball), and exclude NO_BALL from balls-faced alongside
+WIDE. Unit-check on a scripted over. Recipe B paired vs fresh same-seed
+baseline.
+**Gate (sim pair):** correctness — LANDED if guards hold (no CI-clean
+regression on batter_runs_mae, top_bowler, bowler_wkts_1plus,
+team_first_over_mae); batter-family improvements a bonus. **Budget:** ~2 h.
+**Result:** —
+
+## D3 [P1] [PENDING] Fix extras graft: empirical rates + pre-calibration ordering (sim-side half)
+**Hypothesis:** `predict_next_ball` grafts a flat 1% wide + 1% no-ball AFTER
+the calibrator runs (`sim_v1_2.py`: calibrator ~:1121-1126, graft
+:1141-1142, then renormalize) — de-tuning the calibrated 6-class marginals —
+and the rates are wrong (real T20 wides ≈3.5–4%, no-balls ≈0.5%: the flat 2%
+under-produces wides and over-produces no-balls ~2×). Extras are also baked
+into training labels (a wide-1 is labeled `one`), so the graft
+double-counts; the label-side rework needs `parsing_v2.py` (loop-forbidden —
+see Interactive backlog I5). This idea is the sim-side half only.
+**Method:** compute empirical wide/no-ball per-delivery rates from val-split
+cricsheet JSONs (as-of; small script, artifacts to `models/auto/d3/`);
+replace the hardcoded 0.01/0.01; restructure so the calibrated 6-class
+RELATIVE marginals are preserved when extras mass is added (scale the six
+classes by (1 − p_extras) instead of renormalizing after the graft). Recipe
+B paired.
+**Gate (sim pair):** PRIMARY = simulated wide/no-ball rates match the
+empirical val rates (report before/after) AND no CI-clean guard regression
+(batter_runs_mae, pp_total/team-total families, top_bowler, bowler_wkts).
+Both → LANDED; total-line improvements a bonus. **Budget:** ~2 h.
+**Result:** —
+
+## D4 [P2] [PENDING] Wicket-type modeling: run-outs in the sim (attribution fix)
+**Hypothesis:** the sim attributes 100% of dismissals to bowler-vs-striker
+(`sim_v1_2.py:321-324`; bowling card ~:3606-3614). Real T20 has ~5–8%
+run-outs (often the non-striker, never credited to the bowler). This is
+exactly the residual `bowler_wkts_1plus` overshoot (+0.03 vs fair baseline
+even after calibration, `reports/e5_class_weight_fix.md:87`) — attribution,
+not rates.
+**Method:** on a sampled WICKET, draw dismissal type from empirical rates
+(run-out fraction + non-striker share, computed as-of from cricsheet
+`wickets[].kind`; script + artifact under `models/auto/d4/`); run-outs
+dismiss striker/non-striker per the empirical share with NO bowler credit.
+Total wicket rate unchanged — only attribution moves. Recipe B paired.
+**Gate (sim pair):** `bowler_wkts_{1,2}plus` Brier margin vs fair baseline
+improves CI-clean AND guards hold: top_bowler margin vs fair baseline no
+CI-clean regression (it redistributes credit — watch it), batter_runs_mae,
+team_first_over_mae. **Budget:** ~2.5 h.
+**Result:** —
+
+## D5 [P2] [PENDING] Bowler eligibility filter (stop keepers/pure batters bowling)
+**Hypothesis:** `get_available_bowlers` (`sim_v1_2.py:263-279`) iterates all
+11 players; `EmpiricalBowlerSelector` gives unknown bowlers a league-share
+floor α, so non-bowlers bowl at a small nonzero rate, diluting bowler-family
+props.
+**Method:** gate eligibility on as-of career balls-bowled (e.g. ≥60) or real
+support in `models/bowler_phase_usage.json`, relaxing the threshold whenever
+an XI would otherwise have <5 eligible bowlers. Report before/after share of
+overs bowled by zero-history players. Recipe B paired.
+**Gate (sim pair):** PRIMARY = overs bowled by zero-career-ball players drop
+to ≈0 AND bowler coverage stays ≥90% (the G5 bar) AND no CI-clean guard
+regression (top_bowler, bowler_wkts, batter_runs_mae). **Budget:** ~1.5 h.
+**Result:** —
+
+## D6 [P1] [PENDING] Retrain the ball model WITHOUT balanced class weights (structural E5 alternative)
+**Hypothesis:** E5's root cause was `balanced` class weights sampled raw; the
+fix so far is post-hoc marginal patching (E5 global vector → A8 → A14/A15 →
+A16 → B7), which "can't be right everywhere" (the tilt is phase-dependent)
+and is what costs batter_runs_mae under calibration (it breaks an accidental
+boundary/wicket cancellation — e5 report). The never-tried structural
+alternative: retrain with sample weights OFF so the model estimates
+P(outcome|state) with correct conditional structure directly — balanced
+weights only help ranking, which a generative sim doesn't need. E5 compared
+only raw-balanced / theoretical prior-division / vector-scaling.
+**Method:** retrain the v6-hierarchical config with weights off
+(`scripts/xgboost_v2.py` — trainer is editable; weight sites :235, :273-278,
+:343-347; add a config/CLI flag, don't delete the path) to `models/auto/d6/`
+(NEVER overwrite `models/xgb_v3/`). Run the E5 marginal audit
+(teacher-forced per-class marginals vs actual). Then recipe B paired vs the
+canonical venue-ON baseline: d6-raw (no ball calibrator) and, if marginals
+are still visibly off, d6 + fresh val-fit vector as a second arm. Heavy —
+start only if >6 h of night remain.
+**Gate (sim pair):** PRIMARY = teacher-forced marginals ≈ actual (E5-report
+tolerance) AND, paired vs the CALIBRATED venue-ON baseline, tail families
+(`pp_total_*`, `bowler_wkts_1plus`) improve CI-clean while `batter_runs_mae`
+does NOT regress CI-clean (the exact trade the calibrator couldn't deliver).
+Guards: top_bowler, team_first_over_mae. Both → LANDED (promotion to default
+sim model is a human follow-up decision). **Budget:** ~5 h.
+**Result:** —
+
+## D7 [P1] [PENDING] Team-swap symmetry augmentation (match model)
+**Hypothesis:** the match model consumes absolute team1_/team2_ features and
+team assignment is arbitrary cricsheet order, so it is not antisymmetric —
+and it shows: train/val/test base rate drifts 0.488/0.476/0.472 and
+importances are asymmetric (team2_batting_sr #2 vs team1_batting_sr #3;
+is_team2_home weight 15 vs is_team1_home 5). Augmenting each train row with
+its swapped copy (exchange team columns, negate signed diffs, flip label)
+doubles effective n to ~15.8k and enforces P(t1|A,B) = 1 − P(t1|B,A).
+Training-procedure change, no new features — the correlation-check
+discipline and the M3–M6 failure modes don't apply. Appears nowhere in the
+M/E/A history.
+**Method:** in `scripts/xgboost_match_v1.py` (trainer editable), build the
+swapped train copy: exchange every team1_*/team2_* pair, swap
+is_team1_home/is_team2_home, negate *_diff columns, map
+h2h_team1_win_rate_shrunk → 1−x, flip toss_winner_is_team1 and
+team1_batting_first, flip the label. Derive the mapping from
+feature_columns.txt explicitly; unit-check swap(swap(row)) == row and that
+all 48 columns are covered. Augment TRAIN only (val stays raw for early
+stopping). Paired 5-seed (A1 seeds) vs fresh baseline; recipe A.
+**Gate:** LL + ROI vs fresh baseline mean, retraining noise floors (>1
+seed-std). If LANDED, flag inference-time symmetrization (average p(A,B) and
+1 − p(B,A)) as the follow-up idea. **Budget:** ~1.5 h.
+**Result:** —
+
+## D8 [P1] [PENDING] Recency-weighted training (match model)
+**Hypothesis:** train spans 2005–2024 equally weighted (`model.fit` passes no
+sample_weight — `xgboost_match_v1.py:197`); T20 is non-stationary (base-rate
+drift, scoring-era shift). Exponential time-decay concentrates capacity on
+the modern game. Orthogonal to DROPPED M4 (form *features*): this weights
+the loss and adds no features, so the correlation discipline doesn't apply.
+**Method:** add `--decay-half-life-years`; sample_weight =
+0.5^(age_years_at_train_end / HL). Sweep HL ∈ {3, 6, 10, ∞} selecting on VAL
+LL ONLY (pre-commit: no iteration-set shopping); paired 5-seed at the chosen
+HL vs fresh baseline; recipe A.
+**Gate:** LL + ROI vs fresh baseline mean, standard floors. **Budget:** ~2 h.
+**Result:** —
+
+## D9 [P2] [PENDING] Decayed margin-aware team-results ELO (replacement test for win_rate features)
+**Hypothesis:** `win_rate_diff` (crude last-10) is the single highest-gain
+feature — the direct team-result family is the model's best signal but its
+poorest-estimated one. A time-decayed, margin-aware team ELO updated on
+match results is a strictly richer estimator of the same construct, and it
+is match-level BY NATURE — immune to the lineup-aggregation collapse that
+killed M3–M5. It will likely FAIL the |r|>0.5 redundancy check vs
+win_rate_diff, so frame as REPLACEMENT, not addition (per discipline: must
+show clearly higher target correlation).
+**Method:** new TeamEloTracker in `materialize_match_features.py`
+(chronological; K and margin-scaling chosen on val, small grid);
+re-materialize to `data/auto/d9/` (~30–60 min). Pre-training dual
+correlation check FIRST (cheap exit à la M5 if it fails both framings).
+Then paired 5-seed, recipe A, two arms: (a) ADD team-ELO features,
+(b) REPLACE win_rate_last_10/win_rate_diff with them.
+**Gate:** corr-check pass (replacement framing allowed), then LL + ROI vs
+fresh baseline mean on the better arm, standard floors. **Budget:** ~3 h.
+**Result:** —
+
+## D10 [P2] [PENDING] Characterization tests for the eval math (instrumentation)
+**Hypothesis:** every gate verdict rests on untested statistics code —
+nothing tests `match_evaluator._bootstrap_ci`, `_calculate_kelly_fraction`,
+`_calculate_realized_pnl`, the reslice/blend paths, or min-volume
+filtering; `realized_pnl != 0` conflates a zero-return win with "no bet"
+(`match_evaluator.py:933,977`; `reslice_eval_json.py:200-201`). Refactors
+here are unguarded.
+**Method:** NEW test files under `scripts/tests/` only (`test_eval_math.py`,
+…) with synthetic fixtures — do NOT modify `scripts/sim_eval/` or the odds
+builder (loop-forbidden). Characterize current behavior (bootstrap
+reproducibility at seed 42, Kelly caps, PnL arithmetic, edge/min-volume
+boundaries). If a test exposes a real bug: document it in the report and
+mark the test xfail with a comment — do NOT fix (forbidden files); flag it
+for the Interactive backlog.
+**Gate:** instrumentation (A1-style) — LANDED if the suite passes (xfails
+allowed and reported) and covers the named functions. **Budget:** ~2 h.
+**Result:** —
+
+---
+
 ## Combination ideas (C-series)
 Created only when no PENDING ideas remain, from TABLED entries. Follow
 PROTOCOL step 1.
+
+---
+
+# Interactive backlog (supervisor + user sessions only — NOT for the loop)
+
+These touch loop-forbidden surfaces (`parsing_v2.py`, stats backends,
+`scripts/sim_eval/`, the odds builder, production caches) or have no loop
+gate (live-inference behavior). Loop: never claim these — statuses here are
+intentionally not PENDING.
+
+## I1 [INTERACTIVE] Toss both-branch averaging in predict_fixture
+Materializer defaults unknown toss to team1-bats-first
+(`materialize_match_features.py:770`); `predict_fixture.py:220` defaults to
+False — systematic train/serve skew on every pre-toss live prediction.
+Approved design: predict both bat-first branches and average.
+
+## I2 [INTERACTIVE] `_split_elo` bowling fallback
+`materialize_match_features.py::_split_elo`: lineups ≤6 make
+`bottom5_bowling_elo_avg` (top-4 importance) silently equal the top-6
+BATTING elos (`bot_bow_elos = ... if bottom else top_bat_elos`). Replace
+with a neutral/guarded path + a predict-time lineup-length assertion;
+verify zero training rows change (full-XI lineups never hit the branch).
+
+## I3 [INTERACTIVE] Eval statistics hardening (`scripts/sim_eval/`)
+Cluster/block bootstrap by tournament/team (current i.i.d. per-match
+resampling understates ROI CI width on tournament-clustered bet sets); fix
+the `realized_pnl != 0` bet-placed test. Changes the gates themselves —
+human-supervised only; re-report standing headline CIs after.
+
+## I4 [INTERACTIVE] Odds-build integrity (`build_polymarket_odds.py` + eval odds)
+True pre-match check (price_timestamp < scheduled start; 259/261 stamps are
+same-day as the match); log residual top_p>0.92 entries (9 remain, max
+0.9995); remove the outcome-conditioned dedup tiebreak (criterion #2 uses
+the realized Cricsheet winner). Regenerating `betting_odds_polymarket.json`
+re-baselines ALL historical LL/ROI numbers — do deliberately, once.
+
+## I5 [INTERACTIVE] Extras/threes label rework (`parsing_v2.py`, full ball retrain)
+Train the ball model on off-the-bat runs; exclude wide/no-ball rows from
+training; stop folding 3s away (or at least preserve their strike
+rotation); byes/legbyes not credited to the batter; sim gains an explicit
+extras process (D3 is the sim-side stopgap). Label/schema change + full
+retrain — plan as its own session.
+
+## I6 [INTERACTIVE] Same-day match ordering determinism (`loaders_common.py` + cache rebuild)
+Same-date order is OS scandir order (`loaders_common.py:54-58`) and drives
+within-date tracker carryover (77 affected same-day groups) — not
+reproducible across machines. Add a secondary sort key (match id / start
+time); requires stats-cache + parquet rebuild (production artifacts).
+
+## I7 [INTERACTIVE] Venue canonicalization + duplicate player-ID merge
+~149 venue substring-collision pairs ("Bay Oval" vs "Bay Oval, Mount
+Maunganui") fragment venue history; 94 player names map to >1 registry ID
+(split ELO/stats histories, double cold-start). Alias/merge maps at
+cache-build; full rebuild + retrain both models; sharpens LANDED venue
+features.
+
+## I8 [INTERACTIVE] Per-player phase dists + batter-vs-bowler cell (schema-v5 plumbing)
+The flagged highest-value untried ball features need new SQLite
+getters/tables (`stats_sqlite_backend.py` — forbidden to the loop). Do the
+schema-v5 plumbing interactively, then queue the training experiment as a
+future D idea.
+
+## I9 [INTERACTIVE] ELO cold-start / provisional K (`parsing_v2.py`)
+Debutants start at exactly 1500 with K as low as 1.0 (domestic); add a
+provisional high-K warm-up (or uncertainty-scaled K) so new signings don't
+sit at the mean for a season. Full cache rebuild + retrain.
+
+## I10 [INTERACTIVE] Live-fixture operational hardening (`predict_fixture.py`)
+Staleness guard + snapshot-refresh path (trackers frozen 2025-06-30 /
+SQLite 2026-04-16 silently degrade live features); unknown-player handling
+stays a soft warning per user decision (no hard fail); wire the A7
+slice-conditional sizing rule into the live betting path; judge forward
+results against the seed-tempered ~+16% ROI, not the +21.9% headline.
+
+## I11 [INTERACTIVE] Sim micro-hygiene (`sim_v1_2.py`, two-liners)
+`if config.random_seed:` / `if seed:` treat seed 0 as unseeded (:3657,
+:3686) — compare against None instead; remove the shipped TypeError
+debugging tripwire in `simulate_match` (:3522-3544).
+
+## I12 [INTERACTIVE] Women's-corpus model (new track)
+1,745 women's matches already on disk are filtered out of everything; a
+separate women's model is zero-download new coverage. No odds/eval gate
+exists yet — needs its own eval design first.
