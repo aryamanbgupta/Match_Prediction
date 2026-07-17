@@ -83,9 +83,13 @@ def build_winner_map() -> dict:
     the winner, per-innings batting teams, and the innings-1 legal-ball
     count + total used to disambiguate same-day same-venue doubleheaders.
 
-    NOTE: the parquet's innings_id suffix is `hash(json) % 100000` —
-    salted per process and collision-prone — so the only reliable join
-    is (match_date, venue) + innings-1 shape.
+    NOTE: historically the parquet's innings_id suffix was
+    `hash(json) % 100000` — salted per process and collision-prone — so
+    the only reliable join was (match_date, venue) + innings-1 shape.
+    Fixed 2026-07-16 (B2): parquets built since then carry the cricsheet
+    filename stem as the suffix, so `innings_id.split("_", 1)[1]` now
+    joins directly to `data/t20s_json/<stem>.json`. This workaround is
+    kept for compatibility with pre-B2 parquets.
     """
     if WINNER_CACHE.exists():
         return json.load(open(WINNER_CACHE))

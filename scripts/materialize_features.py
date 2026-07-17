@@ -176,6 +176,7 @@ def materialize(
                     elo_tracker=temp_elo, match_k_factor=k_factor,
                     prior=prior, phase_priors=phase_priors,
                     k_player=k_player, k_venue=k_venue,
+                    match_ref=match_id,
                 )
             )
             # Advance temp_venue so the NEXT same-day match sees it.

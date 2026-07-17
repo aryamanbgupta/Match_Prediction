@@ -328,12 +328,14 @@ Full reference: `reports/m8_sizing_rules_eval.md`.
 
 ## Pipeline bugs found during E-series experiments (2026-06-09)
 
-- [ ] **`parsing_v2.py:1255` — `innings_id` is `hash(json) % 100000`**: salted
-  per process (irreproducible across runs) and collision-prone (~450 expected
-  collisions at corpus size). Blocks reliable parquet↔cricsheet joins; E6
-  works around it with a (date, venue) + innings-shape join (~5% drop).
-  Fix: emit the cricsheet filename stem. Requires a feature-parquet rebuild
-  (cheap) but no schema bump.
+- [x] **`parsing_v2.py:1255` — `innings_id` is `hash(json) % 100000`** —
+  **FIXED 2026-07-16 (B2, interactive)**: `parse_match_data_v2` gained a
+  `match_ref=` kwarg (cricsheet filename stem; legacy hash fallback) and
+  `materialize_features.py` threads the loader's match_id. Parquet rebuilt
+  (v6 config, feature hash unchanged): all 140 non-id columns byte-equal;
+  363 collisions removed (360 train / 1 val / 2 test; 716 train innings
+  groups were silently merged); 100% of suffixes now join losslessly to
+  `data/t20s_json/<stem>.json`. Old parquets: `archive/xgb_data_v3_pre_b2/`.
 - [ ] **`sim_v1_2.py` XGBoostModelV2 never sets `venue_encoded`** — `_feat_buf`
   defaults missing keys to 0, so every simulated ball is scored as venue
   code 0 while training saw real codes. Teacher-forced deltas real-vs-0 are

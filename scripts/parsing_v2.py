@@ -985,7 +985,7 @@ def calculate_pressure_features(state, innings_calc):
 def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None,
                         player_metadata=None, elo_tracker=None, match_k_factor=None,
                         prior=None, phase_priors=None,
-                        k_player=30.0, k_venue=200.0):
+                        k_player=30.0, k_venue=200.0, match_ref=None):
     """
     DESIGN DECISION: Pass tracker as parameter rather than global.
     REASONING: Makes dependencies explicit, easier to test, allows multiple trackers
@@ -1004,11 +1004,18 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None,
                provided, 6 phase_p{0,1,2,4,6,w} features are emitted per
                ball, dispatched by pre-ball phase. Phase 3 of the
                outcome-dist follow-up plan; loaded from SQLite _meta.
+        match_ref: Optional stable match identifier (cricsheet filename
+               stem) used as the innings_id suffix. B2 fix (2026-07-16):
+               the legacy `hash(json_data) % 100000` suffix was salted per
+               process (irreproducible across runs) and collision-prone,
+               blocking parquet↔cricsheet joins. Callers that don't emit
+               ball rows for joining may omit it (legacy hash fallback).
 
     Returns:
         Tuple of (all_balls list, innings_totals list for venue update)
     """
     data = json.loads(json_data)
+    match_key = match_ref if match_ref is not None else hash(json_data) % 100000
     player_registry = data['info']['registry']['people']
 
     # DESIGN DECISION: Store match metadata for potential venue/team features
@@ -1252,7 +1259,7 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None,
                 # DESIGN DECISION: Flatten all features into single dict
                 # REASONING: Simpler for DataFrame creation and model training
                 ball_record = {
-                    'innings_id': f"{inning_idx}_{hash(json_data) % 100000}",
+                    'innings_id': f"{inning_idx}_{match_key}",
                     'inning_idx': inning_idx,
                     'over_idx': over_idx,
                     'ball_idx': balls,

@@ -471,7 +471,10 @@ per-ball correction away (A8/A12/A16 washout pattern). Reverted `c37f1b0`
 (re-gate on batter_runs_mae primary @ fresh seed). See
 `research/reports/auto/B1.md`.
 
-## B2 [P1] [PENDING] Fix `innings_id` unstable hash (blocks parquet↔cricsheet joins)
+## B2 [P1] [LANDED] Fix `innings_id` unstable hash (blocks parquet↔cricsheet joins)
+*(done INTERACTIVELY by supervisor 2026-07-16 — `parsing_v2.py` is
+loop-forbidden (program.md rule 1), so this could never have been claimed by
+the loop; do not re-claim)*
 **Hypothesis:** `parsing_v2.py:1255` sets `innings_id = hash(json) % 100000` —
 salted per process (irreproducible across runs), ~450 expected collisions at
 corpus size (TODO.md:331, filed at E5/E6). E6 lost ~5% of matches to a
@@ -481,7 +484,18 @@ workaround join. Correctness fix that unblocks every future ball↔match join.
 row counts and a sample of per-ball features byte-match otherwise.
 **Gate:** correctness idea — LANDED if joins are lossless and no eval metric
 moves beyond eval-only noise (it should be a no-op on metrics). **Budget:** ~1.5 h.
-**Result:** —
+**Result:** LANDED 2026-07-16 (interactive). `parse_match_data_v2` gains
+`match_ref=` (cricsheet filename stem; legacy hash fallback for callers that
+don't emit joinable rows); `materialize_features.py` threads the loader's
+match_id. Re-materialized `data/xgb_data_v3/` via the v6 config (feature hash
+c520a3ba08ae, 114 features, unchanged). Parity: all 140 non-id columns
+byte-equal on train/validation/test → provably a no-op on metrics (no eval
+needed). Collisions removed: 360/1/2 (train/val/test) — old train had 7,792
+distinct suffixes for 8,152 matches, and 716 innings groups were silently
+merged for the sequence models. Join losslessness: 100% of new suffixes
+resolve to `data/t20s_json/<stem>.json`; 9,519 distinct matches, zero
+cross-split overlap. Old parquets at `archive/xgb_data_v3_pre_b2/`. E6's
+(date,venue) workaround kept for pre-B2 parquets; comment updated.
 
 ## B3 [P1] [PENDING] Continuous-forecast shrinkage blend (productize E2's finding)
 **Hypothesis:** E2: the sim's only validated skill is continuous score
