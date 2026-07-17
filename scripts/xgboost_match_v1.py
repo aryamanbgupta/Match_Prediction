@@ -279,25 +279,6 @@ def train_model(args) -> tuple:
     X_val, y_val = val[feat_cols], val["team1_wins"]
     X_test, y_test = test[feat_cols], test["team1_wins"]
 
-    # D8 (2026-07-17): exponential recency weighting of the training loss.
-    # weight_i = 0.5 ** (age_years_i / HL), age measured back from the newest
-    # train match, then normalized to mean 1 so the absolute loss/regularizer
-    # balance (reg_alpha/reg_lambda/min_child_weight) matches unweighted
-    # training. Val stays unweighted — early stopping keeps scoring the raw
-    # validation logloss.
-    sample_weight = None
-    if args.decay_half_life_years is not None:
-        dates = pd.to_datetime(train["match_date"])
-        train_end = dates.max()
-        age_years = (train_end - dates).dt.days / 365.25
-        w = np.power(0.5, age_years / args.decay_half_life_years)
-        sample_weight = (w / w.mean()).to_numpy()
-        eff_n = sample_weight.sum() ** 2 / np.square(sample_weight).sum()
-        print(f"  decay weights: HL={args.decay_half_life_years}y "
-              f"(train_end={train_end.date()}), normalized mean 1, "
-              f"min {sample_weight.min():.4f} max {sample_weight.max():.4f}, "
-              f"effective n = {eff_n:.0f} / {len(sample_weight)}")
-
     model = XGBClassifier(
         objective="binary:logistic",
         eval_metric="logloss",
@@ -313,8 +294,7 @@ def train_model(args) -> tuple:
         random_state=args.seed,
     )
 
-    model.fit(X_train, y_train, sample_weight=sample_weight,
-              eval_set=[(X_val, y_val)], verbose=50)
+    model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=50)
 
     val_proba = model.predict_proba(X_val)[:, 1]
     test_proba = model.predict_proba(X_test)[:, 1]
@@ -351,7 +331,6 @@ def train_model(args) -> tuple:
             "n_train": int(len(X_train)),
             "n_val": int(len(X_val)),
             "n_test": int(len(X_test)),
-            "decay_half_life_years": args.decay_half_life_years,
             "feature_importances": {
                 feat: float(imp)
                 for feat, imp in zip(feat_cols, model.feature_importances_)
@@ -420,11 +399,6 @@ def main():
     ap.add_argument("--reg-lambda", type=float, default=1.0)
     ap.add_argument("--early-stopping-rounds", type=int, default=30)
     ap.add_argument("--seed", type=int, default=29)
-    ap.add_argument("--decay-half-life-years", type=float, default=None,
-                    help="D8: exponential recency weighting of the TRAIN loss "
-                    "with this half-life (years back from the newest train "
-                    "match). Weights normalized to mean 1; val/test never "
-                    "weighted. Omit for uniform weighting (default).")
     ap.add_argument("--swap-augment", action="store_true",
                     help="D7: append a team-swapped mirror of every TRAIN row "
                     "(label flipped) to enforce antisymmetry. Val/test are "
