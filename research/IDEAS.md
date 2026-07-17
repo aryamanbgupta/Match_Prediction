@@ -942,7 +942,7 @@ results (primary arm). Both → LANDED; one → TABLED; none → FAILED.
 **Budget:** ~45 min (no training).
 **Result:** —
 
-## D12 [P1] [PENDING] Swap augmentation on the production config (D7 transfer confirmation)
+## D12 [P1] [RUNNING 2026-07-17T20:55Z] Swap augmentation on the production config (D7 transfer confirmation)
 **Hypothesis:** D7 landed on the loop's recipe-A baseline (v2_clean frozen
 parquet, 45 features), but production
 (`models/xgb_match_v3_m7_production`) trains on an unfrozen parquet with
