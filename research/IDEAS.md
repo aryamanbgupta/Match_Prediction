@@ -1007,7 +1007,7 @@ in the report. Kept `998cad7`+`8a03cd9`; `models/auto/d12/` +
 (production-config swap models at `models/auto/d12/swap_seed*`). See
 `research/reports/auto/D12.md`.
 
-## D13 [P1] [PENDING] Swap augmentation + recency decay combined (D7 × D8)
+## D13 [P1] [RUNNING 2026-07-17T23:14:25Z] Swap augmentation + recency decay combined (D7 × D8)
 **Hypothesis:** D7 (LANDED, ΔLL −0.0121 / ΔROI +3.01pp) and D8 (TABLED, ΔLL
 −0.0093 / ΔROI −1.46pp) are training-procedure changes with disjoint
 mechanisms — data augmentation (antisymmetry) vs loss weighting (recency) —
