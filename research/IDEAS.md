@@ -684,7 +684,7 @@ mandated sim correctness fixes; D4–D10 are approved improvements. Ordering:
   NOT queued as PENDING — they live in the Interactive backlog at the
   bottom of this file. Never claim those.
 
-## D1 [P1] [RUNNING 2026-07-17T17:57Z] Fix sim-side `run_rate` scale skew (runs-per-over vs runs-per-ball)
+## D1 [P1] [LANDED] Fix sim-side `run_rate` scale skew (runs-per-over vs runs-per-ball)
 **Hypothesis:** training computes `run_rate` as runs-per-OVER
 (`parsing_v2.py:938`: `score / max(overs, 0.1)`) but the sim wrappers compute
 runs-per-BALL (`sim_v1_2.py:761`: `runs/(balls+1)`; second site at `:1190`) —
@@ -704,7 +704,34 @@ training AND no guard regresses CI-clean paired (batter_runs_mae,
 team_first_over_mae, top_bowler, bowler_wkts_1plus,
 team_total_{fours,sixes}_mae); CI-clean improvements are a bonus, not
 required. **Budget:** ~2 h.
-**Result:** —
+**Result:** LANDED 2026-07-17 (relay: prior iteration claimed `b5173e9`,
+implemented + pre-committed gate `8fd5a8a`, launched the n=261 eval
+(2213.4 s) and was cut; this iteration verified config + ran gate +
+verdict). All 6 sim-side `run_rate` sites aligned to the training formula
+`score/max(balls/6, 0.1)` — live v7 path :761 and legacy :1190 were
+runs-per-ball (~6.24× OOD skew); the 4 LSTM/MLP/MLPv2/Transformer blocks
+only needed zero-guard alignment; `run_rate_required` untouched. **GATE 1**
+teacher-forced parity MET pre-run: max|parquet−formula| = 0.0 on 310,959
+test+val rows; live `extract_features` spot check exact incl. the
+balls=0/score>0 guard case. Recipe B n=261×100 **seed 43**, venue-ON
+default path + stale v1 vector calibrator (identical to the B6 baseline
+run; ONLY delta = run_rate formula), paired cluster-boot by match vs
+`models/auto/b6/detail_venue_s43_n261.json` via pre-committed
+`d1_gate_analysis.py`. **GATE 2** guards ALL HELD (no CI-excludes-0
+increase): batter_runs_mae −0.044 [−0.171,+0.088], team_first_over_mae
+−0.019 [−0.038,+0.002], fours/sixes MAE +0.061/−0.020 noise, top_bowler
+−0.0005, bowler_wkts_1plus −0.0005. Both → **LANDED**. Context scan
+ONE-SIDED positive (0 CI-clean worse anywhere, 6 better):
+highest_over_runs_18_5 **−0.0272 [−0.0426,−0.0120]**, bowler_economy_10_5
+−0.0035, highest_over_24_5 −0.0021, batter_50plus −0.0020, top_batter
+−0.0012, p_tie −0.0001; all pp_total lines favorable in point estimate but
+straddle 0. Gains sit exactly where a correctly-scaled pace signal should:
+which-over-explodes, economy, batter-level (B1/B6 pattern; team aggregates
+wash out per A8/A12/A16). **RE-BASELINE IN FORCE**: b6 detail JSON is now
+stale (pre-D1 run_rate); canonical venue-ON baseline =
+`models/auto/d1/detail_d1_s43_n261.json` (seed 43, run_rate-aligned,
+current default path). Kept `b5173e9`+`8fd5a8a`; nothing reverted. See
+`research/reports/auto/D1.md`.
 
 ## D2 [P1] [PENDING] Fix strike rotation + balls-faced on extras in the sim
 **Hypothesis:** `update()` rotates strike on any odd `runs`
