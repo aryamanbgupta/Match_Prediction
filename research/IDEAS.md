@@ -583,7 +583,7 @@ A14/A15/A16) are venue-blind; canonical venue-ON baseline =
 11a19ea + 422c266. Follow-up B7 appended (stale ball calibrators). See
 `research/reports/auto/B6.md`.
 
-## B7 [P1] [RUNNING 2026-07-17T12:51:34Z] Refit ball calibrators on the venue-ON sim (B6 re-baseline follow-up)
+## B7 [P1] [TABLED] Refit ball calibrators on the venue-ON sim (B6 re-baseline follow-up)
 *(claim reset by supervisor 2026-07-12: iteration was cut by end-of-night quota
 exhaustion after implement + pre-commit gate; calibrator artifacts already built
 at `models/auto/b7/` — the re-run only needs the paired recipe-B eval + verdict)*
@@ -609,6 +609,58 @@ guards = top_bowler + team_total_{fours,sixes}_mae no CI-clean regression. If
 the refit calibrators are byte-close to the stale ones (max ratio diff < the
 ~0.05 washout threshold), expect null and say so pre-run. **Budget:** ~1.5 h
 (one n=261 run; baseline reused).
+**Result:** TABLED 2026-07-17 (three-iteration relay: 2026-07-12 refit +
+pre-commit gate `1a43a34`, quota-cut; 2026-07-17 morning re-claim `05d917c` +
+eval launch, cut after the 2231.9 s run finished; this iteration = gate +
+verdict). Pre-run staleness was REAL, not a washout-null: global
+max|refit/v1−1| = **0.1712**, over-0 max|refit/A15−1| = **0.2155**, both ≫
+0.05. Paired (refit − stale) cluster-boot by match, n=261×100 **seed 43**
+(verified from launch cmd), vs `models/auto/b6/detail_venue_s43_n261.json`,
+only delta = calibrator. **GATE 1a** no-regress MET — batter_runs_mae +0.017
+[−0.068,+0.100] noise; `team_first_over_mae` **−0.024 [−0.040,−0.007]**
+CI-clean BETTER. **GATE 1b** NOT MET — both improvement arms CI-clean WORSE:
+pooled 6-line tail dBrier **+0.0079 [+0.0048,+0.0109]** (pp_total 45/50/55
++0.0066/+0.0104/+0.0066 all CI-clean worse; highest_over_18_5 +0.0302),
+bowler_wkts_1plus **+0.0024 [+0.0004,+0.0043]**. **GATE 2** guards HELD
+(top_bowler −0.0002, fours/sixes MAE noise). Exactly one gate → TABLED per
+the pre-committed mapping. Context scan one-sided NEGATIVE (mirror of B1/B6's
+positive scans): CI-clean worse batter_fours_1plus/2plus, team_highest_indiv
+34_5/39_5, bowler_economy_10_5, batter_fours_mae; better only
+match_total_sixes_20_5 −0.0049. **Reading:** the E5 v1 global correction is
+NOT stale under venue-ON — the 17% refit divergence is val-composition noise
+that doesn't transfer (refitting actively degrades tails); keep stale v1 as
+the default global. But **A15's first-over gain survives the re-baseline**:
+the refit over-0 vector delivers −0.024 under venue-ON (A15 venue-blind
+−0.018 / A14 −0.022), and the components are separable (over-0 balls never
+see the global vector). Nothing to revert (`1a43a34` = fit+gate harness only;
+default sim path byte-unchanged; artifacts gitignored `models/auto/b7/`).
+Follow-up B8 appended (hybrid v1-global + over-0 default). See
+`research/reports/auto/B7.md`.
+
+## B8 [P2] [PENDING] Hybrid calibrator: stale v1 global + over-0 vector as the venue-ON default (B7 decomposition)
+**Hypothesis:** B7 decomposed cleanly: the refit *global* vector actively hurts
+(pooled tail +0.0079 CI-clean worse — v1 is NOT stale under venue-ON) while the
+*over-0* vector delivers the A14/A15 first-over gain under venue-ON
+(`team_first_over_mae` −0.024 [−0.040,−0.007], separable because over-0 balls
+never see the global vector). The current venue-ON default runs bare v1 with NO
+first-over correction, so A15's validated gain is not collected in production.
+A hybrid `OverVectorScalingCalibrator{_global = stale v1, _v[0] = over-0}`
+should retain the first-over win with none of B7's regressions.
+**Method:** compose the hybrid from existing artifacts (v1 global + the over-0
+vector; both the venue-ON refit over-0 from `models/auto/b7/` and A15's
+venue-blind over-0 are defensible — pick ONE pre-run, default = the venue-ON
+refit, and say so before evaluating; save to `models/auto/b8/`). One recipe-B
+run n=261 **seed 43** with `--ball-calibrator-path`; pair vs the SAME
+`models/auto/b6/detail_venue_s43_n261.json` via the a8/b7 gate tooling.
+Pre-commit the gate script. NOTE: baseline valid only while no sim-engine idea
+has landed since B6 (D-series rule) — else re-run the baseline first.
+**Gate (sim pair):** PRIMARY = `team_first_over_mae` improves CI-clean
+(retaining ~−0.02) AND no CI-clean regression on ANY of {pooled 6-line tail
+Brier, bowler_wkts_1plus, batter_runs_mae}. Guards = top_bowler,
+team_total_{fours,sixes}_mae no CI-clean regression. Both → LANDED (ship the
+hybrid as the default venue-ON calibrator, superseding bare v1; re-baseline
+warning applies); exactly one → TABLED; none → FAILED. **Budget:** ~1 h (one
+n=261 run; baseline + tooling reused).
 **Result:** —
 
 ---
