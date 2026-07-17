@@ -684,7 +684,7 @@ mandated sim correctness fixes; D4–D10 are approved improvements. Ordering:
   NOT queued as PENDING — they live in the Interactive backlog at the
   bottom of this file. Never claim those.
 
-## D1 [P1] [PENDING] Fix sim-side `run_rate` scale skew (runs-per-over vs runs-per-ball)
+## D1 [P1] [RUNNING 2026-07-17T17:57Z] Fix sim-side `run_rate` scale skew (runs-per-over vs runs-per-ball)
 **Hypothesis:** training computes `run_rate` as runs-per-OVER
 (`parsing_v2.py:938`: `score / max(overs, 0.1)`) but the sim wrappers compute
 runs-per-BALL (`sim_v1_2.py:761`: `runs/(balls+1)`; second site at `:1190`) —
