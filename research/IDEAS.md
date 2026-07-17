@@ -942,7 +942,7 @@ results (primary arm). Both → LANDED; one → TABLED; none → FAILED.
 **Budget:** ~45 min (no training).
 **Result:** —
 
-## D12 [P1] [RUNNING 2026-07-17T22:59Z] Swap augmentation on the production config (D7 transfer confirmation)
+## D12 [P1] [LANDED] Swap augmentation on the production config (D7 transfer confirmation)
 **Hypothesis:** D7 landed on the loop's recipe-A baseline (v2_clean frozen
 parquet, 45 features), but production
 (`models/xgb_match_v3_m7_production`) trains on an unfrozen parquet with
@@ -967,7 +967,32 @@ the NEW parquet, involution, coverage); paired 5-seed base-vs-swap
 recommendation goes in the report; not executed by the loop); one → TABLED;
 none → FAILED. **Budget:** ~1.5 h (no re-materialization — parquet subset
 only).
-**Result:** —
+**Result:** LANDED 2026-07-17. Transfer CONFIRMED on the exact production
+frame: `data/auto/d12` = m3_unfrozen subset to the production 48-feature
+set in `feature_columns.txt` order; both arms `--monotone` + trainer
+defaults (verified against production `model.pkl`: 12 constraints, lr 0.05,
+cs 0.9, seed 29). Control airtight — base seed29 **byte-reproduces**
+production `test_predictions.json` (782/782, max|Δp|=0.000e+00; its ≥$50k
+row == the M7 headline 0.6299/+21.90 exactly). Swap mapping extended: 6 M2
+expected pairs + 6 M2 diffs (verified exact t1−t2 mirrors on m3_unfrozen;
+no-ops on the venue-only production frame) + venue_p4/p6/pw invariant.
+Paired 5-seed (A1 seeds) ≥$50k MEAN: **ΔLL −0.0092** (0.6378 → 0.6286,
+floor 0.007, better 5/5 seeds) / **ΔROI +3.39pp** (+19.67 → +23.06, floor
+2.3, up 5/5). **Both → LANDED.** ROI seed-std halves 3.04 → 1.73; swap ROI
+CI lo > 0 on 4/5 seeds (base 2/5); win 50.4 → 52.5%. ≥$100k consistent:
+ΔLL −0.0123, ROI +23.85 → +25.39. Secondary findings: (a) M7 headline
+0.6299/+21.90 confirmed best-of-5 **seed-29 luck** — production-config base
+mean is 0.6378/+19.67 (vindicates E3 tempering); (b) D7's LL-std collapse
+does NOT transfer (swap std 0.0060 vs base 0.0048; ROI-std halving does) —
+re-measure the seed floor per-config before gating on swap baselines;
+(c) swap beats market LL 0.6267 on 2/5 seeds here (v2_clean D7: 5/5); the
+loop frame + swap (0.6196) outscores the production frame + swap (0.6286)
+on the iteration set — frozen-vs-unfrozen flag for interactive review, not
+relitigated by the loop. Production retrain recommendation (human decision)
+in the report. Kept `998cad7`+`8a03cd9`; `models/auto/d12/` +
+`data/auto/d12/` scratch kept (gitignored). D11 gains a free second arm
+(production-config swap models at `models/auto/d12/swap_seed*`). See
+`research/reports/auto/D12.md`.
 
 ---
 
