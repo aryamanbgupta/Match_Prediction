@@ -1007,7 +1007,7 @@ in the report. Kept `998cad7`+`8a03cd9`; `models/auto/d12/` +
 (production-config swap models at `models/auto/d12/swap_seed*`). See
 `research/reports/auto/D12.md`.
 
-## D13 [P1] [RUNNING 2026-07-17T23:14:25Z] Swap augmentation + recency decay combined (D7 × D8)
+## D13 [P1] [FAILED] Swap augmentation + recency decay combined (D7 × D8)
 **Hypothesis:** D7 (LANDED, ΔLL −0.0121 / ΔROI +3.01pp) and D8 (TABLED, ΔLL
 −0.0093 / ΔROI −1.46pp) are training-procedure changes with disjoint
 mechanisms — data augmentation (antisymmetry) vs loss weighting (recency) —
@@ -1032,7 +1032,22 @@ seed-std at 0.0027, so an LL gain may be real below the generic floor;
 report per-seed direction counts either way). Both → LANDED; one → TABLED;
 none → FAILED. **Budget:** ~45 min (10 trainings already exist for one arm;
 5 new trainings + 5 evals).
-**Result:** —
+**Result:** FAILED 2026-07-17. Combo run exactly as specced (weights
+computed on the augmented frame; Stage-0 hard-fail verification: mirror
+rows share weights exactly, mean-1 exact, `w[:n]` == base weights; harness
+`d13_run.py` pre-committed at `9338989` before any training). Paired
+5-seed ≥$50k vs the D7 SWAP arm: **ΔLL −0.0026** (0.6196 → 0.6171,
+sub-floor 0.007; better 4/5 seeds) / **ΔROI −3.67pp** (+23.57 → +19.90,
+down 4/5 seeds) → neither gate → FAILED. The combo IS the loop's sharpest
+model (mean 0.6171; ALL 5 seeds beat market 0.6267, min 0.6154) but the
+decay LL gain overlaps ~70% with swap's (−0.0093 alone → −0.0026
+incremental) and decay's ROI drag amplifies on the swap arm (−1.46pp alone
+→ −3.67pp). ≥$100k same shape (ΔLL −0.0063, ROI +30.02 → +27.70). Third
+confirmation (A4, D8, D13) that LL sharpening decouples from
+threshold-function ROI; **decay lever closed for winner-market ROI**.
+Reverted `c821172` (trainer back to swap-only); harness + `models/auto/d13/`
+scratch kept (gitignored). Log commit landed the following iteration (this
+one was wall-clock-cut after the revert). See `research/reports/auto/D13.md`.
 
 ---
 
