@@ -733,7 +733,7 @@ stale (pre-D1 run_rate); canonical venue-ON baseline =
 current default path). Kept `b5173e9`+`8fd5a8a`; nothing reverted. See
 `research/reports/auto/D1.md`.
 
-## D2 [P1] [PENDING] Fix strike rotation + balls-faced on extras in the sim
+## D2 [P1] [RUNNING 2026-07-18T03:51:14Z] Fix strike rotation + balls-faced on extras in the sim
 **Hypothesis:** `update()` rotates strike on any odd `runs`
 (`sim_v1_2.py:331-332`) and WIDE/NO_BALL both carry runs=1 (`process_ball`
 :560-563), so ~2% of deliveries wrongly swap the striker; and balls-faced
