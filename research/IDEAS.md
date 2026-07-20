@@ -937,7 +937,7 @@ Then paired 5-seed, recipe A, two arms: (a) ADD team-ELO features,
 fresh baseline mean on the better arm, standard floors. **Budget:** ~3 h.
 **Result:** —
 
-## D10 [P2] [PENDING] Characterization tests for the eval math (instrumentation)
+## D10 [P2] [RUNNING 2026-07-20T07:48Z] Characterization tests for the eval math (instrumentation)
 **Hypothesis:** every gate verdict rests on untested statistics code —
 nothing tests `match_evaluator._bootstrap_ci`, `_calculate_kelly_fraction`,
 `_calculate_realized_pnl`, the reslice/blend paths, or min-volume
