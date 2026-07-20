@@ -977,7 +977,7 @@ ideas appended (nothing untracked surfaced). Context: picked because D2
 consumed the night's one-sim-idea slot and D9 (~3 h) didn't fit the
 remaining ~2 h 45 m. Kept `8c3aad7`. See `research/reports/auto/D10.md`.
 
-## D11 [P2] [RUNNING 2026-07-20T07:58Z] Inference-time symmetrization on the swap-augmented model (D7 follow-up)
+## D11 [P2] [FAILED] Inference-time symmetrization on the swap-augmented model (D7 follow-up)
 **Hypothesis:** D7's augmentation makes the model *approximately*
 antisymmetric but not exactly (trees on augmented data still fit residual
 orientation noise). Averaging the two orientations at predict time —
@@ -996,7 +996,24 @@ the base (non-augmented) models `models/auto/d7/base_seed*` as a second arm
 **Gate:** eval-only floors (ΔLL 0.002 / ΔROI 2pp) vs the D7 swap per-seed
 results (primary arm). Both → LANDED; one → TABLED; none → FAILED.
 **Budget:** ~45 min (no training).
-**Result:** —
+**Result:** FAILED 2026-07-20. Eval-only, 3 arms × 5 seeds paired sym-vs-raw
+(`scripts/auto/d11_symmetrize.py`, gate pre-committed @ 3912938); raw
+re-scoring byte-reproduces the saved D7/D12 predictions on all 15 models
+(max|Δp| = 0.0 on the 782 unique-id rows; the 791-row test parquet has 9
+duplicate match_ids and the prediction JSON is last-write-wins — control
+compares last occurrences). **PRIMARY d7_swap ≥$50k mean: ΔLL +0.0013
+(WORSE, 4/5 seeds; floor ≤ −0.002) / ΔROI −0.83pp (floor ≥ +2) → neither →
+FAILED.** Context: **d7_base** ΔLL −0.0011 (sub-floor) / **ΔROI +3.03pp**
+(clears floor) — symmetrization alone recovers essentially ALL of D7's ROI
+gain (+3.03 vs +3.01pp) but only ~10–15% of its LL gain; base+sym (0.6307)
+stays strictly dominated by swap-trained (0.6196) → mechanism knowledge
+(D7's ROI arm = antisymmetry enforcement, LL arm = training-time doubling),
+no production lever. **d12_swap** (production frame): −0.0004 / +0.62pp,
+both sub-floor. mean|asym| 0.052 base → 0.023 swap → 0.018 production:
+augmentation halves residual orientation noise; averaging away the rest
+collects nothing — D7's gate-note hypothesis resolved negative. Nothing to
+revert (no production path touched); harness kept (A9/A11 precedent). No
+new queue ideas. See `research/reports/auto/D11.md`.
 
 ## D12 [P1] [LANDED] Swap augmentation on the production config (D7 transfer confirmation)
 **Hypothesis:** D7 landed on the loop's recipe-A baseline (v2_clean frozen
