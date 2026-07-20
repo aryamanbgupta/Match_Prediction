@@ -733,7 +733,7 @@ stale (pre-D1 run_rate); canonical venue-ON baseline =
 current default path). Kept `b5173e9`+`8fd5a8a`; nothing reverted. See
 `research/reports/auto/D1.md`.
 
-## D2 [P1] [RUNNING 2026-07-18T03:51:14Z] Fix strike rotation + balls-faced on extras in the sim
+## D2 [P1] [TABLED] Fix strike rotation + balls-faced on extras in the sim
 **Hypothesis:** `update()` rotates strike on any odd `runs`
 (`sim_v1_2.py:331-332`) and WIDE/NO_BALL both carry runs=1 (`process_ball`
 :560-563), so ~2% of deliveries wrongly swap the striker; and balls-faced
@@ -747,7 +747,28 @@ baseline.
 **Gate (sim pair):** correctness — LANDED if guards hold (no CI-clean
 regression on batter_runs_mae, top_bowler, bowler_wkts_1plus,
 team_first_over_mae); batter-family improvements a bonus. **Budget:** ~2 h.
-**Result:** —
+**Result:** TABLED 2026-07-20 (relay: implemented + gate pre-committed
+`46f26dc` 2026-07-18; seven eval launches died at startup because each
+iteration ended its turn after launching — children reaped at session
+close; the eighth launch, blocked-on synchronously, completed in 2230.4 s).
+**GATE 1** correctness MET (unit check 26/26, re-verified at eval time).
+Recipe B n=261×100 **seed 43**, venue-ON + run_rate-aligned default path,
+stale v1 vector calibrator both sides, ONLY delta = `update()` semantics;
+paired cluster-boot by match vs `models/auto/d1/detail_d1_s43_n261.json`
+via pre-committed `d2_gate_analysis.py`. **GATE 2** guards: batter_runs_mae
+−0.014 [−0.062,+0.036], top_bowler +0.0001, bowler_wkts_1plus +0.0001 all
+noise — but `team_first_over_mae` **+0.013 [+0.004, +0.023] CI-excludes-0
+WORSE** → REGRESSED. Exactly one gate → TABLED per the pre-committed
+mapping; reverted `bc44473` (harness kept; **D1 baseline remains
+canonical** — no re-baseline occurred). Context scan near-null (only
+batter_6plus_six +0.0018 [+0.0000,+0.0036] at the boundary; pp_total /
+first_wicket / economy favorable but straddling). READING: the unit check
+surfaced a pre-existing, entangled bug — `_simulate_innings` cards each
+ball on `striker_idx` AFTER `update()` has rotated/replaced
+(`sim_v1_2.py:3558/:3567`), so batter-prop extraction reads a mis-keyed
+card; fixing rotation alone re-scrambles rather than removes the
+attribution error. Fix + re-apply as a unit → **D14**. See
+`research/reports/auto/D2.md`.
 
 ## D3 [P1] [PENDING] Fix extras graft: empirical rates + pre-calibration ordering (sim-side half)
 **Hypothesis:** `predict_next_ball` grafts a flat 1% wide + 1% no-ball AFTER
@@ -1048,6 +1069,42 @@ threshold-function ROI; **decay lever closed for winner-market ROI**.
 Reverted `c821172` (trainer back to swap-only); harness + `models/auto/d13/`
 scratch kept (gitignored). Log commit landed the following iteration (this
 one was wall-clock-cut after the revert). See `research/reports/auto/D13.md`.
+
+## D14 [P1] [PENDING] Batting-card attribution fix + D2 extras semantics, gated as a unit (D2 follow-up)
+**Hypothesis:** D2 TABLED with a lone CI-clean guard regression
+(`team_first_over_mae` +0.013 [+0.004,+0.023]) despite provably-correct
+`update()` semantics (26/26 scripted-over assertions). The D2 unit check
+surfaced the likely culprit, a pre-existing independent bug:
+`_simulate_innings` builds its per-ball batting card keyed on
+`state.striker_idx` AFTER `update()` has already rotated strike / replaced a
+dismissed batter (`sim_v1_2.py:3558` BallResult, `:3567` card) — a ONE
+scored by batter 0 is carded to batter 1, and a WICKET ball cards a
+ball-faced to the INCOMING batter. Internal `batsman_stats` (crease
+features) credit correctly; the **card** is what batter-level prop
+extraction reads. Under the old rotation the two attribution errors
+partially overlapped; D2 alone re-scrambled the card mismatch instead of
+removing it. The bugs are entangled — fix the card and re-apply D2 together,
+gated as one unit.
+**Method:** `sim_v1_2.py` only: in `_simulate_innings`, capture the striker
+(and team) index BEFORE `state.update()` and key BallResult + the batting
+card on the captured index; re-apply D2 (`git revert bc44473`). Extend
+`scripts/auto/d2_unit_check.py` with card-vs-stats equality assertions (per
+batter on the scripted over, the card must match internal `batsman_stats`).
+Recipe B n=261×100 **seed 43**, venue-ON default path, stale v1 vector
+calibrator, paired vs `models/auto/d1/detail_d1_s43_n261.json` (still the
+canonical venue-ON baseline — D2 was reverted, so no re-baseline is in
+force; re-verify no sim-engine idea landed since D1 before trusting it).
+Pre-commit the gate script before the run. Eval must be waited on
+synchronously in-session (see D2 operational notes — background launches
+die at turn end).
+**Gate (sim pair):** correctness — extended unit check passes (incl.
+card-vs-stats) AND guards hold (no CI-excludes-0 regression on
+batter_runs_mae, top_bowler, bowler_wkts_1plus, team_first_over_mae — i.e.
+D2's first-over regression must disappear); batter-family improvements a
+bonus. Both → LANDED (both fixes ship as one unit; re-baseline warning
+applies); exactly one → TABLED; none → FAILED. **Budget:** ~1.5 h (one
+n=261 run; baseline + tooling reused).
+**Result:** —
 
 ---
 
