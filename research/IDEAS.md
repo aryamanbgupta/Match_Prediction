@@ -937,7 +937,7 @@ Then paired 5-seed, recipe A, two arms: (a) ADD team-ELO features,
 fresh baseline mean on the better arm, standard floors. **Budget:** ~3 h.
 **Result:** —
 
-## D10 [P2] [RUNNING 2026-07-20T07:48Z] Characterization tests for the eval math (instrumentation)
+## D10 [P2] [LANDED] Characterization tests for the eval math (instrumentation)
 **Hypothesis:** every gate verdict rests on untested statistics code —
 nothing tests `match_evaluator._bootstrap_ci`, `_calculate_kelly_fraction`,
 `_calculate_realized_pnl`, the reslice/blend paths, or min-volume
@@ -953,7 +953,29 @@ mark the test xfail with a comment — do NOT fix (forbidden files); flag it
 for the Interactive backlog.
 **Gate:** instrumentation (A1-style) — LANDED if the suite passes (xfails
 allowed and reported) and covers the named functions. **Budget:** ~2 h.
-**Result:** —
+**Result:** LANDED 2026-07-20. `scripts/tests/test_eval_math.py` (new file
+only; no `sim_eval/` edits): **29 tests = 27 PASS + 2 XFAIL, 0 fail**;
+standalone runner and pytest agree (0.34 s); hermetic synthetic fixtures.
+All named functions covered. Key pins: evaluator and reslice `_bootstrap_ci`
+copies are **bit-identical** (unstratified + stratified; the loop reads CIs
+from both interchangeably), seed-42 reproducibility exact, numeric pins on
+venv numpy 1.24.3 detect environment drift; Kelly confirmed **uncapped by
+design** (kelly(0.99,100)=98/99); realized-pnl threshold strictly `>0`,
+max-edge team choice, win/loss arithmetic exact; flat-ROI CI == per-bet
+PnL-mean CI ×100; reslice min-volume boundary **inclusive**, absent-from-odds
+matches kept only at `min_volume=None`; blend `_recompute_realized_pnl` ==
+evaluator on a 9-case branch grid + Kelly/Brier parity + threshold constants
+in lockstep. The known `realized_pnl != 0` bet-placed sentinel bug
+(`match_evaluator.py:933/977`, `reslice_eval_json.py:200-201` — I3 backlog)
+is documented as **2 strict xfail tests** asserting the CORRECT behavior:
+they flip to a loud XPASS error when I3 is fixed interactively. Minor
+divergence noted in-comment: reslice `_bootstrap_ci` lacks the evaluator's
+`n_resamples<=0` guard (unreachable at defaults). **No new defect found**
+beyond tracked I3 — the eval math is internally consistent, retroactively
+de-risking historical CI/ROI rows. Existing suites unaffected. No new queue
+ideas appended (nothing untracked surfaced). Context: picked because D2
+consumed the night's one-sim-idea slot and D9 (~3 h) didn't fit the
+remaining ~2 h 45 m. Kept `8c3aad7`. See `research/reports/auto/D10.md`.
 
 ## D11 [P2] [PENDING] Inference-time symmetrization on the swap-augmented model (D7 follow-up)
 **Hypothesis:** D7's augmentation makes the model *approximately*
