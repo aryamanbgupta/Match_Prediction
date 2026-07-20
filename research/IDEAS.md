@@ -977,7 +977,7 @@ ideas appended (nothing untracked surfaced). Context: picked because D2
 consumed the night's one-sim-idea slot and D9 (~3 h) didn't fit the
 remaining ~2 h 45 m. Kept `8c3aad7`. See `research/reports/auto/D10.md`.
 
-## D11 [P2] [PENDING] Inference-time symmetrization on the swap-augmented model (D7 follow-up)
+## D11 [P2] [RUNNING 2026-07-20T07:58Z] Inference-time symmetrization on the swap-augmented model (D7 follow-up)
 **Hypothesis:** D7's augmentation makes the model *approximately*
 antisymmetric but not exactly (trees on augmented data still fit residual
 orientation noise). Averaging the two orientations at predict time —
