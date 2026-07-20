@@ -95,10 +95,15 @@ def score_seed(arm: str, seed: int) -> dict:
     p_raw = model.predict_proba(enc_raw[feat_cols])[:, 1]
 
     # Control 1: this scoring path must reproduce the saved predictions.
+    # The JSON is keyed by match_id with last-write-wins (test has 791 rows /
+    # 782 unique ids), so compare on the last occurrence per id — the rows
+    # the JSON actually stores and the eval actually consumes.
     saved = json.loads((mdir / "test_predictions.json").read_text())
     p_saved = np.array([saved[m]["p_team1"] for m in test["match_id"]])
-    dev = np.max(np.abs(p_raw - p_saved))
-    print(f"  [{arm} s{seed}] raw-reproduction max|dp| = {dev:.3e}")
+    last = ~test["match_id"].duplicated(keep="last").to_numpy()
+    dev = np.max(np.abs(p_raw[last] - p_saved[last]))
+    print(f"  [{arm} s{seed}] raw-reproduction max|dp| = {dev:.3e} "
+          f"({int(last.sum())} unique-id rows)")
     assert dev <= 1e-12, "scoring path does not reproduce saved predictions"
 
     # Swapped orientation. _swap_frame hard-fails on unclassified columns.
