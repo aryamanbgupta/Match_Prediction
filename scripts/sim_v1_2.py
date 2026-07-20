@@ -312,9 +312,7 @@ class MatchState:
         self.partnership_runs += runs
 
         # Update batsman stats (fixed: removed non-existent BYE, LEG_BYE)
-        # Legal deliveries only: wide/no-ball runs are extras, not off the
-        # bat, and neither counts as a ball faced (D2)
-        if outcome not in [Outcome.WIDE, Outcome.NO_BALL]:
+        if outcome != Outcome.WIDE:
             batsman_key = (self.current_team_idx, self.striker_idx)
             stats = self.batsman_stats.get(batsman_key, (0, 0))
             self.batsman_stats[batsman_key] = (stats[0] + runs, stats[1] + 1)
@@ -329,9 +327,8 @@ class MatchState:
             # NEW: Reset partnership on wicket
             self.partnership_runs = 0
         
-        # Rotate strike on odd off-the-bat runs only — the single extra run
-        # of a wide/no-ball never swaps the striker (D2)
-        if outcome not in [Outcome.WIDE, Outcome.NO_BALL] and runs % 2 == 1:
+        # Rotate strike
+        if runs % 2 == 1:
             self.striker_idx, self.non_striker_idx = self.non_striker_idx, self.striker_idx
         
         # Add to current over
