@@ -1109,7 +1109,7 @@ Reverted `c821172` (trainer back to swap-only); harness + `models/auto/d13/`
 scratch kept (gitignored). Log commit landed the following iteration (this
 one was wall-clock-cut after the revert). See `research/reports/auto/D13.md`.
 
-## D14 [P1] [RUNNING 2026-07-21T00:45Z] Batting-card attribution fix + D2 extras semantics, gated as a unit (D2 follow-up)
+## D14 [P1] [TABLED] Batting-card attribution fix + D2 extras semantics, gated as a unit (D2 follow-up)
 **Hypothesis:** D2 TABLED with a lone CI-clean guard regression
 (`team_first_over_mae` +0.013 [+0.004,+0.023]) despite provably-correct
 `update()` semantics (26/26 scripted-over assertions). The D2 unit check
@@ -1143,6 +1143,71 @@ D2's first-over regression must disappear); batter-family improvements a
 bonus. Both → LANDED (both fixes ship as one unit; re-baseline warning
 applies); exactly one → TABLED; none → FAILED. **Budget:** ~1.5 h (one
 n=261 run; baseline + tooling reused).
+**Result:** TABLED 2026-07-20. D2 re-applied (`7079c96`) + pre-ball
+attribution snapshot in `_simulate_innings` (`3cb2f7e`); scope declared
+pre-run in the gate script: batting card keyed on the FACING striker,
+bowling card on the DELIVERING bowler (`simulate_ball` reassigns
+`bowler_idx` to the next over's bowler before the card read — every
+over-final ball was mis-credited, ~1/6 of deliveries), BallResult
+over/ball labels pre-increment (old code rolled each over's 6th legal
+delivery into the next over, so the `b.over==0` first-over extraction was
+systematically missing its final delivery); team_runs/wickets stay
+POST-ball. **GATE 1** extended unit check MET pre-run (d2 26/26 +
+scripted deterministic innings through the real `_simulate_innings`:
+card-vs-stats equality, over-final bowler attribution, over labels,
+conservation). Recipe B n=261×100 **seed 43**, venue-ON +
+run_rate-aligned default path, stale v1 vector calibrator both sides,
+paired cluster-boot by match vs `models/auto/d1/detail_d1_s43_n261.json`
+via pre-committed `d14_gate_analysis.py` (@3cb2f7e). **GATE 2**:
+batter_runs_mae +0.000 / top_bowler +0.0001 noise;
+`team_first_over_mae` **−0.132 [−0.222, −0.043] CI-clean BETTER** (D2's
++0.013 regression gone and inverted, 3.526 → 3.395 — ~7× A15's
+calibrator gain; extraction-window fix, not calibration); but
+`bowler_wkts_1plus` **+0.0027 [+0.0007, +0.0050] CI-excludes-0 WORSE**
+(2plus +0.0022 echoes) → REGRESSED. Exactly one gate → TABLED. READING:
+correct over-final bowler keying un-smears per-bowler wickets and
+UNMASKS the E5-residual bowler-wicket overshoot whose root cause D4
+names (100% bowler credit, no run-out channel) — the old mis-keying was
+accidentally diluting a known bias; D2→D14→D4 entanglement one layer
+down. Batter-card mis-keying itself nets ~0 on batter families (washes
+out across sims). Reverted `87d9133` (sim byte-identical to pre-D14
+head; **D1 baseline remains canonical**); harness + `models/auto/d14/`
+scratch kept. Fix + gate as a unit with D4 → **D15**. See
+`research/reports/auto/D14.md`.
+
+## D15 [P1] [PENDING] Full attribution unit: D2 + D14 snapshot + D4 run-out dismissals (D14 follow-up)
+**Hypothesis:** D14 TABLED with a lone CI-clean regression on
+`bowler_wkts_1plus` (+0.0027 [+0.0007,+0.0050]) while `team_first_over_mae`
+improved CI-clean (−0.132) and correctness was proven. Mechanism: correct
+over-final-ball bowler keying un-smears wickets across bowlers, unmasking
+the bowler-wicket overshoot whose root cause **D4 already names** — the sim
+credits 100% of dismissals to the bowler while real T20 has ~5–8% run-outs
+(often the non-striker, never bowler-credited). The old mis-keying and the
+missing run-out channel partially cancelled; each fix alone re-exposes the
+other's bias (the D2→D14 pattern one layer down). Applying D2 semantics +
+D14 attribution snapshot + D4's run-out dismissal channel as ONE unit
+should keep D14's first-over and card-correctness wins while the run-out
+channel removes the unmasked wicket overshoot (right sign, right rough
+magnitude: ~5–8% fewer bowler-credited wickets).
+**Method:** re-apply the D14 unit (`git revert 87d9133`); implement D4 per
+its entry — empirical run-out fraction + non-striker share computed as-of
+from cricsheet `wickets[].kind` (script + artifact under `models/auto/d15/`);
+on a sampled WICKET draw dismissal type, run-outs dismiss striker/non-striker
+per the empirical share with NO bowler credit; total wicket rate unchanged.
+Extend `d14_unit_check.py` with run-out attribution assertions. Recipe B
+n=261×100 **seed 43**, venue-ON default path, stale v1 vector calibrator,
+paired vs `models/auto/d1/detail_d1_s43_n261.json` (re-verify canonical
+first). Pre-commit the gate script; wait on the eval synchronously
+in-session (D2/D14 operational lesson). Subsumes D4's mechanism — if D15
+lands, running D4 alone is moot (supervisor call on its queue status; do
+not edit its entry from the loop).
+**Gate (sim pair):** PRIMARY = `bowler_wkts_1plus` does NOT regress
+CI-clean vs the D1 baseline AND `team_first_over_mae` retains a CI-clean
+improvement. Guards = `top_bowler` (D4's warning: credit redistribution),
+`batter_runs_mae`, `bowler_wkts_2plus`: no CI-excludes-0 regression. Both →
+LANDED (D2+D14+D4 ship as the attribution unit; re-baseline warning
+applies); exactly one → TABLED; none → FAILED. **Budget:** ~2.5 h (one
+n=261 run + empirical-rates build; D14 tooling reused).
 **Result:** —
 
 ---
