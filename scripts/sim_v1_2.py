@@ -312,9 +312,7 @@ class MatchState:
         self.partnership_runs += runs
 
         # Update batsman stats (fixed: removed non-existent BYE, LEG_BYE)
-        # Legal deliveries only: wide/no-ball runs are extras, not off the
-        # bat, and neither counts as a ball faced (D2)
-        if outcome not in [Outcome.WIDE, Outcome.NO_BALL]:
+        if outcome != Outcome.WIDE:
             batsman_key = (self.current_team_idx, self.striker_idx)
             stats = self.batsman_stats.get(batsman_key, (0, 0))
             self.batsman_stats[batsman_key] = (stats[0] + runs, stats[1] + 1)
@@ -329,9 +327,8 @@ class MatchState:
             # NEW: Reset partnership on wicket
             self.partnership_runs = 0
         
-        # Rotate strike on odd off-the-bat runs only — the single extra run
-        # of a wide/no-ball never swaps the striker (D2)
-        if outcome not in [Outcome.WIDE, Outcome.NO_BALL] and runs % 2 == 1:
+        # Rotate strike
+        if runs % 2 == 1:
             self.striker_idx, self.non_striker_idx = self.non_striker_idx, self.striker_idx
         
         # Add to current over
@@ -3545,42 +3542,31 @@ class SimulationEngine:
         start_wickets = int(state.wickets[state.current_team_idx])
         
         while not state.is_innings_over():
-            # Attribution snapshot BEFORE the ball: simulate_ball -> update()
-            # rotates/replaces the striker, increments the legal-ball count
-            # (so balls//6 rolls the over's 6th delivery into the next over)
-            # and, at over end, reassigns bowler_idx to the NEXT over's
-            # bowler — reading state afterwards mis-keys the delivery (D14)
-            pre_striker_idx = state.striker_idx
-            pre_bowler_idx = state.bowler_idx
-            pre_over = state.balls // 6
-            pre_ball = state.balls % 6
-
             # Simulate next ball
             outcome, runs = self.rules.simulate_ball(state, self.model)
-
-            # Record ball result (team_runs/team_wickets stay cumulative
-            # POST-ball — prop extraction depends on that semantics)
+            
+            # Record ball result
             ball_result = BallResult(
                 innings=state.innings,
-                over=pre_over,
-                ball=pre_ball,
+                over=state.balls // 6,
+                ball=state.balls % 6,
                 outcome=outcome,
                 runs=runs,
-                striker_idx=pre_striker_idx,
-                bowler_idx=pre_bowler_idx,
+                striker_idx=state.striker_idx,
+                bowler_idx=state.bowler_idx,
                 team_runs=int(state.runs[state.current_team_idx]),
                 team_wickets=int(state.wickets[state.current_team_idx])
             )
             balls.append(ball_result)
-
+            
             # Update batting card
             if outcome != Outcome.WIDE:
-                key = pre_striker_idx
+                key = state.striker_idx
                 runs_scored = runs if outcome not in [Outcome.WIDE, Outcome.NO_BALL] else 0
                 balls_faced = 1 if outcome not in [Outcome.WIDE, Outcome.NO_BALL] else 0
                 fours = 1 if outcome == Outcome.FOUR else 0
                 sixes = 1 if outcome == Outcome.SIX else 0
-
+                
                 if key in batting_card:
                     prev = batting_card[key]
                     batting_card[key] = (
@@ -3591,12 +3577,12 @@ class SimulationEngine:
                     )
                 else:
                     batting_card[key] = (runs_scored, balls_faced, fours, sixes)
-
+            
             # Update bowling card
             if outcome not in [Outcome.WIDE, Outcome.NO_BALL]:
-                key = pre_bowler_idx
+                key = state.bowler_idx
                 wickets = 1 if outcome == Outcome.WICKET else 0
-
+                
                 if key in bowling_card:
                     prev = bowling_card[key]
                     bowling_card[key] = (prev[0] + 1, prev[1] + runs, prev[2] + wickets)
