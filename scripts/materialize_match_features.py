@@ -178,6 +178,88 @@ METADATA_COLUMNS = [
 ]
 
 
+class TeamEloTracker:
+    """Decayed, margin-aware team-results ELO (D9, 2026-07-20).
+
+    A strictly richer estimator of the construct `win_rate_last_10`
+    measures (recent team-result strength): opponent-adjusted (ELO
+    expected-score update), margin-aware (margin-of-victory multiplier),
+    and time-decayed (ratings regress toward base with elapsed days, so
+    franchise roster churn between seasons decays stale strength).
+
+    Chronological semantics match the player ELO trackers (invariant #5):
+    updates apply immediately, so a same-day later match sees the earlier
+    same-day result. Queries are pure (no mutation); `update()` is called
+    by the materialize loop AFTER this match's features are built, and is
+    skipped entirely in frozen mode — identical to the A2 trackers.
+    """
+
+    def __init__(self, k: float = 24.0, margin: bool = True,
+                 half_life_days: Optional[float] = None,
+                 base: float = 1500.0, scale: float = 400.0) -> None:
+        self.k = k
+        self.margin = margin
+        self.half_life_days = half_life_days
+        self.base = base
+        self.scale = scale
+        # team -> (rating, last_event_date)
+        self.ratings: Dict[str, Tuple[float, datetime]] = {}
+
+    def _decayed(self, team: str, as_of: datetime) -> float:
+        entry = self.ratings.get(team)
+        if entry is None:
+            return self.base
+        rating, last = entry
+        if self.half_life_days is None or as_of <= last:
+            return rating
+        dt_days = (as_of - last).days
+        return self.base + (rating - self.base) * (
+            0.5 ** (dt_days / self.half_life_days))
+
+    def get(self, team: str, as_of: datetime) -> float:
+        """Pre-match rating as of `as_of` (decay applied, no mutation)."""
+        return self._decayed(team, as_of)
+
+    @staticmethod
+    def _margin_mult(margin_runs, margin_wickets) -> float:
+        """Margin-of-victory multiplier in [0.5, 2.0]. Run and wicket
+        margins map onto a common normalized scale (30-run win ~ 4-wicket
+        win ~ 0.5); wins with no `by` block (super-over / eliminator) are
+        treated as the narrowest possible win.
+        """
+        if margin_runs is not None:
+            m = min(float(margin_runs), 60.0) / 60.0
+        elif margin_wickets is not None:
+            m = min(float(margin_wickets), 8.0) / 8.0
+        else:
+            m = 0.0
+        return 0.5 + 1.5 * m
+
+    def update(self, team1: str, team2: str, match_date: datetime,
+               team1_won: bool, margin_runs=None, margin_wickets=None) -> None:
+        r1 = self._decayed(team1, match_date)
+        r2 = self._decayed(team2, match_date)
+        expected1 = 1.0 / (1.0 + 10.0 ** ((r2 - r1) / self.scale))
+        mult = (self._margin_mult(margin_runs, margin_wickets)
+                if self.margin else 1.0)
+        delta = self.k * mult * ((1.0 if team1_won else 0.0) - expected1)
+        self.ratings[team1] = (r1 + delta, match_date)
+        self.ratings[team2] = (r2 - delta, match_date)
+
+
+# D9 grid — all variants computed in ONE materialization pass (trackers are
+# cheap); the val-LL sweep selects one variant downstream. Names become
+# column suffixes: team{1,2}_elo_<name>, team_elo_diff_<name>.
+TEAM_ELO_GRID = [
+    ("k16",      dict(k=16.0, margin=False, half_life_days=None)),
+    ("k32",      dict(k=32.0, margin=False, half_life_days=None)),
+    ("k16m",     dict(k=16.0, margin=True,  half_life_days=None)),
+    ("k32m",     dict(k=32.0, margin=True,  half_life_days=None)),
+    ("k16md365", dict(k=16.0, margin=True,  half_life_days=365.0)),
+    ("k32md365", dict(k=32.0, margin=True,  half_life_days=365.0)),
+]
+
+
 class TeamFormTracker:
     """Records per-team match results in chronological order. Queries
     return the team's win rate over its last `n` matches with date strictly
@@ -724,6 +806,7 @@ def _build_match_record(
     outcome_features: Optional[Dict[str, float]] = None,
     rolling_features: Optional[Dict[str, float]] = None,
     affinity_features: Optional[Dict[str, float]] = None,
+    team_elo_trackers: Optional[List[Tuple[str, "TeamEloTracker"]]] = None,
 ) -> Optional[dict]:
     """Collapse per-ball rows into a single match-level record. Returns
     None if the match has no valid winner (no-result / abandoned).
@@ -983,6 +1066,16 @@ def _build_match_record(
     # === M6 conditions === purely match_date-derived; compute here.
     record.update({k: float(v) for k, v in
                    _match_conditions_features(match_date).items()})
+
+    # === D9 team-results ELO (opt-in) === queried pre-update, same
+    # temporal semantics as form/h2h trackers (caller updates AFTER).
+    if team_elo_trackers:
+        for name, trk in team_elo_trackers:
+            r1 = trk.get(team1, match_date)
+            r2 = trk.get(team2, match_date)
+            record[f"team1_elo_{name}"] = float(r1)
+            record[f"team2_elo_{name}"] = float(r2)
+            record[f"team_elo_diff_{name}"] = float(r1 - r2)
     return record
 
 
@@ -997,6 +1090,7 @@ def materialize(
     k_player: float = 30.0,
     k_venue: float = 200.0,
     freeze_trackers_after: Optional[str] = None,
+    team_elo: bool = False,
 ) -> Tuple[int, dict]:
     provider = StatsProvider(str(sqlite_dir), version=version)
     if provider.backend_name != "sqlite":
@@ -1021,6 +1115,15 @@ def materialize(
     form_tracker = TeamFormTracker()
     h2h_tracker = H2HTracker()
     home_tracker = HomeVenueTracker(lookback_days=730)
+
+    # === D9 team-results ELO trackers (opt-in; default path unchanged).
+    team_elo_trackers: Optional[List[Tuple[str, TeamEloTracker]]] = (
+        [(name, TeamEloTracker(**kw)) for name, kw in TEAM_ELO_GRID]
+        if team_elo else None
+    )
+    if team_elo_trackers:
+        print(f"  TEAM ELO: emitting {len(team_elo_trackers)} grid variants "
+              f"({', '.join(n for n, _ in team_elo_trackers)})")
 
     # No-leakage diagnostic: freeze trackers + SQLite rehydration as of
     # `freeze_trackers_after + 1 day`. Test matches all see the same
@@ -1134,6 +1237,7 @@ def materialize(
                 outcome_features=outcome_features,
                 rolling_features=rolling_features,
                 affinity_features=affinity_features,
+                team_elo_trackers=team_elo_trackers,
             )
             if record is None:
                 n_dropped += 1
@@ -1162,6 +1266,13 @@ def materialize(
                                match_date, winner)
             home_tracker.update(record["team1"], record["venue"], match_date)
             home_tracker.update(record["team2"], record["venue"], match_date)
+            if team_elo_trackers:
+                by = ((data.get("info", {}).get("outcome", {}) or {})
+                      .get("by", {}) or {})
+                for _, trk in team_elo_trackers:
+                    trk.update(record["team1"], record["team2"], match_date,
+                               t1_won, margin_runs=by.get("runs"),
+                               margin_wickets=by.get("wickets"))
 
         if n_matches % 1000 == 0 and n_matches > 0:
             dt = time.time() - t_start
@@ -1206,6 +1317,10 @@ def main() -> int:
                     "test — matches with date > this value all see the "
                     "snapshot at this date+1, with no cross-match updates "
                     "during the test period. Default: None (no freeze).")
+    ap.add_argument("--team-elo", action="store_true",
+                    help="D9: emit decayed margin-aware team-results ELO "
+                    "columns (TEAM_ELO_GRID variants). Off by default — the "
+                    "production schema is unchanged without this flag.")
     args = ap.parse_args()
 
     splits = dict(DEFAULT_SPLITS)
@@ -1221,6 +1336,7 @@ def main() -> int:
         gender="male",
         metadata_csv=args.metadata_csv,
         freeze_trackers_after=args.freeze_trackers_after,
+        team_elo=args.team_elo,
     )
     dt = time.time() - t0
     print(f"\nDONE: {n_matches:,} matches → {args.out_dir} in {dt:.0f}s")
