@@ -687,7 +687,7 @@ warning applies); exactly one → TABLED; none → FAILED. **Budget:** ~1 h (one
 n=261 run; baseline + tooling reused).
 **Result:** —
 
-## B9 [P2] [PENDING] top_bowler margin vs a usage-share fair baseline (B4 follow-up)
+## B9 [P2] [RUNNING 2026-07-21 07:13 UTC] top_bowler margin vs a usage-share fair baseline (B4 follow-up)
 **Hypothesis:** B4 showed the E2 career-wickets-share baseline is weak
 exactly where the sim's top_bowler profit concentrates (p_base<2%
 longshots): it prices debutants at 0.26% when they actually top the
