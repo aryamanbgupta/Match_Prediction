@@ -221,6 +221,33 @@ def analyze(detail_path: Path, asof, label: str):
     bv = breakeven_vig(rows, 0.0)
     res["breakeven"] = {"last_pos_vig": bv[0], "last_pos_roi_pct": bv[1],
                         "first_nonpos_vig": bv[2], "first_nonpos_roi_pct": bv[3]}
+
+    # --- price-band breakdown at vig 5%, thr 0 (where do the units come from?)
+    bands = [(0.20, 1.01, ">=20%"), (0.10, 0.20, "10-20%"),
+             (0.05, 0.10, "5-10%"), (0.02, 0.05, "2-5%"),
+             (0.00, 0.02, "<2%")]
+    bets = price_and_bet(rows, 0.05, 0.0)
+    base_of = {(r["mid"], r["name"]): r["p_base"] for r in rows}
+    res["bands_vig05_thr0"] = {}
+    for lo_b, hi_b, lbl in bands:
+        sub = [b for b in bets if lo_b <= base_of[(b["mid"], b["name"])] < hi_b]
+        res["bands_vig05_thr0"][lbl] = roi_with_ci(sub)
+
+    # --- D5 diagnostic: sim money on zero-career-wicket players
+    zc = [r for r in rows if asof.career_wickets(r["name"], r["mid"][:10]) == 0]
+    zc_conf = [r for r in zc if r["p_sim"] >= 0.02]
+    zc_bets = [b for b in price_and_bet(zc, 0.05, 0.0)]
+    res["zero_career_wkts"] = {
+        "n_rows": len(zc),
+        "n_actual_top": int(sum(r["y"] for r in zc)),
+        "base_rate": float(np.mean([r["y"] for r in zc])) if zc else None,
+        "mean_p_sim": float(np.mean([r["p_sim"] for r in zc])) if zc else None,
+        "mean_p_base": float(np.mean([r["p_base"] for r in zc])) if zc else None,
+        "n_sim_ge_2pct": len(zc_conf),
+        "mean_p_sim_ge_2pct": (float(np.mean([r["p_sim"] for r in zc_conf]))
+                               if zc_conf else None),
+        "bets_vig05": roi_with_ci(zc_bets),
+    }
     return res
 
 
@@ -322,6 +349,41 @@ def main():
         + ("none <= 50%" if bv["first_nonpos_vig"] is None
            else f"{bv['first_nonpos_vig']:.1%} "
                 f"(ROI {bv['first_nonpos_roi_pct']:+.2f}%)"))
+    lines += [
+        "",
+        "## Where the units come from — baseline-price bands "
+        "(vig 5%, thr 0)",
+        "",
+        "| p_base band | bets | ROI % | ROI 95% CI | win % | total PnL u |",
+        "|---|---|---|---|---|---|",
+    ]
+    for lbl, t in r["bands_vig05_thr0"].items():
+        if t is None:
+            lines.append(f"| {lbl} | 0 | — | — | — | — |")
+        else:
+            lines.append(
+                f"| {lbl} | {t['n_bets']} | {t['roi_pct']:+.2f} | "
+                f"[{t['roi_ci_pct'][0]:+.2f}, {t['roi_ci_pct'][1]:+.2f}] | "
+                f"{t['win_rate_pct']:.1f} | {t['total_pnl_u']:+.1f} |")
+    zc = r["zero_career_wkts"]
+    zb = zc["bets_vig05"]
+    lines += [
+        "",
+        "## D5 diagnostic — zero-career-wicket players (as-of)",
+        "",
+        f"- rows {zc['n_rows']}, actual top-bowler outcomes "
+        f"{zc['n_actual_top']} (base rate "
+        f"{zc['base_rate']*100:.2f}%); mean p_sim "
+        f"{zc['mean_p_sim']*100:.2f}% vs mean p_base "
+        f"{zc['mean_p_base']*100:.2f}%",
+        f"- rows with p_sim >= 2%: {zc['n_sim_ge_2pct']} (mean p_sim "
+        + (f"{zc['mean_p_sim_ge_2pct']*100:.2f}%" if zc["mean_p_sim_ge_2pct"]
+           else "—") + ")",
+        ("- YES bets the sim would place on them (vig 5%, thr 0): "
+         + (f"{zb['n_bets']} bets, ROI {zb['roi_pct']:+.2f}% "
+            f"CI [{zb['roi_ci_pct'][0]:+.2f}, {zb['roi_ci_pct'][1]:+.2f}], "
+            f"total PnL {zb['total_pnl_u']:+.1f}u" if zb else "0 bets")),
+    ]
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text("\n".join(lines) + "\n")
     print(f"report -> {args.out}")
