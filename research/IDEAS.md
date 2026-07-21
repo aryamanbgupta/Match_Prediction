@@ -509,7 +509,7 @@ compare MAE vs sim-alone and baseline-alone (`prop_fair_baselines.py`).
 ≥1 family AND no family regresses vs its best parent. **Budget:** ~2 h.
 **Result:** —
 
-## B4 [P2] [PENDING] top_bowler pricing margin (post-calibration edge quantification)
+## B4 [P2] [RUNNING 2026-07-21T07:04Z] top_bowler pricing margin (post-calibration edge quantification)
 **Hypothesis:** top_bowler is the only binary family beating its fair baseline
 (E5). Quantify the margin as implied odds: at what price does the sim's
 top_bowler probability have positive EV vs the fair baseline as synthetic
