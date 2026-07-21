@@ -202,7 +202,7 @@ def corr_check() -> dict:
         print(f"  [stage2] {v:>9}: T={T:.4f}  R_max={R:.3f} ({f_max}, "
               f"its T={T_fmax:.4f})  ADD={'OK' if add_ok else 'no'}  "
               f"REPL={'OK' if repl_ok else 'no'}")
-    out["any_viable"] = any_viable
+    out["any_viable"] = bool(any_viable)
     print(f"  [stage2] any framing viable: {any_viable}"
           + ("" if any_viable else "  -> CHEAP EXIT (FAILED)"))
     return out
