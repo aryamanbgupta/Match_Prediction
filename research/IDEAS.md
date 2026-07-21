@@ -918,7 +918,7 @@ to reuse); harness `scripts/auto/d8_run.py` + `models/auto/d8/` scratch
 kept. **Combine candidate**: with D7 swap-augment (supplies the ROI arm) —
 appended as D13. See `research/reports/auto/D8.md`.
 
-## D9 [P2] [RUNNING 2026-07-21T01:50Z] Decayed margin-aware team-results ELO (replacement test for win_rate features)
+## D9 [P2] [FAILED] Decayed margin-aware team-results ELO (replacement test for win_rate features)
 **Hypothesis:** `win_rate_diff` (crude last-10) is the single highest-gain
 feature — the direct team-result family is the model's best signal but its
 poorest-estimated one. A time-decayed, margin-aware team ELO updated on
@@ -935,7 +935,32 @@ Then paired 5-seed, recipe A, two arms: (a) ADD team-ELO features,
 (b) REPLACE win_rate_last_10/win_rate_diff with them.
 **Gate:** corr-check pass (replacement framing allowed), then LL + ROI vs
 fresh baseline mean on the better arm, standard floors. **Budget:** ~3 h.
-**Result:** —
+**Result:** FAILED 2026-07-20 (relay: prior iteration claimed `3a80a41` +
+implemented `793eeed` with the full decision pipeline pre-committed in
+`d9_run.py`, cut mid-materialization; this iteration re-ran everything).
+Stage 0 unit check ALL PASS. Stage 1 parity vs v2_clean **FAILED** (post-B2
+match_id semantics + same-day row order shift whole rows) → pre-committed
+fallback: fresh same-session 5-seed base control on the 51-col subset of the
+d9 frame = **0.6336/+19.93** (≥$50k mean; A1's logged 0.6318/+20.56 is stale
+for re-materialized frames — future paired ideas take note). Stage 2 dual
+corr check **PASSES — first feature idea to clear the target-corr bar since
+the discipline** (T=|corr(elo_diff,y)| 0.178–0.206 vs T_wr 0.1552, all 6
+variants clear the REPL bar 0.1707, margin-aware strongest; R_max 0.64–0.80
+vs win_rate_diff as expected). Val-LL-only selection (seed 29): add→k32,
+repl→k16md365. Paired 5-seed ≥$50k: **add_k32 ΔLL −0.0019** (sub-floor
+0.007; 2/5 paired better) / **ΔROI −0.42pp** (1/5) → FAILED; **repl_k16md365
+ΔLL +0.0017 / ΔROI −1.41pp** → FAILED. ≥$100k consistent (both arms
+flat-to-worse vs base 0.5926/+25.52). Neither arm clears either floor →
+**FAILED**. Reading: the premise was CONFIRMED (results-ELO is the better
+univariate estimator) yet buys nothing conditioned on the full 48-feature
+set — player-ELO lineup aggregates already carry team strength; and REPLACE
+is strictly worse ⇒ crude last-10 win_rate carries incremental
+bounded-window recency signal ELO lacks. 6th match-level feature direction
+dead, first to die AFTER passing the corr check: univariate target-corr
+premium ≠ conditional value. Reverted materializer at `4625c0d`
+(byte-identical to pre-D9); harness kept (re-revert to reuse); scratch
+`models/auto/d9/` + `data/auto/d9/` kept (gitignored). No new ideas
+appended. See `research/reports/auto/D9.md`.
 
 ## D10 [P2] [LANDED] Characterization tests for the eval math (instrumentation)
 **Hypothesis:** every gate verdict rests on untested statistics code —
