@@ -918,7 +918,7 @@ to reuse); harness `scripts/auto/d8_run.py` + `models/auto/d8/` scratch
 kept. **Combine candidate**: with D7 swap-augment (supplies the ROI arm) —
 appended as D13. See `research/reports/auto/D8.md`.
 
-## D9 [P2] [PENDING] Decayed margin-aware team-results ELO (replacement test for win_rate features)
+## D9 [P2] [RUNNING 2026-07-21T01:50Z] Decayed margin-aware team-results ELO (replacement test for win_rate features)
 **Hypothesis:** `win_rate_diff` (crude last-10) is the single highest-gain
 feature — the direct team-result family is the model's best signal but its
 poorest-estimated one. A time-decayed, margin-aware team ELO updated on
