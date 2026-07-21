@@ -1200,7 +1200,7 @@ head; **D1 baseline remains canonical**); harness + `models/auto/d14/`
 scratch kept. Fix + gate as a unit with D4 → **D15**. See
 `research/reports/auto/D14.md`.
 
-## D15 [P1] [PENDING] Full attribution unit: D2 + D14 snapshot + D4 run-out dismissals (D14 follow-up)
+## D15 [P1] [RUNNING 2026-07-21T06:08:46Z] Full attribution unit: D2 + D14 snapshot + D4 run-out dismissals (D14 follow-up)
 **Hypothesis:** D14 TABLED with a lone CI-clean regression on
 `bowler_wkts_1plus` (+0.0027 [+0.0007,+0.0050]) while `team_first_over_mae`
 improved CI-clean (−0.132) and correctness was proven. Mechanism: correct
