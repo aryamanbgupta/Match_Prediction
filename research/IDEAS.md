@@ -509,7 +509,7 @@ compare MAE vs sim-alone and baseline-alone (`prop_fair_baselines.py`).
 ≥1 family AND no family regresses vs its best parent. **Budget:** ~2 h.
 **Result:** —
 
-## B4 [P2] [RUNNING 2026-07-21T07:04Z] top_bowler pricing margin (post-calibration edge quantification)
+## B4 [P2] [LANDED] top_bowler pricing margin (post-calibration edge quantification)
 **Hypothesis:** top_bowler is the only binary family beating its fair baseline
 (E5). Quantify the margin as implied odds: at what price does the sim's
 top_bowler probability have positive EV vs the fair baseline as synthetic
@@ -520,7 +520,31 @@ baseline; compute edge distribution, EV curves at hypothetical vig levels
 sufficient, else one recipe-B run.
 **Gate:** instrumentation (like A1) — LANDED if the pricing table + report
 are produced with real numbers. **Budget:** ~1.5 h.
-**Result:** —
+**Result:** LANDED 2026-07-21. Pure analysis on the canonical D15 detail
+(`models/auto/d15/detail_d15_s43_n261.json`, calibrated sim, 522
+team-markets / 5,835 rows) vs the exact E2 as-of fair baseline
+(`prop_fair_baselines.py` imported read-only); synthetic market
+q=p_base×(1+vig), YES-only flat 1u, cluster-boot CIs by match. **Margin
+re-verified on the current engine**: ΔBrier **−0.0017 [−0.0030, −0.0003]**
+CI-clean (D1 same-seed context −0.0023 [−0.0035,−0.0010]; E5's standing
+claim survives the B6/D1/D15 engine chain). **Pricing grid**: +EV at EVERY
+vig 0–10% × thr 0–20% (flat ROI +138…+166%, all 16 cells CI-clean;
+in-sample break-even vig >50%; Kelly mean 0.047/median 0.031). **Band
+decomposition flips the reading**: 83% of PnL from p_base<2% longshots;
+the head is flat/negative (10–20% band +0.8 [−18.0,+19.5]; ≥20% band
+−20.8 [−47.3,+9.0]) — the honest bettable slice is the **5–10% band
+(odds ~10–21): ROI +54.1 [+23.4, +84.6]**. Tail profit = two entangled
+distortions, audited row-by-row: (1) the career-wickets-share baseline
+catastrophically underprices debutants (zero-career players top wickets at
+0.90% vs 0.26% priced; all 15 winners genuine debutants, no name-mismatch
+artifact); (2) the sim overprices non-bowlers — **D5 quantified in betting
+units**: 477 rows give zero-career-wicket players p_sim≥2% (mean 3.84%),
+topped by keepers/batters (PD Salt 6%, S Konstas 9%, Sahibzada Farhan 10%,
+DP Conway 5–6%, SD Hope 8%). Harness `scripts/auto/b4_pricing_margin.py`;
+table `research/reports/auto/B4_pricing.md`; numbers
+`models/auto/b4/pricing_numbers.json` (gitignored). E2's fair-baseline bar
+shown weak in the tail → B9 appended (usage-share baseline re-test). Kept
+`74856a6`+`b387cbb`. See `research/reports/auto/B4.md`.
 
 ## B5 [P2] [PENDING] In-play over/under quote prototype (analytics-engine seed)
 **Hypothesis:** `models/inplay_winprob_v1` (P(win|state)) + the calibrated sim
@@ -661,6 +685,33 @@ team_total_{fours,sixes}_mae no CI-clean regression. Both → LANDED (ship the
 hybrid as the default venue-ON calibrator, superseding bare v1; re-baseline
 warning applies); exactly one → TABLED; none → FAILED. **Budget:** ~1 h (one
 n=261 run; baseline + tooling reused).
+**Result:** —
+
+## B9 [P2] [PENDING] top_bowler margin vs a usage-share fair baseline (B4 follow-up)
+**Hypothesis:** B4 showed the E2 career-wickets-share baseline is weak
+exactly where the sim's top_bowler profit concentrates (p_base<2%
+longshots): it prices debutants at 0.26% when they actually top the
+wickets 0.90% of the time, because career-wickets share cannot see *who
+actually bowls*. A stronger fair baseline — as-of expected-overs share
+(bowler_phase_usage-style history, EB-shrunk, uniform-ish prior for
+debutant XI members) × career wicket rate, normalized within XI — is the
+"competent bettor" bar. If the sim's CI-clean ΔBrier margin (B4: −0.0017
+on the D15 engine) survives THAT baseline, the E2/E5 skill claim is
+robust; if it flips, "first binary family with real skill" needs a
+caveat and the E2 bar should be flagged for interactive revision (the
+eval framework itself is loop-forbidden — build the stronger baseline in
+`scripts/auto/`, do NOT edit `prop_fair_baselines.py`).
+**Method:** build the usage baseline as-of from cricsheet (per-player
+balls-bowled share within team-match, EB-shrunk toward a lineup-uniform
+prior; reuse the E2 corpus-log pattern in a NEW script under
+`scripts/auto/`); verify it beats the career-share baseline on Brier
+(it must, else it's not a stronger bar); rerun the B4 margin + band
+analysis with it on the SAME canonical D15 detail JSON. Pure analysis,
+no sim run.
+**Gate:** instrumentation+verdict hybrid: report the paired ΔBrier
+(sim − usage-baseline) with CI verbatim either way; LANDED if the
+analysis completes with real numbers AND the conclusion (margin survives
+or flips) is stated with its CI. **Budget:** ~1.5 h.
 **Result:** —
 
 ---
