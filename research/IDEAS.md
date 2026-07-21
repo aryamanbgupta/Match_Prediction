@@ -687,7 +687,7 @@ warning applies); exactly one → TABLED; none → FAILED. **Budget:** ~1 h (one
 n=261 run; baseline + tooling reused).
 **Result:** —
 
-## B9 [P2] [RUNNING 2026-07-21 07:13 UTC] top_bowler margin vs a usage-share fair baseline (B4 follow-up)
+## B9 [P2] [LANDED] top_bowler margin vs a usage-share fair baseline (B4 follow-up)
 **Hypothesis:** B4 showed the E2 career-wickets-share baseline is weak
 exactly where the sim's top_bowler profit concentrates (p_base<2%
 longshots): it prices debutants at 0.26% when they actually top the
@@ -712,6 +712,62 @@ no sim run.
 (sim − usage-baseline) with CI verbatim either way; LANDED if the
 analysis completes with real numbers AND the conclusion (margin survives
 or flips) is stated with its CI. **Budget:** ~1.5 h.
+**Result:** LANDED 2026-07-21. **The margin FLIPS.** Usage baseline
+(as-of EB-shrunk expected-deliveries × per-ball wicket rate,
+lineup-uniform debutant prior, K=5 appearances / 120 balls, pre-committed
+`4ebad9b`) on the canonical D15 detail; B4's career pairing reproduced
+exact (|Δ|=0.00e+00). Stronger-bar check CI-clean: usage − career ΔBrier
+**−0.0055 [−0.0070, −0.0040]** (standalone Brier 0.0747 vs career 0.0802
+vs sim 0.0785). The margin: sim − usage **+0.0038 [+0.0026, +0.0051]
+CI-clean WORSE** — identical at grid (2,60)/(10,240); head-only (both
+p≥2%) +0.0049 [+0.0032,+0.0067] and 4/5 p_usage bands CI-clean worse →
+NOT a tail artifact. **E5's "first binary family to beat a fair
+baseline" is falsified at the competent-bettor bar**; B4's pricing grid
+inverts (flat ROI −29…−45% at every vig×thr vs usage prices; <2% band
+779 bets, 0 wins). Mechanism split — both are USAGE errors: true
+debutants (0 appearances) top the wickets 8.47% actual; the
+lineup-uniform prior prices them 9.06%, sim 1.63% (sim under-bowls
+debutant bowlers); seen-never-took-wicket players 0.62% actual vs sim
+1.29% (D5's over-bowled non-bowlers). E2 bar flagged for interactive
+revision (I13); sim who-bowls alignment appended as B10. Harness
+`scripts/auto/b9_usage_baseline.py`; artifacts `models/auto/b9/`
+(gitignored). See `research/reports/auto/B9.md`.
+
+## B10 [P2] [PENDING] Sim who-bowls usage alignment: debutants + non-bowlers (B9 follow-up, D5 superset)
+**Hypothesis:** B9's usage baseline beats the calibrated sim on top_bowler
+CI-clean in every band that matters (pooled +0.0038, head-only +0.0049),
+and both exposed distortions are WHO-BOWLS errors, not per-ball-rate
+errors: (a) true debutants (0 prior XI appearances) actually top the
+team's wickets 8.47% of the time — the lineup-uniform expected-balls
+prior alone prices them at 9.06% while the sim gives 1.63%, i.e. the
+`EmpiricalBowlerSelector`'s unknown-bowler league-share floor α
+under-bowls genuine debutant bowlers ~5×; (b) experienced
+never-took-a-wicket players get p_sim 1.29% vs 0.62% actual (D5's
+over-bowled keepers/batters, 477 rows ≥2% per B4). Aligning the
+selector's shares to B9's as-of usage expectations — unknown/debutant
+players toward the lineup-uniform prior, long-history zero-usage players
+toward their ~0 historical share — attacks both tails of the same defect
+mechanistically, where D5's eligibility threshold only cuts tail (b).
+**Method:** sim-engine change in `sim_v1_2.py`'s bowler-selection layer
+only (ball model untouched): blend `EmpiricalBowlerSelector`'s EB-shrunk
+phase-usage share with the B9 as-of expected-balls share
+(`models/auto/b9/usage_corpus.pkl` / rebuildable via the B9 harness) for
+players absent from or thin in `models/bowler_phase_usage.json`; keep
+the ≥5-eligible-bowlers relaxation. Report before/after simulated
+balls-bowled share for true debutants and zero-usage veterans vs actual
+(unit-level check, pre-run). Recipe B n=261×100 seed 43, venue-ON
+default path, stale v1 vector calibrator both sides, paired vs the
+canonical D15 baseline `models/auto/d15/detail_d15_s43_n261.json`
+(re-verify no sim-engine idea landed since D15 first). Pre-commit the
+gate script; wait on the eval synchronously in-session (D2/D14 lesson).
+**Gate (sim pair):** PRIMARY = `top_bowler` Brier improves CI-clean
+paired vs the D15 run (target: close part of the +0.0038 gap to the B9
+usage baseline — recompute sim−usage on the new detail as context) AND
+G5 bowler coverage stays ≥90%. Guards = `bowler_wkts_{1,2}plus`,
+`batter_runs_mae`, `team_first_over_mae`: no CI-clean regression. Both →
+LANDED (re-baseline warning applies; subsumes D5's mechanism — its
+queue status becomes a supervisor call); exactly one → TABLED; none →
+FAILED. **Budget:** ~2.5 h. One sim idea per night.
 **Result:** —
 
 ---
@@ -1418,3 +1474,19 @@ Byte-identical numerics for any seed ≠ 0 (guard-only changes);
 1,745 women's matches already on disk are filtered out of everything; a
 separate women's model is zero-download new coverage. No odds/eval gate
 exists yet — needs its own eval design first.
+
+## I13 [INTERACTIVE] Upgrade the E2 fair-baseline bar (flagged by loop iteration B9, 2026-07-21)
+B9 built a usage-share top_bowler baseline (as-of EB-shrunk
+expected-deliveries × per-ball wicket rate, lineup-uniform debutant
+prior) that beats BOTH the E2 career-share baseline (ΔBrier −0.0055
+[−0.0070, −0.0040]) and the calibrated sim itself (sim − usage +0.0038
+[+0.0026, +0.0051] CI-clean, robust to shrinkage) — falsifying E5's
+"first binary family beats a fair baseline" at the competent-bettor bar.
+`prop_fair_baselines.py` is loop-forbidden, so the bar upgrade is
+interactive: adopt the usage-share construction for `top_bowler`
+(reference implementation `scripts/auto/b9_usage_baseline.py`), and
+consider the analogous expected-balls × rate count-model upgrade for
+`bowler_wkts_{1,2,3}plus`. Re-state the standing prop-skill claims
+(E2/E5 reports, CLAUDE.md prop-framework paragraph) after the bar moves;
+sim-gate guard families that reference "margin vs fair baseline" keep
+meaning only relative to the bar version in force.
