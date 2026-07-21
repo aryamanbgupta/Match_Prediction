@@ -1200,7 +1200,7 @@ head; **D1 baseline remains canonical**); harness + `models/auto/d14/`
 scratch kept. Fix + gate as a unit with D4 → **D15**. See
 `research/reports/auto/D14.md`.
 
-## D15 [P1] [RUNNING 2026-07-21T06:08:46Z] Full attribution unit: D2 + D14 snapshot + D4 run-out dismissals (D14 follow-up)
+## D15 [P1] [LANDED] Full attribution unit: D2 + D14 snapshot + D4 run-out dismissals (D14 follow-up)
 **Hypothesis:** D14 TABLED with a lone CI-clean regression on
 `bowler_wkts_1plus` (+0.0027 [+0.0007,+0.0050]) while `team_first_over_mae`
 improved CI-clean (−0.132) and correctness was proven. Mechanism: correct
@@ -1233,7 +1233,40 @@ improvement. Guards = `top_bowler` (D4's warning: credit redistribution),
 LANDED (D2+D14+D4 ship as the attribution unit; re-baseline warning
 applies); exactly one → TABLED; none → FAILED. **Budget:** ~2.5 h (one
 n=261 run + empirical-rates build; D14 tooling reused).
-**Result:** —
+**Result:** LANDED 2026-07-21 (relay: 2026-07-21 06:08 UTC iteration
+claimed `0503849`, re-applied D2+D14 via `4c9778a`, implemented the
+run-out channel + unit check + pre-committed gate `17fd2d1`, launched the
+eval and died at session close; this iteration re-verified the unit check
+30/30 at eval time, re-ran the eval blocked-on synchronously — 2218.6 s,
+261/261 — and ran gate + verdict). Empirical as-of rates (< 2025-07-01,
+8,697 matches / 108,356 dismissals): p_runout **0.075077**,
+nonstriker_share **0.468470**, baked as constants into `sim_v1_2.py`
+(no runtime file dep); sampled WICKETs draw dismissal type in
+`simulate_ball`, run-outs dismiss striker/non-striker with NO
+bowling-card credit, total wicket rate untouched; legacy dismissal=None
+path == pre-D15. Recipe B n=261×100 **seed 43**, venue-ON +
+run_rate-aligned default path, stale v1 vector calibrator both sides,
+ONLY delta = the D2+D14+D15 unit; paired cluster-boot by match vs
+`models/auto/d1/detail_d1_s43_n261.json` via pre-committed
+`d15_gate_analysis.py`. **P1** `bowler_wkts_1plus` +0.0047
+[−0.0001,+0.0095] CI includes 0 → no CI-clean regression (D14's +0.0027
+[+0.0007,+0.0050] gone) → MET. **P2** `team_first_over_mae` **−0.111
+[−0.185,−0.038]** CI-clean better (3.526 → 3.415; D14's win retained) →
+MET. **GUARDS HELD**: batter_runs_mae +0.014, top_bowler +0.0007 noise;
+BONUS `bowler_wkts_2plus` **−0.0054 [−0.0085,−0.0024]** CI-clean BETTER
+(D14's regression inverted), context `bowler_wkts_3plus` −0.0013
+[−0.0021,−0.0004] better — the run-out channel bites hardest on the
+multi-wicket tail, as D4 predicted. Both → **LANDED**; commits
+`4c9778a`+`17fd2d1` kept, nothing reverted. Caveats: 1plus point
+estimate (+0.0047) not better than D14's, CI at the boundary — residual
+1plus overshoot remains (D5/D6 are the queued levers); context
+`team_total_fours_mae` +0.043 [+0.009,+0.075] CI-clean worse (~1.2%
+rel), the scan's only CI-clean negative. **RE-BASELINE IN FORCE**: all
+pre-D15 sim detail JSONs (incl. D1's) are stale; canonical venue-ON
+baseline = `models/auto/d15/detail_d15_s43_n261.json` (seed 43,
+attribution unit). D4's mechanism is subsumed — its queue status is a
+supervisor call (entry not edited by the loop). No new ideas appended
+(D5/D6 already cover the residual). See `research/reports/auto/D15.md`.
 
 ---
 
