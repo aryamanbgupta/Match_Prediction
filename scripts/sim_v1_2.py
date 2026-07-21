@@ -80,6 +80,20 @@ class Outcome(Enum):
     WIDE = 8
     NO_BALL = 9
 
+
+# D15 (D4 mechanism): empirical dismissal-type split for sampled WICKETs.
+# Training labels every delivery carrying a wickets[] entry as WICKET
+# (parsing_v2.py:909) — run-outs included — so the sim's TOTAL wicket rate is
+# already right; but the eval's actuals side counts a bowler wicket only for
+# kind != "run out" (scripts/sim_eval/prop_backtest.py:326, the only excluded
+# kind), while the sim credited 100% of wickets to the bowler's card. The
+# dismissal-type draw moves attribution only. Rates computed as-of (< 2025-07-01
+# male T20s, 108,356 dismissals) by scripts/auto/d15_build_runout_rates.py
+# (artifact models/auto/d15/runout_rates.json); rarer non-bowler kinds
+# (retired hurt 0.13%, ...) stay bowler-credited to match the eval convention.
+RUNOUT_P = 0.075077
+RUNOUT_NONSTRIKER_SHARE = 0.468470
+
 @dataclass
 class Player:
     """Represents a cricket player"""
@@ -135,6 +149,11 @@ class MatchState:
     # Tracking: (team_idx, player_idx) -> value
     bowler_balls: Dict[Tuple[int, int], int] = field(default_factory=dict)
     batsman_stats: Dict[Tuple[int, int], Tuple[int, int]] = field(default_factory=dict)
+
+    # D15: dismissal type of the ball just applied by update() —
+    # None (no wicket) / 'bowler' / 'runout_striker' / 'runout_nonstriker'.
+    # Per-ball transient; the innings loop reads it for bowling-card credit.
+    last_dismissal: Optional[str] = None
 
     # NEW: Partnership tracking (runs since last wicket)
     partnership_runs: int = 0
@@ -278,8 +297,15 @@ class MatchState:
         
         return available
     
-    def update(self, outcome: Outcome, runs: int = 0):
-        """Update state after a ball"""
+    def update(self, outcome: Outcome, runs: int = 0,
+               dismissal: Optional[str] = None):
+        """Update state after a ball.
+
+        dismissal (D15): for WICKET balls, 'bowler' / 'runout_striker' /
+        'runout_nonstriker'. None (legacy callers) behaves as 'bowler':
+        striker dismissed. A non-striker run-out replaces the NON-striker;
+        the striker keeps the strike.
+        """
         # Check if we have space in history (defensive programming)
         if self.history_idx >= len(self.history):
             # Extend history array if needed
@@ -322,12 +348,22 @@ class MatchState:
         # Handle wicket
         if outcome == Outcome.WICKET:
             self.wickets[self.current_team_idx] += 1
-            # Track who got out
-            self.batsmen_out[self.current_team_idx].append(self.striker_idx)
-            # Get next batsman
-            self.striker_idx = self.get_next_batsman_idx()
+            if dismissal == 'runout_nonstriker':
+                # D15: run out at the non-striker's end — the incoming
+                # batsman replaces the non-striker, the striker (who faced
+                # the ball, charged above) keeps the strike.
+                self.batsmen_out[self.current_team_idx].append(self.non_striker_idx)
+                self.non_striker_idx = self.get_next_batsman_idx()
+            else:
+                # Track who got out
+                self.batsmen_out[self.current_team_idx].append(self.striker_idx)
+                # Get next batsman
+                self.striker_idx = self.get_next_batsman_idx()
             # NEW: Reset partnership on wicket
             self.partnership_runs = 0
+            self.last_dismissal = dismissal if dismissal is not None else 'bowler'
+        else:
+            self.last_dismissal = None
         
         # Rotate strike on odd off-the-bat runs only — the single extra run
         # of a wide/no-ball never swaps the striker (D2)
@@ -389,6 +425,7 @@ class MatchState:
         new_state.history_idx = self.history_idx
         new_state.bowler_balls = self.bowler_balls.copy()
         new_state.batsman_stats = self.batsman_stats.copy()
+        new_state.last_dismissal = self.last_dismissal  # D15
         new_state.partnership_runs = self.partnership_runs  # NEW
         new_state.toss_winner = self.toss_winner
         new_state.chose_to_bat = self.chose_to_bat
@@ -525,10 +562,17 @@ class EmpiricalBowlerSelector(BowlerSelector):
 class T20Rules:
     """Enforces T20 cricket rules and match flow"""
 
+    _runout_logged = False  # D15: once-per-process startup line
+
     def __init__(self, bowler_selector: Optional[BowlerSelector] = None):
         # Default to the empirical phase-aware selector. Pass
         # RandomBowlerSelector() explicitly for A/B comparison runs.
         self.bowler_selector = bowler_selector or EmpiricalBowlerSelector()
+        if not T20Rules._runout_logged:
+            print(f"Run-out dismissal channel ACTIVE "
+                  f"(p_runout={RUNOUT_P:.4f}, "
+                  f"nonstriker_share={RUNOUT_NONSTRIKER_SHARE:.4f})")
+            T20Rules._runout_logged = True
     
     def select_next_bowler(self, state: MatchState) -> int:
         """Select bowler for next over"""
@@ -551,27 +595,34 @@ class T20Rules:
         
         return True
     
-    def process_ball(self, state: MatchState, outcome: Outcome) -> int:
-        """Process a ball and return runs scored"""
+    def process_ball(self, state: MatchState, outcome: Outcome,
+                     dismissal: Optional[str] = None) -> int:
+        """Process a ball and return runs scored.
+
+        Deterministic given its arguments — the D15 dismissal-type draw
+        lives in `simulate_ball` (the RNG-owning layer). Callers that pass
+        no dismissal get legacy semantics on WICKET (striker out, bowler
+        credit).
+        """
         runs = 0
-        
+
         # Direct run outcomes (fixed: removed non-existent THREE, FIVE)
         if outcome in [Outcome.ONE, Outcome.TWO, Outcome.FOUR, Outcome.SIX]:
             runs = outcome.value
-        
+
         # Extras
         elif outcome == Outcome.WIDE:
             runs = 1  # Simplified: 1 run for wide
         elif outcome == Outcome.NO_BALL:
             runs = 1  # Simplified: 1 run for no-ball
-        
+
         # Wicket - no runs (simplified, ignoring run outs with runs)
         elif outcome == Outcome.WICKET:
             runs = 0
-        
+
         # Update state
-        state.update(outcome, runs)
-        
+        state.update(outcome, runs, dismissal=dismissal)
+
         return runs
     
     def simulate_ball(self, state: MatchState, model: 'PredictionModel') -> Tuple[Outcome, int]:
@@ -608,9 +659,21 @@ class T20Rules:
         # Ensure legal outcome
         if not self.is_legal_outcome(state, outcome):
             outcome = Outcome.DOT
-        
+
+        # D15: dismissal-type draw for sampled wickets — attribution only,
+        # the total wicket rate is untouched. Same seeded `random` stream as
+        # the outcome draw. Empirical as-of rates; see the module constants.
+        dismissal = None
+        if outcome == Outcome.WICKET:
+            if random.random() < RUNOUT_P:
+                dismissal = ('runout_nonstriker'
+                             if random.random() < RUNOUT_NONSTRIKER_SHARE
+                             else 'runout_striker')
+            else:
+                dismissal = 'bowler'
+
         # Process the ball
-        runs = self.process_ball(state, outcome)
+        runs = self.process_ball(state, outcome, dismissal=dismissal)
         
         # Select new bowler if over just ended (and not end of innings)
         if state.balls % 6 == 0 and state.balls > 0 and not state.is_innings_over():
@@ -3595,7 +3658,10 @@ class SimulationEngine:
             # Update bowling card
             if outcome not in [Outcome.WIDE, Outcome.NO_BALL]:
                 key = pre_bowler_idx
-                wickets = 1 if outcome == Outcome.WICKET else 0
+                # D15: run-outs carry no bowler credit (matches the actuals
+                # convention in prop_backtest — kind "run out" excluded).
+                wickets = 1 if (outcome == Outcome.WICKET
+                                and state.last_dismissal == 'bowler') else 0
 
                 if key in bowling_card:
                     prev = bowling_card[key]
