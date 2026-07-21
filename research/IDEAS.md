@@ -1109,7 +1109,7 @@ Reverted `c821172` (trainer back to swap-only); harness + `models/auto/d13/`
 scratch kept (gitignored). Log commit landed the following iteration (this
 one was wall-clock-cut after the revert). See `research/reports/auto/D13.md`.
 
-## D14 [P1] [PENDING] Batting-card attribution fix + D2 extras semantics, gated as a unit (D2 follow-up)
+## D14 [P1] [RUNNING 2026-07-21T00:45Z] Batting-card attribution fix + D2 extras semantics, gated as a unit (D2 follow-up)
 **Hypothesis:** D2 TABLED with a lone CI-clean guard regression
 (`team_first_over_mae` +0.013 [+0.004,+0.023]) despite provably-correct
 `update()` semantics (26/26 scripted-over assertions). The D2 unit check
