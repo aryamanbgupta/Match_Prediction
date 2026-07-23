@@ -877,7 +877,7 @@ card; fixing rotation alone re-scrambles rather than removes the
 attribution error. Fix + re-apply as a unit → **D14**. See
 `research/reports/auto/D2.md`.
 
-## D3 [P1] [RUNNING 2026-07-23T02:10Z] Fix extras graft: empirical rates + pre-calibration ordering (sim-side half)
+## D3 [P1] [TABLED] Fix extras graft: empirical rates + pre-calibration ordering (sim-side half)
 **Hypothesis:** `predict_next_ball` grafts a flat 1% wide + 1% no-ball AFTER
 the calibrator runs (`sim_v1_2.py`: calibrator ~:1121-1126, graft
 :1141-1142, then renormalize) — de-tuning the calibrated 6-class marginals —
@@ -896,7 +896,35 @@ B paired.
 empirical val rates (report before/after) AND no CI-clean guard regression
 (batter_runs_mae, pp_total/team-total families, top_bowler, bowler_wkts).
 Both → LANDED; total-line improvements a bonus. **Budget:** ~2 h.
-**Result:** —
+**Result:** TABLED 2026-07-22 (relay: same-night iteration claimed
+`a64baf7` + implemented `8dfda3a` — shared `graft_extras()` at all six
+wrapper sites, val-split rates 0.037702/0.004409 replacing flat
+0.009804/0.009804, unit check 13/13 + gate pre-committed — and launched
+the eval twice; both died at session close. This iteration re-verified
+the unit check at eval time, blocked-on the eval synchronously (2284.0 s,
+261/261), gate + verdict.) **GATE 1 MET**: live-path draws over ~300k
+deliveries 0.037750/0.004350 vs val 0.037702/0.004409 (3σ); old graft
+wides ~3.8× under, no-balls ~2.2× over — hypothesis confirmed at the
+data level. **GATE 2 NOT MET**: paired vs the canonical D15 s43 baseline
+(only delta = graft), all three `innings_runs` lines CI-clean WORSE —
+160_5 **+0.0087 [+0.0010,+0.0166]**, 170_5 **+0.0142 [+0.0058,+0.0230]**,
+180_5 **+0.0128 [+0.0049,+0.0204]**; pp_total lean worse straddling;
+top_bowler/bowler_wkts/batter_runs_mae noise; context
+`team_total_sixes_mae` +0.055 [+0.019,+0.088] the only other CI-clean
+move. Exactly one gate → TABLED. MECHANISM (called in the pre-run note):
+training labels fold wide runs into the 6 classes (wide-1 → `one`, I5),
+so the per-legal-ball model output already carries extras runs — grafting
+the TRUE empirical mass on top double-counts (+2.9 extras runs/innings,
+2.4 → 5.3), inflating simulated totals; the old flat 1%+1% graft was an
+accidental partial compensation, not a defensible rate. Rate realism
+alone bought no observable prop win. Reverted `87f4fe6` (sim
+byte-identical to pre-D3 head; **D15 baseline remains canonical**);
+harness + `models/auto/d3/` kept. **Combine candidate:** re-apply this
+exact graft as the sim-side half of I5's label rework (post-I5 the
+6-class block carries zero extras mass, so the composition becomes
+correct by construction; `d3_unit_check.py` + `d3_gate_analysis.py` are
+the ready-made acceptance check). No new ideas appended. See
+`research/reports/auto/D3.md`.
 
 ## D4 [P2] [PENDING] Wicket-type modeling: run-outs in the sim (attribution fix)
 **Hypothesis:** the sim attributes 100% of dismissals to bowler-vs-striker
