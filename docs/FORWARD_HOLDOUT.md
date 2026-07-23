@@ -167,5 +167,15 @@ The proposed choices and current artifact hashes are in
 I3 and I6 are complete, but review and freeze it only after the scorer tests
 and ball-simulation same-day replay guard are complete.
 
+The tracked machine-readable contract is
+`evaluation/forward_protocol_2026-06-01_2026-07-13.yaml`. Its model-free
+preflight verifies both sealed fingerprints, all candidate artifact hashes,
+the three liquidity counts, and every opening condition:
+
+```bash
+uv run python scripts/forward_eval_contract.py \
+  evaluation/forward_protocol_2026-06-01_2026-07-13.yaml
+```
+
 After scoring, this holdout is consumed. Subsequent tuning requires a new
 forward window.

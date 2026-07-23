@@ -1,0 +1,103 @@
+schema_version: 1
+protocol_id: forward_2026-06-01_2026-07-13_v1
+status: DRAFT
+created_date: "2026-07-23"
+
+holdout:
+  directory: data/forward_holdout/2026-06-01_2026-07-13
+  dataset_fingerprint_sha256: 82ccde16cf2b7e5f13a9236f2788f3c8be1582f312f5c028ec44a6ab76561028
+  selected_matches: 137
+  liquidity_slices:
+    all: 137
+    min_volume_50000: 61
+    min_volume_100000: 30
+
+state:
+  directory: data/forward_state/2026-06-01_2026-07-13
+  directory_fingerprint_sha256: 725719e6ab1951cb0fa36544ea2e710ce22f0625e5934bd3dae992e21f9b792f
+  sqlite_sha256: c95524db29f1680c5fff9fa97a3f7f5d882ceef41075e7477d30698a730edb7c
+  same_day_order_version: date_then_match_id_lexicographic_v1
+  prior_contract: frozen_external_sqlite_v1
+
+statistics:
+  bootstrap_contract: tournament_time_block_v1
+  bootstrap_seed: 42
+  bootstrap_resamples: 10000
+  minimum_confirmatory_clusters: 10
+
+candidates:
+  match_m7:
+    role: primary_match_winner
+    calibration: none
+    artifacts:
+      - path: models/xgb_match_v3_m7_production/model.pkl
+        sha256: 5274a9ed52bf67a4916614bb9c16c88252fc3dbaf6c989840864661d30ca7ac6
+      - path: models/xgb_match_v3_m7_production/encoders.pkl
+        sha256: a09411274d3885e7e980ad049a5709d795d472223ac68b23ddbea4ea61402e93
+      - path: models/xgb_match_v3_m7_production/feature_columns.txt
+        sha256: 5891d03bbc6694a5dc92c455355102cca06794ff9d20873b3738295abf4ef873
+
+  ball_v7:
+    role: winner_benchmark_and_distribution_engine
+    n_simulations: 100
+    random_seed: 43
+    bowler_selector: empirical
+    ball_calibration: vector
+    artifacts:
+      - path: models/xgb_v3/xgboost_model_v3.pkl
+        sha256: 5400df329221d8a85f36eea793821459c39bd9fbd35a30d72e6f3900d3d491ac
+      - path: models/xgb_v3/batter_encoder_v3.pkl
+        sha256: 94ed4c061945e0d6fd055dd46f48c2f349b8ab2651f2a482560e99c44b610e90
+      - path: models/xgb_v3/bowler_encoder_v3.pkl
+        sha256: 554c1987b5d13d4d94a84b0f118cb85ba5d41d837b0f9861861f1dbb571f89ca
+      - path: models/xgb_v3/venue_encoder_v3.pkl
+        sha256: b451bb5a8c9ca1177e39eaceefc8977e2cb20dfd31d966c27b55fbeb21c18892
+      - path: models/xgb_v3/matchup_encoder_v3.pkl
+        sha256: 051f45780937859ef6981d3e1d3afcf84277e2d02f655409b1d043a53d384ab2
+      - path: models/xgb_v3/feature_columns_v3.txt
+        sha256: 5f400222192caf2c7b6617558ef521e18d3429f842e714647d27e2f6c1c4b176
+      - path: models/xgb_v3/outcome_dist_config_v3.json
+        sha256: 5ecf91976a74f0ff9b68bbf32838ef18400406a7adc298f93a24362a595eac17
+      - path: models/xgb_v3/vector_scaling_calibrator_v1.pkl
+        sha256: e7f80123cb2460befdab2e414b7d06794892d7f2652746a2992b376961a9ed73
+      - path: models/bowler_phase_usage.json
+        sha256: 0ed98417e215a27343867fa3f2fb3fb7a2e65e4e6c4f1d472d053c077774e80a
+      - path: experiments/configs/xgb_v6_hierarchical_shrink.yaml
+        sha256: 46a8ec24771648a89c689b74ca06aa31f909b33e8900884e7ec29b2912f1ff99
+      - path: scripts/sim_v1_2.py
+        sha256: f20aef46e9a1d6511f28fa8ec84b061406a9c868444b578234a49ba4205c6433
+
+betting_policies:
+  flat:
+    stake_units: 1.0
+    minimum_edge: 0.0
+    edge_comparison: strictly_greater
+  a7:
+    stake_units: 1.0
+    elo_boundary: 5.0
+    close_minimum_edge: 0.0
+    mismatch_minimum_edge: 0.10
+    edge_comparison: strictly_greater
+
+reporting:
+  slices: [all, min_volume_50000, min_volume_100000]
+  probability_metrics: [binary_log_loss, brier_score]
+  betting_metrics: [n_bets, total_pnl, roi, win_rate, max_drawdown]
+  kelly_headline: false
+  threshold_sweep: false
+
+decision:
+  primary_slice: min_volume_50000
+  probability_market_log_loss_tolerance: 0.01
+  probability_requires_better_than_ball_v7: true
+  economic_policy: a7
+  economic_requires_positive_ci_lower_bound: true
+  economic_requires_minimum_clusters: 10
+
+opening_conditions:
+  i3_complete: true
+  i6_complete: true
+  scorer_tests_complete: false
+  ball_same_day_replay_complete: false
+  scoring_code_hashes_recorded: false
+  user_approved: false

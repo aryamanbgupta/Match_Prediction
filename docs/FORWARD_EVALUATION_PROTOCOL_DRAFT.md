@@ -8,6 +8,20 @@ This document is the proposed one-time evaluation contract for
 `data/forward_holdout/2026-06-01_2026-07-13/`. It must be reviewed and changed
 only before any model probabilities are produced for that directory.
 
+The machine-readable companion is
+`evaluation/forward_protocol_2026-06-01_2026-07-13.yaml`. It remains `DRAFT`
+and fails closed if a scoring command asks for frozen authorization.
+
+Run the model-free preflight at any time:
+
+```bash
+uv run python scripts/forward_eval_contract.py \
+  evaluation/forward_protocol_2026-06-01_2026-07-13.yaml
+```
+
+Adding `--require-frozen` must fail until scorer tests, ball same-day replay,
+scoring-code hashes, and explicit user approval are all recorded.
+
 Sealed dataset facts:
 
 - 137 matched men's T20 fixtures, 2026-06-02 through 2026-07-13.
