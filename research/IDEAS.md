@@ -142,6 +142,13 @@ slice-conditional (wiring into a live betting harness is human follow-up;
 stack on A4's logit-avg (orthogonal — probability ensemble × bet filter). See
 `research/reports/auto/A7.md`.
 
+**I3 revision (2026-07-23):** A7 remains the fixed forward betting policy, but
+its historical economic claim is no longer confirmatory. Tournament-block
+resampling gives ≥$50k ROI +36.93% **[-1.52%, +59.81%]** across 17 blocks and
+≥$100k +35.86% **[-36.70%, +58.16%]** across 10 blocks. The point improvement
+and drawdown reduction remain; the earlier positive i.i.d. lower bound is
+superseded. See `reports/i3_eval_statistics_hardening.md`.
+
 ## A8 [P3] [FAILED] Sim: phase-conditional vector scaling (E5 follow-up)
 **Hypothesis:** one global vector calibrator over/under-corrects by phase;
 per-phase (PP/mid/death) scaling removes the residual bowler-wicket overshoot
@@ -1493,11 +1500,19 @@ predict-time guard raises <7 / warns <11. Corpus scan: 0 of 9,519 male
 matches have a ≤6 lineup → zero training rows change, no re-materialization
 needed.
 
-## I3 [INTERACTIVE] Eval statistics hardening (`scripts/sim_eval/`)
-Cluster/block bootstrap by tournament/team (current i.i.d. per-match
-resampling understates ROI CI width on tournament-clustered bet sets); fix
-the `realized_pnl != 0` bet-placed test. Changes the gates themselves —
-human-supervised only; re-report standing headline CIs after.
+## I3 [DONE 2026-07-23] Eval statistics hardening (`scripts/sim_eval/`)
+Centralized the eval math under `eval_statistics.py`. Bet placement now uses
+explicit `bet_placed`/`bet_team` fields (legacy rows reconstruct from
+edge+odds), so zero-return wins remain in bet count/ROI denominator/win rate.
+Headline LL/ROI CIs use 10,000 seed-42 whole Cricsheet-event time-block
+resamples (`tournament_time_block_v1`), with team-pair/season fallback,
+metadata coverage, effective block count, and a `<10 blocks = descriptive`
+guard. Historical point ROIs are unchanged but prior CI-clean claims do not
+survive: M7 ≥$50k +21.90% **[-10.79,+50.18]** (19 blocks); A7 +36.93%
+**[-1.52,+59.81]** (17); ball-v7 +6.11% **[-7.99,+25.70]** (19).
+The sealed forward set was not scored; its ≥$50k slice has only 7 blocks, so
+this window cannot alone confirm economic ROI. See
+`reports/i3_eval_statistics_hardening.md`.
 
 ## I4 [INTERACTIVE] Odds-build integrity (`build_polymarket_odds.py` + eval odds)
 True pre-match check (price_timestamp < scheduled start; 259/261 stamps are
@@ -1505,6 +1520,15 @@ same-day as the match); log residual top_p>0.92 entries (9 remain, max
 0.9995); remove the outcome-conditioned dedup tiebreak (criterion #2 uses
 the realized Cricsheet winner). Regenerating `betting_odds_polymarket.json`
 re-baselines ALL historical LL/ROI numbers — do deliberately, once.
+**Forward-set progress (2026-07-23):** per user decision, the legacy extractor
+and the historical 261-match artifacts remain unchanged. A separate strict
+extractor now enforces explicit scheduled start, last CLOB tick strictly
+before start, exact-title H2H, male scope, resolved two-team outcomes, and
+full provenance. The outcome-blind forward builder sealed 137 new matches
+(61 ≥$50k / 30 ≥$100k) with zero timing/result/overlap violations; see
+`docs/FORWARD_HOLDOUT.md`. This completes the guardrails for future data but
+does **not** rehabilitate or re-baseline the legacy 261-match odds, so I4
+remains interactive if historical headline metrics are ever regenerated.
 
 ## I5 [INTERACTIVE] Extras/threes label rework (`parsing_v2.py`, full ball retrain)
 Train the ball model on off-the-bat runs; exclude wide/no-ball rows from
@@ -1513,11 +1537,19 @@ rotation); byes/legbyes not credited to the batter; sim gains an explicit
 extras process (D3 is the sim-side stopgap). Label/schema change + full
 retrain — plan as its own session.
 
-## I6 [INTERACTIVE] Same-day match ordering determinism (`loaders_common.py` + cache rebuild)
-Same-date order is OS scandir order (`loaders_common.py:54-58`) and drives
-within-date tracker carryover (77 affected same-day groups) — not
-reproducible across machines. Add a secondary sort key (match id / start
-time); requires stats-cache + parquet rebuild (production artifacts).
+## I6 [DONE 2026-07-23] Same-day match ordering determinism
+All chronological loaders now use the versioned
+`(match_date, Cricsheet match_id)` order
+`date_then_match_id_lexicographic_v1`; multi-directory walks share that
+implementation and reject duplicate IDs. Cache acceptance now requires exact
+source membership/count plus the ordering version. The forward sidecar
+combines 9,519 historical and 401 context matches without modifying production
+artifacts, freezes global/phase priors from the pre-holdout cache, and verifies
+feature rows for all 137 sealed fixtures. The refreshed audit found 1,616
+historical and 67 context same-day groups whose old filesystem order differed.
+On 791 already-consumed test rows, M7 LL changed 0.592629 → 0.592474 and mean
+absolute prediction movement was 0.079 percentage points. No forward fixture
+was scored. See `docs/I6_SAME_DAY_ORDERING_AUDIT.md`.
 
 ## I7 [INTERACTIVE] Venue canonicalization + duplicate player-ID merge
 ~149 venue substring-collision pairs ("Bay Oval" vs "Bay Oval, Mount

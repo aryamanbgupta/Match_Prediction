@@ -7,6 +7,17 @@ import time
 
 from sim_v1_2 import SimulationEngine, SimulationConfig, MatchState, ResultAggregator
 from .loaders import BettingOddsLoader
+from .eval_statistics import (
+    BOOTSTRAP_CONTRACT_VERSION,
+    DEFAULT_BOOTSTRAP_RESAMPLES,
+    DEFAULT_BOOTSTRAP_SEED,
+    MIN_RECOMMENDED_CLUSTERS,
+    bootstrap_mean_ci,
+    cluster_id_for_record,
+    count_unique_clusters,
+    flat_bet_team,
+    flat_bet_won,
+)
 
 # Betting configuration
 BET_EDGE_THRESHOLD = 0.0  # Minimum edge required to place bet (0 = any positive edge)
@@ -46,6 +57,9 @@ class MatchEvaluationResult:
     # Metadata
     n_simulations: int = 0
     simulation_time: float = 0.0
+    bet_placed: Optional[bool] = None
+    bet_team: Optional[str] = None
+    competition_cluster_id: Optional[str] = None
 
 
 @dataclass
@@ -111,6 +125,9 @@ class OverallEvaluationResults:
     avg_log_loss_ci_high: float = float('nan')
     flat_roi_ci_low: float = float('nan')
     flat_roi_ci_high: float = float('nan')
+    bootstrap_contract: str = BOOTSTRAP_CONTRACT_VERSION
+    n_bootstrap_clusters: int = 0
+    bootstrap_reliable: bool = False
 
 
 class MatchLevelEvaluator:
@@ -118,7 +135,8 @@ class MatchLevelEvaluator:
     
     def __init__(self, model, simulation_engine: SimulationEngine,
                  n_simulations: int = 1000, parallel: bool = True,
-                 bootstrap_resamples: int = 1000):
+                 bootstrap_resamples: int = DEFAULT_BOOTSTRAP_RESAMPLES,
+                 cluster_lookup: Optional[Dict[str, str]] = None):
         """
         Args:
             model: The prediction model (XGBoost, etc.)
@@ -127,12 +145,15 @@ class MatchLevelEvaluator:
             parallel: Enable parallel processing for simulations
             bootstrap_resamples: Resamples used for percentile-method 95% CIs
                 on log-loss / flat-betting ROI.
+            cluster_lookup: Match ID -> tournament/tour-season block. Missing
+                IDs fall back to an unordered team-pair-season block.
         """
         self.model = model
         self.engine = simulation_engine
         self.n_simulations = n_simulations
         self.parallel = parallel
         self.bootstrap_resamples = bootstrap_resamples
+        self.cluster_lookup = dict(cluster_lookup or {})
     
     def evaluate_all(self, matches: List[Tuple[str, MatchState]], 
                      odds_lookup: Dict[str, Dict]) -> OverallEvaluationResults:
@@ -356,6 +377,19 @@ class MatchLevelEvaluator:
                                                        d['team1'], d['team2'])
             edge = self._calculate_edge(simulated_win_prob, d['market_win_prob'])
             realized_pnl = self._calculate_realized_pnl(edge, d['market_odds'], d['actual_winner'])
+            decision = {
+                "match_id": d["match_id"],
+                "teams": [d["team1"], d["team2"]],
+                "actual_winner": d["actual_winner"],
+                "edge": edge,
+                "market_odds": d["market_odds"],
+                "realized_pnl": realized_pnl,
+            }
+            bet_team = flat_bet_team(decision, BET_EDGE_THRESHOLD)
+            competition_cluster_id = cluster_id_for_record(
+                decision,
+                getattr(self, "cluster_lookup", None),
+            )
 
             # Kelly and EV
             best_team = None
@@ -400,6 +434,9 @@ class MatchLevelEvaluator:
                 fractional_kelly_pnl=fractional_kelly_pnl,
                 n_simulations=self.n_simulations,
                 simulation_time=d['sim_time'],
+                bet_placed=bet_team is not None,
+                bet_team=bet_team,
+                competition_cluster_id=competition_cluster_id,
             )
             match_results.append(result)
 
@@ -487,6 +524,19 @@ class MatchLevelEvaluator:
         brier_score = self._calculate_brier_score(simulated_win_prob, actual_winner, team1, team2)
         edge = self._calculate_edge(simulated_win_prob, market_win_prob)
         realized_pnl = self._calculate_realized_pnl(edge, market_odds, actual_winner)
+        decision = {
+            "match_id": match_id,
+            "teams": [team1, team2],
+            "actual_winner": actual_winner,
+            "edge": edge,
+            "market_odds": market_odds,
+            "realized_pnl": realized_pnl,
+        }
+        bet_team = flat_bet_team(decision, BET_EDGE_THRESHOLD)
+        competition_cluster_id = cluster_id_for_record(
+            decision,
+            getattr(self, "cluster_lookup", None),
+        )
 
         # Calculate Kelly Criterion and EV metrics
         best_team = None
@@ -539,7 +589,10 @@ class MatchLevelEvaluator:
             full_kelly_pnl=full_kelly_pnl,
             fractional_kelly_pnl=fractional_kelly_pnl,
             n_simulations=self.n_simulations,
-            simulation_time=simulation_time
+            simulation_time=simulation_time,
+            bet_placed=bet_team is not None,
+            bet_team=bet_team,
+            competition_cluster_id=competition_cluster_id,
         )
     
     def _calculate_log_loss(self, sim_prob: Dict[str, float], actual_winner: Optional[str],
@@ -626,11 +679,17 @@ class MatchLevelEvaluator:
         # If edge doesn't meet threshold, no bet
         if not best_team or best_edge <= BET_EDGE_THRESHOLD:
             return 0.0
+        try:
+            odds = float(market_odds[best_team])
+        except (KeyError, TypeError, ValueError):
+            return 0.0
+        if not np.isfinite(odds) or odds < 1.0:
+            return 0.0
         
         # Calculate P&L
         if best_team == actual_winner:
             # Win: Return is (odds - 1) since stake is returned
-            return float(market_odds.get(best_team, 0)) - 1.0
+            return odds - 1.0
         else:
             # Loss: Lose the stake
             return -1.0
@@ -718,50 +777,23 @@ class MatchLevelEvaluator:
             return -kelly_fraction
 
     def _bootstrap_ci(self, values: List[float], n_resamples: int = None,
-                      ci: float = 0.95, seed: int = 42,
-                      strata: Optional[List] = None) -> Tuple[float, float]:
-        """Percentile-method bootstrap CI for the mean of `values`.
-
-        If `strata` is provided (one label per value), resampling happens
-        within each stratum, preserving stratum sizes — a standard
-        stratified bootstrap. This widens the CI when within-stratum
-        variance is lower than between-stratum variance, which is the
-        honest framing for cross-tier / cross-period match samples.
-
-        Returns (low, high). Returns (nan, nan) on empty input.
-        """
-        if not values:
-            return (float('nan'), float('nan'))
+                      ci: float = 0.95, seed: int = DEFAULT_BOOTSTRAP_SEED,
+                      strata: Optional[List] = None,
+                      clusters: Optional[List] = None) -> Tuple[float, float]:
+        """Delegate to the shared I3 bootstrap contract."""
         if n_resamples is None:
-            n_resamples = self.bootstrap_resamples
-        if n_resamples <= 0:
-            return (float('nan'), float('nan'))
-
-        arr = np.asarray(values, dtype=float)
-        n = len(arr)
-        rng = np.random.default_rng(seed)
-
-        if strata is None:
-            idx = rng.integers(0, n, size=(n_resamples, n))
-            means = arr[idx].mean(axis=1)
-        else:
-            if len(strata) != n:
-                raise ValueError(
-                    f"strata length {len(strata)} does not match values "
-                    f"length {n}")
-            stratum_to_idx: Dict = {}
-            for i, s in enumerate(strata):
-                stratum_to_idx.setdefault(s, []).append(i)
-            sums = np.zeros(n_resamples)
-            for s, members in stratum_to_idx.items():
-                m = len(members)
-                resampled = rng.integers(0, m, size=(n_resamples, m))
-                sums += arr[np.asarray(members)][resampled].sum(axis=1)
-            means = sums / n
-        alpha = (1 - ci) / 2
-        return (
-            float(np.quantile(means, alpha)),
-            float(np.quantile(means, 1 - alpha)),
+            n_resamples = getattr(
+                self,
+                "bootstrap_resamples",
+                DEFAULT_BOOTSTRAP_RESAMPLES,
+            )
+        return bootstrap_mean_ci(
+            values,
+            n_resamples=n_resamples,
+            ci=ci,
+            seed=seed,
+            clusters=clusters,
+            strata=strata,
         )
 
     def _calculate_sharpe_ratio(self, returns: List[float]) -> float:
@@ -840,10 +872,12 @@ class MatchLevelEvaluator:
             total_matches = len(category_results)
             wins = sum(1 for r, team in category_results if r.actual_winner == team)
 
-            flat_pnl = sum(r.realized_pnl for r, _ in category_results
-                          if r.realized_pnl is not None and r.realized_pnl != 0)
-            flat_bets = sum(1 for r, _ in category_results
-                           if r.realized_pnl is not None and r.realized_pnl != 0)
+            flat_bet_results = [
+                r for r, _ in category_results
+                if flat_bet_team(r, BET_EDGE_THRESHOLD) is not None
+            ]
+            flat_pnl = sum(float(r.realized_pnl) for r in flat_bet_results)
+            flat_bets = len(flat_bet_results)
 
             full_kelly_pnl = sum(r.full_kelly_pnl for r, _ in category_results
                                 if r.full_kelly_pnl is not None)
@@ -929,12 +963,11 @@ class MatchLevelEvaluator:
                         all_signed_edges.append(-edge)  # Wrong prediction
 
             # Track actual P&L
-            if result.realized_pnl is not None:
-                if result.realized_pnl != 0:  # A bet was placed
-                    total_pnl += result.realized_pnl
-                    bets_placed += 1
-                    if result.realized_pnl > 0:
-                        winning_bets += 1
+            if flat_bet_team(result, BET_EDGE_THRESHOLD) is not None:
+                total_pnl += float(result.realized_pnl)
+                bets_placed += 1
+                if flat_bet_won(result, BET_EDGE_THRESHOLD):
+                    winning_bets += 1
 
         avg_edge = np.mean(all_edges) if all_edges else 0.0
         avg_signed_edge = np.mean(all_signed_edges) if all_signed_edges else 0.0
@@ -950,6 +983,7 @@ class MatchLevelEvaluator:
         fractional_kelly_wins = 0
         fractional_kelly_bets = 0
         flat_returns = []
+        flat_clusters = []
         full_kelly_returns = []
         fractional_kelly_returns = []
 
@@ -974,8 +1008,14 @@ class MatchLevelEvaluator:
                     fractional_kelly_wins += 1
 
             # Track flat returns for Sharpe
-            if result.realized_pnl is not None and result.realized_pnl != 0:
-                flat_returns.append(result.realized_pnl)
+            if flat_bet_team(result, BET_EDGE_THRESHOLD) is not None:
+                flat_returns.append(float(result.realized_pnl))
+                flat_clusters.append(
+                    cluster_id_for_record(
+                        result,
+                        getattr(self, "cluster_lookup", None),
+                    )
+                )
 
         # Calculate Kelly ROIs and win rates
         full_kelly_roi = (full_kelly_pnl / full_kelly_bets * 100) if full_kelly_bets > 0 else 0.0
@@ -988,11 +1028,27 @@ class MatchLevelEvaluator:
         sharpe_full_kelly = self._calculate_sharpe_ratio(full_kelly_returns)
         sharpe_fractional_kelly = self._calculate_sharpe_ratio(fractional_kelly_returns)
 
-        # Bootstrap CIs on per-match log loss and per-bet flat P&L. ROI CI is
-        # the P&L-mean CI ×100 (ROI = mean(P&L) × 100 by definition). Resamples
-        # are seeded for reproducibility across the three liquidity slices.
-        ll_lo, ll_hi = self._bootstrap_ci(log_losses)
-        roi_lo, roi_hi = self._bootstrap_ci(flat_returns)
+        # I3: whole tournament/tour-season blocks are resampled. Complete
+        # blocks retain repeated teams and shared competition/market regimes.
+        ll_results = [
+            result for result in match_results
+            if not np.isnan(result.log_loss)
+        ]
+        ll_clusters = [
+            cluster_id_for_record(
+                result,
+                getattr(self, "cluster_lookup", None),
+            )
+            for result in ll_results
+        ]
+        ll_lo, ll_hi = self._bootstrap_ci(
+            log_losses,
+            clusters=ll_clusters,
+        )
+        roi_lo, roi_hi = self._bootstrap_ci(
+            flat_returns,
+            clusters=flat_clusters,
+        )
         flat_roi_ci_low = roi_lo * 100 if not np.isnan(roi_lo) else float('nan')
         flat_roi_ci_high = roi_hi * 100 if not np.isnan(roi_hi) else float('nan')
 
@@ -1031,6 +1087,12 @@ class MatchLevelEvaluator:
             avg_log_loss_ci_high=ll_hi,
             flat_roi_ci_low=flat_roi_ci_low,
             flat_roi_ci_high=flat_roi_ci_high,
+            bootstrap_contract=BOOTSTRAP_CONTRACT_VERSION,
+            n_bootstrap_clusters=count_unique_clusters(flat_clusters),
+            bootstrap_reliable=(
+                count_unique_clusters(flat_clusters)
+                >= MIN_RECOMMENDED_CLUSTERS
+            ),
         )
     
     def _calculate_calibration(self, match_results: List[MatchEvaluationResult],
@@ -1107,6 +1169,12 @@ def print_evaluation_summary(results: OverallEvaluationResults):
     print(f"  Sharpe Ratio: {results.sharpe_ratio_flat:.2f}")
     print(f"  Win Rate: {results.win_rate:.1%}")
     print(f"  Bets Placed: {results.bets_placed}")
+    print(
+        f"  Bootstrap: {results.bootstrap_contract} "
+        f"({results.n_bootstrap_clusters} bet clusters)"
+    )
+    if not results.bootstrap_reliable:
+        print("  WARNING: fewer than 10 clusters; ROI CI is descriptive only")
 
     print(f"\nFull Kelly Criterion:")
     print(f"  Total P&L: {results.full_kelly_total_pnl:+.2f} units")

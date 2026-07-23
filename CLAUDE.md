@@ -23,16 +23,17 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
    improvement deltas, and the explanation of why M3–M6 feature work
    dropped.
 
-   **Honest headline (iteration polymarket eval, the gate; n=170 ≥$50k bets)**:
+   **Honest headline (iteration Polymarket eval; I3-revised 2026-07-23)**:
    raw LL **0.6299** vs market 0.6267 (essentially at market);
-   flat ROI **+21.90%** (CI [+2.28%, +43.83%]) — clears strict ROI gate.
-   ≥$100k slice (n=110): LL 0.5929, ROI **+26.39%** (CI [+0.57%, +58.78%])
-   — CI cleanly excludes 0. **Close-match slice** (top6 ELO diff ≤ 5,
-   n=74): ROI **+33.27%** (CI [+4.36%, +61.53%]) — the historically weak
-   slice finally clears the gate. 2026-04 IPL walk-forward: ROI +34.87%
-   (CI [+2.04%, +68.06%]), win 65.7%. **Golden eval is intentionally NOT
-   recomputed for M-phase selection** — held out for production-launch
-   confirmation only (see `feedback_iteration_only_decisions.md`).
+   flat ROI **+21.90%**, but the tournament-block CI is
+   **[-10.79%, +50.18%]** across 19 competition blocks. ≥$100k:
+   LL 0.5929, ROI **+26.39%**, block CI **[-17.36%, +46.42%]** across
+   11 blocks. The earlier positive i.i.d. lower bounds, including the
+   close-match and single-month claims, are superseded by I3 and no longer
+   establish a production betting edge. M7 remains the direct probability
+   model of record; A7 remains the predeclared forward betting policy, with
+   economic performance unconfirmed. See
+   `reports/i3_eval_statistics_hardening.md`.
 
    **Frozen vs unfrozen tracker semantics**: previous diagnostic claimed
    frozen-mode trackers (snapshot at val/test boundary, no within-test
@@ -109,6 +110,16 @@ Eval sets:
   `build_polymarket_odds_golden.py` (polymarket from
   `/Users/aryamangupta/Projects/polymarket-cricket/data/polymarket_prematch_odds_<date>.json`).
   Per-match dashboard: `reports/ipl_2026_dashboard_clean.html`.
+- **Sealed forward set** (2026-07-23):
+  `data/forward_holdout/2026-06-01_2026-07-13/` (137 matches,
+  matched 2026-06-02 → 2026-07-13; 61 at ≥$50k, 30 at ≥$100k).
+  Constructed from the separate strict Polymarket extractor with every
+  quote strictly before explicit scheduled start, exact H2H-only markets,
+  male-T20 Cricsheet joins, outcome-blind selection, provenance hashes,
+  and zero overlap with older pools. **No model has been scored on it.**
+  Do not open it until candidate models, A7 betting policy, metrics, slices,
+  and the one-time decision rule are frozen. See
+  `docs/FORWARD_HOLDOUT.md`.
 
 Use `--min-volume {50000,100000}` to slice either set for sharp markets.
 
@@ -234,6 +245,8 @@ Step-by-step v7 sim equivalent: `build_stats_cache.py` → `materialize_features
 | What features exist? Implementation status? | [docs/feature_roadmap.md](docs/feature_roadmap.md) |
 | What's the current research log / past experiment results? | [IMPROVEMENTS.md](IMPROVEMENTS.md) |
 | What's actively being worked on? Eval gates? | [TODO.md](TODO.md) |
+| How is the sealed forward set built and protected? | [docs/FORWARD_HOLDOUT.md](docs/FORWARD_HOLDOUT.md) |
+| What exactly changed in deterministic same-day state? | [docs/I6_SAME_DAY_ORDERING_AUDIT.md](docs/I6_SAME_DAY_ORDERING_AUDIT.md) |
 | What did the system look like historically? | [docs/archive/](docs/archive/) |
 
 ---
@@ -258,9 +271,24 @@ Step-by-step v7 sim equivalent: `build_stats_cache.py` → `materialize_features
    numerics within MC noise of serial. Cap `OMP_NUM_THREADS` per process
    or BLAS oversubscribes and you serialize. See
    `docs/OPERATIONS.md` § "Multi-process parallel eval".
-5. **Same-day match order matters** in `materialize_features.py`. Within-date
-   trackers carry state across same-day siblings; reordering changes features
-   for every match in the batch.
+5. **Same-day match order is a versioned data contract.** Every tracker walk
+   must use `(match_date, Cricsheet match_id)` via `loaders_common.py`
+   (`date_then_match_id_lexicographic_v1`). Within-date trackers carry state
+   across siblings, so filesystem order is forbidden. Deterministic caches
+   persist the version in `_meta`; match materializers fail closed when it is
+   absent or different.
+6. **Forward context is state, not training data.** Build it only under
+   `data/forward_state/` with `build_forward_state.py`; never overwrite the
+   production cache/parquets or recompute global/phase priors over the future
+   context. The sidecar freezes those priors from the pre-holdout production
+   cache and does not load a model. Direct match evaluation uses its
+   deterministic match rows. Ball simulation additionally requires
+   sequential same-day replay; date-only SQLite queries are insufficient.
+7. **Match-winner ROI uncertainty uses I3 blocks, never match-level i.i.d.**
+   Use `sim_eval/eval_statistics.py` contract
+   `tournament_time_block_v1`: 10,000 seed-42 whole-event resamples, explicit
+   bet placement, and `<10 blocks = descriptive`. Historical i.i.d. CI-clean
+   claims are superseded.
 
 ---
 

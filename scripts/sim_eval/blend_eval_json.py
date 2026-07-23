@@ -26,8 +26,17 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import sys
 from pathlib import Path
 from typing import Dict, Optional
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+
+from sim_eval.eval_statistics import (  # noqa: E402
+    cluster_id_for_record,
+    flat_bet_team,
+)
 
 # Match the existing eval pipeline's edge threshold so realized_pnl is
 # computed identically.
@@ -70,9 +79,28 @@ def _recompute_realized_pnl(edge: Dict[str, float],
             best_team = team
     if not best_team or best_edge <= BET_EDGE_THRESHOLD:
         return 0.0
+    try:
+        odds = float(market_odds[best_team])
+    except (KeyError, TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(odds) or odds < 1.0:
+        return 0.0
     if best_team == actual_winner:
-        return float(market_odds.get(best_team, 0)) - 1.0
+        return odds - 1.0
     return -1.0
+
+
+def _persist_bet_contract(record: dict, *, recompute: bool) -> dict:
+    """Persist explicit placement and fallback cluster metadata."""
+    out = dict(record)
+    if recompute:
+        out.pop("bet_placed", None)
+        out.pop("bet_team", None)
+    bet_team = flat_bet_team(out, BET_EDGE_THRESHOLD)
+    out["bet_placed"] = bet_team is not None
+    out["bet_team"] = bet_team
+    out["competition_cluster_id"] = cluster_id_for_record(out)
+    return out
 
 
 def _blend_match(match: dict, p_direct_team1: Optional[float], w: float) -> dict:
@@ -86,16 +114,16 @@ def _blend_match(match: dict, p_direct_team1: Optional[float], w: float) -> dict
     out = dict(match)  # shallow copy
     teams = match.get("teams") or list(match.get("simulated_prob", {}).keys())
     if len(teams) != 2:
-        return out
+        return _persist_bet_contract(out, recompute=False)
     team1, team2 = teams[0], teams[1]
     sim_prob = match.get("simulated_prob", {})
     p_sim_t1 = sim_prob.get(team1)
     if p_sim_t1 is None:
-        return out
+        return _persist_bet_contract(out, recompute=False)
 
     if p_direct_team1 is None:
         # No direct prediction for this match — pass sim through.
-        return out
+        return _persist_bet_contract(out, recompute=False)
 
     # Blend in logit space.
     logit_blend = w * _logit(p_sim_t1) + (1 - w) * _logit(p_direct_team1)
@@ -136,6 +164,7 @@ def _blend_match(match: dict, p_direct_team1: Optional[float], w: float) -> dict
     # Bet decision + PnL.
     out["realized_pnl"] = _recompute_realized_pnl(
         new_edge, market_odds, actual_winner)
+    out = _persist_bet_contract(out, recompute=True)
 
     # Expected value + Kelly on the chosen-bet side, mirroring
     # match_evaluator._calculate_expected_value / _calculate_kelly_fraction.

@@ -21,6 +21,11 @@ from stats_provider import StatsProvider
 from player_metadata import PlayerMetadataProvider
 from sim_eval.loaders import TestMatchLoader, BettingOddsLoader
 from sim_eval.match_evaluator import MatchLevelEvaluator, print_evaluation_summary
+from sim_eval.eval_statistics import (
+    DEFAULT_BOOTSTRAP_RESAMPLES,
+    DEFAULT_BOOTSTRAP_SEED,
+    load_competition_clusters,
+)
 
 
 def create_example_odds_file():
@@ -97,8 +102,12 @@ def main():
                        help='Drop matches whose polymarket_volume_usd is below this threshold. '
                             'Use for liquidity-sliced eval (e.g., 50000 / 100000). '
                             'Default: None (no filter; preserves non-polymarket odds files).')
-    parser.add_argument('--bootstrap-resamples', type=int, default=1000,
-                       help='Number of bootstrap resamples for ROI / log-loss CIs (default: 1000)')
+    parser.add_argument(
+        '--bootstrap-resamples',
+        type=int,
+        default=DEFAULT_BOOTSTRAP_RESAMPLES,
+        help='Tournament-block resamples for ROI / log-loss CIs (default: 10000)',
+    )
 
     # Calibration arguments
     parser.add_argument('--calibrate', action='store_true',
@@ -407,12 +416,22 @@ def main():
         return
 
     # Create evaluator
+    cluster_lookup = load_competition_clusters(args.test_dir)
+    loaded_ids = {match_id for match_id, _state in matches}
+    cluster_coverage = sum(match_id in cluster_lookup for match_id in loaded_ids)
+    if cluster_coverage != len(loaded_ids):
+        print(
+            "Warning: Cricsheet competition metadata covers "
+            f"{cluster_coverage}/{len(loaded_ids)} loaded matches; unmatched "
+            "fixtures will use team-pair-season blocks."
+        )
     evaluator = MatchLevelEvaluator(
         model=model,
         simulation_engine=engine,
         n_simulations=args.n_sims,
         parallel=args.parallel,
         bootstrap_resamples=args.bootstrap_resamples,
+        cluster_lookup=cluster_lookup,
     )
     
     # Run evaluation (with or without match-level calibration)
@@ -478,6 +497,12 @@ def main():
                 'flat_betting_win_rate': results.win_rate,
                 'flat_betting_bets_placed': results.bets_placed,
                 'flat_betting_sharpe': results.sharpe_ratio_flat,
+                'bootstrap_contract': results.bootstrap_contract,
+                'bootstrap_seed': DEFAULT_BOOTSTRAP_SEED,
+                'bootstrap_resamples': args.bootstrap_resamples,
+                'n_bootstrap_clusters': results.n_bootstrap_clusters,
+                'bootstrap_reliable': results.bootstrap_reliable,
+                'cluster_metadata_coverage': cluster_coverage,
                 # Full Kelly
                 'full_kelly_total_pnl': results.full_kelly_total_pnl,
                 'full_kelly_roi_pct': results.full_kelly_roi,
@@ -519,6 +544,9 @@ def main():
                 'log_loss': match.log_loss,
                 'brier_score': match.brier_score,
                 'realized_pnl': match.realized_pnl,
+                'bet_placed': match.bet_placed,
+                'bet_team': match.bet_team,
+                'competition_cluster_id': match.competition_cluster_id,
                 'expected_value': match.expected_value,
                 'full_kelly_fraction': match.full_kelly_fraction,
                 'full_kelly_pnl': match.full_kelly_pnl,

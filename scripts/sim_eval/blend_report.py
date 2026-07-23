@@ -180,7 +180,9 @@ def render_markdown(sliced_dir: Path, direct_json: Path) -> str:
     out.append("# Phase A1 — Direct + Sim Blend Report\n")
     out.append("LL/ROI by blend weight `w` and slice. "
                "`logit(P_final) = w·logit(P_sim) + (1−w)·logit(P_direct)`. "
-               "ROI CIs are 95% bootstrap (1000 resamples).\n")
+               "Current regenerated ROI CIs use the I3 whole-competition "
+               "block contract; historical reports retain the intervals "
+               "recorded at generation time.\n")
 
     out.append(f"**Reference baselines** — coinflip LL {COINFLIP_LL:.4f}, "
                f"market LL {MARKET_LL_ALL:.4f}, "

@@ -96,7 +96,7 @@ quick "scope sniff."
 | File | Lines | Role |
 |---|---:|---|
 | `scripts/build_stats_cache.py` | ~600 | Chronological JSON walk → SQLite schema v4. Writes delta-compressed snapshots, outcome counts (`c0..cw`), match-log rows, and global prior π. Idempotent via `_meta.source_json_mtime_max`. |
-| `scripts/materialize_features.py` | ~310 | Per-date batched parquet emission. Rehydrates `temp_*` trackers from SQLite once per date, replays same-day matches in monolith order, writes 4 splits + `.feature_hash` marker. |
+| `scripts/materialize_features.py` | ~310 | Per-date batched parquet emission. Rehydrates `temp_*` trackers from SQLite once per date, replays same-day matches in versioned match-ID order, writes 4 splits + `.feature_hash` marker. |
 | `scripts/parsing_v2.py` | ~1140 | Tracker primitives: `PlayerStatsTracker`, `PlayerEloTracker`, `VenueStatsTracker`, `InningsFeatureCalculator`, `parse_match_data_v2`, `deep_copy_stats`, `classify_match_k_factor`. The orchestrator was deleted in Phase B; only helpers remain. |
 | `scripts/tracker_rehydration.py` | ~350 | Seeds `temp_*` trackers from SQLite at a date boundary using the new private accessors on `_SQLiteBackend`. |
 | `scripts/loaders_common.py` | ~125 | `iter_matches_chronological`, `extract_match_metadata`, `DEFAULT_SPLITS`, `effective_splits`. Shared by parser + tests. |
@@ -133,6 +133,7 @@ quick "scope sniff."
 | `match_evaluator.py` | ~1010 | `MatchLevelEvaluator` — runs sims per match, computes log loss / Brier / edge / calibration / flat & Kelly P&L. Optional Platt + isotonic calibration via `--calibrate` / `--ball-calibrate`. |
 | `run_sim_eval.py` | ~22 K bytes | CLI entrypoint. `--model-type {xgboost,lstm,mlp,transformer}`, `--model-version`, `--n-sims`, `--max-matches`, `--mlx`, calibration flags, `--bowler-selector {empirical,random}` (default empirical). |
 | `prop_backtest.py` | ~1100 | Prop-bet backtest harness (2026-05-12). Simulates each test match, aggregates ~25 prop families (top batter/bowler, innings/PP totals, team top-scorer, sixes/fours counts, first-wicket runs, bowler wickets/economy, tie), scores Brier-skill + MAE vs cricsheet actuals with bootstrap CIs. |
+| `eval_statistics.py` | ~280 | I3 match-winner statistics contract: explicit flat-bet decisions, Cricsheet event time blocks with team-pair fallback, and deterministic whole-block LL/ROI bootstrap intervals. |
 | `render_prop_per_match.py` / `compare_selector_eval.py` / `check_bowler_coverage.py` | — | Prop drilldown renderer (per-match markdown + index), empirical-vs-random selector A/B with gate verdicts, and bowler-coverage (G5) diagnostic. |
 
 ### 2.6 Experiment infrastructure
@@ -195,7 +196,7 @@ models/player_stats_cache_v3.sqlite (~57 MB, schema v4)
         │  for each date:
         │    rehydrate temp_stats / temp_elo / temp_venue from SQLite
         │      (union of all same-day players + venues)
-        │    for each same-day match (in monolith order):
+        │    for each same-day match (in versioned match-ID order):
         │      parse_match_data_v2(..., prior=π)
         │      → 105 columns/ball, including 42 outcome-dist features
         │      advance temp_venue post-match (matches monolith drift)
@@ -600,7 +601,8 @@ batting_match_log (player_id, date_id, intra_date_idx,
 bowling_match_log (player_id, date_id, intra_date_idx,
                    runs_given, balls_bowled, wickets)
 ```
-`intra_date_idx` distinguishes same-day matches in monolith order; the recent
+`intra_date_idx` distinguishes same-day matches in the versioned
+`(match_date, Cricsheet match_id)` order; the recent
 deque is reconstructed via
 `ORDER BY date_id DESC, intra_date_idx DESC LIMIT N` with strict `date_id < ?`
 at date boundaries.
@@ -609,13 +611,17 @@ at date boundaries.
 ```
 schema_version             = 4
 build_timestamp            = 2026-04-23T18:25:00
+same_day_order_version     = date_then_match_id_lexicographic_v1
+source_dirs_json           = <ordered JSON array of absolute source dirs>
+source_json_file_count     = <exact number of JSON source files>
 source_json_mtime_max      = <max(mtime) of data/t20s_json/*.json at build>
 prior_p0..prior_pw         = global empirical outcome distribution π
 ```
 
-`_meta.schema_version == SCHEMA_VERSION` and `source_json_mtime_max ≥ live`
-mtime are the gates for `StatsProvider` to accept the cache; `run_experiment`
-uses them to decide whether to re-run `build_stats_cache.py`.
+Schema, ordering version, exact source-directory list/file count, and maximum
+source mtime are the gates for materialization and smart-cache reuse. A
+forward sidecar additionally records `prior_contract =
+frozen_external_sqlite_v1` and the pre-holdout prior-source hash.
 
 ### 5.4 Betting odds JSON
 
@@ -738,9 +744,9 @@ snapshot emission, and per-ball feature materialization. We split it into
 
 **Insight**: same-day matches are the only intra-batch state dependency.
 `materialize_features.py` rehydrates `temp_*` trackers once per date from
-SQLite, then replays same-day matches in monolith order so within-date drift
-matches. This is what makes the parity harness pass bit-exactly on all
-secondaries.
+SQLite, then replays same-day matches in versioned match-ID order. Both cache
+construction and materialization use the shared loader contract, so results no
+longer depend on filesystem enumeration order.
 
 ### 6.5 Ball-level modelling + Monte Carlo
 
@@ -964,10 +970,12 @@ Driver script: `perf_runs/run_n_parallel.py`. Ops recipe in
 
 ### 6.13 Strict same-day-stateful contract
 
-Same-day matches in `materialize_features.py` are processed in monolith
-order, with `temp_venue` updated post-match between siblings. Swapping M1
-↔ M2 inside a same-day batch produces different features for both — Phase A
-proved this on 5,855 same-day-secondary matches.
+Same-day matches in `materialize_features.py` are processed by
+`(match_date, Cricsheet match_id)`, with `temp_venue` updated post-match
+between siblings. Swapping M1 ↔ M2 inside a same-day batch produces different
+features for both, so this order is versioned in SQLite metadata and required
+by the materializers. Multi-directory iteration uses the same global order
+and rejects duplicate match IDs.
 
 This has one architectural consequence: per-match parquet caching (Phase C,
 not yet shipped) must key on `(match_id, position_in_same_day_batch,

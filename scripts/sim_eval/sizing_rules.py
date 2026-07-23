@@ -38,14 +38,32 @@ from reslice_eval_json import (  # noqa: E402
     _slice_predicate,
     SLICE_NAMES,
 )
+from eval_statistics import (  # noqa: E402
+    BOOTSTRAP_CONTRACT_VERSION,
+    DEFAULT_BOOTSTRAP_RESAMPLES,
+    DEFAULT_BOOTSTRAP_SEED,
+    MIN_RECOMMENDED_CLUSTERS,
+    cluster_id_for_record,
+    load_competition_clusters,
+)
 
 
 def _bet_team_and_edge(match: dict) -> Tuple[Optional[str], float]:
     edges = match.get("edge", {})
     if not edges:
         return None, 0.0
-    best_team = max(edges, key=edges.get)
-    return best_team, float(edges[best_team])
+    candidates = []
+    for team, value in edges.items():
+        try:
+            numeric_edge = float(value)
+        except (TypeError, ValueError):
+            continue
+        if np.isfinite(numeric_edge):
+            candidates.append((numeric_edge, str(team)))
+    if not candidates:
+        return None, 0.0
+    best_edge, best_team = max(candidates, key=lambda item: item[0])
+    return best_team, best_edge
 
 
 def _compute_pnl(match: dict, sizing: str, kelly_mult: float, cap: float
@@ -59,22 +77,25 @@ def _compute_pnl(match: dict, sizing: str, kelly_mult: float, cap: float
     best_team, edge = _bet_team_and_edge(match)
     if best_team is None:
         return None
-    odds = match.get("market_odds", {}).get(best_team)
-    if odds is None or odds <= 1.0:
+    try:
+        odds = float(match.get("market_odds", {})[best_team])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not np.isfinite(odds) or odds < 1.0:
         return None
     actual_winner = match.get("actual_winner")
     won = (actual_winner == best_team)
 
     if sizing == "flat":
-        return float(odds - 1.0) if won else -1.0
+        return odds - 1.0 if won else -1.0
 
     if sizing == "kelly":
         full_k = float(match.get("full_kelly_fraction", 0.0))
         if full_k <= 0:
-            return 0.0  # no bet (no kelly edge)
+            return None
         capped = min(full_k, cap)
         stake = capped * kelly_mult
-        return stake * float(odds - 1.0) if won else -stake
+        return stake * (odds - 1.0) if won else -stake
 
     raise ValueError(f"Unknown sizing: {sizing}")
 
@@ -85,13 +106,17 @@ def evaluate(matches: List[dict], vol_by_id: Dict[str, Optional[float]],
               kelly_mult: float = 0.25, cap: float = 0.02,
               slice_name: str = "all",
               min_volume: Optional[float] = None,
-              n_resamples: int = 1000) -> Dict:
+              n_resamples: int = DEFAULT_BOOTSTRAP_RESAMPLES,
+              cluster_lookup: Optional[Dict[str, str]] = None) -> Dict:
     """Apply sizing rules to the bets passing slice/volume filters."""
     predicate = _slice_predicate(slice_name, 15.0, 5.0)
 
     pnls: List[float] = []
+    pnl_clusters: List[str] = []
+    wins: List[bool] = []
     n_eligible = 0
     skipped_under_threshold = 0
+    cluster_metadata_coverage = 0
     for match in matches:
         if min_volume is not None:
             vol = vol_by_id.get(match["match_id"])
@@ -101,8 +126,10 @@ def evaluate(matches: List[dict], vol_by_id: Dict[str, Optional[float]],
         if not predicate(match, feat):
             continue
         n_eligible += 1
+        if cluster_lookup and match["match_id"] in cluster_lookup:
+            cluster_metadata_coverage += 1
 
-        _, edge = _bet_team_and_edge(match)
+        bet_team, edge = _bet_team_and_edge(match)
         if edge <= threshold:
             skipped_under_threshold += 1
             continue
@@ -110,12 +137,18 @@ def evaluate(matches: List[dict], vol_by_id: Dict[str, Optional[float]],
         if pnl is None:
             continue
         pnls.append(pnl)
+        pnl_clusters.append(cluster_id_for_record(match, cluster_lookup))
+        wins.append(match.get("actual_winner") == bet_team)
 
     n_bets = len(pnls)
     total_pnl = float(np.sum(pnls)) if pnls else 0.0
     roi_pct = (total_pnl / n_bets * 100.0) if n_bets else 0.0
-    win_rate = sum(1 for p in pnls if p > 0) / n_bets if n_bets else 0.0
-    roi_lo, roi_hi = _bootstrap_ci(pnls, n=n_resamples)
+    win_rate = sum(wins) / n_bets if n_bets else 0.0
+    roi_lo, roi_hi = _bootstrap_ci(
+        pnls,
+        n=n_resamples,
+        clusters=pnl_clusters,
+    )
 
     if pnls:
         cum = np.cumsum(pnls)
@@ -138,6 +171,14 @@ def evaluate(matches: List[dict], vol_by_id: Dict[str, Optional[float]],
         "roi_ci_hi": roi_hi * 100 if not np.isnan(roi_hi) else float("nan"),
         "win_rate": win_rate,
         "max_drawdown": max_dd,
+        "bootstrap_contract": BOOTSTRAP_CONTRACT_VERSION,
+        "bootstrap_seed": DEFAULT_BOOTSTRAP_SEED,
+        "bootstrap_resamples": n_resamples,
+        "n_bootstrap_clusters": len(set(pnl_clusters)),
+        "bootstrap_reliable": (
+            len(set(pnl_clusters)) >= MIN_RECOMMENDED_CLUSTERS
+        ),
+        "cluster_metadata_coverage": cluster_metadata_coverage,
     }
 
 
@@ -155,7 +196,16 @@ def main() -> int:
                     help="Kelly multiplier (default 0.25 = quarter Kelly)")
     ap.add_argument("--cap", type=float, default=0.02,
                     help="Per-bet outlier cap (default 0.02 = 2%% of bank)")
-    ap.add_argument("--bootstrap-resamples", type=int, default=1000)
+    ap.add_argument(
+        "--bootstrap-resamples",
+        type=int,
+        default=DEFAULT_BOOTSTRAP_RESAMPLES,
+    )
+    ap.add_argument(
+        "--cluster-source-dir",
+        type=Path,
+        default=PROJECT_ROOT / "data" / "polymarket_test",
+    )
     ap.add_argument("--out", type=Path, default=None,
                     help="Optional CSV output path.")
     args = ap.parse_args()
@@ -171,6 +221,11 @@ def main() -> int:
                  for m in odds_data.get("matches", [])}
     feat_lookup = (_load_feature_lookup(args.feature_parquet)
                    if args.feature_parquet else {})
+    cluster_lookup = (
+        load_competition_clusters(args.cluster_source_dir)
+        if args.cluster_source_dir.is_dir()
+        else {}
+    )
 
     rows = []
     for sz in sizings:
@@ -181,6 +236,7 @@ def main() -> int:
                 kelly_mult=args.kelly_mult, cap=args.cap,
                 slice_name=args.slice, min_volume=args.min_volume,
                 n_resamples=args.bootstrap_resamples,
+                cluster_lookup=cluster_lookup,
             )
             rows.append(r)
             print(f"  sizing={sz:5s}  thr={t:.3f}  "

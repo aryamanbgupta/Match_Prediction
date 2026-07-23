@@ -8,7 +8,8 @@ Walks cricsheet JSONs in chronological order, rehydrates trackers per-date
 each match, then collapses the per-ball rows into a single match-level
 record by taking the first ball of each innings (where the inning's
 team-batting / team-bowling features sit) plus match-level constants from
-`info.*`. The match's `team1_wins` target comes from `info.outcome.winner`.
+`info.*`. The match's `team1_wins` target comes from `info.outcome.winner`,
+or `info.outcome.eliminator` for a resolved tie.
 
 Output: `data/xgb_match_data_v1/{train,validation,test,golden_test}.parquet`,
 one row per non-no-result match, with the cheap-subset feature list
@@ -34,23 +35,9 @@ from loaders_common import (
     DEFAULT_SPLITS,
     extract_match_metadata,
     iter_matches_chronological,
+    iter_matches_chronological_multi,
 )
 from materialize_features import classify_split, group_by_date
-
-
-def iter_matches_chronological_multi(folders, gender="male"):
-    """Walk multiple cricsheet pools and yield merged in date order.
-
-    Re-uses iter_matches_chronological per folder, materializes each into a
-    list, then merge-sorts by (date, match_id) for a deterministic global
-    chronology. No dedupe — caller ensures pools don't overlap (cricsheet
-    filenames are unique stems, so this is safe with our golden / live split).
-    """
-    streams = [iter_matches_chronological(f, gender=gender) for f in folders]
-    tagged = [((d, mid), (mid, txt, d)) for s in streams for (mid, txt, d) in s]
-    tagged.sort(key=lambda t: t[0])
-    for _, entry in tagged:
-        yield entry
 from parsing_v2 import parse_match_data_v2
 from player_metadata import PlayerMetadataProvider
 from stats_provider import StatsProvider
@@ -176,6 +163,16 @@ METADATA_COLUMNS = [
     "competition_tier",  # raw string, encoded at training time
     "team1_wins",
 ]
+
+
+def resolved_match_winner(info: dict) -> str | None:
+    """Return the result winner, including a tie's eliminator winner."""
+    teams = info.get("teams") or []
+    outcome = info.get("outcome") or {}
+    winner = outcome.get("winner")
+    if not winner and outcome.get("result") == "tie":
+        winner = outcome.get("eliminator")
+    return winner if winner in teams else None
 
 
 class TeamFormTracker:
@@ -733,10 +730,9 @@ def _build_match_record(
     if len(teams) != 2:
         return None
 
-    outcome = info.get("outcome", {})
-    winner = outcome.get("winner")
-    if not winner or winner not in teams:
-        # No-result / abandoned / tie without super-over winner. Drop.
+    winner = resolved_match_winner(info)
+    if winner is None:
+        # No-result / abandoned / tie without an eliminator winner. Drop.
         return None
 
     team1, team2 = teams[0], teams[1]
@@ -998,7 +994,11 @@ def materialize(
     k_venue: float = 200.0,
     freeze_trackers_after: Optional[str] = None,
 ) -> Tuple[int, dict]:
-    provider = StatsProvider(str(sqlite_dir), version=version)
+    provider = StatsProvider(
+        str(sqlite_dir),
+        version=version,
+        require_order_contract=True,
+    )
     if provider.backend_name != "sqlite":
         raise RuntimeError(
             f"materialize_match_features requires SQLite backend; got "

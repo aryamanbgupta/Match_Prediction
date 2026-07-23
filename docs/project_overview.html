@@ -1197,7 +1197,7 @@ v7 hierarchical (the four narrow cells only):
     </div>
   </div>
 
-  <h3>Flat-ROI bootstrap CI on ≥ $50K (zero = no skill)</h3>
+  <h3>I3 competition-block ROI CI on ≥ $50K (zero = no skill)</h3>
   <div class="card" style="padding: 22px;">
     <svg class="ci-svg" viewBox="0 0 800 110" preserveAspectRatio="xMidYMid meet">
       <!-- axis -->
@@ -1210,21 +1210,22 @@ v7 hierarchical (the four narrow cells only):
         <line x1="560" y1="76" x2="560" y2="84" stroke="#cbd5e1"/><text x="560" y="100" text-anchor="middle">+10%</text>
         <line x1="700" y1="76" x2="700" y2="84" stroke="#cbd5e1"/><text x="700" y="100" text-anchor="middle">+25%</text>
       </g>
-      <!-- v7 CI: -10.7% to +23.9%, point estimate +6.11% -->
+      <!-- v7 I3 CI: -7.99% to +25.70%, point estimate +6.11% -->
       <!-- mapping: 0% at x=420; 1% = 14.4 px (since 25% spans 140px) -->
-      <!-- -10.7% → 420 - 154 = 266; +23.9% → 420 + 344 = 764; +6.11% → 420 + 88 = 508 -->
-      <line x1="266" y1="40" x2="764" y2="40" stroke="#16a34a" stroke-width="4" stroke-linecap="round"/>
-      <line x1="266" y1="28" x2="266" y2="52" stroke="#16a34a" stroke-width="3"/>
-      <line x1="764" y1="28" x2="764" y2="52" stroke="#16a34a" stroke-width="3"/>
+      <!-- -7.99% → 420 - 115 = 305; +25.70% → 420 + 370 = 790; +6.11% → 420 + 88 = 508 -->
+      <line x1="305" y1="40" x2="790" y2="40" stroke="#16a34a" stroke-width="4" stroke-linecap="round"/>
+      <line x1="305" y1="28" x2="305" y2="52" stroke="#16a34a" stroke-width="3"/>
+      <line x1="790" y1="28" x2="790" y2="52" stroke="#16a34a" stroke-width="3"/>
       <circle cx="508" cy="40" r="7" fill="#16a34a" stroke="white" stroke-width="2"/>
       <text x="508" y="22" text-anchor="middle" font-size="13" font-weight="600" fill="#0f172a" font-family="-apple-system">v7 +6.11 %</text>
-      <text x="266" y="68" text-anchor="middle" font-size="10" fill="#64748b" font-family="ui-monospace">−10.7 %</text>
-      <text x="764" y="68" text-anchor="middle" font-size="10" fill="#64748b" font-family="ui-monospace">+23.9 %</text>
+      <text x="305" y="68" text-anchor="middle" font-size="10" fill="#64748b" font-family="ui-monospace">−7.99 %</text>
+      <text x="790" y="68" text-anchor="middle" font-size="10" fill="#64748b" font-family="ui-monospace">+25.70 %</text>
     </svg>
   </div>
   <p style="font-size: 12.5px; color: var(--muted); margin-top: 6px;">
-    CI straddles zero — encouraging direction but not yet "we can bet this." Closing it needs either a larger
-    eval set (the post-2026-04-17 golden holdout) or stronger model resolution.
+    The tournament-block CI straddles zero across 19 blocks—encouraging
+    direction, but not evidence of a betting edge. Confirmation needs more
+    independent competition blocks and stronger probability resolution.
   </p>
 
   <h3>Go / no-go gate</h3>
@@ -1240,8 +1241,8 @@ v7 hierarchical (the four narrow cells only):
     <div class="gate-cond">
       <div class="gate-status fail">×</div>
       <div>
-        <strong>2. Flat-ROI bootstrap CI on the ≥ $50K slice excludes zero</strong><br>
-        <span style="font-family: ui-monospace; font-size: 12.5px; color: var(--text-2);">Current: CI [−10.7 %, +23.9 %] — fail, straddles zero</span>
+        <strong>2. I3 competition-block ROI CI on the ≥ $50K slice excludes zero</strong><br>
+        <span style="font-family: ui-monospace; font-size: 12.5px; color: var(--text-2);">Current: CI [−7.99 %, +25.70 %] over 19 blocks — fail, straddles zero</span>
       </div>
     </div>
   </div>

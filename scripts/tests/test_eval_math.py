@@ -1,9 +1,7 @@
 """
-Characterization tests for the eval math (research idea D10, 2026-07-20).
+Characterization and I3 regression tests for the eval math.
 
-Pins the CURRENT behavior of the statistics code that every research-loop
-verdict rests on — it does NOT modify anything under scripts/sim_eval/
-(loop-forbidden). Covered:
+Pins the evaluation behavior that research-loop verdicts rest on. Covered:
 
   - match_evaluator._bootstrap_ci        (reproducibility, strata, degenerate)
   - reslice_eval_json._bootstrap_ci      (parity with the evaluator's copy)
@@ -14,16 +12,8 @@ verdict rests on — it does NOT modify anything under scripts/sim_eval/
   - blend_eval_json                      (w=0/w=1 identities, team alignment,
                                           pnl/kelly parity with the evaluator)
 
-Known-bug documentation policy (per D10): tests marked xfail assert the
-CORRECT behavior and are EXPECTED TO FAIL until the underlying defect is
-fixed interactively (the fix touches loop-forbidden files). If one starts
-passing, the bug was fixed — remove the xfail marker.
-
-  KNOWN BUG (I3 backlog): `realized_pnl != 0` is used as the "a bet was
-  placed" test (match_evaluator.py:933,977; reslice_eval_json.py:200-201),
-  which conflates a genuinely-placed bet that returned exactly zero (a win
-  at decimal odds 1.0) with "no bet". Such a bet silently vanishes from
-  bets_placed / win-rate / Sharpe / the ROI denominator.
+I3 replaces the P&L sentinel with an explicit edge/odds bet decision and
+uses tournament/tour-season block bootstrap intervals for headline metrics.
 
 Run standalone (repo convention) or under pytest:
     uv run python scripts/tests/test_eval_math.py
@@ -48,21 +38,16 @@ from sim_eval.match_evaluator import (  # noqa: E402
 )
 from sim_eval import blend_eval_json as bl  # noqa: E402
 from sim_eval import reslice_eval_json as rs  # noqa: E402
-
-
-# --------------------------------------------------------------------------
-# xfail plumbing: works standalone AND under pytest.
-# --------------------------------------------------------------------------
-
-def _xfail(reason):
-    def deco(fn):
-        fn.__xfail_reason__ = reason
-        try:
-            import pytest
-            return pytest.mark.xfail(reason=reason, strict=True)(fn)
-        except ImportError:
-            return fn
-    return deco
+from sim_eval import sizing_rules as sizing  # noqa: E402
+from auto import a7_conditional_threshold as a7  # noqa: E402
+from sim_eval.eval_statistics import (  # noqa: E402
+    BOOTSTRAP_CONTRACT_VERSION,
+    bootstrap_mean_ci,
+    cluster_id_for_record,
+    competition_cluster_from_info,
+    flat_bet_team,
+    load_competition_clusters,
+)
 
 
 # --------------------------------------------------------------------------
@@ -189,6 +174,59 @@ def test_bootstrap_pinned_values():
         f"stratified pin moved: ({slo}, {shi})"
 
 
+def test_cluster_bootstrap_resamples_whole_competitions():
+    values = [-1.0, -1.0, -1.0, 1.0, 1.0, 1.0]
+    clusters = ["tour-a"] * 3 + ["league-b"] * 3
+    iid_lo, iid_hi = bootstrap_mean_ci(values, n_resamples=4000, seed=42)
+    block_lo, block_hi = bootstrap_mean_ci(
+        values,
+        n_resamples=4000,
+        seed=42,
+        clusters=clusters,
+    )
+    assert (block_hi - block_lo) > (iid_hi - iid_lo)
+    assert block_lo == -1.0 and block_hi == 1.0
+
+
+def test_competition_cluster_uses_event_time_blocks(tmp_path):
+    info = {
+        "dates": ["2026-01-03"],
+        "teams": ["A", "B"],
+        "venue": "Ground",
+        "event": {"name": "Example League"},
+    }
+    payload = {"info": info}
+    (tmp_path / "1.json").write_text(json.dumps(payload))
+    lookup = load_competition_clusters(tmp_path)
+    expected = "event:Example League|block_start:2026-01-03"
+    assert competition_cluster_from_info(info).startswith(
+        "event:Example League|season:"
+    )
+    assert lookup["2026-01-03_A_B_Ground"] == expected
+    assert BOOTSTRAP_CONTRACT_VERSION == "tournament_time_block_v1"
+
+
+def test_event_block_crosses_calendar_boundary_but_splits_after_gap(tmp_path):
+    rows = [
+        ("1", "2025-12-20", ["A", "B"]),
+        ("2", "2026-01-10", ["C", "D"]),
+        ("3", "2026-08-01", ["A", "C"]),
+    ]
+    for stem, date, teams in rows:
+        (tmp_path / f"{stem}.json").write_text(json.dumps({
+            "info": {
+                "dates": [date],
+                "teams": teams,
+                "venue": "Ground",
+                "event": {"name": "Cross-Year League"},
+            }
+        }))
+    lookup = load_competition_clusters(tmp_path)
+    first = lookup["2025-12-20_A_B_Ground"]
+    assert lookup["2026-01-10_C_D_Ground"] == first
+    assert lookup["2026-08-01_A_C_Ground"] != first
+
+
 # --------------------------------------------------------------------------
 # B. Kelly fraction / Kelly PnL
 # --------------------------------------------------------------------------
@@ -270,9 +308,11 @@ def test_realized_pnl_win_loss_and_team_choice():
 
 
 def test_realized_pnl_zero_return_win_equals_no_bet_sentinel():
-    """Characterizes the sentinel collision at the FUNCTION level (this is
-    the root of the aggregation bug, see xfail tests): a placed winning bet
-    at decimal odds 1.0 returns 0.0 — the same value used for 'no bet'."""
+    """The scalar P&L function has an unavoidable zero-value collision.
+
+    Aggregation must therefore use the explicit bet decision rather than
+    this scalar as a placement sentinel.
+    """
     ev = _evaluator()
     no_bet = ev._calculate_realized_pnl({"A": -0.1, "B": -0.1}, {"A": 2.0}, "A")
     zero_win = ev._calculate_realized_pnl({"A": 0.1, "B": -0.1}, {"A": 1.0}, "A")
@@ -319,20 +359,31 @@ def test_aggregate_flat_roi_arithmetic_and_ci_scaling():
     assert abs(res.avg_log_loss - (0.4 + 0.9 + 0.6) / 3) < 1e-12, \
         "nan log losses are excluded from the mean"
     # ROI CI is the per-bet PnL-mean CI x100, over ONLY the placed bets.
-    lo, hi = ev._bootstrap_ci([1.5, -1.0])
+    bet_clusters = [
+        cluster_id_for_record(results[0]),
+        cluster_id_for_record(results[1]),
+    ]
+    lo, hi = ev._bootstrap_ci(
+        [1.5, -1.0],
+        clusters=bet_clusters,
+    )
     assert abs(res.flat_roi_ci_low - lo * 100) < 1e-9
     assert abs(res.flat_roi_ci_high - hi * 100) < 1e-9
     # LL CI over the three valid log losses.
-    llo, lhi = ev._bootstrap_ci([0.4, 0.9, 0.6])
+    llo, lhi = ev._bootstrap_ci(
+        [0.4, 0.9, 0.6],
+        clusters=[
+            cluster_id_for_record(result)
+            for result in results[:3]
+        ],
+    )
     assert res.avg_log_loss_ci_low == llo and res.avg_log_loss_ci_high == lhi
 
 
-@_xfail("KNOWN BUG (I3): realized_pnl != 0 conflates a zero-return win "
-        "with 'no bet' (match_evaluator.py:933,977)")
-def test_xfail_aggregate_counts_zero_pnl_win_as_bet():
+def test_aggregate_counts_zero_pnl_win_as_bet():
     """A bet genuinely placed (positive edge) and WON at decimal odds 1.0
     has realized_pnl exactly 0.0. Correct behavior: it IS a placed, winning
-    bet -> bets_placed == 2, win_rate == 1.0. Current behavior drops it."""
+    bet -> bets_placed == 2, win_rate == 1.0."""
     ev = _evaluator()
     results = [
         _mk_result("m1", market_prob={"A": 0.4, "B": 0.6},
@@ -347,6 +398,7 @@ def test_xfail_aggregate_counts_zero_pnl_win_as_bet():
     assert res.bets_placed == 2, \
         f"zero-return win must count as a placed bet; got {res.bets_placed}"
     assert res.win_rate == 1.0
+    assert flat_bet_team(results[1]) == "A"
 
 
 # --------------------------------------------------------------------------
@@ -357,11 +409,20 @@ def _write_reslice_fixture(tmp: Path):
     eval_json = tmp / "eval.json"
     odds_json = tmp / "odds.json"
     matches = [
-        {"match_id": "m_a", "log_loss": 0.4, "brier_score": 0.16, "realized_pnl": 1.5},
-        {"match_id": "m_b", "log_loss": 0.9, "brier_score": 0.25, "realized_pnl": -1.0},
-        {"match_id": "m_c", "log_loss": 0.6, "brier_score": 0.20, "realized_pnl": 0.0},
-        {"match_id": "m_d", "log_loss": 0.5, "brier_score": 0.20, "realized_pnl": None},
-        {"match_id": "m_e", "log_loss": 0.7, "brier_score": 0.21, "realized_pnl": 0.5},
+        {"match_id": "m_a", "log_loss": 0.4, "brier_score": 0.16,
+         "realized_pnl": 1.5, "bet_placed": True, "bet_team": "A",
+         "actual_winner": "A"},
+        {"match_id": "m_b", "log_loss": 0.9, "brier_score": 0.25,
+         "realized_pnl": -1.0, "bet_placed": True, "bet_team": "A",
+         "actual_winner": "B"},
+        {"match_id": "m_c", "log_loss": 0.6, "brier_score": 0.20,
+         "realized_pnl": 0.0, "bet_placed": True, "bet_team": "A",
+         "actual_winner": "A"},
+        {"match_id": "m_d", "log_loss": 0.5, "brier_score": 0.20,
+         "realized_pnl": None, "bet_placed": False},
+        {"match_id": "m_e", "log_loss": 0.7, "brier_score": 0.21,
+         "realized_pnl": 0.5, "bet_placed": True, "bet_team": "A",
+         "actual_winner": "A"},
     ]
     eval_json.write_text(json.dumps({"matches": matches}))
     odds_json.write_text(json.dumps({"matches": [
@@ -401,31 +462,105 @@ def test_reslice_summary_math_and_ci_consistency():
         ep, op = _write_reslice_fixture(Path(tmp))
         out = rs.reslice(ep, op, min_volume=None)
         s = out["summary"]
-        # Bets: pnl not in (None, 0, 0.0) -> {+1.5, -1.0, +0.5}
-        assert s["flat_betting_bets_placed"] == 3
+        # Explicit placement retains the zero-return win.
+        assert s["flat_betting_bets_placed"] == 4
         assert abs(s["flat_betting_total_pnl"] - 1.0) < 1e-12
-        assert abs(s["flat_betting_roi_pct"] - 100.0 / 3) < 1e-9
-        assert abs(s["flat_betting_win_rate"] - 2.0 / 3) < 1e-12
+        assert abs(s["flat_betting_roi_pct"] - 25.0) < 1e-9
+        assert abs(s["flat_betting_win_rate"] - 3.0 / 4) < 1e-12
         # Self-consistency: summary CIs == module's own bootstrap on the
         # same inputs (order preserved from the eval JSON).
-        llo, lhi = rs._bootstrap_ci([0.4, 0.9, 0.6, 0.5, 0.7], n=1000)
+        llo, lhi = rs._bootstrap_ci(
+            [0.4, 0.9, 0.6, 0.5, 0.7],
+            n=10_000,
+        )
         assert s["avg_log_loss_ci_low"] == llo and s["avg_log_loss_ci_high"] == lhi
-        plo, phi = rs._bootstrap_ci([1.5, -1.0, 0.5], n=1000)
+        # Synthetic IDs have no source metadata, so each is a singleton block
+        # and the block bootstrap reduces exactly to i.i.d. resampling.
+        plo, phi = rs._bootstrap_ci(
+            [1.5, -1.0, 0.0, 0.5],
+            n=10_000,
+        )
         assert abs(s["flat_betting_roi_ci_low"] - plo * 100) < 1e-9
         assert abs(s["flat_betting_roi_ci_high"] - phi * 100) < 1e-9
 
 
-@_xfail("KNOWN BUG (I3): reslice drops zero-return placed bets from the "
-        "bet count (reslice_eval_json.py:200-201)")
-def test_xfail_reslice_counts_zero_pnl_win_as_bet():
-    """m_c's realized_pnl of exactly 0.0 is ambiguous under the current
-    sentinel; when it encodes a placed win at odds 1.0, the correct slice
-    counts 4 bets, not 3."""
+def test_reslice_counts_zero_pnl_win_as_bet():
+    """m_c's explicit zero-return win remains in the denominator."""
     with tempfile.TemporaryDirectory() as tmp:
         ep, op = _write_reslice_fixture(Path(tmp))
         out = rs.reslice(ep, op, min_volume=None)
         assert out["summary"]["flat_betting_bets_placed"] == 4, \
             "zero-return placed bet must stay in the ROI denominator"
+        rows = {row["match_id"]: row for row in out["matches"]}
+        assert rows["m_c"]["bet_placed"] is True
+        assert rows["m_c"]["bet_team"] == "A"
+        assert rows["m_c"]["competition_cluster_id"]
+
+
+def test_a7_summary_counts_zero_return_win_without_pnl_sentinel():
+    summary = a7._summarize(
+        pnls=[0.0, -1.0],
+        clusters=["event:a", "event:b"],
+        wins=[True, False],
+        n_resamples=100,
+    )
+    assert summary["n_bets"] == 2
+    assert summary["win_rate"] == 0.5
+
+
+def test_sizing_summary_counts_zero_return_flat_win():
+    row = {
+        "match_id": "m_zero",
+        "teams": ["A", "B"],
+        "edge": {"A": 0.1, "B": -0.1},
+        "market_odds": {"A": 1.0, "B": 9.0},
+        "actual_winner": "A",
+    }
+    summary = sizing.evaluate(
+        [row],
+        vol_by_id={},
+        feat_lookup={},
+        threshold=0.0,
+        sizing="flat",
+        n_resamples=100,
+    )
+    assert summary["n_bets"] == 1
+    assert summary["total_pnl"] == 0.0
+    assert summary["win_rate"] == 1.0
+
+
+def test_sizing_kelly_zero_fraction_is_not_a_placed_bet():
+    row = {
+        "match_id": "m_no_kelly",
+        "teams": ["A", "B"],
+        "edge": {"A": 0.1, "B": -0.1},
+        "market_odds": {"A": 2.0, "B": 2.0},
+        "actual_winner": "A",
+        "full_kelly_fraction": 0.0,
+    }
+    summary = sizing.evaluate(
+        [row],
+        vol_by_id={},
+        feat_lookup={},
+        threshold=0.0,
+        sizing="kelly",
+        n_resamples=100,
+    )
+    assert summary["n_bets"] == 0
+
+
+def test_invalid_or_nonfinite_odds_do_not_place_bets():
+    base = {
+        "match_id": "m_invalid",
+        "teams": ["A", "B"],
+        "edge": {"A": 0.1, "B": -0.1},
+        "actual_winner": "A",
+        "realized_pnl": 0.0,
+    }
+    for invalid in (None, "bad", float("nan"), 0.9):
+        row = dict(base, market_odds={"A": invalid, "B": 2.0})
+        assert flat_bet_team(row) is None
+        assert sizing._compute_pnl(row, "flat", 0.25, 0.02) is None
 
 
 # --------------------------------------------------------------------------
@@ -494,11 +629,16 @@ def test_blend_aligns_reversed_direct_team_order():
         "direct predictions must be re-aligned to the eval JSON's team1"
 
 
-def test_blend_passthrough_missing_direct_is_verbatim():
+def test_blend_passthrough_missing_direct_preserves_metrics_and_adds_contract():
     sim_json, direct = _blend_fixture()
     out = bl.blend(sim_json, direct, w=0.0)
-    assert out["matches"][2] == sim_json["matches"][2], \
-        "a match absent from the direct predictions must pass through unchanged"
+    passthrough = out["matches"][2]
+    for key, value in sim_json["matches"][2].items():
+        assert passthrough[key] == value, \
+            "a missing direct prediction must preserve source metrics"
+    assert passthrough["bet_placed"] is False
+    assert passthrough["bet_team"] is None
+    assert passthrough["competition_cluster_id"]
 
 
 def test_blend_recomputed_metrics_match_evaluator_formulas():
@@ -544,8 +684,26 @@ def test_blend_realized_pnl_mirror_grid():
         a = bl._recompute_realized_pnl(edge, odds, winner)
         b = ev._calculate_realized_pnl(edge, odds, winner)
         assert a == b, f"mirror broken for {(edge, odds, winner)}: {a} vs {b}"
+    assert bl._recompute_realized_pnl(
+        {"A": 0.1, "B": -0.1},
+        {"B": 3.0},
+        "A",
+    ) == 0.0, "missing odds for the selected team means no placed bet"
     assert bl.BET_EDGE_THRESHOLD == BET_EDGE_THRESHOLD, \
         "blend duplicates the threshold constant — must stay in lockstep"
+
+
+def test_blend_persists_recomputed_bet_contract():
+    sim_json, direct = _blend_fixture()
+    out = bl.blend(sim_json, direct, w=0.0)
+    blended = out["matches"][0]
+    assert blended["bet_placed"] is True
+    assert blended["bet_team"] == "A"
+    assert blended["competition_cluster_id"]
+    passthrough = out["matches"][2]
+    assert passthrough["bet_placed"] is False
+    assert passthrough["bet_team"] is None
+    assert passthrough["competition_cluster_id"]
 
 
 # --------------------------------------------------------------------------

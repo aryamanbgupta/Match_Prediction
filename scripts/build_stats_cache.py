@@ -19,22 +19,32 @@ Usage:
         --gender-filter male
 
     uv run python scripts/build_stats_cache.py --force-rebuild
+
+    # For a sealed forward evaluation, use build_forward_state.py instead;
+    # it wraps the multi-source and frozen-prior options with more guardrails.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import sqlite3
 import sys
 import time
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, Iterable, List, Tuple
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from loaders_common import extract_match_metadata, iter_matches_chronological
+from loaders_common import (
+    SAME_DAY_ORDER_VERSION,
+    extract_match_metadata,
+    iter_matches_chronological,
+    iter_matches_chronological_multi,
+)
 from parsing_v2 import (
     PlayerEloTracker,
     PlayerStatsTracker,
@@ -47,6 +57,32 @@ from stats_sqlite_backend import SCHEMA_SQL, SCHEMA_VERSION
 
 
 BATCH_SIZE = 20_000
+PRIOR_META_KEYS = (
+    "prior_p0",
+    "prior_p1",
+    "prior_p2",
+    "prior_p4",
+    "prior_p6",
+    "prior_pw",
+    "prior_pp_p0",
+    "prior_pp_p1",
+    "prior_pp_p2",
+    "prior_pp_p4",
+    "prior_pp_p6",
+    "prior_pp_pw",
+    "prior_mid_p0",
+    "prior_mid_p1",
+    "prior_mid_p2",
+    "prior_mid_p4",
+    "prior_mid_p6",
+    "prior_mid_pw",
+    "prior_death_p0",
+    "prior_death_p1",
+    "prior_death_p2",
+    "prior_death_p4",
+    "prior_death_p6",
+    "prior_death_pw",
+)
 
 
 def _intern(d: Dict[str, int], key: str) -> int:
@@ -164,13 +200,110 @@ def _verify_log_denormalized_consistency(conn, sample_n: int = 500) -> None:
         print(f"    {stats_table}: {len(rows)} rows OK", flush=True)
 
 
-def sqlite_up_to_date(out_path: Path, source_dir: Path) -> bool:
+def _normalize_source_dirs(
+    source_dirs: Path | Iterable[Path],
+) -> list[Path]:
+    if isinstance(source_dirs, Path):
+        values = [source_dirs]
+    else:
+        values = list(source_dirs)
+    if not values:
+        raise ValueError("at least one source directory is required")
+    return [Path(value) for value in values]
+
+
+def _source_paths_json(source_dirs: Iterable[Path]) -> str:
+    return json.dumps(
+        [str(path.resolve()) for path in source_dirs],
+        separators=(",", ":"),
+    )
+
+
+def _source_json_files(source_dirs: Iterable[Path]) -> list[Path]:
+    return [
+        path
+        for source_dir in source_dirs
+        for path in source_dir.glob("*.json")
+    ]
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(128 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def freeze_priors_from_sqlite(
+    target_path: Path,
+    prior_source_path: Path,
+) -> dict[str, str]:
+    """Freeze target global/phase priors to a pre-holdout SQLite artifact.
+
+    Per-date player/ELO/venue rows in ``target_path`` may advance through
+    live context, but its shrinkage priors must not be recomputed using
+    fixtures later than an early holdout prediction.
+    """
+    target = target_path.resolve()
+    source = prior_source_path.resolve()
+    if target == source:
+        raise ValueError("prior source and target SQLite must differ")
+    if not target.is_file() or not source.is_file():
+        raise FileNotFoundError(
+            f"target/source SQLite missing: target={target}, source={source}"
+        )
+
+    source_conn = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
+    try:
+        source_meta = dict(source_conn.execute("SELECT key, value FROM _meta"))
+    finally:
+        source_conn.close()
+    missing = [key for key in PRIOR_META_KEYS if key not in source_meta]
+    if missing:
+        raise RuntimeError(f"prior source is missing _meta keys: {missing}")
+    if int(source_meta.get("schema_version", -1)) != SCHEMA_VERSION:
+        raise RuntimeError("prior source SQLite schema mismatch")
+
+    source_hash = _sha256_file(source)
+    target_conn = sqlite3.connect(target)
+    try:
+        target_meta = dict(target_conn.execute("SELECT key, value FROM _meta"))
+        if int(target_meta.get("schema_version", -1)) != SCHEMA_VERSION:
+            raise RuntimeError("target SQLite schema mismatch")
+        rows = [(key, source_meta[key]) for key in PRIOR_META_KEYS]
+        rows.extend(
+            [
+                ("prior_contract", "frozen_external_sqlite_v1"),
+                ("prior_source_sqlite", str(source)),
+                ("prior_source_sha256", source_hash),
+            ]
+        )
+        target_conn.executemany(
+            "INSERT OR REPLACE INTO _meta (key, value) VALUES (?, ?)",
+            rows,
+        )
+        target_conn.commit()
+    finally:
+        target_conn.close()
+    return {
+        "prior_contract": "frozen_external_sqlite_v1",
+        "prior_source_sqlite": str(source),
+        "prior_source_sha256": source_hash,
+    }
+
+
+def sqlite_up_to_date(
+    out_path: Path,
+    source_dirs: Path | Iterable[Path],
+) -> bool:
     """Return True if the existing SQLite is current vs the JSON corpus.
 
     Guards: schema_version == current, source_json_mtime_max >=
     max(JSON mtime). Matches the staleness pattern at
     stats_provider.py:692-702.
     """
+    normalized_dirs = _normalize_source_dirs(source_dirs)
     if not out_path.exists():
         return False
     try:
@@ -186,34 +319,44 @@ def sqlite_up_to_date(out_path: Path, source_dir: Path) -> bool:
         return False
     if file_schema != SCHEMA_VERSION:
         return False
+    if meta.get("same_day_order_version") != SAME_DAY_ORDER_VERSION:
+        return False
+    if meta.get("source_dirs_json") != _source_paths_json(normalized_dirs):
+        return False
 
     try:
         source_mtime_at_build = float(meta.get("source_json_mtime_max", 0))
+        source_count_at_build = int(meta.get("source_json_file_count", -1))
     except (TypeError, ValueError):
         return False
 
+    source_files = _source_json_files(normalized_dirs)
     live_mtime_max = max(
-        (p.stat().st_mtime for p in source_dir.glob("*.json")),
+        (path.stat().st_mtime for path in source_files),
         default=0.0,
     )
-    return source_mtime_at_build + 1 >= live_mtime_max
+    return (
+        source_mtime_at_build + 1 >= live_mtime_max
+        and source_count_at_build == len(source_files)
+    )
 
 
 def build(
-    source_dir: Path,
+    source_dirs: Path | Iterable[Path],
     out_path: Path,
     gender: str = "male",
     metadata_csv: Path = None,
 ) -> None:
+    normalized_dirs = _normalize_source_dirs(source_dirs)
     t_start = time.time()
-    print(f"building {out_path} from {source_dir} (gender={gender})",
+    print(f"building {out_path} from {normalized_dirs} (gender={gender})",
           flush=True)
 
     stats = PlayerStatsTracker()
     venue = VenueStatsTracker()
     elo = PlayerEloTracker()
     metadata_path = metadata_csv or (
-        source_dir.parent / "all_players_enriched.csv"
+        normalized_dirs[0].parent / "all_players_enriched.csv"
     )
     metadata = PlayerMetadataProvider(str(metadata_path))
 
@@ -454,9 +597,12 @@ def build(
     _PHASE_CK_KEYS = ('c0', 'c1', 'c2', 'c4', 'c6', 'cw')
 
     import json as _json
-    for match_id, json_text, match_date in iter_matches_chronological(
-        source_dir, gender=gender
-    ):
+    match_iterator = (
+        iter_matches_chronological_multi(normalized_dirs, gender=gender)
+        if len(normalized_dirs) > 1
+        else iter_matches_chronological(normalized_dirs[0], gender=gender)
+    )
+    for match_id, json_text, match_date in match_iterator:
         date_str = match_date.strftime('%Y-%m-%d')
         data = _json.loads(json_text)
         meta = extract_match_metadata(data)
@@ -564,8 +710,9 @@ def build(
         sorted(((v, k) for k, v in date_ids.items()), key=lambda r: r[0]))
 
     # Record the newest source JSON mtime for the staleness guard.
+    source_files = _source_json_files(normalized_dirs)
     source_json_mtime_max = max(
-        (p.stat().st_mtime for p in source_dir.glob('*.json')),
+        (path.stat().st_mtime for path in source_files),
         default=0.0,
     )
     # Schema v4: global empirical outcome prior π. Computed by summing
@@ -637,7 +784,10 @@ def build(
     meta_rows = [
         ('schema_version', str(SCHEMA_VERSION)),
         ('build_timestamp', datetime.utcnow().isoformat() + 'Z'),
+        ('same_day_order_version', SAME_DAY_ORDER_VERSION),
+        ('source_dirs_json', _source_paths_json(normalized_dirs)),
         ('source_json_mtime_max', f"{source_json_mtime_max:.6f}"),
+        ('source_json_file_count', str(len(source_files))),
         ('source_match_count', str(n_matches)),
         ('gender_filter', str(gender or 'all')),
         ('num_players', str(len(player_ids))),
@@ -690,6 +840,27 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--source-dir", type=Path,
                     default=Path("data/t20s_json"))
+    ap.add_argument(
+        "--extra-source-dir",
+        type=Path,
+        action="append",
+        default=[],
+        help=(
+            "Additional non-overlapping Cricsheet pool(s), merged with "
+            "--source-dir by deterministic (date, match_id) order. May be "
+            "repeated."
+        ),
+    )
+    ap.add_argument(
+        "--prior-source-sqlite",
+        type=Path,
+        default=None,
+        help=(
+            "After building, replace global/phase prior _meta values with "
+            "those from this pre-holdout SQLite. Use for chronological "
+            "forward state so future context cannot alter shrinkage priors."
+        ),
+    )
     ap.add_argument("--out", type=Path,
                     default=Path("models/player_stats_cache_v3.sqlite"))
     ap.add_argument("--gender-filter", type=str, default="male",
@@ -704,15 +875,28 @@ def main() -> int:
     args = ap.parse_args()
 
     gender = args.gender_filter or None
+    source_dirs = [args.source_dir] + list(args.extra_source_dir)
 
-    if not args.force_rebuild and sqlite_up_to_date(args.out, args.source_dir):
+    if not args.force_rebuild and sqlite_up_to_date(args.out, source_dirs):
         print(f"{args.out} is current (schema_version={SCHEMA_VERSION}, "
-              "source mtime covered). Skipping rebuild. "
+              f"same_day_order={SAME_DAY_ORDER_VERSION}, "
+              "source membership/mtime covered). Skipping rebuild. "
               "Use --force-rebuild to override.")
         return 0
 
-    build(args.source_dir, args.out, gender=gender,
+    build(source_dirs, args.out, gender=gender,
           metadata_csv=args.metadata_csv)
+    if args.prior_source_sqlite:
+        provenance = freeze_priors_from_sqlite(
+            args.out,
+            args.prior_source_sqlite,
+        )
+        print(
+            "  froze global/phase priors from "
+            f"{provenance['prior_source_sqlite']} "
+            f"({provenance['prior_source_sha256'][:12]}...)",
+            flush=True,
+        )
     return 0
 
 

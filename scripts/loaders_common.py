@@ -11,14 +11,20 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator, Tuple
+from typing import Iterable, Iterator, Tuple
+
+
+# Bump this whenever the within-date ordering rule changes. Cache builders
+# persist it in SQLite _meta so old filesystem-ordered artifacts cannot be
+# mistaken for deterministic ones.
+SAME_DAY_ORDER_VERSION = "date_then_match_id_lexicographic_v1"
 
 
 def iter_matches_chronological(
     folder_path: str | Path,
     gender: str | None = "male",
 ) -> Iterator[Tuple[str, str, datetime]]:
-    """Yield (match_id, json_text, match_date) in ascending date order.
+    """Yield matches in ascending ``(date, match_id)`` order.
 
     Args:
         folder_path: Directory containing cricsheet *.json match files.
@@ -37,6 +43,8 @@ def iter_matches_chronological(
           corpus-level setup cost.
         * Files whose JSON fails to parse or lack `info.dates` are skipped
           silently to match parsing_v2.py's existing error-tolerant behavior.
+        * Match ID is the filename stem and is the stable same-day secondary
+          key required by ``SAME_DAY_ORDER_VERSION``.
     """
     folder = Path(folder_path)
     json_files = list(folder.glob("*.json"))
@@ -44,21 +52,57 @@ def iter_matches_chronological(
     # Gender filter is applied during the sort pass so we don't hold text
     # for skipped matches in memory. A second read at yield time hits the
     # OS page cache and is cheap.
-    dated: list[tuple[datetime, Path]] = []
+    dated: list[tuple[datetime, str, Path]] = []
     for p in json_files:
         try:
             data = json.loads(p.read_text())
             if gender is not None and data["info"].get("gender", "male") != gender:
                 continue
             date_str = data["info"]["dates"][0]
-            dated.append((datetime.strptime(date_str, "%Y-%m-%d"), p))
+            dated.append(
+                (datetime.strptime(date_str, "%Y-%m-%d"), p.stem, p)
+            )
         except (json.JSONDecodeError, KeyError, IndexError, ValueError):
             continue
 
-    dated.sort(key=lambda t: t[0])
+    # I6 contract: never inherit Path.glob/scandir order. Cricsheet does not
+    # provide a universal scheduled-start timestamp, so filename stem
+    # (Cricsheet match ID) is the stable secondary key.
+    dated.sort(key=lambda item: (item[0], item[1]))
 
-    for match_date, path in dated:
+    for match_date, _match_id, path in dated:
         yield path.stem, path.read_text(), match_date
+
+
+def iter_matches_chronological_multi(
+    folder_paths: Iterable[str | Path],
+    gender: str | None = "male",
+) -> Iterator[Tuple[str, str, datetime]]:
+    """Yield a deterministic merged chronology from multiple JSON pools.
+
+    Ordering is identical to :func:`iter_matches_chronological`:
+    ``(match_date, match_id)``. Duplicate match IDs fail closed because
+    replaying one match twice would contaminate every later tracker snapshot.
+    """
+    tagged: list[tuple[datetime, str, str]] = []
+    seen: dict[str, Path] = {}
+    for raw_folder in folder_paths:
+        folder = Path(raw_folder)
+        for match_id, json_text, match_date in iter_matches_chronological(
+            folder, gender=gender
+        ):
+            previous = seen.get(match_id)
+            if previous is not None:
+                raise RuntimeError(
+                    f"duplicate match ID {match_id!r} across source pools: "
+                    f"{previous} and {folder}"
+                )
+            seen[match_id] = folder
+            tagged.append((match_date, match_id, json_text))
+
+    tagged.sort(key=lambda item: (item[0], item[1]))
+    for match_date, match_id, json_text in tagged:
+        yield match_id, json_text, match_date
 
 
 # Monolith-inherited split cutoffs (parsing_v2.py:1210-1215). Used as

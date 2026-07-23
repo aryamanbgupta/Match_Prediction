@@ -3,9 +3,10 @@ Post-hoc re-slicer for previously saved match-level eval JSONs.
 
 Loads an existing eval result file (with per-match `log_loss` /
 `realized_pnl` etc.) and a polymarket-style odds file (with
-`polymarket_volume_usd`), and produces sliced summaries using the same
-bootstrap-CI helper that powers run_sim_eval.py. Default loop emits all
-/ ≥$50k / ≥$100k volume slices; pass --slice to apply an additional
+`polymarket_volume_usd`), and produces sliced summaries using the shared I3
+competition-block bootstrap. Output rows are upgraded with explicit
+`bet_placed`, `bet_team`, and `competition_cluster_id` fields. Default loop
+emits all / ≥$50k / ≥$100k volume slices; pass --slice to apply an additional
 predicate (IPL-only, international-only, mismatch, close).
 
 Adversarial slices (M1, 2026-05-10) require feature-row joining for
@@ -36,6 +37,19 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
+from sim_eval.eval_statistics import (  # noqa: E402
+    BOOTSTRAP_CONTRACT_VERSION,
+    DEFAULT_BOOTSTRAP_RESAMPLES,
+    DEFAULT_BOOTSTRAP_SEED,
+    MIN_RECOMMENDED_CLUSTERS,
+    bootstrap_mean_ci,
+    cluster_id_for_record,
+    count_unique_clusters,
+    flat_bet_team,
+    flat_bet_won,
+    load_competition_clusters,
+)
+
 
 SLICE_NAMES = ("all", "ipl", "international", "mismatch", "close")
 
@@ -58,34 +72,18 @@ _IPL_TEAMS = frozenset({
 
 
 def _bootstrap_ci(values: List[float], n: int = 1000, ci: float = 0.95,
-                  seed: int = 42, strata: Optional[List] = None) -> tuple:
-    """Percentile bootstrap. If strata given, resample within each
-    stratum and concat — preserves stratum sizes (standard stratified
-    bootstrap). Returns (low, high) of mean(values).
-    """
-    if not values:
-        return (float('nan'), float('nan'))
-    arr = np.asarray(values, dtype=float)
-    rng = np.random.default_rng(seed)
-    if strata is None:
-        idx = rng.integers(0, len(arr), size=(n, len(arr)))
-        means = arr[idx].mean(axis=1)
-    else:
-        if len(strata) != len(arr):
-            raise ValueError(f"strata length {len(strata)} != values "
-                             f"length {len(arr)}")
-        groups: Dict = {}
-        for i, s in enumerate(strata):
-            groups.setdefault(s, []).append(i)
-        sums = np.zeros(n)
-        for members in groups.values():
-            m = len(members)
-            resampled = rng.integers(0, m, size=(n, m))
-            sums += arr[np.asarray(members)][resampled].sum(axis=1)
-        means = sums / len(arr)
-    alpha = (1 - ci) / 2
-    return (float(np.quantile(means, alpha)),
-            float(np.quantile(means, 1 - alpha)))
+                  seed: int = DEFAULT_BOOTSTRAP_SEED,
+                  strata: Optional[List] = None,
+                  clusters: Optional[List] = None) -> tuple:
+    """Compatibility wrapper around the shared I3 bootstrap."""
+    return bootstrap_mean_ci(
+        values,
+        n_resamples=n,
+        ci=ci,
+        seed=seed,
+        clusters=clusters,
+        strata=strata,
+    )
 
 
 def _load_feature_lookup(feature_parquet: Optional[Path]) -> Dict[str, Dict]:
@@ -162,12 +160,14 @@ def _build_strata(matches: List[dict], feat_lookup: Dict[str, Dict],
 
 
 def reslice(eval_json_path: str, odds_json_path: str,
-            min_volume: Optional[float], n_resamples: int = 1000,
+            min_volume: Optional[float],
+            n_resamples: int = DEFAULT_BOOTSTRAP_RESAMPLES,
             slice_name: str = "all",
             feature_parquet: Optional[Path] = None,
             mismatch_thresh: float = 15.0,
             close_thresh: float = 5.0,
-            stratify_by: Optional[str] = None) -> Dict:
+            stratify_by: Optional[str] = None,
+            cluster_source_dir: Optional[Path] = None) -> Dict:
     """Recompute summary stats over the slice {match: vol >= min_volume
     AND predicate(slice_name)}.
     """
@@ -180,6 +180,16 @@ def reslice(eval_json_path: str, odds_json_path: str,
                  for m in odds_data.get('matches', [])}
     feat_lookup = _load_feature_lookup(feature_parquet)
     predicate = _slice_predicate(slice_name, mismatch_thresh, close_thresh)
+    if cluster_source_dir is None:
+        default_cluster_source = PROJECT_ROOT / "data" / "polymarket_test"
+        cluster_source_dir = (
+            default_cluster_source if default_cluster_source.is_dir() else None
+        )
+    cluster_lookup = (
+        load_competition_clusters(cluster_source_dir)
+        if cluster_source_dir is not None
+        else {}
+    )
 
     matches = eval_data.get('matches', [])
     kept_matches = []
@@ -191,14 +201,22 @@ def reslice(eval_json_path: str, odds_json_path: str,
         feat = feat_lookup.get(match['match_id'], {})
         if not predicate(match, feat):
             continue
-        kept_matches.append(match)
+        bet_team = flat_bet_team(match)
+        enriched = dict(match)
+        enriched["bet_placed"] = bet_team is not None
+        enriched["bet_team"] = bet_team
+        enriched["competition_cluster_id"] = cluster_id_for_record(
+            match,
+            cluster_lookup,
+        )
+        kept_matches.append(enriched)
 
     def _is_valid_ll(m):
         ll = m.get('log_loss')
         return ll is not None and not (isinstance(ll, float) and np.isnan(ll))
 
     def _has_bet(m):
-        return m.get('realized_pnl') not in (None, 0, 0.0)
+        return flat_bet_team(m) is not None
 
     ll_matches = [m for m in kept_matches if _is_valid_ll(m)]
     log_losses = [m['log_loss'] for m in ll_matches]
@@ -214,9 +232,27 @@ def reslice(eval_json_path: str, odds_json_path: str,
         if stratify_by else None
     roi_strata = _build_strata(flat_betting_matches, feat_lookup, stratify_by) \
         if stratify_by else None
+    ll_clusters = [
+        cluster_id_for_record(match, cluster_lookup)
+        for match in ll_matches
+    ]
+    roi_clusters = [
+        cluster_id_for_record(match, cluster_lookup)
+        for match in flat_betting_matches
+    ]
 
-    ll_lo, ll_hi = _bootstrap_ci(log_losses, n=n_resamples, strata=ll_strata)
-    pl_lo, pl_hi = _bootstrap_ci(flat_returns, n=n_resamples, strata=roi_strata)
+    ll_lo, ll_hi = _bootstrap_ci(
+        log_losses,
+        n=n_resamples,
+        strata=ll_strata,
+        clusters=ll_clusters,
+    )
+    pl_lo, pl_hi = _bootstrap_ci(
+        flat_returns,
+        n=n_resamples,
+        strata=roi_strata,
+        clusters=roi_clusters,
+    )
 
     avg_log_loss = float(np.mean(log_losses)) if log_losses else float('nan')
     avg_brier = float(np.mean(brier_scores)) if brier_scores else float('nan')
@@ -227,7 +263,11 @@ def reslice(eval_json_path: str, odds_json_path: str,
     flat_roi_ci_low = pl_lo * 100 if not np.isnan(pl_lo) else float('nan')
     flat_roi_ci_high = pl_hi * 100 if not np.isnan(pl_hi) else float('nan')
 
-    win_rate = (sum(1 for r in flat_returns if r > 0) / bets_placed) if bets_placed else 0.0
+    win_rate = (
+        sum(1 for match in flat_betting_matches if flat_bet_won(match))
+        / bets_placed
+        if bets_placed else 0.0
+    )
 
     vol_tag = "all" if min_volume is None else f"min_volume_{int(min_volume)}"
     slice_tag = vol_tag if slice_name == "all" else f"{slice_name}_{vol_tag}"
@@ -241,6 +281,21 @@ def reslice(eval_json_path: str, odds_json_path: str,
         'mismatch_threshold': mismatch_thresh if slice_name == "mismatch" else None,
         'close_threshold':    close_thresh if slice_name == "close" else None,
         'stratify_by':    stratify_by,
+        'bootstrap_contract': BOOTSTRAP_CONTRACT_VERSION,
+        'bootstrap_seed': DEFAULT_BOOTSTRAP_SEED,
+        'bootstrap_resamples': n_resamples,
+        'n_bootstrap_clusters': count_unique_clusters(roi_clusters),
+        'bootstrap_reliable': (
+            count_unique_clusters(roi_clusters)
+            >= MIN_RECOMMENDED_CLUSTERS
+        ),
+        'cluster_source_dir': (
+            str(Path(cluster_source_dir).resolve())
+            if cluster_source_dir is not None else None
+        ),
+        'cluster_metadata_coverage': sum(
+            match['match_id'] in cluster_lookup for match in kept_matches
+        ),
         'n_matches_in_source': len(matches),
         'n_matches_evaluated': len(kept_matches),
         'avg_log_loss':            avg_log_loss,
@@ -263,7 +318,11 @@ def main():
     parser.add_argument('--in', dest='in_path', required=True, help='Path to eval results JSON to re-slice.')
     parser.add_argument('--odds', required=True, help='Polymarket-style odds JSON with polymarket_volume_usd.')
     parser.add_argument('--out-dir', required=True, help='Output directory for sliced JSONs.')
-    parser.add_argument('--bootstrap-resamples', type=int, default=1000)
+    parser.add_argument(
+        '--bootstrap-resamples',
+        type=int,
+        default=DEFAULT_BOOTSTRAP_RESAMPLES,
+    )
     parser.add_argument('--slice', choices=SLICE_NAMES, default="all",
                         help='Adversarial slice predicate. Composes with '
                         '--min-volume (intersection). Default: all.')
@@ -284,6 +343,16 @@ def main():
                         default="none",
                         help='Stratify the bootstrap by '
                         '(competition_tier, early/late half). Default: none.')
+    parser.add_argument(
+        '--cluster-source-dir',
+        type=Path,
+        default=None,
+        help=(
+            'Cricsheet JSON directory used for tournament/tour-season block '
+            'labels. Defaults to data/polymarket_test when present; unmatched '
+            'rows use team-pair-season blocks.'
+        ),
+    )
     parser.add_argument('--min-volume', type=int, action="append", default=None,
                         help='Volume threshold(s). Repeat for multiple. If '
                         'omitted, defaults to (None, 50000, 100000) — three '
@@ -307,7 +376,8 @@ def main():
                          feature_parquet=args.feature_parquet,
                          mismatch_thresh=args.mismatch_threshold,
                          close_thresh=args.close_threshold,
-                         stratify_by=stratify)
+                         stratify_by=stratify,
+                         cluster_source_dir=args.cluster_source_dir)
         slice_tag = result['summary']['slice']
         out_path = out_dir / f"{src_stem}_{slice_tag}.json"
         with open(out_path, 'w') as f:
@@ -321,6 +391,12 @@ def main():
         print(f"  Flat ROI: {s['flat_betting_roi_pct']:+.2f}%  "
               f"[95% CI: {s['flat_betting_roi_ci_low']:+.2f}%, {s['flat_betting_roi_ci_high']:+.2f}%]")
         print(f"  Bets placed: {s['flat_betting_bets_placed']}, win rate: {s['flat_betting_win_rate']:.1%}")
+        print(
+            f"  Bootstrap: {s['bootstrap_contract']} "
+            f"({s['n_bootstrap_clusters']} bet clusters)"
+        )
+        if not s["bootstrap_reliable"]:
+            print("  WARNING: fewer than 10 clusters; CI is descriptive only")
         print(f"  → {out_path}")
 
 

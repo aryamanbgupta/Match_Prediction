@@ -1,5 +1,12 @@
 # M7 — architecture sweep (2026-05-10)
 
+> **I3 statistical revision (2026-07-23):** tables below retain the original
+> per-match i.i.d. intervals used for the historical model-selection decision.
+> They are superseded for current economic claims. Whole-competition block
+> intervals are M7 ≥$50k **[-10.79%, +50.18%]** and ≥$100k
+> **[-17.36%, +46.42%]**; neither excludes zero. See
+> `reports/i3_eval_statistics_hardening.md`.
+
 Phase 7 of match-level v3. **Outcome: LANDED M7.A best_val as new production baseline.** First v3 M-phase since M2 to actually clear gates beyond what M2 venue-only unfrozen delivered. Pivot from feature engineering to architecture tuning was the right move after M3–M6 all dropped.
 
 **New production baseline**: `models/xgb_match_v3_m7_production/`. Same 49 features as M2 v.o. (M1 + 3 venue outcome-dist); only the hyperparameters changed.

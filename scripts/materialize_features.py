@@ -124,11 +124,15 @@ def materialize(
     k_venue: float = 200.0,
 ) -> Tuple[int, dict]:
     """Walk the corpus per-date; for each date, rehydrate temp trackers
-    from SQLite and replay same-day matches in monolith order.
+    from SQLite and replay same-day matches in deterministic match-ID order.
 
     Returns (n_matches, split_counts).
     """
-    provider = StatsProvider(str(sqlite_dir), version=version)
+    provider = StatsProvider(
+        str(sqlite_dir),
+        version=version,
+        require_order_contract=True,
+    )
     if provider.backend_name != "sqlite":
         raise RuntimeError(
             f"materialize_features requires SQLite backend; got "

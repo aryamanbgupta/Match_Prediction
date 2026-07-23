@@ -31,7 +31,8 @@ class StatsProvider:
     """
 
     def __init__(self, cache_dir: str = 'models', max_cached_chunks: int = 5,
-                 version: str = 'v3'):
+                 version: str = 'v3',
+                 require_order_contract: bool = False):
         # `max_cached_chunks` is retained as a no-op kwarg for callers
         # that still pass it; the chunked backend it once configured is
         # gone.
@@ -46,7 +47,12 @@ class StatsProvider:
                 f"`uv run python scripts/build_stats_cache.py`."
             )
 
-        self._backend = self._open_sqlite(sqlite_path, cache_root, version)
+        self._backend = self._open_sqlite(
+            sqlite_path,
+            cache_root,
+            version,
+            require_order_contract=require_order_contract,
+        )
         self.dates = list(self._backend._date_strs)
         self.backend_name = 'sqlite'
         self.version = version
@@ -55,7 +61,13 @@ class StatsProvider:
     # --- backend selection ----------------------------------------------
 
     @staticmethod
-    def _open_sqlite(sqlite_path, cache_root, version):
+    def _open_sqlite(
+        sqlite_path,
+        cache_root,
+        version,
+        require_order_contract=False,
+    ):
+        from loaders_common import SAME_DAY_ORDER_VERSION
         from stats_sqlite_backend import _SQLiteBackend, SCHEMA_VERSION
 
         backend = _SQLiteBackend(str(sqlite_path))
@@ -70,6 +82,17 @@ class StatsProvider:
                 f"{SCHEMA_VERSION}. Delete the file and rebuild with "
                 f"`uv run python scripts/build_stats_cache.py`."
             )
+
+        cache_order = meta.get('same_day_order_version')
+        if cache_order != SAME_DAY_ORDER_VERSION:
+            message = (
+                f"SQLite same-day ordering mismatch: {sqlite_path} has "
+                f"{cache_order!r}, code expects {SAME_DAY_ORDER_VERSION!r}. "
+                "Rebuild the cache before deterministic materialization."
+            )
+            if require_order_contract:
+                raise RuntimeError(message)
+            print(f"WARNING: {message}", flush=True)
 
         # Staleness: fail loudly rather than silently serving old stats.
         # `source_json_mtime_max` is written by build_stats_cache.py;

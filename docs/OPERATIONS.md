@@ -97,12 +97,12 @@ multiprocess parallelism — the `OMP_NUM_THREADS` cap is the only safe knob.
 Use `--min-volume` to filter polymarket entries by `polymarket_volume_usd`. The plan's go/no-go gate is the **≥$50k slice** (170 matches); ≥$100k (110 matches) is a tighter sharp-market check.
 
 ```bash
-# Single slice, with bootstrap 95% CIs on log loss + flat ROI.
+# Single slice, with tournament-block 95% CIs on log loss + flat ROI.
 uv run python scripts/sim_eval/run_sim_eval.py \
     --test-dir data/polymarket_test \
     --odds betting_odds_polymarket.json \
     --n-sims 100 --min-volume 50000 \
-    --bootstrap-resamples 1000 \
+    --bootstrap-resamples 10000 \
     --output-dir eval_out/sliced
 
 # All 3 slices in one shot (all / >=$50k / >=$100k):
@@ -117,10 +117,19 @@ uv run python scripts/sim_eval/compare_slices.py \
 uv run python scripts/sim_eval/reslice_eval_json.py \
     --in  eval_out/postfix/xgboost_20260421_220541.json \
     --odds betting_odds_polymarket.json \
-    --out-dir eval_out/phase1_sliced_v4
+    --out-dir eval_out/phase1_sliced_v4 \
+    --cluster-source-dir data/polymarket_test
 ```
 
 YAML wiring: set `evaluation.min_volume` and `evaluation.bootstrap_resamples` in the experiment config to make the auto-eval inside `run_experiment.py` produce a single sliced result. To get all three slices, run `run_sliced_eval.sh` after training completes (use `--skip-training` or fresh `--only-eval` invocations).
+
+I3 contract: `eval_statistics.py` groups contiguous fixtures sharing the
+Cricsheet event name, splitting a later edition after more than 120 inactive
+days. Missing event metadata falls back to unordered team pair plus cricket
+season. The bootstrap samples whole blocks, uses 10,000 resamples and seed 42,
+and records metadata coverage/effective cluster count in JSON. Fewer than 10
+betting blocks is descriptive only. `realized_pnl` is never a bet-placement
+sentinel; new output persists `bet_placed` and `bet_team`.
 
 ### Prop-bet backtest + bowler selector (2026-05-12)
 
@@ -351,8 +360,10 @@ engine = SimulationEngine(model, T20Rules())
 # 1a. Build SQLite stats cache (chronological tracker walk).
 uv run python scripts/build_stats_cache.py
 # Options: --source-dir data/t20s_json, --out models/player_stats_cache_v3.sqlite,
+#          --extra-source-dir (repeatable), --prior-source-sqlite,
 #          --gender-filter male, --force-rebuild.
-# Idempotent: no-ops if _meta.source_json_mtime_max >= max(JSON mtime).
+# Idempotent only when schema, deterministic ordering version, exact source
+# directory list/file count, and max JSON mtime all match.
 
 # 1b. Materialize feature parquet (per-date batching, SQLite rehydration).
 uv run python scripts/materialize_features.py \
@@ -366,8 +377,25 @@ uv run python scripts/materialize_features.py \
 - `materialize_features.py`: **~5 min**, ~2 GB RAM, 9,519 matches → 2.2M ball records across 4 parquets, 105 columns (63 + 42 outcome-dist). **~3× faster than the old monolith** because the tracker walk is skipped.
 
 **What it does**:
-1. **`build_stats_cache.py`**: Loads matches chronologically, runs `PlayerStatsTracker` + `PlayerEloTracker` + `VenueStatsTracker`, takes first-write-wins snapshots per date, emits delta-compressed rows to SQLite, and writes one `batting_match_log` / `bowling_match_log` row per (player, match) for recent-form reconstruction. Schema v4 also writes 6 outcome-count columns (`c0..cw`) per row on `batting`, `bowling`, `batting_vs_type`, `bowling_vs_hand`, `venue`, plus the global prior π in `_meta`. Two integrity checks run before close: `_verify_log_denormalized_consistency` (deque-vs-sum) and `_verify_outcome_count_conservation` (Σ cX ≡ balls).
-2. **`materialize_features.py`**: Groups matches by date, rehydrates trackers from SQLite once per date using the union of same-day players + venues, loads π from `_meta` once at startup, replays same-day matches in monolith order so within-date drift matches, calls `parse_match_data_v2(..., prior=π)` per match, and writes per-split parquets. Splits come from the YAML `data.splits` block (falls back to the hardcoded defaults).
+1. **`build_stats_cache.py`**: Loads matches in versioned `(date, match_id)` order, runs `PlayerStatsTracker` + `PlayerEloTracker` + `VenueStatsTracker`, takes first-write-wins snapshots per date, emits delta-compressed rows to SQLite, and writes one `batting_match_log` / `bowling_match_log` row per (player, match) for recent-form reconstruction. Multiple non-overlapping source directories can be merged; duplicate match IDs fail closed. Schema v4 also writes 6 outcome-count columns (`c0..cw`) per row on `batting`, `bowling`, `batting_vs_type`, `bowling_vs_hand`, `venue`, plus the global prior π in `_meta`. `--prior-source-sqlite` freezes the global/phase priors from an earlier cache for forward state. Two integrity checks run before close: `_verify_log_denormalized_consistency` (deque-vs-sum) and `_verify_outcome_count_conservation` (Σ cX ≡ balls).
+2. **`materialize_features.py`**: Groups matches by date, rehydrates trackers from SQLite once per date using the union of same-day players + venues, loads π from `_meta` once at startup, replays same-day matches in deterministic match-ID order, calls `parse_match_data_v2(..., prior=π)` per match, and writes per-split parquets. It requires the cache ordering metadata and fails on a legacy/unversioned cache. Splits come from the YAML `data.splits` block (falls back to the hardcoded defaults).
+
+### Forward holdout state (never training input)
+
+```bash
+uv run python scripts/build_forward_state.py \
+  --holdout-dir data/forward_holdout/2026-06-01_2026-07-13
+
+uv run python scripts/verify_forward_state.py \
+  data/forward_state/2026-06-01_2026-07-13
+```
+
+This builds an immutable sidecar under `data/forward_state/`, not the
+production cache. It merges the historical corpus with the sealed holdout's
+chronological context, freezes priors from the pre-holdout production SQLite,
+materializes match features, verifies every selected fixture, and writes
+`NO_MODEL_SCORING`. It does not import a model. See
+`FORWARD_HOLDOUT.md` and `I6_SAME_DAY_ORDERING_AUDIT.md`.
 
 **Parity guarantee**: `scripts/tests/test_phase_a_parity.py` validates that this two-step pipeline produces bit-exact parquet output vs the original monolith across all 9,519 matches. The harness now also passes π into both reference and candidate paths so the 42 outcome-distribution columns are checked column-by-column.
 
@@ -1187,8 +1215,11 @@ uv run python scripts/predict_fixture.py --fixture fixtures/<id>.json
 Lineup entries may be either cricsheet 8-char IDs or display names
 (names are resolved against `data/all_players_enriched.csv`).
 Polymarket odds are optional; when provided the script also reports
-edge and bet recommendation per the M8 sizing rule (flat 1 unit
-at threshold 0pp).
+edge and bet recommendation. The standing A7 forward policy is flat one-unit
+staking, betting all close fixtures (`|elo_diff| <= 5`) and requiring model
+edge strictly above 10% on mismatch fixtures. Historical economic confidence
+is unconfirmed under I3 competition-block resampling; keep this policy fixed
+for forward evaluation rather than retuning it.
 
 **The 2026-04-16 staleness caveat.** `predict_fixture.py` uses the
 production SQLite cache (`models/player_stats_cache_v3.sqlite`) +

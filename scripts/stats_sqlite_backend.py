@@ -203,7 +203,7 @@ CREATE TABLE IF NOT EXISTS bowling_elo (
 CREATE TABLE IF NOT EXISTS batting_match_log (
     player_id INTEGER NOT NULL,
     date_id INTEGER NOT NULL,
-    intra_date_idx INTEGER NOT NULL,   -- 0,1,2... monolith order within date
+    intra_date_idx INTEGER NOT NULL,   -- 0,1,2... versioned match-ID order
     runs INTEGER NOT NULL,
     balls INTEGER NOT NULL,
     dismissals INTEGER NOT NULL,

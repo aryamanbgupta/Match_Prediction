@@ -707,13 +707,13 @@ function renderSizingTab() {
         <div class="pane-header"><span>FINDING</span></div>
         <div class="pane-body">
           <p style="color: var(--text-2); line-height: 1.6;">
-            <span style="color: var(--amber);">Counter-intuitive:</span> flat 1-unit at threshold 0 is the only config where iter ≥$50k ROI CI cleanly excludes 0 (+0.91 lower bound). Higher thresholds increase point ROI (cherry-picking high-edge bets) but widen CIs faster — and at 1–3% thresholds, ROI actually drops AND CIs go negative. Max drawdown is also WORST at 3% threshold (20.04 units).
+            <span style="color: var(--amber);">Historical M8 sweep:</span> these table intervals use the old per-match bootstrap and are retained as model-development history. I3 supersedes their confidence claims; no standing historical match-winner policy has a tournament-block ROI interval wholly above zero.
           </p>
           <p style="color: var(--text-2); line-height: 1.6;">
-            <span style="color: var(--cyan);">Why:</span> the M7 production probability output has enough resolution that even 1% edges carry signal. The "edge > threshold" rule from betting folklore doesn't apply to a calibrated low-lr model. The model's low-edge bets are NOT it "guessing where it doesn't know" — they're calibrated small-disagreement bets that aggregate to positive expectation.
+            <span style="color: var(--cyan);">What remains:</span> low-edge bets produced encouraging point returns, but competition-level dependence makes the uncertainty materially wider. Threshold choice therefore stays fixed for the forward evaluation rather than being retuned from this sweep.
           </p>
           <p style="color: var(--text-2); line-height: 1.6;">
-            <span style="color: var(--green);">Slice-conditional finding (NOT landed):</span> on mismatch fixtures (|top6 ELO diff| ≥ 15, n=24), threshold=10% gives ROI +44.06% [+1.15, +78.30], win 72%. Inference-time complexity not justified at small n.
+            <span style="color: var(--green);">Standing A7 policy:</span> bet close fixtures flat; on mismatch fixtures (|ELO diff| &gt; 5), require edge &gt;10%. Historical ≥$50k point ROI is +36.93%, with I3 block CI [−1.52%, +59.81%] across 17 blocks—promising, not economically confirmed.
           </p>
         </div>
       </div>

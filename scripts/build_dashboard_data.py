@@ -3,8 +3,9 @@ docs/model_dashboard_terminal.html, docs/model_dashboard_trader.html, and
 docs/predictions_tracker.html.
 
 Most match-level v3 numbers are curated from the M1–M8 phase reports
-under reports/m{1..8}_*.md (those reports ARE the canonical source — they
-report bootstrap CIs that match_evaluator emits but in pre-formatted form).
+under reports/m{1..8}_*.md. Historical model-selection entries retain the
+intervals reported at the time. Current production headlines use the I3
+competition-block contract from reports/i3_eval_statistics_hardening.md.
 Sizing-sweep numbers are read from the M7 production CSVs verbatim.
 Train-time metrics + feature importances are read from train_metrics.json.
 Fixture inputs are read from fixtures/*.json.
@@ -239,12 +240,12 @@ MATCH_LEVEL_MODELS = [
         'feature_count': 49,
         'mode': 'unfrozen',
         'what_changed': 'Same 49 features as M2 v.o. unfrozen. ONLY hyperparameters changed: lr 0.10→0.05, colsample 0.8→0.9. From 81-config grid (max_depth × lr × subsample × colsample); winner picked by val LL, then validated on iter ≥$50k. Old config was over-aggressive.',
-        'why': 'Closed M2 v.o.\'s residual fit-gap. Iter ≥$100k ROI CI cleanly excludes 0 for the first time (+0.57). Close-match slice ROI CI also clears (+4.36) — historically weakest slice. 2026-04 IPL: ROI +34.87% [+2.04, +68.06], win 65.7%. Production uses RAW probabilities (Platt over-corrects on this config and kills iteration ROI).',
+        'why': 'Closed M2 v.o.\'s residual fit-gap and remains the direct probability model of record. I3 later superseded the old per-match ROI intervals: the current ≥$50k block CI is [-10.79, +50.18] and ≥$100k is [-17.36, +46.42], so historical profitability is encouraging but does not confirm a betting edge. Production uses RAW probabilities (Platt over-corrects on this config).',
         'metrics': {
             'val_ll': 0.6459, 'test_ll': 0.5924,
-            'iter_50k_raw':   {'ll': 0.6299, 'roi': 21.90, 'roi_ci': [2.28, 43.83],  'win_pct': None, 'n': 170},
+            'iter_50k_raw':   {'ll': 0.6299, 'roi': 21.90, 'roi_ci': [-10.79, 50.18], 'win_pct': 51.8, 'n': 170, 'n_bets': 168, 'n_clusters': 19, 'ci_method': 'tournament_time_block_v1'},
             'iter_50k_platt': {'ll': 0.6223, 'roi': 13.54, 'roi_ci': [-7.29, 34.94], 'n': 170},
-            'iter_100k_raw':  {'ll': 0.5929, 'roi': 26.39, 'roi_ci': [0.57, 58.78],  'n': 110},
+            'iter_100k_raw':  {'ll': 0.5929, 'roi': 26.39, 'roi_ci': [-17.36, 46.42], 'win_pct': 54.5, 'n': 110, 'n_bets': 110, 'n_clusters': 11, 'ci_method': 'tournament_time_block_v1'},
             'close':    {'ll': 0.6880, 'roi': 33.27, 'roi_ci': [4.36, 61.53],   'win_pct': 56.8, 'n': 74},
             'mismatch': {'ll': 0.3565, 'roi': None, 'n': 24},
             'ipl':      {'ll': 0.6709, 'roi': None, 'n': 22},
@@ -258,8 +259,8 @@ MATCH_LEVEL_MODELS = [
             {'month': '2026-03', 'n': 8,  'll': 0.5874, 'roi': -25.95,'win_pct': 37.5,  'roi_ci': [-78.63, 45.23]},
             {'month': '2026-04', 'n': 35, 'll': 0.6554, 'roi': 34.87, 'win_pct': 65.7,  'roi_ci': [2.04, 68.06]},
         ],
-        'gates': {'iter_50k_ll_beats_market': True, 'iter_50k_roi_ci_pos': True,
-                  'iter_100k_roi_ci_pos': True, 'close_roi_ci_pos': True},
+        'gates': {'iter_50k_ll_beats_market': False, 'iter_50k_roi_ci_pos': False,
+                  'iter_100k_roi_ci_pos': False, 'close_roi_ci_pos': None},
     },
 ]
 
@@ -547,8 +548,8 @@ PHASE_NARRATIVE = [
         'date': '2026-05-10',
         'goal': 'After 5/5 feature phases dropped, attack hyperparameters: 81-config grid (max_depth × lr × subsample × colsample).',
         'what_we_did': 'Trained all 81 configs in 13s. Selected top 6 by val LL, validated each on iter ≥$50k. Picked best_val: lr 0.10→0.05, cs 0.8→0.9.',
-        'result': 'Iter ≥$100k ROI CI cleanly excludes 0 for the first time (+0.57). Close-match slice ROI CI also clears (+4.36) — historically weakest slice. 2026-04 IPL: ROI +34.87% [+2.04, +68.06], win 65.7%. Old config was over-aggressive (early-stopped at ~60 rounds; new config trains ~80 rounds with smaller steps).',
-        'lesson': 'Picked best_val NOT best_test. Standalone test LL alone is misleading; iter ≥$50k ROI/LL is the gate. Production uses RAW probabilities — Platt over-corrects on this lower-lr config and kills iteration ROI.',
+        'result': 'Landed on validation log loss and remains the direct probability model of record. I3 later replaced the old per-match ROI intervals: ≥$50k is +21.90% [-10.79, +50.18] across 19 blocks; ≥$100k is +26.39% [-17.36, +46.42] across 11 blocks. No historical ROI claim is now CI-clean.',
+        'lesson': 'Picked best_val, not best_test. Production uses RAW probabilities. Probability-model selection and economic confirmation are separate decisions; the latter now requires the I3 competition-block contract.',
     },
     {
         'phase': 'M8', 'title': 'Sizing rules: simpler is better',
@@ -556,25 +557,33 @@ PHASE_NARRATIVE = [
         'date': '2026-05-10',
         'goal': 'Test edge thresholds + Kelly variants. Conventional wisdom: bet only when edge > 3%, fractional Kelly stake.',
         'what_we_did': 'Sweep over thresholds {0, 1%, 2%, 3%, 5%, 7%, 10%, 15%}. Tested flat, quarter-Kelly, full-Kelly with/without 2% per-bet cap.',
-        'result': 'Counter-intuitive: flat 1-unit at threshold 0 is the only config where iter ≥$50k ROI CI cleanly excludes 0 (+0.91 lower bound). Higher thresholds increase point ROI (cherry-picking) but widen CIs faster. Slice-conditional finding: on mismatch fixtures, threshold=10% wins (+44.06% [+1.15, +78.30], win 72%) — documented for future, not landed.',
-        'lesson': 'M7 production probabilities have enough resolution that even 1% edges carry signal. The "edge > threshold" heuristic from betting folklore doesn\'t apply to a calibrated low-lr model.',
+        'result': 'The original per-match bootstrap favored flat 1-unit staking. A7 subsequently predeclared a slice-conditional rule. Under I3, A7 retains +36.93% point ROI but its ≥$50k block CI is [-1.52, +59.81] across 17 blocks, so the policy remains economically unconfirmed.',
+        'lesson': 'Keep the A7 rule fixed for forward evaluation, but do not treat historical threshold sweeps or per-match intervals as proof of a betting edge.',
     },
 ]
 
 
 def main() -> None:
     data = {
-        'generated_at': '2026-05-14',
+        'generated_at': '2026-07-23',
+        'evaluation_statistics': {
+            'contract': 'tournament_time_block_v1',
+            'bootstrap_seed': 42,
+            'bootstrap_resamples': 10000,
+            'minimum_confirmatory_clusters': 10,
+            'report': 'reports/i3_eval_statistics_hardening.md',
+        },
         'production': {
             'match_level': {
                 'model_id': 'xgb_match_v3_m7_production',
                 'feature_count': 49,
                 'mode': 'unfrozen, raw probabilities',
-                'sizing': 'flat 1 unit, edge threshold 0',
-                'headline_iter_50k': {'ll': 0.6299, 'market_ll': 0.6267, 'roi': 21.90, 'roi_ci': [2.28, 43.83]},
-                'headline_iter_100k': {'ll': 0.5929, 'roi': 26.39, 'roi_ci': [0.57, 58.78]},
-                'headline_close': {'ll': 0.6880, 'roi': 33.27, 'roi_ci': [4.36, 61.53], 'win_pct': 56.8},
-                'headline_2026_04_ipl': {'roi': 34.87, 'roi_ci': [2.04, 68.06], 'win_pct': 65.7},
+                'sizing': 'A7: flat 1 unit; require edge >10% only when |elo_diff| > 5',
+                'headline_iter_50k': {'ll': 0.6299, 'market_ll': 0.6267, 'roi': 21.90, 'roi_ci': [-10.79, 50.18], 'n_bets': 168, 'n_clusters': 19, 'ci_method': 'tournament_time_block_v1'},
+                'headline_iter_100k': {'ll': 0.5929, 'roi': 26.39, 'roi_ci': [-17.36, 46.42], 'n_bets': 110, 'n_clusters': 11, 'ci_method': 'tournament_time_block_v1'},
+                'headline_a7_50k': {'roi': 36.93, 'roi_ci': [-1.52, 59.81], 'n_bets': 109, 'n_clusters': 17, 'ci_method': 'tournament_time_block_v1'},
+                'headline_close': {'ll': 0.6880, 'roi': 33.27, 'legacy_iid_roi_ci': [4.36, 61.53], 'win_pct': 56.8},
+                'headline_2026_04_ipl': {'roi': 34.87, 'legacy_iid_roi_ci': [2.04, 68.06], 'win_pct': 65.7},
             },
             'ball_level': {
                 'model_id': 'xgb_v7_hierarchical_shrink',

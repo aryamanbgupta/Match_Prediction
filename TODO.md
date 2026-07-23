@@ -1,5 +1,14 @@
 # TODO
 
+> **Current evaluation note (I3, 2026-07-23):** match-winner headline
+> intervals now use 10,000 seed-42 whole-competition resamples, not
+> per-match i.i.d. bootstrap. The old positive ROI lower bounds in this
+> historical task log are superseded: M7 ≥$50k is +21.90%
+> `[-10.79%, +50.18%]`, A7 is +36.93% `[-1.52%, +59.81%]`, and ball v7
+> is +6.11% `[-7.99%, +25.70%]`. See
+> `reports/i3_eval_statistics_hardening.md`. The new forward holdout is
+> sealed and remains unscored.
+
 ## Completed
 - ✅ Make the outcome categories: squish/ round down to 0,1,2,4,6,W
 - ✅ LSTM model architecture (scripts/lstm_v1.py, LSTMModelV1 in sim_v1_2.py)

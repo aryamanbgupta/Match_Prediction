@@ -141,8 +141,9 @@ def _check_parquet_cache(config: dict, feature_list: list) -> bool:
 def _check_sqlite_cache(config: dict) -> bool:
     """SQLite cache is current iff `_meta.schema_version` matches the
     live `stats_sqlite_backend.SCHEMA_VERSION` (currently 4) AND
-    `source_json_mtime_max` is at least as new as the live JSON corpus.
-    Returns False on any read error (missing file, bad schema, etc.)."""
+    the deterministic same-day ordering contract matches AND the source
+    membership/mtime matches the live JSON corpus. Returns False on any
+    read error (missing file, bad schema, etc.)."""
     import sqlite3
     version = config["data"].get("version", "v3")
     sqlite_path = Path(f"models/player_stats_cache_{version}.sqlite")
@@ -159,6 +160,7 @@ def _check_sqlite_cache(config: dict) -> bool:
     # Schema check — import lazily to avoid hard dep if Phase B backend missing
     try:
         sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+        from loaders_common import SAME_DAY_ORDER_VERSION
         from stats_sqlite_backend import SCHEMA_VERSION
     except ImportError:
         return False
@@ -167,8 +169,11 @@ def _check_sqlite_cache(config: dict) -> bool:
             return False
     except (TypeError, ValueError):
         return False
+    if meta.get("same_day_order_version") != SAME_DAY_ORDER_VERSION:
+        return False
 
-    # JSON mtime check — SQLite is stale if any JSON is newer.
+    # JSON membership + mtime check — SQLite is stale if a file was
+    # added/removed or any live JSON is newer.
     json_dir = PROJECT_ROOT / "data" / "t20s_json"
     if not json_dir.exists():
         # No JSONs to check against; trust the SQLite.
@@ -176,21 +181,38 @@ def _check_sqlite_cache(config: dict) -> bool:
     json_files = list(json_dir.glob("*.json"))
     if not json_files:
         return True
+    expected_sources = json.dumps(
+        [str(json_dir.resolve())],
+        separators=(",", ":"),
+    )
+    if meta.get("source_dirs_json") != expected_sources:
+        return False
     live_mtime = max(p.stat().st_mtime for p in json_files)
     try:
         cached_mtime = float(meta.get("source_json_mtime_max", 0))
+        cached_count = int(meta.get("source_json_file_count", -1))
     except (TypeError, ValueError):
         return False
-    return cached_mtime + 1 >= live_mtime
+    return (
+        cached_mtime + 1 >= live_mtime
+        and cached_count == len(json_files)
+    )
 
 
 def check_smart_cache(config: dict, feature_list: list) -> tuple[bool, bool]:
     """Return (sqlite_valid, parquet_valid). Phase B introduces two
     independent artifacts; the caller decides which steps to skip."""
-    return (
-        _check_sqlite_cache(config),
-        _check_parquet_cache(config, feature_list),
+    sqlite_valid = _check_sqlite_cache(config)
+    # Parquet is downstream of SQLite. If the cache contract or source
+    # membership invalidates SQLite, the replacement file will necessarily
+    # be newer and semantically different; force materialization in the same
+    # run instead of pairing new state with legacy-order feature rows.
+    parquet_valid = (
+        _check_parquet_cache(config, feature_list)
+        if sqlite_valid
+        else False
     )
+    return sqlite_valid, parquet_valid
 
 
 def run_step(cmd: list, step_name: str, tracker: ExperimentTracker,
