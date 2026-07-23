@@ -151,6 +151,12 @@ context in the same versioned order and advance transient state only after
 each earlier match. Pointing the existing evaluator at the sidecar SQLite
 without that replay is prohibited.
 
+`scripts/score_forward_match_m7.py` implements the direct-model half behind
+the frozen-protocol gate. Its parquet projection excludes target/outcome
+fields, validates all 137 identities and team orientations, and emits a
+write-once prediction artifact plus SHA-256 sidecar. Do not run it on the
+sealed set while the machine-readable protocol remains `DRAFT`.
+
 ## Opening the holdout
 
 Before any model probabilities are scored, freeze and document:

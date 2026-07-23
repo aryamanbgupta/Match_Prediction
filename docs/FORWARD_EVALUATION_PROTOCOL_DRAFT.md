@@ -22,6 +22,19 @@ uv run python scripts/forward_eval_contract.py \
 Adding `--require-frozen` must fail until scorer tests, ball same-day replay,
 scoring-code hashes, and explicit user approval are all recorded.
 
+The M7 adapter is `scripts/score_forward_match_m7.py`. It reads only the
+declared feature columns plus fixture identity from the sidecar parquet;
+`team1_wins` and every outcome field are excluded at the parquet read. It
+writes an outcome-free, write-once prediction JSON and SHA-256 sidecar. The
+command below is documented for the eventual frozen run; while this protocol
+is `DRAFT`, it fails before importing `joblib`:
+
+```bash
+uv run python scripts/score_forward_match_m7.py \
+  evaluation/forward_protocol_2026-06-01_2026-07-13.yaml \
+  --out forward_eval_out/2026-06-01_2026-07-13/match_m7_predictions.json
+```
+
 Sealed dataset facts:
 
 - 137 matched men's T20 fixtures, 2026-06-02 through 2026-07-13.
