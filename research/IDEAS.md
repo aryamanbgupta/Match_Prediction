@@ -497,7 +497,7 @@ resolve to `data/t20s_json/<stem>.json`; 9,519 distinct matches, zero
 cross-split overlap. Old parquets at `archive/xgb_data_v3_pre_b2/`. E6's
 (date,venue) workaround kept for pre-B2 parquets; comment updated.
 
-## B3 [P1] [RUNNING 2026-07-23T03:15Z] Continuous-forecast shrinkage blend (productize E2's finding)
+## B3 [P1] [LANDED] Continuous-forecast shrinkage blend (productize E2's finding)
 **Hypothesis:** E2: the sim's only validated skill is continuous score
 forecasts (batter-runs MAE −0.71 vs career baseline). A val-fit shrinkage
 blend `α·sim + (1−α)·fair_baseline` per family should beat both parents —
@@ -507,7 +507,34 @@ val matches; evaluate on recipe B test with `--ball-calibrator vector`;
 compare MAE vs sim-alone and baseline-alone (`prop_fair_baselines.py`).
 **Gate (sim pair):** blend MAE beats BOTH parents (paired, CI excludes 0) on
 ≥1 family AND no family regresses vs its best parent. **Budget:** ~2 h.
-**Result:** —
+**Result:** LANDED 2026-07-23. No engine change, no re-baseline (post-hoc
+blend; `prop_fair_baselines.py` read-only; non-engine pick — D3 consumed
+the night's sim-engine slot). Alphas fit VAL-ONLY on the exact ball-model
+val split (545 matches 2024-12-31..2025-06-29 from the post-B2 parquet
+stems; ONE prop_backtest run at the canonical D15 engine config, s42,
+100 sims, 4642 s, 0 skips; grid 0..1 step .01 min row-MAE, pre-committed
+`ce6be5d` before any result): batter_runs **0.93**, highest_indiv
+**0.83**, team_fours **0.64**, team_sixes **0.79**, first_over **0.15**
+(sim-heavy exactly where E2 said the skill lives; baseline-heavy on
+first-over). Test = EXISTING canonical D15 s43 detail, paired |err|
+deltas cluster-boot 2000/s29. **GATE 1 MET** on TWO families CI-clean vs
+BOTH parents: `batter_runs_mae` (vs sim **−0.0155 [−0.0279,−0.0034]**,
+vs base −0.3443 [−0.4952,−0.1845]) and `team_total_sixes_mae` (vs sim
+**−0.1277 [−0.1797,−0.0781]**, vs base −0.2337 [−0.4017,−0.0693]).
+**GATE 2 MET**: zero CI-clean regressions vs best parent — blend
+point-beats the best parent on ALL FIVE families (highest_indiv 16.312
+vs sim 16.492; fours 3.637 vs base 3.654; first_over 3.374 vs base
+3.383). Both → LANDED; commits kept, nothing reverted. The blend is the
+system's best continuous score forecast: never worse than either parent,
+CI-clean better where the sim has skill. Context (post-verdict): val
+alphas lean sim vs test-optimal (.93→.78, .83→.68, .64→.35, .79→.59;
+first_over .15→.28) — the pre-stated E5-calibrator-in-sample caveat
+confirmed in direction; the land survives it. Production adoption (live
+prop quoting reads alpha.json) = human follow-up. Artifacts
+`models/auto/b3/` (alpha.json, detail_val_s42_n545.json,
+gate_numbers.json; gitignored), harness
+`scripts/auto/b3_shrinkage_blend.py`. B11 appended (bias-free alpha
+refit). See `research/reports/auto/B3.md`.
 
 ## B4 [P2] [LANDED] top_bowler pricing margin (post-calibration edge quantification)
 **Hypothesis:** top_bowler is the only binary family beating its fair baseline
@@ -768,6 +795,33 @@ G5 bowler coverage stays ≥90%. Guards = `bowler_wkts_{1,2}plus`,
 LANDED (re-baseline warning applies; subsumes D5's mechanism — its
 queue status becomes a supervisor call); exactly one → TABLED; none →
 FAILED. **Budget:** ~2.5 h. One sim idea per night.
+**Result:** —
+
+## B11 [P3] [PENDING] Bias-free alpha refit for the B3 blend (B3 follow-up)
+**Hypothesis:** B3's val-fit alphas systematically lean toward the sim
+relative to the (diagnostic-only) test optimum on every sim-heavy family
+(.93→.78, .83→.68, .64→.35, .79→.59) — the direction B3's pre-run caveat
+predicted: the v1 vector calibrator was E5-fit on those same val balls, so
+val sim forecasts are in-sample-flattered. A val construction free of that
+bias (e.g. split val in half: refit a vector calibrator on half A only,
+run the val sim + alpha fit on half B with the half-A calibrator; or
+K-fold the same) should yield smaller, better-transferring alphas and a
+CI-clean improvement of the blend over B3's blend on ≥1 family. Cheap
+guard: B3's landed alphas stay in force unless the refit blend beats
+B3's blend paired CI-clean (not just the parents).
+**Method:** reuse `scripts/auto/b3_shrinkage_blend.py` + the existing val
+detail where possible (the half-B sim run needs a NEW calibrator, so one
+~40 min half-val sim run); gate on the canonical D15 s43 detail with the
+B3 gate tooling, adding a paired blend-vs-B3-blend delta. Pre-commit the
+gate before any run. NOTE: fitting a new vector calibrator must NOT touch
+`models/xgb_v3/vector_scaling_calibrator_v1.pkl` (write to
+`models/auto/b11/`); the TEST-side sim stays the canonical D15 detail
+(stale v1 calibrator) — only the VAL fitting construction changes.
+**Gate (sim pair):** PRIMARY = refit blend beats B3's blend paired
+CI-clean on ≥1 family AND no family regresses CI-clean vs B3's blend.
+Guards = B3's GATE 2 (no family CI-clean worse than its best parent).
+Both → LANDED (alpha.json superseded); exactly one → TABLED; none →
+FAILED (B3 alphas stand). **Budget:** ~1.5 h.
 **Result:** —
 
 ---
