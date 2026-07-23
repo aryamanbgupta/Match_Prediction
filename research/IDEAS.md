@@ -573,7 +573,7 @@ table `research/reports/auto/B4_pricing.md`; numbers
 shown weak in the tail → B9 appended (usage-share baseline re-test). Kept
 `74856a6`+`b387cbb`. See `research/reports/auto/B4.md`.
 
-## B5 [P2] [PENDING] In-play over/under quote prototype (analytics-engine seed)
+## B5 [P2] [RUNNING 2026-07-23T04:55Z] In-play over/under quote prototype (analytics-engine seed)
 **Hypothesis:** `models/inplay_winprob_v1` (P(win|state)) + the calibrated sim
 (score distributions from any mid-innings state) can produce live over/under
 quotes for remaining-innings runs. Feasibility prototype: quote quality
