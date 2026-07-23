@@ -497,7 +497,7 @@ resolve to `data/t20s_json/<stem>.json`; 9,519 distinct matches, zero
 cross-split overlap. Old parquets at `archive/xgb_data_v3_pre_b2/`. E6's
 (date,venue) workaround kept for pre-B2 parquets; comment updated.
 
-## B3 [P1] [PENDING] Continuous-forecast shrinkage blend (productize E2's finding)
+## B3 [P1] [RUNNING 2026-07-23T03:15Z] Continuous-forecast shrinkage blend (productize E2's finding)
 **Hypothesis:** E2: the sim's only validated skill is continuous score
 forecasts (batter-runs MAE −0.71 vs career baseline). A val-fit shrinkage
 blend `α·sim + (1−α)·fair_baseline` per family should beat both parents —
