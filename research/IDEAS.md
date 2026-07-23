@@ -877,7 +877,7 @@ card; fixing rotation alone re-scrambles rather than removes the
 attribution error. Fix + re-apply as a unit → **D14**. See
 `research/reports/auto/D2.md`.
 
-## D3 [P1] [PENDING] Fix extras graft: empirical rates + pre-calibration ordering (sim-side half)
+## D3 [P1] [RUNNING 2026-07-23T02:10Z] Fix extras graft: empirical rates + pre-calibration ordering (sim-side half)
 **Hypothesis:** `predict_next_ball` grafts a flat 1% wide + 1% no-ball AFTER
 the calibrator runs (`sim_v1_2.py`: calibrator ~:1121-1126, graft
 :1141-1142, then renormalize) — de-tuning the calibrated 6-class marginals —
