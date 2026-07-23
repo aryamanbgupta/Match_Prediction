@@ -94,43 +94,6 @@ class Outcome(Enum):
 RUNOUT_P = 0.075077
 RUNOUT_NONSTRIKER_SHARE = 0.468470
 
-# D3 (2026-07-23): empirical per-delivery wide/no-ball rates, VAL split
-# (2024-12-31 <= date < 2025-06-30, male t20s_json — the ball model's
-# validation window, same convention as the E5 calibrator fit). Replaces
-# the flat 1%+1% graft in every model wrapper, which under-produced wides
-# ~3.8x and over-produced no-balls ~2.2x (real per-delivery rates: wides
-# 3.77%, no-balls 0.44%). Builder: scripts/auto/d3_build_extras_rates.py
-# (artifact models/auto/d3/extras_rates.json). Labels still fold extras
-# into the 6 classes (a wide-1 is labeled `one`) — that rework is I5;
-# this is the sim-side half.
-EXTRAS_P_WIDE = 0.037702
-EXTRAS_P_NO_BALL = 0.004409
-
-_GRAFT_MODEL_CLASSES = ('dot', 'one', 'two', 'four', 'six', 'wicket')
-
-
-def graft_extras(outcome_probs: Dict[str, float]) -> Dict[str, float]:
-    """Add empirical wide/no-ball mass to a model wrapper's outcome dict.
-
-    Scales the 6-class model block by (1 - p_extras) so the calibrated
-    RELATIVE marginals are preserved exactly (D3); the old pattern set
-    flat 0.01 masses and renormalized. Mutates and returns outcome_probs;
-    the result sums to exactly 1.
-    """
-    block = sum(outcome_probs[k] for k in _GRAFT_MODEL_CLASSES)
-    p_extras = EXTRAS_P_WIDE + EXTRAS_P_NO_BALL
-    if block > 0.0:
-        scale = (1.0 - p_extras) / block
-        for k in _GRAFT_MODEL_CLASSES:
-            outcome_probs[k] *= scale
-    else:  # degenerate model output: spread the non-extras mass uniformly
-        for k in _GRAFT_MODEL_CLASSES:
-            outcome_probs[k] = (1.0 - p_extras) / len(_GRAFT_MODEL_CLASSES)
-    outcome_probs['wide'] = EXTRAS_P_WIDE
-    outcome_probs['no_ball'] = EXTRAS_P_NO_BALL
-    return outcome_probs
-
-
 @dataclass
 class Player:
     """Represents a cricket player"""
@@ -609,9 +572,6 @@ class T20Rules:
             print(f"Run-out dismissal channel ACTIVE "
                   f"(p_runout={RUNOUT_P:.4f}, "
                   f"nonstriker_share={RUNOUT_NONSTRIKER_SHARE:.4f})")
-            print(f"Empirical extras graft ACTIVE "
-                  f"(p_wide={EXTRAS_P_WIDE:.4f}, "
-                  f"p_no_ball={EXTRAS_P_NO_BALL:.4f}, val-split; D3)")
             T20Rules._runout_logged = True
     
     def select_next_bowler(self, state: MatchState) -> int:
@@ -1245,9 +1205,16 @@ class XGBoostModelV2(PredictionModel):
                 outcome_name = self.class_to_outcome[class_idx]
                 outcome_probs[outcome_name] = prob
 
-        # Graft empirical extras mass; preserves the calibrated 6-class
-        # relative marginals exactly (D3).
-        return graft_extras(outcome_probs)
+        # Add small probabilities for extras (not in your model)
+        outcome_probs['wide'] = 0.01
+        outcome_probs['no_ball'] = 0.01
+
+        # Normalize
+        total = sum(outcome_probs.values())
+        if total > 0:
+            outcome_probs = {k: v/total for k, v in outcome_probs.items()}
+
+        return outcome_probs
 
 class XGBoostModel(PredictionModel):
     def __init__(self, model_path: str, batter_encoder_path: str, bowler_encoder_path: str):
@@ -1314,9 +1281,16 @@ class XGBoostModel(PredictionModel):
                 outcome_name = self.class_to_outcome[class_idx]
                 outcome_probs[outcome_name] = prob
         
-        # Graft empirical extras mass; preserves the 6-class relative
-        # marginals exactly (D3).
-        return graft_extras(outcome_probs)
+        # Add small probabilities for extras (not in your model)
+        outcome_probs['wide'] = 0.01
+        outcome_probs['no_ball'] = 0.01
+        
+        # Normalize
+        total = sum(outcome_probs.values())
+        if total > 0:
+            outcome_probs = {k: v/total for k, v in outcome_probs.items()}
+        
+        return outcome_probs
 
 class DummyModel(PredictionModel):
     """Simple probability-based model for testing"""
@@ -1788,9 +1762,16 @@ class LSTMModelV1(PredictionModel):
             if outcome_name:
                 outcome_probs[outcome_name] = float(prob)
 
-        # Graft empirical extras mass; preserves the 6-class relative
-        # marginals exactly (D3).
-        return graft_extras(outcome_probs)
+        # Add extras
+        outcome_probs['wide'] = 0.01
+        outcome_probs['no_ball'] = 0.01
+
+        # Normalize
+        total = sum(outcome_probs.values())
+        if total > 0:
+            outcome_probs = {k: v/total for k, v in outcome_probs.items()}
+
+        return outcome_probs
 
 
 class MLPModelV1(PredictionModel):
@@ -2181,7 +2162,7 @@ class MLPModelV1(PredictionModel):
         # Convert to outcome dict
         outcome_probs = {
             'dot': 0.0, 'one': 0.0, 'two': 0.0, 'four': 0.0,
-            'six': 0.0, 'wicket': 0.0, 'wide': 0.0, 'no_ball': 0.0
+            'six': 0.0, 'wicket': 0.0, 'wide': 0.01, 'no_ball': 0.01
         }
 
         for class_idx, prob in enumerate(probs):
@@ -2190,9 +2171,11 @@ class MLPModelV1(PredictionModel):
                 outcome_probs[outcome_name] = float(prob)
 
         # Normalize
-        # Graft empirical extras mass; preserves the 6-class relative
-        # marginals exactly (D3).
-        return graft_extras(outcome_probs)
+        total = sum(outcome_probs.values())
+        if total > 0:
+            outcome_probs = {k: v/total for k, v in outcome_probs.items()}
+
+        return outcome_probs
 
 
 class MLPModelV2(PredictionModel):
@@ -2629,7 +2612,7 @@ class MLPModelV2(PredictionModel):
 
         outcome_probs = {
             'dot': 0.0, 'one': 0.0, 'two': 0.0, 'four': 0.0,
-            'six': 0.0, 'wicket': 0.0, 'wide': 0.0, 'no_ball': 0.0
+            'six': 0.0, 'wicket': 0.0, 'wide': 0.01, 'no_ball': 0.01
         }
 
         for class_idx, prob in enumerate(probs):
@@ -2637,9 +2620,11 @@ class MLPModelV2(PredictionModel):
             if outcome_name:
                 outcome_probs[outcome_name] = float(prob)
 
-        # Graft empirical extras mass; preserves the 6-class relative
-        # marginals exactly (D3).
-        return graft_extras(outcome_probs)
+        total = sum(outcome_probs.values())
+        if total > 0:
+            outcome_probs = {k: v/total for k, v in outcome_probs.items()}
+
+        return outcome_probs
 
 
 class TransformerModelV1(PredictionModel):
@@ -3213,9 +3198,16 @@ class TransformerModelV1(PredictionModel):
             if outcome_name:
                 outcome_probs[outcome_name] = float(prob)
 
-        # Graft empirical extras mass; preserves the 6-class relative
-        # marginals exactly (D3).
-        return graft_extras(outcome_probs)
+        # Add extras
+        outcome_probs['wide'] = 0.01
+        outcome_probs['no_ball'] = 0.01
+
+        # Normalize
+        total = sum(outcome_probs.values())
+        if total > 0:
+            outcome_probs = {k: v/total for k, v in outcome_probs.items()}
+
+        return outcome_probs
 
 
 class LLMModelV1(PredictionModel):
