@@ -59,7 +59,11 @@ TRACKER_SNAPSHOT = REPO / "data" / "tracker_snapshot_test_end.pkl"
 DEFAULT_STATE_DIR = REPO / "models"
 DEFAULT_TRACKER_SOURCE_DIRS = (REPO / "data" / "t20s_json",)
 DEFAULT_MAX_STATE_AGE_DAYS = 14
-EDGE_THRESHOLD = 0.0
+A7_POLICY_ID = "a7_forward_v1"
+A7_ELO_BOUNDARY = 5.0
+A7_CLOSE_MINIMUM_EDGE = 0.0
+A7_MISMATCH_MINIMUM_EDGE = 0.10
+A7_MINIMUM_VOLUME_USD = 50_000.0
 
 
 def _normalize_source_dirs(
@@ -269,7 +273,8 @@ def assess_state_freshness(
     return {
         "status": "stale" if stale else "fresh",
         "fixture_date": fixture_date,
-        "effective_as_of": effective_day.isoformat(),
+        "state_available_through": effective_day.isoformat(),
+        "query_as_of": fixture_date,
         "age_days": effective_age,
         "max_state_age_days": max_state_age_days,
         "sqlite": {**sqlite_state, "age_days": sqlite_age},
@@ -512,35 +517,145 @@ def apply_encoders_and_predict(record: dict,
                    "feature_row": {c: (float(df[c].iloc[0]) if c not in ('venue','competition_tier') else df[c].iloc[0]) for c in feat_cols}}
 
 
-def compute_bet(team1: str, team2: str, p_team1: float,
-                polymarket_odds: dict | None) -> dict:
+def compute_bet(
+    team1: str,
+    team2: str,
+    p_team1: float,
+    polymarket_odds: dict | None,
+    *,
+    top6_batting_elo_diff: float | None = None,
+    polymarket_volume_usd: float | None = None,
+    state_eligible: bool = True,
+) -> dict:
+    """Apply the frozen A7 policy as a non-executable shadow decision."""
     if not polymarket_odds:
-        return {"odds_provided": False}
+        return {
+            "odds_provided": False,
+            "policy_id": A7_POLICY_ID,
+            "mode": "shadow_only",
+            "execution_authorized": False,
+            "shadow_bet_placed": False,
+            "suppression_reasons": ["missing_odds"],
+        }
     try:
         d1 = float(polymarket_odds[team1])
         d2 = float(polymarket_odds[team2])
-    except (KeyError, TypeError):
-        return {"odds_provided": False, "error": "odds dict must include both teams"}
-    market_t1 = 1.0 / d1
-    market_t2 = 1.0 / d2
+    except (KeyError, TypeError, ValueError):
+        return {
+            "odds_provided": False,
+            "policy_id": A7_POLICY_ID,
+            "mode": "shadow_only",
+            "execution_authorized": False,
+            "shadow_bet_placed": False,
+            "suppression_reasons": ["invalid_odds"],
+            "error": "odds dict must include finite decimal odds for both teams",
+        }
+    if not np.isfinite(d1) or not np.isfinite(d2) or d1 < 1.0 or d2 < 1.0:
+        return {
+            "odds_provided": False,
+            "policy_id": A7_POLICY_ID,
+            "mode": "shadow_only",
+            "execution_authorized": False,
+            "shadow_bet_placed": False,
+            "suppression_reasons": ["invalid_odds"],
+            "error": "decimal odds must be finite and at least 1.0",
+        }
+
+    inverse_t1 = 1.0 / d1
+    inverse_t2 = 1.0 / d2
+    overround = inverse_t1 + inverse_t2
+    market_t1 = inverse_t1 / overround
+    market_t2 = inverse_t2 / overround
     p_team2 = 1.0 - p_team1
     edge_t1 = p_team1 - market_t1
     edge_t2 = p_team2 - market_t2
     edges = {team1: edge_t1, team2: edge_t2}
     best_team = max(edges, key=edges.get)
     best_edge = edges[best_team]
-    placed = best_edge > EDGE_THRESHOLD
+
+    suppression_reasons = []
+    elo_regime = None
+    threshold = None
+    if top6_batting_elo_diff is None or not np.isfinite(
+        top6_batting_elo_diff
+    ):
+        suppression_reasons.append("missing_top6_batting_elo_diff")
+    else:
+        elo_regime = (
+            "mismatch"
+            if abs(float(top6_batting_elo_diff)) > A7_ELO_BOUNDARY
+            else "close"
+        )
+        threshold = (
+            A7_MISMATCH_MINIMUM_EDGE
+            if elo_regime == "mismatch"
+            else A7_CLOSE_MINIMUM_EDGE
+        )
+
+    volume = None
+    if polymarket_volume_usd is not None:
+        try:
+            volume = float(polymarket_volume_usd)
+        except (TypeError, ValueError):
+            volume = None
+    liquidity_eligible = (
+        volume is not None
+        and np.isfinite(volume)
+        and volume >= A7_MINIMUM_VOLUME_USD
+    )
+    if not liquidity_eligible:
+        suppression_reasons.append(
+            "missing_liquidity"
+            if volume is None
+            else "below_minimum_liquidity"
+        )
+    if not state_eligible:
+        suppression_reasons.append("state_not_fresh")
+
+    edge_qualified = (
+        threshold is not None and best_edge > threshold
+    )
+    if threshold is not None and not edge_qualified:
+        suppression_reasons.append("edge_not_strictly_above_threshold")
+    shadow_placed = (
+        edge_qualified and liquidity_eligible and state_eligible
+    )
     return {
         "odds_provided": True,
+        "policy_id": A7_POLICY_ID,
+        "mode": "shadow_only",
+        "economic_confirmation": "unconfirmed",
+        "execution_authorized": False,
+        "stake_units": 1.0,
         "decimal_odds": {team1: d1, team2: d2},
+        "market_overround": overround,
         "market_implied_prob": {team1: market_t1, team2: market_t2},
         "edge_pp": {team1: edge_t1 * 100, team2: edge_t2 * 100},
-        "bet_team": best_team if placed else None,
-        "bet_decimal": d1 if (placed and best_team == team1) else (d2 if placed else None),
-        "bet_edge_pp": best_edge * 100 if placed else None,
+        "top6_batting_elo_diff": top6_batting_elo_diff,
+        "elo_boundary": A7_ELO_BOUNDARY,
+        "elo_regime": elo_regime,
+        "edge_threshold_pp": (
+            threshold * 100 if threshold is not None else None
+        ),
+        "edge_qualified": edge_qualified,
+        "polymarket_volume_usd": volume,
+        "minimum_volume_usd": A7_MINIMUM_VOLUME_USD,
+        "liquidity_eligible": liquidity_eligible,
+        "state_eligible": bool(state_eligible),
+        "shadow_bet_placed": shadow_placed,
+        "shadow_bet_team": best_team if shadow_placed else None,
+        "shadow_bet_decimal": (
+            d1 if (shadow_placed and best_team == team1)
+            else (d2 if shadow_placed else None)
+        ),
+        "shadow_bet_edge_pp": best_edge * 100 if shadow_placed else None,
+        "bet_placed": False,
+        "bet_team": None,
+        "suppression_reasons": suppression_reasons,
         "expected_pnl_per_unit_if_won": (
-            (d1 - 1) if (placed and best_team == team1)
-            else ((d2 - 1) if placed else 0.0)),
+            (d1 - 1) if (shadow_placed and best_team == team1)
+            else ((d2 - 1) if shadow_placed else 0.0)
+        ),
     }
 
 
@@ -629,7 +744,8 @@ def main() -> int:
         message = (
             f"live state is {state_freshness['age_days']} days behind fixture "
             f"{fixture['date']} (maximum {args.max_state_age_days}); effective "
-            f"as-of is {state_freshness['effective_as_of']}. Rebuild a "
+            f"state is available through "
+            f"{state_freshness['state_available_through']}. Rebuild a "
             "separate SQLite cache and tracker snapshot from the same sources, "
             "then pass --state-dir/--tracker-snapshot. "
             "--allow-stale-state is diagnostic-only and suppresses betting."
@@ -670,8 +786,15 @@ def main() -> int:
               f"{p_bat*100:.1f}% / {p_chase*100:.1f}%)")
     p_team2 = 1.0 - p_team1
 
-    bet_info = compute_bet(fixture["team1"], fixture["team2"], p_team1,
-                           fixture.get("polymarket_odds"))
+    bet_info = compute_bet(
+        fixture["team1"],
+        fixture["team2"],
+        p_team1,
+        fixture.get("polymarket_odds"),
+        top6_batting_elo_diff=record["top6_batting_elo_diff"],
+        polymarket_volume_usd=fixture.get("polymarket_volume_usd"),
+        state_eligible=state_freshness["status"] == "fresh",
+    )
 
     output = {
         "fixture": {k: v for k, v in fixture.items() if k != "team1_lineup" and k != "team2_lineup"},
@@ -717,16 +840,30 @@ def main() -> int:
     print(f"  P({fixture['team2']:<35s} wins) = {p_team2*100:>5.1f}%")
     print()
     if bet_info.get("odds_provided"):
-        if bet_info.get("bet_team"):
-            print(f"  Bet: {bet_info['bet_team']} @ {bet_info['bet_decimal']:.2f}  "
-                  f"(edge +{bet_info['bet_edge_pp']:.1f}pp)")
+        if bet_info.get("shadow_bet_placed"):
+            print(
+                f"  Shadow A7: {bet_info['shadow_bet_team']} @ "
+                f"{bet_info['shadow_bet_decimal']:.2f}  "
+                f"(edge +{bet_info['shadow_bet_edge_pp']:.1f}pp; "
+                f"threshold >{bet_info['edge_threshold_pp']:.0f}pp)"
+            )
             print(f"  PnL if win: +{bet_info['expected_pnl_per_unit_if_won']:.3f}; "
                   f"PnL if loss: -1.000")
         else:
-            print(f"  No bet — best edge {max(bet_info['edge_pp'].values()):+.1f}pp "
-                  f"≤ threshold {EDGE_THRESHOLD*100:.0f}pp")
+            reasons = ", ".join(bet_info.get("suppression_reasons") or [])
+            print(
+                f"  No A7 shadow bet — best edge "
+                f"{max(bet_info['edge_pp'].values()):+.1f}pp"
+                + (
+                    f"; threshold >{bet_info['edge_threshold_pp']:.0f}pp"
+                    if bet_info.get("edge_threshold_pp") is not None
+                    else ""
+                )
+                + (f"; {reasons}" if reasons else "")
+            )
+        print("  Execution authorization: BLOCKED (economic edge unconfirmed)")
     else:
-        print("  (no polymarket odds provided in fixture; pass to compute bet)")
+        print("  (no valid Polymarket odds; no A7 shadow decision)")
 
     if debug["encoder_warnings"]:
         print()
