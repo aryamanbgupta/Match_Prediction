@@ -151,6 +151,14 @@ context in the same versioned order and advance transient state only after
 each earlier match. Pointing the existing evaluator at the sidecar SQLite
 without that replay is prohibited.
 
+`scripts/sim_eval/same_day_stats.py` implements the transient stats half of
+that contract. It reads only `info` fields before prediction, requires an
+evaluated prediction to be locked before delivery replay, advances the
+rehydrated trackers in memory, and invalidates the simulation stats memo after
+every match. It never writes the sidecar. The ball scorer that orchestrates
+this layer is still pending, so the machine-readable replay opening condition
+remains false.
+
 `scripts/score_forward_match_m7.py` implements the direct-model half behind
 the frozen-protocol gate. Its parquet projection excludes target/outcome
 fields, validates all 137 identities and team orientations, and emits a

@@ -71,10 +71,20 @@ holdout fingerprint, and all selected feature IDs.
 The materialized match rows already contain the deterministic within-day
 advancement required by the direct model. The current ball-simulation
 evaluator reads SQLite at date granularity; it must not be pointed at this
-sidecar and assumed to have equivalent same-day state. Its forward scorer
-must replay sealed context matches sequentially in the versioned order before
-the holdout is opened. That is an explicit scorer-opening condition, not a
-reason to score the data during I6.
+sidecar and assumed to have equivalent same-day state.
+
+`scripts/sim_eval/same_day_stats.py` now supplies the missing transient layer.
+It rehydrates the same production trackers once per date, forces evaluated
+predictions to lock before replay, then advances actual deliveries only for a
+later same-day fixture. It is an in-memory adapter around the read-only
+sidecar, not a change to the simulation engine or SQLite schema. Synthetic
+tests cover chronology, ordering, stale-cache invalidation, and pre-prediction
+field access; a model-free smoke test replayed a real three-fixture context
+date while leaving the sidecar SQLite at its recorded SHA-256.
+
+The forward scorer must still connect this provider to ball v7 and pass its
+end-to-end tests before the protocol opening condition can be marked complete.
+No sealed model probability was produced during the overlay test.
 
 ## Historical impact audit
 

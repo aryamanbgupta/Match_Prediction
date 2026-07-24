@@ -103,6 +103,26 @@ Proposed simulation recipe: 100 simulations per fixture, fixed seed 43,
 phase-aware empirical bowler selector, vector ball calibration, and current
 venue-aware/default D15 simulation behavior.
 
+The transient statistics layer is
+`scripts/sim_eval/same_day_stats.py`. At the start of each date it rehydrates
+the existing player, ELO, recent-form, matchup, outcome-distribution, and
+venue trackers from the sidecar's first-of-date snapshot. For each fixture it
+enforces:
+
+1. open the match using `info` fields only;
+2. lock the evaluated prediction, if one is required;
+3. replay completed deliveries into memory;
+4. clear all memoized stats before the next same-day fixture.
+
+Context-only fixtures may advance without a model prediction. Evaluated
+fixtures cannot. Dates must increase, same-day match IDs must increase, and a
+failed replay restores the pre-replay tracker state. The layer subclasses the
+existing stats memo wrapper so the simulation engine cannot accidentally wrap
+it in a second, stale cache. The sealed SQLite file remains read-only; its
+verified hash is unchanged. This component is implemented and tested, but the
+protocol's `ball_same_day_replay_complete` opening condition remains false
+until the frozen-gated ball scorer is connected and tested end to end.
+
 ## Historical reference only
 
 These are context, not gates to be silently reused as forward results:
@@ -190,7 +210,9 @@ All must be complete before scoring:
    team order, aliases, ties/no-results, missing odds, and all three liquidity
    boundaries. The ball-simulation path must also prove that it replays an
    earlier same-day fixture in `date_then_match_id_lexicographic_v1` order;
-   its current date-only SQLite query is insufficient by itself.
+   its current date-only SQLite query is insufficient by itself. The
+   transient replay provider is complete; frozen-gated scorer integration is
+   still pending.
 4. The sidecar cache is hashed. The scoring code and final protocol must be
    hashed after I3. Any transient/per-match state artifact introduced for the
    ball-simulation replay must be generated from the sealed context, verified,
