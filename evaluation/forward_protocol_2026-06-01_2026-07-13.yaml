@@ -1,6 +1,6 @@
 schema_version: 1
 protocol_id: forward_2026-06-01_2026-07-13_v1
-status: DRAFT
+status: FROZEN
 created_date: "2026-07-23"
 
 holdout:
@@ -141,4 +141,4 @@ opening_conditions:
   scorer_tests_complete: true
   ball_same_day_replay_complete: true
   scoring_code_hashes_recorded: true
-  user_approved: false
+  user_approved: true

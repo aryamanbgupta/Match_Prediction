@@ -1,16 +1,18 @@
-# Forward evaluation protocol — draft, not yet frozen
+# Forward evaluation protocol — frozen
 
 ## Status
 
-**DRAFT / DO NOT SCORE THE FORWARD HOLDOUT YET.**
+**FROZEN / APPROVED FOR THE ONE-TIME FORWARD EVALUATION.**
 
-This document is the proposed one-time evaluation contract for
+This document is the frozen one-time evaluation contract for
 `data/forward_holdout/2026-06-01_2026-07-13/`. It must be reviewed and changed
-only before any model probabilities are produced for that directory.
+only before any model probabilities are produced for that directory. The user
+approved it unchanged on 2026-07-23, before the first model run.
 
 The machine-readable companion is
-`evaluation/forward_protocol_2026-06-01_2026-07-13.yaml`. It remains `DRAFT`
-and fails closed if a scoring command asks for frozen authorization.
+`evaluation/forward_protocol_2026-06-01_2026-07-13.yaml`. It is `FROZEN`; all
+scoring commands still fail closed if any opening condition, artifact hash, or
+dataset/state fingerprint does not verify.
 
 Run the model-free preflight at any time:
 
@@ -19,9 +21,10 @@ uv run python scripts/forward_eval_contract.py \
   evaluation/forward_protocol_2026-06-01_2026-07-13.yaml
 ```
 
-Adding `--require-frozen` must fail until explicit user approval is recorded.
-I3, I6, both scorers, the outcome/reporting tests, ball-v7 same-day replay,
-and the scoring-code hash manifest are complete.
+Adding `--require-frozen` now authorizes scoring only after the complete
+contract passes. I3, I6, both scorers, the outcome/reporting tests, ball-v7
+same-day replay, the scoring-code hash manifest, and explicit user approval
+are complete.
 
 The M7 adapter is `scripts/score_forward_match_m7.py`. It reads only the
 declared feature columns plus fixture identity from the sidecar parquet;
@@ -226,9 +229,7 @@ Report both, without choosing between them after seeing the holdout:
 No odds threshold, ELO boundary, or liquidity cutoff may be changed after
 scoring.
 
-## Proposed one-time interpretation rule
-
-This section requires user approval before the draft becomes frozen.
+## Frozen one-time interpretation rule
 
 - **Probability confirmation:** on the primary ≥$50k slice, M7 log loss is
   no more than 0.01 worse than the market baseline and is better than the
@@ -270,8 +271,9 @@ All must be complete before scoring:
    transient ball state is in memory only and is deterministically generated
    from the sealed context; no mutable replay artifact or SQLite copy is
    written.
-5. The user explicitly approves this protocol. At that point change this
-   status from DRAFT to FROZEN before the first model run.
+5. **COMPLETE:** The user explicitly approved this protocol unchanged on
+   2026-07-23. Its status was changed from DRAFT to FROZEN before the first
+   model run.
 
 ## Prohibited after opening
 
