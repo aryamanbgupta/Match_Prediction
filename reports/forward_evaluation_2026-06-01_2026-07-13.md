@@ -72,6 +72,27 @@ primary liquidity slice. The ≥$100k result favors ball-v7, but that secondary
 slice has only 30 fixtures and six blocks and cannot override the primary
 decision.
 
+## Comparison with the earlier iteration set
+
+M7 did not improve in absolute log loss. On the older ≥$50k iteration set its
+log loss was 0.6299; on this forward slice it is 0.6823, a deterioration of
+0.0524. The important transfer result is relative:
+
+- earlier iteration: M7 0.6299 versus market 0.6267, so M7 was 0.0032 worse;
+- frozen forward: M7 0.6823 versus market 0.7445, so M7 is 0.0621 better;
+- frozen forward without the two major upsets: M7 0.6654 versus market
+  0.6824, so M7 remains 0.0170 better.
+
+The older and forward sets have different fixture and competition mixes, so
+these values are not a claim that the model itself improved between runs.
+They show that the frozen M7 transferred better than the contemporaneous
+market on the preregistered high-liquidity slice.
+
+The historical I3-corrected point ROIs were +21.90% for M7 flat and +36.93%
+for M7 A7. The frozen point ROIs are much higher, but the upset-removed values
+below are +20.58% and +20.04%. The apparent ROI jump is therefore mainly a
+consequence of two long-shot wins, not evidence that expected ROI tripled.
+
 ## Betting metrics
 
 ROI intervals are 95% tournament/time-block bootstrap intervals in percentage
@@ -116,15 +137,34 @@ This section is post-hoc diagnosis, not a new decision rule.
 
 Two Ireland wins against India, at decimal odds 18.1818 and 9.5238, contribute
 +25.71 units of M7 A7's +31.92 primary-slice P&L. They are both part of the
-same `India tour of Ireland` block. Removing that entire block leaves:
+same `India tour of Ireland` block. They are also the only primary-slice
+matches whose actual winner had market probability below 25%, so that cutoff
+removes exactly these two fixtures.
 
-- M7 A7: 31 bets, +6.21 units, +20.04% ROI;
-- M7 log loss: 0.6654;
-- market log loss: 0.6824;
-- ball-v7 log loss: 0.6953.
+Removing them gives:
+
+| Candidate/policy | Bets | P&L | ROI |
+|---|---:|---:|---:|
+| M7 flat | 59 | +12.14 | +20.58% |
+| M7 A7 | 31 | +6.21 | +20.04% |
+| Ball-v7 flat | 59 | +6.37 | +10.80% |
+| Ball-v7 A7 | 48 | +11.45 | +23.85% |
+
+The corresponding 59-match probability metrics are:
+
+| Candidate | Log loss | Brier |
+|---|---:|---:|
+| M7 | **0.6654** | **0.2369** |
+| Market | 0.6824 | 0.2454 |
+| Ball-v7 | 0.6953 | 0.2503 |
 
 Thus the probability ordering survives this sensitivity, while the ROI
 magnitude falls sharply.
+
+If the same two wins are removed from the all-liquidity results, every
+betting row becomes negative: M7 flat -14.03%, M7 A7 -17.96%, ball-v7 flat
+-17.03%, and ball-v7 A7 -8.24%. This reinforces that the defensible result is
+specific to the frozen ≥$50k primary slice.
 
 A separate derived diagnostic for the 76 fixtures below $50,000 shows M7
 flat ROI of -40.90% and M7 A7 ROI of -40.19%. This was not a preregistered
