@@ -51,7 +51,12 @@ from loaders_common import (
     extract_match_metadata,
     iter_matches_chronological,
 )
-from parsing_v2 import parse_match_data_v2
+from parsing_v2 import (
+    DELIVERY_SEMANTICS,
+    I5_DELIVERY_SEMANTICS,
+    LEGACY_DELIVERY_SEMANTICS,
+    parse_match_data_v2,
+)
 from player_metadata import PlayerMetadataProvider
 from stats_provider import StatsProvider
 from tracker_rehydration import (
@@ -122,6 +127,7 @@ def materialize(
     feature_hash_info: Optional[dict] = None,
     k_player: float = 30.0,
     k_venue: float = 200.0,
+    delivery_semantics: str = LEGACY_DELIVERY_SEMANTICS,
 ) -> Tuple[int, dict]:
     """Walk the corpus per-date; for each date, rehydrate temp trackers
     from SQLite and replay same-day matches in deterministic match-ID order.
@@ -145,6 +151,16 @@ def materialize(
     # distribution features; without it, those columns are zeros.
     # Trigger lookup-load before reading _prior so the attribute exists.
     provider._backend._ensure_conn()
+    cache_meta = dict(
+        provider._backend._conn.execute("SELECT key, value FROM _meta")
+    )
+    cache_semantics = cache_meta.get(
+        "delivery_semantics", LEGACY_DELIVERY_SEMANTICS)
+    if cache_semantics != delivery_semantics:
+        raise RuntimeError(
+            "SQLite/parser delivery-semantics mismatch: "
+            f"cache={cache_semantics!r}, requested={delivery_semantics!r}"
+        )
     prior = provider._backend._prior
     # Phase 3: per-phase priors loaded from SQLite _meta. On pre-Phase-3
     # caches, _phase_priors collapses to {phase: π} for every phase, so
@@ -181,6 +197,7 @@ def materialize(
                     prior=prior, phase_priors=phase_priors,
                     k_player=k_player, k_venue=k_venue,
                     match_ref=match_id,
+                    delivery_semantics=delivery_semantics,
                 )
             )
             # Advance temp_venue so the NEXT same-day match sees it.
@@ -252,11 +269,24 @@ def main() -> int:
                     "defaults to 'male'.")
     ap.add_argument("--metadata-csv", type=Path,
                     default=Path("data/all_players_enriched.csv"))
+    ap.add_argument(
+        "--delivery-semantics",
+        choices=sorted(DELIVERY_SEMANTICS),
+        default=None,
+        help=(
+            "Versioned parser/state contract. Reads "
+            "data.delivery_semantics from config when omitted."
+        ),
+    )
     args = ap.parse_args()
 
     config = load_config(args.config)
     data_cfg = config.get("data", {})
     version = args.version or data_cfg.get("version", "v3")
+    delivery_semantics = (
+        args.delivery_semantics
+        or data_cfg.get("delivery_semantics", LEGACY_DELIVERY_SEMANTICS)
+    )
     gender = (
         args.gender_filter
         if args.gender_filter is not None
@@ -266,6 +296,12 @@ def main() -> int:
     out_dir = args.out_dir or Path(
         "data/xgb_data" if version == "v2" else f"data/xgb_data_{version}"
     )
+    if (delivery_semantics == I5_DELIVERY_SEMANTICS
+            and version in {"v2", "v3"}):
+        ap.error(
+            "I5 semantics require an isolated data.version (for example "
+            "'i5') so deployed v2/v3 parquet is not overwritten"
+        )
     # Phase 6: outcome-dist k overrides from YAML.
     od_cfg = config.get("outcome_dist", {}) if config else {}
     k_player = float(od_cfg.get("k_player", 30.0))
@@ -302,6 +338,7 @@ def main() -> int:
             # still pick up all men's matches today because of corpus
             # composition, but the cache key must reflect intent.
             "gender_filter": gender if gender is not None else "all",
+            "delivery_semantics": delivery_semantics,
         }
     except ImportError:
         pass  # feature_registry unavailable — skip the marker
@@ -326,6 +363,7 @@ def main() -> int:
         feature_hash_info=feature_hash_info,
         k_player=k_player,
         k_venue=k_venue,
+        delivery_semantics=delivery_semantics,
     )
     dt = time.time() - t0
 

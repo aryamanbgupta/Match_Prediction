@@ -24,6 +24,10 @@ sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
 from feature_registry import resolve_feature_list, get_feature_hash
 from experiment_tracker import ExperimentTracker
+from parsing_v2 import (
+    I5_DELIVERY_SEMANTICS,
+    LEGACY_DELIVERY_SEMANTICS,
+)
 
 
 def load_config(config_path: str) -> dict:
@@ -106,6 +110,13 @@ def _check_parquet_cache(config: dict, feature_list: list) -> bool:
     if cached_gender != want_gender:
         return False
 
+    want_semantics = config.get("data", {}).get(
+        "delivery_semantics", LEGACY_DELIVERY_SEMANTICS)
+    cached_semantics = cached.get(
+        "delivery_semantics", LEGACY_DELIVERY_SEMANTICS)
+    if cached_semantics != want_semantics:
+        return False
+
     # Phase 6: outcome_dist k_player / k_venue. parquet content depends
     # on these (shrinkage strength), so a k-sweep config must invalidate
     # the cache. None on either side defaults to 30/200 (matches the
@@ -170,6 +181,12 @@ def _check_sqlite_cache(config: dict) -> bool:
     except (TypeError, ValueError):
         return False
     if meta.get("same_day_order_version") != SAME_DAY_ORDER_VERSION:
+        return False
+    want_semantics = config.get("data", {}).get(
+        "delivery_semantics", LEGACY_DELIVERY_SEMANTICS)
+    cached_semantics = meta.get(
+        "delivery_semantics", LEGACY_DELIVERY_SEMANTICS)
+    if cached_semantics != want_semantics:
         return False
 
     # JSON membership + mtime check — SQLite is stale if a file was
@@ -272,6 +289,11 @@ def build_training_cmd(config: dict, feature_list: list) -> list:
         # write the sidecar (k_player / k_venue) consumed by the sim
         # wrappers at inference time.
         "outcome_dist": config.get("outcome_dist", {}),
+        "data": {
+            "version": config["data"].get("version", "v3"),
+            "delivery_semantics": config["data"].get(
+                "delivery_semantics", LEGACY_DELIVERY_SEMANTICS),
+        },
     })
 
     script_map = {
@@ -384,6 +406,16 @@ def main():
     config = load_config(args.config)
     exp_name = config["experiment"]["name"]
     model_type = config["model"]["type"]
+    data_cfg = config.get("data", {})
+    version = data_cfg.get("version", "v3")
+    delivery_semantics = data_cfg.get(
+        "delivery_semantics", LEGACY_DELIVERY_SEMANTICS)
+    if (delivery_semantics == I5_DELIVERY_SEMANTICS
+            and version in {"v2", "v3"}):
+        raise ValueError(
+            "I5 delivery semantics require an isolated data.version "
+            "(for example 'i5')"
+        )
 
     # Resolve features
     feature_list = resolve_feature_list(
@@ -418,7 +450,14 @@ def main():
             print(f"\n  Cache state: sqlite_valid={sqlite_valid}, "
                   f"parquet_valid={parquet_valid}")
 
-    cache_cmd = [sys.executable, "scripts/build_stats_cache.py"]
+    cache_cmd = [
+        sys.executable,
+        "scripts/build_stats_cache.py",
+        "--out",
+        f"models/player_stats_cache_{version}.sqlite",
+        "--delivery-semantics",
+        delivery_semantics,
+    ]
     mat_cmd = [sys.executable, "scripts/materialize_features.py",
                "--config", args.config]
     train_cmd = build_training_cmd(config, feature_list)

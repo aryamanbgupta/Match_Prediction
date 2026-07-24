@@ -46,6 +46,9 @@ from loaders_common import (
     iter_matches_chronological_multi,
 )
 from parsing_v2 import (
+    DELIVERY_SEMANTICS,
+    I5_DELIVERY_SEMANTICS,
+    LEGACY_DELIVERY_SEMANTICS,
     PlayerEloTracker,
     PlayerStatsTracker,
     VenueStatsTracker,
@@ -296,6 +299,7 @@ def freeze_priors_from_sqlite(
 def sqlite_up_to_date(
     out_path: Path,
     source_dirs: Path | Iterable[Path],
+    delivery_semantics: str = LEGACY_DELIVERY_SEMANTICS,
 ) -> bool:
     """Return True if the existing SQLite is current vs the JSON corpus.
 
@@ -320,6 +324,11 @@ def sqlite_up_to_date(
     if file_schema != SCHEMA_VERSION:
         return False
     if meta.get("same_day_order_version") != SAME_DAY_ORDER_VERSION:
+        return False
+    # Caches built before I5 are the deployed legacy contract.
+    cached_semantics = meta.get(
+        "delivery_semantics", LEGACY_DELIVERY_SEMANTICS)
+    if cached_semantics != delivery_semantics:
         return False
     if meta.get("source_dirs_json") != _source_paths_json(normalized_dirs):
         return False
@@ -346,7 +355,11 @@ def build(
     out_path: Path,
     gender: str = "male",
     metadata_csv: Path = None,
+    delivery_semantics: str = LEGACY_DELIVERY_SEMANTICS,
 ) -> None:
+    if delivery_semantics not in DELIVERY_SEMANTICS:
+        raise ValueError(
+            f"unsupported delivery semantics {delivery_semantics!r}")
     normalized_dirs = _normalize_source_dirs(source_dirs)
     t_start = time.time()
     print(f"building {out_path} from {normalized_dirs} (gender={gender})",
@@ -360,6 +373,7 @@ def build(
     )
     metadata = PlayerMetadataProvider(str(metadata_path))
 
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     if out_path.exists():
         print(f"  removing existing {out_path}", flush=True)
         out_path.unlink()
@@ -627,6 +641,7 @@ def build(
         _, _, vname, innings_details, chase_won = parse_match_data_v2(
             json_text, stats, venue, metadata,
             elo_tracker=elo, match_k_factor=k_factor,
+            delivery_semantics=delivery_semantics,
         )
 
         # --- emit match-log rows (schema v3) --------------------------
@@ -751,27 +766,33 @@ def build(
         else:
             phase_prior_pcts[phase] = tuple(c / n for c in totals)
 
-    # Aggregate sanity check: the per-phase totals are computed from
-    # innings_details (legal-only), but `total_counts` is the
-    # batting-stats sum (includes wides/noballs since update_stats is
-    # called on every delivery). They will NOT match in general — Δ
-    # equals the wide+noball count. Per-innings conservation is enforced
-    # in the loop above; here we just log the legal-only grand total
-    # for visibility, and confirm it doesn't exceed the inclusive total.
+    # Aggregate sanity check. Under I5 both tracker and phase counts use
+    # legal deliveries, so equality is mandatory. The legacy contract
+    # includes wides/no-balls in tracker counts and can only require that
+    # legal phase counts do not exceed the inclusive total.
     legal_grand_total = sum(
         sum(phase_total_counts[ph][i]
             for ph in ('powerplay', 'middle', 'death'))
         for i in range(6)
     )
     inclusive_grand_total = sum(total_counts)
-    if legal_grand_total > inclusive_grand_total:
+    if delivery_semantics == I5_DELIVERY_SEMANTICS:
+        if legal_grand_total != inclusive_grand_total:
+            raise RuntimeError(
+                f"I5 legal-ball total mismatch: phases={legal_grand_total:,} "
+                f"tracker={inclusive_grand_total:,}"
+            )
+    elif legal_grand_total > inclusive_grand_total:
         raise RuntimeError(
             f"legal-only phase total {legal_grand_total:,} exceeds "
             f"inclusive batting-stats total {inclusive_grand_total:,}"
         )
-    print(f"  legal balls (Σ over phases): {legal_grand_total:,} "
-          f"(vs {inclusive_grand_total:,} inclusive incl. wides/noballs)",
-          flush=True)
+    print(
+        f"  legal balls (Σ over phases): {legal_grand_total:,} "
+        f"(tracker total {inclusive_grand_total:,}; "
+        f"semantics={delivery_semantics})",
+        flush=True,
+    )
     print(f"  per-phase priors:", flush=True)
     for phase in ('powerplay', 'middle', 'death'):
         n = sum(phase_total_counts[phase])
@@ -785,6 +806,7 @@ def build(
         ('schema_version', str(SCHEMA_VERSION)),
         ('build_timestamp', datetime.utcnow().isoformat() + 'Z'),
         ('same_day_order_version', SAME_DAY_ORDER_VERSION),
+        ('delivery_semantics', delivery_semantics),
         ('source_dirs_json', _source_paths_json(normalized_dirs)),
         ('source_json_mtime_max', f"{source_json_mtime_max:.6f}"),
         ('source_json_file_count', str(len(source_files))),
@@ -872,20 +894,43 @@ def main() -> int:
     ap.add_argument("--metadata-csv", type=Path, default=None,
                     help="Override path to all_players_enriched.csv. "
                     "Defaults to <source-dir>/../all_players_enriched.csv")
+    ap.add_argument(
+        "--delivery-semantics",
+        choices=sorted(DELIVERY_SEMANTICS),
+        default=LEGACY_DELIVERY_SEMANTICS,
+        help=(
+            "Versioned parser/state contract. I5 uses legal_off_bat_v1; "
+            "legacy remains the safe default for deployed-model rebuilds."
+        ),
+    )
     args = ap.parse_args()
 
     gender = args.gender_filter or None
     source_dirs = [args.source_dir] + list(args.extra_source_dir)
 
-    if not args.force_rebuild and sqlite_up_to_date(args.out, source_dirs):
+    if (args.delivery_semantics == I5_DELIVERY_SEMANTICS
+            and args.out == Path("models/player_stats_cache_v3.sqlite")):
+        ap.error(
+            "I5 semantics cannot overwrite the deployed v3 cache; pass an "
+            "isolated --out such as "
+            "models/i5/player_stats_cache_i5.sqlite"
+        )
+
+    if not args.force_rebuild and sqlite_up_to_date(
+        args.out,
+        source_dirs,
+        delivery_semantics=args.delivery_semantics,
+    ):
         print(f"{args.out} is current (schema_version={SCHEMA_VERSION}, "
               f"same_day_order={SAME_DAY_ORDER_VERSION}, "
+              f"delivery_semantics={args.delivery_semantics}, "
               "source membership/mtime covered). Skipping rebuild. "
               "Use --force-rebuild to override.")
         return 0
 
     build(source_dirs, args.out, gender=gender,
-          metadata_csv=args.metadata_csv)
+          metadata_csv=args.metadata_csv,
+          delivery_semantics=args.delivery_semantics)
     if args.prior_source_sqlite:
         provenance = freeze_priors_from_sqlite(
             args.out,

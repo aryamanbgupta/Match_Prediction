@@ -705,9 +705,16 @@ class XGBoostModelV2(PredictionModel):
         self.stats_provider = wrap_with_cache(stats_provider)  # Optional stats provider for simulations
         self.player_metadata = player_metadata  # NEW: Optional player metadata for Tier 1/2/3 features
         self.ball_calibrator = ball_calibrator  # Optional ball-level calibrator
+        from pathlib import Path as _P
+        _model_path = _P(model_path)
+        _artifact_suffix = _model_path.stem.removeprefix('xgboost_model_')
 
         # NEW: Load matchup encoder if provided
         self.matchup_encoder = None
+        if matchup_encoder_path is None:
+            _me = _model_path.parent / f'matchup_encoder_{_artifact_suffix}.pkl'
+            if _me.exists():
+                matchup_encoder_path = str(_me)
         if matchup_encoder_path:
             try:
                 self.matchup_encoder = joblib.load(matchup_encoder_path)
@@ -722,8 +729,7 @@ class XGBoostModelV2(PredictionModel):
         # found → legacy behavior (venue_encoded stays 0).
         self.venue_encoder = None
         if venue_encoder_path is None:
-            from pathlib import Path as _P
-            _ve = _P(model_path).parent / 'venue_encoder_v3.pkl'
+            _ve = _model_path.parent / f'venue_encoder_{_artifact_suffix}.pkl'
             if _ve.exists():
                 venue_encoder_path = str(_ve)
         if venue_encoder_path:
@@ -766,10 +772,12 @@ class XGBoostModelV2(PredictionModel):
         # the model. Missing file → use defaults (30 / 200), preserving
         # behavior for v6 / Phase-5 artifacts that don't carry the file.
         import json as _json
-        from pathlib import Path as _Path
         self.k_player = 30.0
         self.k_venue = 200.0
-        _od_path = _Path(model_path).parent / 'outcome_dist_config_v3.json'
+        _od_path = (
+            _model_path.parent
+            / f'outcome_dist_config_{_artifact_suffix}.json'
+        )
         if _od_path.exists():
             try:
                 with open(_od_path) as _f:

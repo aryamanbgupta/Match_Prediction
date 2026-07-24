@@ -7,6 +7,7 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.utils.class_weight import compute_class_weight
 import joblib
 import argparse
+import json as _json
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Train XGBoost v3 model')
@@ -15,6 +16,17 @@ parser.add_argument('--n-trials', type=int, default=50, help='Number of Optuna t
 parser.add_argument('--config-json', type=str, default=None,
                     help='JSON config from experiment runner (overrides feature list and hyperparameters)')
 args = parser.parse_args()
+
+_config = _json.loads(args.config_json) if args.config_json else {}
+data_version = str(_config.get('data', {}).get('version', 'v3'))
+if Path(data_version).name != data_version or data_version in {'', '.', '..'}:
+    raise ValueError(f"unsafe data version: {data_version!r}")
+data_dir = Path(
+    'data/xgb_data' if data_version == 'v2'
+    else f'data/xgb_data_{data_version}'
+)
+model_dir = Path('models') / f'xgb_{data_version}'
+artifact_suffix = data_version
 
 # Best hyperparameters from previous Optuna run (v2, trial 42)
 # These will be used if --tune is not specified
@@ -29,11 +41,14 @@ DEFAULT_BEST_PARAMS = {
 }
 
 # Load split data
-# v3: Data with player metadata features (Tier 1/2/3)
-print("Loading split datasets (v3 with player metadata features)...")
-train_df = pd.read_parquet('data/xgb_data_v3/cricket_data_v3_train.parquet')
-val_df = pd.read_parquet('data/xgb_data_v3/cricket_data_v3_validation.parquet')
-test_df = pd.read_parquet('data/xgb_data_v3/cricket_data_v3_test.parquet')
+# Data with player metadata features (Tier 1/2/3).
+print(f"Loading split datasets ({data_version})...")
+train_df = pd.read_parquet(
+    data_dir / f'cricket_data_{data_version}_train.parquet')
+val_df = pd.read_parquet(
+    data_dir / f'cricket_data_{data_version}_validation.parquet')
+test_df = pd.read_parquet(
+    data_dir / f'cricket_data_{data_version}_test.parquet')
 
 print(f"Train: {len(train_df)} balls")
 print(f"Validation: {len(val_df)} balls") 
@@ -140,8 +155,6 @@ print("Encoding complete!")
 
 # Resolve feature list: from config-json or hardcoded defaults
 if args.config_json:
-    import json as _json
-    _config = _json.loads(args.config_json)
     from feature_registry import resolve_feature_list
     all_potential_features = resolve_feature_list(
         _config['features']['groups'],
@@ -319,9 +332,10 @@ if args.tune:
     best_params = study.best_params.copy()
 
     # Save study for analysis
-    Path('models/xgb_v3').mkdir(exist_ok=True)
-    joblib.dump(study, 'models/xgb_v3/optuna_study_v3.pkl')
-    print(f"Saved Optuna study to models/xgb_v3/optuna_study_v3.pkl")
+    model_dir.mkdir(parents=True, exist_ok=True)
+    study_path = model_dir / f'optuna_study_{artifact_suffix}.pkl'
+    joblib.dump(study, study_path)
+    print(f"Saved Optuna study to {study_path}")
 else:
     # Use default best params from previous run
     print("\n--- USING SAVED HYPERPARAMETERS (use --tune to re-optimize) ---")
@@ -390,7 +404,6 @@ for _, row in feature_importance.head(15).iterrows():
     print(f"  {row['feature']:25s}: {row['importance']:.4f}")
 
 # Save feature importance JSON
-import json as _json
 booster = final_model.get_booster()
 fi_data = {}
 for imp_type in ['gain', 'weight', 'cover']:
@@ -399,27 +412,33 @@ for imp_type in ['gain', 'weight', 'cover']:
     fi_data[imp_type] = {k: v / total for k, v in raw.items()}
 fi_data['feature_list'] = feature_cols
 
-Path('models/xgb_v3').mkdir(exist_ok=True)
-with open('models/xgb_v3/feature_importance.json', 'w') as f:
+model_dir.mkdir(parents=True, exist_ok=True)
+with open(model_dir / 'feature_importance.json', 'w') as f:
     _json.dump(fi_data, f, indent=2)
 print("  Saved feature_importance.json")
 
 # Save model and encoders
-# v3: Model with player metadata features (Tier 1/2/3)
-print("\nSaving model (v3)...")
-Path('models/xgb_v3').mkdir(exist_ok=True)
+# Model with player metadata features (Tier 1/2/3)
+print(f"\nSaving model ({data_version})...")
+model_dir.mkdir(parents=True, exist_ok=True)
 
-joblib.dump(final_model, 'models/xgb_v3/xgboost_model_v3.pkl')
-joblib.dump(le_batter, 'models/xgb_v3/batter_encoder_v3.pkl')
-joblib.dump(le_bowler, 'models/xgb_v3/bowler_encoder_v3.pkl')
+model_path = model_dir / f'xgboost_model_{artifact_suffix}.pkl'
+batter_encoder_path = model_dir / f'batter_encoder_{artifact_suffix}.pkl'
+bowler_encoder_path = model_dir / f'bowler_encoder_{artifact_suffix}.pkl'
+venue_encoder_path = model_dir / f'venue_encoder_{artifact_suffix}.pkl'
+joblib.dump(final_model, model_path)
+joblib.dump(le_batter, batter_encoder_path)
+joblib.dump(le_bowler, bowler_encoder_path)
+joblib.dump(le_venue, venue_encoder_path)
 
 # Save matchup encoder if it was created
 if 'le_matchup' in dir():
-    joblib.dump(le_matchup, 'models/xgb_v3/matchup_encoder_v3.pkl')
-    print("  Saved matchup_encoder_v3.pkl")
+    matchup_path = model_dir / f'matchup_encoder_{artifact_suffix}.pkl'
+    joblib.dump(le_matchup, matchup_path)
+    print(f"  Saved {matchup_path.name}")
 
 # Save feature list for consistency
-with open('models/xgb_v3/feature_columns_v3.txt', 'w') as f:
+with open(model_dir / f'feature_columns_{artifact_suffix}.txt', 'w') as f:
     for feat in feature_cols:
         f.write(f"{feat}\n")
 
@@ -427,19 +446,33 @@ with open('models/xgb_v3/feature_columns_v3.txt', 'w') as f:
 # wrappers (sim_v1_2.XGBoostModelV2.__init__) can recover them at load
 # time. Without this, a model trained on k=10 features would be
 # evaluated with the default k=30 distributions — silent drift.
-import json as _odjson
 _od_cfg_out = {'k_player': 30.0, 'k_venue': 200.0}
 if args.config_json:
     _od_yaml = _config.get('outcome_dist', {}) if '_config' in dir() else {}
     if _od_yaml:
         _od_cfg_out['k_player'] = float(_od_yaml.get('k_player', 30.0))
-        _od_cfg_out['k_venue']  = float(_od_yaml.get('k_venue', 200.0))
-with open('models/xgb_v3/outcome_dist_config_v3.json', 'w') as _f:
-    _odjson.dump(_od_cfg_out, _f, indent=2)
-print(f"  Saved outcome_dist_config_v3.json (k_player={_od_cfg_out['k_player']}, "
+        _od_cfg_out['k_venue'] = float(_od_yaml.get('k_venue', 200.0))
+od_path = model_dir / f'outcome_dist_config_{artifact_suffix}.json'
+with open(od_path, 'w') as _f:
+    _json.dump(_od_cfg_out, _f, indent=2)
+print(f"  Saved {od_path.name} (k_player={_od_cfg_out['k_player']}, "
       f"k_venue={_od_cfg_out['k_venue']})")
 
+training_contract = {
+    'data_version': data_version,
+    'delivery_semantics': _config.get('data', {}).get(
+        'delivery_semantics', 'inclusive_total_runs_v1'),
+    'train_rows': int(len(train_df)),
+    'validation_rows': int(len(val_df)),
+    'test_rows': int(len(test_df)),
+    'classes': [0, 1, 2, 4, 6, 'wicket'],
+}
+contract_path = model_dir / f'training_contract_{artifact_suffix}.json'
+with open(contract_path, 'w') as _f:
+    _json.dump(training_contract, _f, indent=2)
+print(f"  Saved {contract_path.name}")
+
 print("Training complete!")
-print(f"Model saved as: models/xgb_v3/xgboost_model_v3.pkl")
+print(f"Model saved as: {model_path}")
 print(f"Final validation log loss: {val_logloss:.4f}")
 print(f"Final test log loss: {test_logloss:.4f}")

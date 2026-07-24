@@ -78,8 +78,8 @@ def main():
                        help='JSON file containing betting odds')
     parser.add_argument('--model-type', type=str, default='xgboost', choices=['xgboost', 'lstm', 'mlp', 'mlp_v2', 'transformer', 'llm'],
                        help='Model type to use (xgboost, lstm, mlp, mlp_v2, transformer, or llm)')
-    parser.add_argument('--model-version', type=str, default='v3', choices=['v3'],
-                       help='Model version to use (v2=legacy 29 features, v3=46+ features with player metadata)')
+    parser.add_argument('--model-version', type=str, default='v3',
+                       help='Artifact version to use (for example v3 or i5)')
     parser.add_argument('--model', type=str, default=None,
                        help='Path to trained model (overrides --model-version)')
     parser.add_argument('--batter-encoder', type=str, default=None,
@@ -133,19 +133,20 @@ def main():
 
     args = parser.parse_args()
 
-    # Set model paths based on version (can be overridden by explicit args).
-    # Only v3 is supported — v2 artifacts (models/xgb/) were deleted in the
-    # 2026-04-26 cleanup. The arg is retained for forward-compat with future
-    # versions, but unknown values fall back to v3 paths.
-    if args.model_version != 'v3':
-        print(f"warning: --model-version={args.model_version!r} is unsupported; "
-              f"v2 artifacts were deleted. Falling back to v3 paths.",
-              file=sys.stderr)
-    default_model = 'models/xgb_v3/xgboost_model_v3.pkl'
-    default_batter_encoder = 'models/xgb_v3/batter_encoder_v3.pkl'
-    default_bowler_encoder = 'models/xgb_v3/bowler_encoder_v3.pkl'
-    default_feature_columns = 'models/xgb_v3/feature_columns_v3.txt'
-    stats_version = 'v3'
+    # Set model paths based on a safe artifact version; explicit paths win.
+    if (Path(args.model_version).name != args.model_version
+            or args.model_version in {'', '.', '..'}):
+        parser.error(f"unsafe --model-version {args.model_version!r}")
+    model_dir = Path('models') / f'xgb_{args.model_version}'
+    default_model = str(
+        model_dir / f'xgboost_model_{args.model_version}.pkl')
+    default_batter_encoder = str(
+        model_dir / f'batter_encoder_{args.model_version}.pkl')
+    default_bowler_encoder = str(
+        model_dir / f'bowler_encoder_{args.model_version}.pkl')
+    default_feature_columns = str(
+        model_dir / f'feature_columns_{args.model_version}.txt')
+    stats_version = args.model_version
 
     model_path = args.model or default_model
     batter_encoder_path = args.batter_encoder or default_batter_encoder
@@ -194,7 +195,7 @@ def main():
 
     # Load player metadata (needed for LSTM and v3 features)
     player_metadata = None
-    if args.model_type == 'lstm' or args.model_version == 'v3':
+    if args.model_type in {'xgboost', 'lstm'}:
         print("\nLoading player metadata...")
         try:
             player_metadata = PlayerMetadataProvider('data/all_players_enriched.csv')
@@ -209,8 +210,10 @@ def main():
         if args.ball_calibrate_data:
             _ball_cal_data_path = args.ball_calibrate_data
         else:
-            # Only v3 parquet exists post-2026-04-26; v2 was deleted.
-            _ball_cal_data_path = 'data/xgb_data_v3/cricket_data_v3_validation.parquet'
+            _ball_cal_data_path = (
+                f'data/xgb_data_{args.model_version}/'
+                f'cricket_data_{args.model_version}_validation.parquet'
+            )
 
         if not Path(_ball_cal_data_path).exists():
             print(f"\nWarning: Validation data not found at {_ball_cal_data_path}")

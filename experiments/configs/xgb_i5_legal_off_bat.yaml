@@ -1,0 +1,59 @@
+experiment:
+  name: "xgb_i5_legal_off_bat"
+  description: "Isolated v7 rebuild on legal-delivery, off-the-bat I5 labels and state"
+  tags: ["xgboost", "i5", "legal_ball", "off_bat_runs", "extras"]
+
+data:
+  version: "i5"
+  delivery_semantics: "legal_off_bat_v1"
+  test_dir: "data/polymarket_test"
+  odds_file: "betting_odds_polymarket.json"
+
+features:
+  groups:
+    - basic
+    - player_stats
+    - h2h
+    - momentum
+    - pressure
+    - chase
+    - medium
+    - player_metadata
+    - matchup
+    - type_based
+    - team_strength
+    - batter_outcome_dist
+    - bowler_outcome_dist
+    - batter_vs_type_dist
+    - bowler_vs_hand_dist
+    - venue_outcome_dist
+    - phase_outcome_dist
+  exclude: []
+  include_extra: []
+
+model:
+  type: "xgboost"
+  hyperparameters:
+    n_estimators: 444
+    max_depth: 10
+    learning_rate: 0.24036372383981375
+    subsample: 0.8776663421127178
+    colsample_bytree: 0.7424085095268674
+    reg_alpha: 0.8503122682099661
+    reg_lambda: 0.18186045420525845
+  tune: false
+  tune_trials: 50
+
+outcome_dist:
+  k_player: 30.0
+  k_venue: 200.0
+
+evaluation:
+  n_sims: 100
+  parallel: false
+  bootstrap_resamples: 1000
+
+pipeline:
+  skip_parsing: false
+  skip_training: false
+  skip_evaluation: false
