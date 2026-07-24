@@ -136,10 +136,10 @@ bet flat, mismatch >5 require edge>10%) **+36.93%/109 bets** — ΔROI **+15.03p
 total profit 36.79→40.25u, ROI CI lo +2.28→+12.06. The 59 dropped mismatch/
 low-edge bets are a net-losing subset (−5.86% ROI), reproducing M8's
 over-confidence-on-lopsided finding. 100k directionally consistent
-(+26.39→+35.86%, CI lo −0.99 at n=72). Recommended production sizing becomes
-slice-conditional (wiring into a live betting harness is human follow-up;
-`predict_fixture.py` only emits probabilities). Kept commit. C-series candidate:
-stack on A4's logit-avg (orthogonal — probability ensemble × bet filter). See
+(+26.39→+35.86%, CI lo −0.99 at n=72). The slice-conditional rule is now wired
+into `predict_fixture.py` by I10 as a ≥$50k shadow-only policy; it does not
+authorize execution. Kept commit. C-series candidate: stack on A4's logit-avg
+(orthogonal — probability ensemble × bet filter). See
 `research/reports/auto/A7.md`.
 
 **I3 revision (2026-07-23):** A7 remains the fixed forward betting policy, but
@@ -1575,12 +1575,22 @@ Debutants start at exactly 1500 with K as low as 1.0 (domestic); add a
 provisional high-K warm-up (or uncertainty-scaled K) so new signings don't
 sit at the mean for a season. Full cache rebuild + retrain.
 
-## I10 [INTERACTIVE] Live-fixture operational hardening (`predict_fixture.py`)
-Staleness guard + snapshot-refresh path (trackers frozen 2025-06-30 /
-SQLite 2026-04-16 silently degrade live features); unknown-player handling
-stays a soft warning per user decision (no hard fail); wire the A7
-slice-conditional sizing rule into the live betting path; judge forward
-results against the seed-tempered ~+16% ROI, not the +21.9% headline.
+## I10 [DONE 2026-07-24] Live-fixture operational hardening (`predict_fixture.py`)
+Live prediction now inspects SQLite/tracker coverage before provider/model
+loading, requires matching source counts, and fails when either state
+component is more than 14 days behind the fixture. A diagnostic stale override
+is explicit and suppresses betting. Multiple tracker source pools merge under
+the I6 order, so the consumed forward sidecar (9,920 matches through
+2026-07-13) and future live-only caches have a supported non-destructive path.
+Unknown players remain a soft warning.
+
+A7 now uses normalized two-team market probabilities, the exact frozen
+`|elo_diff| <= 5` positive-edge / `>5` edge>10pp rule, and requires ≥$50k
+volume. It is deliberately shadow-only (`execution_authorized=false`,
+`bet_team=null`) because the forward economic decision did not confirm;
+stale state, missing liquidity, and boundary failures suppress the shadow
+candidate. Ten focused tests cover freshness, source mismatch, odds
+normalization, strict boundaries, liquidity, and stale-state suppression.
 
 ## I11 [DONE 2026-07-16] Sim micro-hygiene (`sim_v1_2.py`, two-liners)
 `if config.random_seed:` / `if seed:` treat seed 0 as unseeded (:3657,

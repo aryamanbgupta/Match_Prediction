@@ -35,6 +35,14 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
    economic performance unconfirmed. See
    `reports/i3_eval_statistics_hardening.md`.
 
+   **Frozen forward result (2026-07-23):** on the preregistered ≥$50k slice,
+   M7 LL is **0.6823** versus market 0.7445 and ball-v7 0.7015, so probability
+   confirmation passed. M7 A7 returned +96.72%, but its block interval is
+   [-3.29%, +623.85%] across only five betting blocks, so economic
+   confirmation failed. Removing the only two winners priced below 25% leaves
+   M7 LL 0.6654 versus market 0.6824 and M7 A7 ROI +20.04%. See
+   `reports/forward_evaluation_2026-06-01_2026-07-13.md`.
+
    **Frozen vs unfrozen tracker semantics**: previous diagnostic claimed
    frozen-mode trackers (snapshot at val/test boundary, no within-test
    updates) outperformed unfrozen on every slice. After the leakage fix
@@ -116,10 +124,12 @@ Eval sets:
   Constructed from the separate strict Polymarket extractor with every
   quote strictly before explicit scheduled start, exact H2H-only markets,
   male-T20 Cricsheet joins, outcome-blind selection, provenance hashes,
-  and zero overlap with older pools. **No model has been scored on it.**
-  Do not open it until candidate models, A7 betting policy, metrics, slices,
-  and the one-time decision rule are frozen. See
-  `docs/FORWARD_HOLDOUT.md`.
+  and zero overlap with older pools. The protocol was frozen before scoring;
+  both outcome-free prediction artifacts and the post-lock report are
+  checksummed and committed. This set is now consumed and must never be used
+  for fitting, calibration, threshold selection, or candidate selection. See
+  `docs/FORWARD_HOLDOUT.md` and
+  `reports/forward_evaluation_2026-06-01_2026-07-13.md`.
 
 Use `--min-volume {50000,100000}` to slice either set for sharp markets.
 
@@ -163,19 +173,17 @@ uv run python scripts/sim_eval/blend_report.py \
 
 # === Predict an upcoming fixture ===
 # Hand-write fixtures/<match>.json (see fixtures/_template.json), then:
-uv run python scripts/predict_fixture.py --fixture fixtures/<match>.json
-# First run takes ~7s (builds tracker_snapshot_test_end.pkl from t20s_json
-# only — golden data NOT included). Subsequent sub-second. Per-fixture
-# unfrozen rehydration: SQLite + tracker queries use as-of fixture_date,
-# falling back to test_end (2026-04-16) for fixtures past that. Pass
-# --rebuild-snapshot if data/t20s_json grows.
-#
-# For a fixture well past 2026-04-16 where the stale cache matters
-# (recent-form / current-season player ELOs missing), use the
-# non-destructive duplicate workflow instead — it refreshes inputs in
-# tmp/golden_inclusive/ without touching the train/eval-frozen
-# production cache. See docs/OPERATIONS.md § "Operation 6: Predict an
-# upcoming fixture (live)" for the four-step recipe.
+uv run python scripts/predict_fixture.py \
+  --fixture fixtures/<match>.json \
+  --state-dir data/forward_state/2026-06-01_2026-07-13 \
+  --tracker-snapshot tmp/live_state/tracker_snapshot_2026-07-13.pkl \
+  --tracker-source-dir data/t20s_json \
+  --tracker-source-dir \
+    data/forward_holdout/2026-06-01_2026-07-13/context_t20s_json
+# Add --rebuild-snapshot once if that matching snapshot does not exist.
+# The default 2026-04-16 production state now fails when >14 days stale.
+# A7 output is ≥$50k, exact-policy, shadow-only, and never authorizes
+# execution. See docs/OPERATIONS.md § "Operation 6".
 
 # === Golden eval refresh (after new polymarket capture + cricsheet refresh) ===
 # 1. Pull new T20 cricsheet JSONs from stat-generator (date >= 2026-04-17):

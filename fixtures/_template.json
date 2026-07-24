@@ -1,5 +1,5 @@
 {
-  "_comment": "Template for a single-fixture prediction input. Lineup entries can be cricsheet 8-char IDs (e.g. 'fc2fffb5') or display names (e.g. 'Virat Kohli'). Names are resolved against data/all_players_enriched.csv. polymarket_odds is optional — provide decimal odds for both teams to get an edge + bet recommendation.",
+  "_comment": "Template for a single-fixture prediction input. Lineup entries can be cricsheet 8-char IDs (e.g. 'fc2fffb5') or display names (e.g. 'Virat Kohli'). Names are resolved against data/all_players_enriched.csv. Provide exact-team decimal odds plus polymarket_volume_usd for a liquidity-gated A7 shadow decision. Execution is never authorized by this script.",
   "date": "2026-05-10",
   "team1": "Chennai Super Kings",
   "team2": "Royal Challengers Bengaluru",
@@ -37,5 +37,6 @@
   "polymarket_odds": {
     "Chennai Super Kings": 1.95,
     "Royal Challengers Bengaluru": 1.88
-  }
+  },
+  "polymarket_volume_usd": 75000.0
 }

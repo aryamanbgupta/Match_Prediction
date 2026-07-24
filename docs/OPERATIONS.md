@@ -1248,60 +1248,78 @@ uv run python scripts/predict_fixture.py --fixture fixtures/<id>.json
 
 Lineup entries may be either cricsheet 8-char IDs or display names
 (names are resolved against `data/all_players_enriched.csv`).
-Polymarket odds are optional; when provided the script also reports
-edge and bet recommendation. The standing A7 forward policy is flat one-unit
-staking, betting all close fixtures (`|elo_diff| <= 5`) and requiring model
-edge strictly above 10% on mismatch fixtures. Historical economic confidence
-is unconfirmed under I3 competition-block resampling; keep this policy fixed
-for forward evaluation rather than retuning it.
+Unknown players remain a soft warning. Polymarket odds are optional, but an
+A7 shadow candidate requires exact-team decimal odds and
+`polymarket_volume_usd`.
 
-**The 2026-04-16 staleness caveat.** `predict_fixture.py` uses the
-production SQLite cache (`models/player_stats_cache_v3.sqlite`) +
-tracker snapshot from `data/t20s_json`, both deliberately frozen at
-test_end (2026-04-16) to keep the iteration / golden eval sets
-out-of-sample. For a fixture past that date, all per-player ELOs,
-recent-form, and venue trackers see only pre-cutoff history. This
-is fine for short-horizon fixtures but can materially shift the
-number on longer-horizon ones (e.g. RR vs GT IPL 2026 Qualifier 2,
-2026-05-29: stale cache gave RR 67.2%, post-refresh through
-2026-05-24 gave RR 56.5% — recent-form was the missing signal).
+**State guard.** The predictor reads the maximum SQLite date and tracker
+snapshot `as_of` date before loading the provider or model. It also requires
+their source-match counts to agree. By default it fails when either component
+is more than 14 days behind the fixture. State newer than the fixture is safe:
+all feature and tracker queries remain filtered by the fixture date.
 
-**Refreshed-state prediction (non-destructive).** To predict with
-post-cutoff data without contaminating the held-out train/eval
-artifacts, use the duplicate workflow in `tmp/golden_inclusive/`:
+The default production SQLite and snapshot end on 2026-04-16, so they now
+fail loudly for later live fixtures instead of silently falling back. For a
+diagnostic probability only, `--allow-stale-state` bypasses the age failure,
+marks the output `stale_override`, and suppresses every A7 shadow candidate.
+
+**Current chronology-safe state.** The consumed forward sidecar covers
+completed matches through 2026-07-13 without changing the production cache.
+Build its matching tracker snapshot once and predict with:
 
 ```bash
-# 1. Pull new T20 cricsheet JSONs from stat-generator into the
-#    golden pool. Skips anything already in data/t20s_json (the
-#    frozen local pool) — never mutates it.
-uv run python scripts/extract_golden_cricsheet.py
-
-# 2. Sync new golden files into the tmp combined pool that feeds
-#    the duplicate SQLite cache.
-cp -n data/golden/t20s_json/*.json tmp/golden_inclusive/t20s_combined/
-
-# 3. Rebuild the duplicate SQLite cache (~7 min). The production
-#    cache at models/player_stats_cache_v3.sqlite is left alone.
-uv run python scripts/build_stats_cache.py \
-    --source-dir tmp/golden_inclusive/t20s_combined \
-    --out tmp/golden_inclusive/player_stats_cache_v3.sqlite \
-    --metadata-csv data/all_players_enriched.csv \
-    --force-rebuild
-
-# 4. Predict, rebuilding the combined tracker snapshot in the
-#    process. Same production model (xgb_match_v3_m7_production);
-#    only the feature inputs are refreshed, no retrain.
-uv run python tmp/golden_inclusive/predict_with_refreshed_state.py \
-    --fixture fixtures/<id>.json --rebuild-snapshot
+uv run python scripts/predict_fixture.py \
+  --fixture fixtures/<id>.json \
+  --state-dir data/forward_state/2026-06-01_2026-07-13 \
+  --tracker-snapshot tmp/live_state/tracker_snapshot_2026-07-13.pkl \
+  --tracker-source-dir data/t20s_json \
+  --tracker-source-dir \
+    data/forward_holdout/2026-06-01_2026-07-13/context_t20s_json \
+  --rebuild-snapshot
 ```
 
-Outputs land in `tmp/golden_inclusive/predictions/`. Drop
-`--rebuild-snapshot` on subsequent runs against the same data state.
+Drop `--rebuild-snapshot` on subsequent runs against the same source state.
+The SQLite and tracker must both report 9,920 source matches.
+
+**Future non-destructive refresh.** Put newly completed Cricsheet matches in a
+separate non-overlapping directory, then build a new live-only cache:
+
+```bash
+uv run python scripts/build_stats_cache.py \
+  --source-dir data/t20s_json \
+  --extra-source-dir \
+    data/forward_holdout/2026-06-01_2026-07-13/context_t20s_json \
+  --extra-source-dir <new_context_dir> \
+  --out tmp/live_state/player_stats_cache_v3.sqlite \
+  --metadata-csv data/all_players_enriched.csv \
+  --prior-source-sqlite models/player_stats_cache_v3.sqlite \
+  --force-rebuild
+
+uv run python scripts/predict_fixture.py \
+  --fixture fixtures/<id>.json \
+  --state-dir tmp/live_state \
+  --tracker-snapshot tmp/live_state/tracker_snapshot.pkl \
+  --tracker-source-dir data/t20s_json \
+  --tracker-source-dir \
+    data/forward_holdout/2026-06-01_2026-07-13/context_t20s_json \
+  --tracker-source-dir <new_context_dir> \
+  --rebuild-snapshot
+```
 
 The discipline: never add post-2026-04-16 files to `data/t20s_json`
 or rebuild `models/player_stats_cache_v3.sqlite` in place. Doing
 so contaminates the iteration + golden test sets that document the
 production model's ROI numbers.
+
+**A7 output is shadow-only.** Odds are normalized to two-team fair
+probabilities. The frozen rule requires positive edge for
+`|top6_batting_elo_diff| <= 5` and edge strictly above 10 percentage points
+when the absolute difference is greater than 5. The live path additionally
+requires volume at least $50,000, matching the confirmed probability slice.
+Output always has `execution_authorized: false` and `bet_team: null`; a
+qualifying observation is recorded under `shadow_bet_*`. This remains the
+contract until a future window supplies at least ten independent betting
+blocks and economically confirms the policy.
 
 ---
 
