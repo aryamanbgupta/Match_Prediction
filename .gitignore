@@ -32,6 +32,9 @@ venv/
 .vscode/
 .idea/
 
+# Local Glassbox agent/runtime state
+.glassbox/
+
 # Database
 *.db
 *.sqlite3
