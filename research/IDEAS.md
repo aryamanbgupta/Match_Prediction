@@ -1620,3 +1620,23 @@ consider the analogous expected-balls × rate count-model upgrade for
 (E2/E5 reports, CLAUDE.md prop-framework paragraph) after the bar moves;
 sim-gate guard families that reference "margin vs fair baseline" keep
 meaning only relative to the bar version in force.
+
+## I14 [INTERACTIVE] Physical venue context: dimensions, altitude, and seasonal weather
+The learned venue ID embedding has to infer physical ground characteristics
+from match outcomes alone and cannot generalize those characteristics to a
+new or renamed venue. Build a canonical venue registry with latitude,
+longitude, altitude, and sourced boundary geometry (straight and square
+distances, ideally ranges plus observation date). Boundary ropes move between
+matches, so dimensions must carry provenance and uncertainty rather than be
+treated as timeless exact constants. Add monthly climate normals for
+temperature, humidity/dew point, wind, and precipitation; keep actual
+match-day forecasts/observations as a separate time-indexed feature to avoid
+mixing climatology with information that was unavailable at prediction time.
+
+At modeling time, concatenate normalized physical/context features with the
+learned venue embedding instead of attempting to encode continuous values as
+venue IDs. Test whether this improves unseen/low-history venue performance,
+six/four rates, innings totals, and chase calibration. Prerequisites: I7 venue
+canonicalization, source/licensing audit, missing-value indicators, and an
+as-of join test. Gate on grouped-by-venue holdout performance so repeated
+matches at major grounds cannot hide regressions at sparse venues.
