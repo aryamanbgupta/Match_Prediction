@@ -19,9 +19,9 @@ uv run python scripts/forward_eval_contract.py \
   evaluation/forward_protocol_2026-06-01_2026-07-13.yaml
 ```
 
-Adding `--require-frozen` must fail until scoring-code hashes and explicit
-user approval are recorded. I3, I6, both scorers, the outcome/reporting
-tests, and ball-v7 same-day replay are complete.
+Adding `--require-frozen` must fail until explicit user approval is recorded.
+I3, I6, both scorers, the outcome/reporting tests, ball-v7 same-day replay,
+and the scoring-code hash manifest are complete.
 
 The M7 adapter is `scripts/score_forward_match_m7.py`. It reads only the
 declared feature columns plus fixture identity from the sidecar parquet;
@@ -91,6 +91,19 @@ I3 statistics prerequisite (complete 2026-07-23):
   120 days; missing event metadata falls back to unordered team pair/season;
 - bet placement is explicit and independent of realized P&L;
 - fewer than 10 betting blocks is descriptive, not confirmatory.
+
+Scoring-code prerequisite (complete 2026-07-23):
+
+- manifest contract: `scoring_code_sha256_v1`;
+- 17 files are pinned in the machine-readable protocol, including both
+  scorers, the post-lock evaluator, replay/stat/parser dependencies, preflight
+  verifiers, shared I3 statistics, `pyproject.toml`, and `uv.lock`;
+- model-free preflight recomputes every hash and reports
+  `scoring_code_artifacts_verified: 17`;
+- `scripts/sim_v1_2.py` remains separately pinned as a ball-v7 candidate
+  artifact;
+- any code or environment-lock change now fails preflight before a model can
+  load.
 
 ## Candidates
 
@@ -253,10 +266,10 @@ All must be complete before scoring:
    its current date-only SQLite query is insufficient by itself. The separate
    post-lock evaluator also tests strict A7 boundaries, explicit bet placement,
    unresolved-result inventory, checksum tampering, and write-once reports.
-4. The sidecar cache is hashed. The scoring code and final protocol must be
-   hashed after I3. Any transient/per-match state artifact introduced for the
-   ball-simulation replay must be generated from the sealed context, verified,
-   and hashed as well.
+4. **COMPLETE:** The sidecar cache and 17-file scoring path are hashed. The
+   transient ball state is in memory only and is deterministically generated
+   from the sealed context; no mutable replay artifact or SQLite copy is
+   written.
 5. The user explicitly approves this protocol. At that point change this
    status from DRAFT to FROZEN before the first model run.
 

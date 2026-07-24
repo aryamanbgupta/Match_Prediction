@@ -423,6 +423,12 @@ completed match, and never writes to the sidecar SQLite.
 The evaluator runs only after both prediction files are locked; that is the
 first point where realized outcomes and odds enter the workflow.
 
+The protocol also pins a 17-file `scoring_code_sha256_v1` manifest covering
+the full executable path and locked Python environment. The model-free
+preflight verifies it on every run. While status is `DRAFT`, explicit user
+approval is the sole remaining blocker and all three commands above still
+fail closed.
+
 **Parity guarantee**: `scripts/tests/test_phase_a_parity.py` validates that this two-step pipeline produces bit-exact parquet output vs the original monolith across all 9,519 matches. The harness now also passes π into both reference and candidate paths so the 42 outcome-distribution columns are checked column-by-column.
 
 **Temporal Splits** (`scripts/loaders_common.py:DEFAULT_SPLITS`, override via

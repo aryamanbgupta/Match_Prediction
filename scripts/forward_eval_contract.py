@@ -31,6 +31,7 @@ REQUIRED_OPENING_CONDITIONS = (
     "scoring_code_hashes_recorded",
     "user_approved",
 )
+SCORING_CODE_MANIFEST_VERSION = "scoring_code_sha256_v1"
 
 
 def sha256_file(path: Path) -> str:
@@ -110,6 +111,36 @@ def _verify_artifacts(protocol: dict[str, Any]) -> list[dict[str, str]]:
     return verified
 
 
+def _verify_scoring_code(
+    protocol: dict[str, Any],
+) -> list[dict[str, str]]:
+    manifest = protocol.get("scoring_code") or {}
+    if manifest.get("manifest_version") != SCORING_CODE_MANIFEST_VERSION:
+        raise RuntimeError("missing/unsupported scoring-code manifest")
+    artifacts = manifest.get("artifacts") or []
+    if not artifacts:
+        raise RuntimeError("scoring-code manifest is empty")
+
+    verified: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for artifact in artifacts:
+        relative = str(artifact.get("path") or "")
+        expected_hash = str(artifact.get("sha256") or "")
+        if relative in seen:
+            raise RuntimeError(f"duplicate scoring-code artifact: {relative}")
+        seen.add(relative)
+        path = repo_path(relative)
+        if not path.is_file():
+            raise RuntimeError(f"missing scoring-code artifact: {relative}")
+        actual_hash = sha256_file(path)
+        if actual_hash != expected_hash:
+            raise RuntimeError(
+                f"scoring-code hash mismatch: {relative}"
+            )
+        verified.append({"path": relative, "sha256": actual_hash})
+    return verified
+
+
 def preflight(protocol_path: Path, require_frozen: bool = False) -> dict[str, Any]:
     """Verify the protocol and return a model-free preflight report."""
     protocol_path = protocol_path.resolve()
@@ -160,6 +191,7 @@ def preflight(protocol_path: Path, require_frozen: bool = False) -> dict[str, An
         raise RuntimeError("state SQLite hash differs from protocol")
 
     verified_artifacts = _verify_artifacts(protocol)
+    verified_scoring_code = _verify_scoring_code(protocol)
     opening = protocol.get("opening_conditions") or {}
     missing_conditions = [
         name for name in REQUIRED_OPENING_CONDITIONS
@@ -195,6 +227,7 @@ def preflight(protocol_path: Path, require_frozen: bool = False) -> dict[str, An
         "selected_matches": holdout_report["selected_matches"],
         "liquidity_slices": live_slices,
         "candidate_artifacts_verified": len(verified_artifacts),
+        "scoring_code_artifacts_verified": len(verified_scoring_code),
         "opening_condition_blockers": missing_conditions,
         "scoring_allowed": scoring_allowed,
         "model_imports_performed": False,

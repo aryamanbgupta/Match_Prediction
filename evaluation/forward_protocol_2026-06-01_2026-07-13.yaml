@@ -70,6 +70,44 @@ candidates:
       - path: scripts/sim_v1_2.py
         sha256: f20aef46e9a1d6511f28fa8ec84b061406a9c868444b578234a49ba4205c6433
 
+scoring_code:
+  manifest_version: scoring_code_sha256_v1
+  artifacts:
+    - path: pyproject.toml
+      sha256: 8763222734ae5d10ccea54d536a3598936a5e44f508aa59209eb108586258d0a
+    - path: uv.lock
+      sha256: a2ab1b54a5056cb38a1d5d8446dcec8fcef64e869b79a2cd0989565f8e2f4079
+    - path: scripts/calibration.py
+      sha256: f79e511200422bed25e9db7bc9f2a91a278901664a6c40460527b7b0b22b9445
+    - path: scripts/evaluate_forward_predictions.py
+      sha256: bf4953b294c336de0c5a063d63f8ef464db75f083801d465ef5a367d45c2ebb9
+    - path: scripts/forward_eval_contract.py
+      sha256: 625a78fe1d98902482fd483e2dab86e33b9f026b1563cd87526ab7a24bb30837
+    - path: scripts/loaders_common.py
+      sha256: dc2e6d05554024c9ecdf00e952904320af935ff3bb3f646e142df21a524b3594
+    - path: scripts/parsing_v2.py
+      sha256: 1de4e4960c1387232e2765cfde9137ba4e59fe2c2f2bb12f026dfff18e01795a
+    - path: scripts/player_metadata.py
+      sha256: ba94410137b1483996a9fed3f20d1cf925072f1a00bb3cda914914d938b24181
+    - path: scripts/score_forward_ball_v7.py
+      sha256: dad03eb1b214bb10062baf8d111f09ca00e5a6f9c7e1d14f28efac0d17c196d4
+    - path: scripts/score_forward_match_m7.py
+      sha256: 3328b48c3f86960e7d0c47946c8e1daefdaa4699012c9dfde1e517e575a7f445
+    - path: scripts/sim_eval/eval_statistics.py
+      sha256: dfd1a10279cf71e42e3096e91141913fbb423702a0281aab87952645fdff578f
+    - path: scripts/sim_eval/same_day_stats.py
+      sha256: 45a953f34e8758ba8d0be45b1bd1ac7edcc5b9e5b22a4973eaebebd33e36d392
+    - path: scripts/stats_provider.py
+      sha256: 91df04fdf9d87f21cd69589e2fde87b5543777d7b44e7cc7592e1d91211273b1
+    - path: scripts/stats_sqlite_backend.py
+      sha256: b9758a27d7d1826e9631edbb23bc0434f789254b07678a0a0f5a5a78e8cb1ccd
+    - path: scripts/tracker_rehydration.py
+      sha256: 615a7d2d0a3eea47b2b54aab9a535f418cae50396d077e818f7f166ed4ae41f3
+    - path: scripts/verify_forward_holdout.py
+      sha256: cc240ec74653cc5f4f2a57be9f660fcccb79e75b49732f6d61e49189c545ee07
+    - path: scripts/verify_forward_state.py
+      sha256: c60f3c86ccd71e7cce444b65b8a0164de274d4562dce69dce8d37fddc2b6a5bf
+
 betting_policies:
   flat:
     stake_units: 1.0
@@ -102,5 +140,5 @@ opening_conditions:
   i6_complete: true
   scorer_tests_complete: true
   ball_same_day_replay_complete: true
-  scoring_code_hashes_recorded: false
+  scoring_code_hashes_recorded: true
   user_approved: false

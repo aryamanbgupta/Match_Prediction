@@ -194,8 +194,8 @@ Before any model probabilities are scored, freeze and document:
 The proposed choices and current artifact hashes are in
 `docs/FORWARD_EVALUATION_PROTOCOL_DRAFT.md`. It is deliberately marked DRAFT:
 I3, I6, both scorers, post-lock reporting, and ball same-day replay are
-complete, but review and freeze it only after scoring-code hashes are
-recorded.
+complete. The 17-file `scoring_code_sha256_v1` manifest is also recorded and
+verified. Explicit user approval is the only remaining opening condition.
 
 The tracked machine-readable contract is
 `evaluation/forward_protocol_2026-06-01_2026-07-13.yaml`. Its model-free

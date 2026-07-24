@@ -34,11 +34,11 @@ def test_draft_preflight_verifies_everything_without_scoring():
         "min_volume_100000": 30,
     }
     assert report["candidate_artifacts_verified"] == 14
+    assert report["scoring_code_artifacts_verified"] == 17
     assert report["scoring_allowed"] is False
     assert report["model_imports_performed"] is False
     assert report["model_scoring_performed"] is False
     assert report["opening_condition_blockers"] == [
-        "scoring_code_hashes_recorded",
         "user_approved",
     ]
 
@@ -79,4 +79,16 @@ def test_tampered_fingerprint_is_rejected(tmp_path: Path):
     )
     tampered.write_text(text)
     with pytest.raises(RuntimeError, match="holdout fingerprint"):
+        preflight(tampered)
+
+
+def test_tampered_scoring_code_hash_is_rejected(tmp_path: Path):
+    tampered = tmp_path / "protocol.yaml"
+    text = PROTOCOL.read_text().replace(
+        "625a78fe1d98902482fd483e2dab86e33b9f026b1563cd87526ab7a24bb30837",
+        "0" * 64,
+        1,
+    )
+    tampered.write_text(text)
+    with pytest.raises(RuntimeError, match="scoring-code hash mismatch"):
         preflight(tampered)
