@@ -155,9 +155,14 @@ without that replay is prohibited.
 that contract. It reads only `info` fields before prediction, requires an
 evaluated prediction to be locked before delivery replay, advances the
 rehydrated trackers in memory, and invalidates the simulation stats memo after
-every match. It never writes the sidecar. The ball scorer that orchestrates
-this layer is still pending, so the machine-readable replay opening condition
-remains false.
+every match. It never writes the sidecar.
+
+`scripts/score_forward_ball_v7.py` orchestrates that layer behind the frozen
+gate. It uses only ordered `info.players` rosters to create pre-match states,
+scores selected fixtures before replay, and advances all 401 context fixtures
+in the I6 order. Its model-free inventory and synthetic chronology tests pass,
+so the replay opening condition is complete. Do not run it on the sealed set
+while the protocol remains `DRAFT`.
 
 `scripts/score_forward_match_m7.py` implements the direct-model half behind
 the frozen-protocol gate. Its parquet projection excludes target/outcome
@@ -178,8 +183,8 @@ Before any model probabilities are scored, freeze and document:
 
 The proposed choices and current artifact hashes are in
 `docs/FORWARD_EVALUATION_PROTOCOL_DRAFT.md`. It is deliberately marked DRAFT:
-I3 and I6 are complete, but review and freeze it only after the scorer tests
-and ball-simulation same-day replay guard are complete.
+I3, I6, and ball same-day replay are complete, but review and freeze it only
+after the remaining scorer tests and scoring-code hashes are complete.
 
 The tracked machine-readable contract is
 `evaluation/forward_protocol_2026-06-01_2026-07-13.yaml`. Its model-free

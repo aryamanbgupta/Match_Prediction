@@ -39,7 +39,6 @@ def test_draft_preflight_verifies_everything_without_scoring():
     assert report["model_scoring_performed"] is False
     assert report["opening_condition_blockers"] == [
         "scorer_tests_complete",
-        "ball_same_day_replay_complete",
         "scoring_code_hashes_recorded",
         "user_approved",
     ]

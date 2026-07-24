@@ -43,6 +43,9 @@ candidates:
     random_seed: 43
     bowler_selector: empirical
     ball_calibration: vector
+    parallel_simulation: false
+    lineup_contract: info_players_roster_order_only_v1
+    winner_probability_postprocess: exclude_ties_clip_0.05_0.95_renormalize_v1
     artifacts:
       - path: models/xgb_v3/xgboost_model_v3.pkl
         sha256: 5400df329221d8a85f36eea793821459c39bd9fbd35a30d72e6f3900d3d491ac
@@ -98,6 +101,6 @@ opening_conditions:
   i3_complete: true
   i6_complete: true
   scorer_tests_complete: false
-  ball_same_day_replay_complete: false
+  ball_same_day_replay_complete: true
   scoring_code_hashes_recorded: false
   user_approved: false

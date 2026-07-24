@@ -19,8 +19,9 @@ uv run python scripts/forward_eval_contract.py \
   evaluation/forward_protocol_2026-06-01_2026-07-13.yaml
 ```
 
-Adding `--require-frozen` must fail until scorer tests, ball same-day replay,
-scoring-code hashes, and explicit user approval are all recorded.
+Adding `--require-frozen` must fail until the remaining scorer tests,
+scoring-code hashes, and explicit user approval are all recorded. The
+ball-v7 same-day replay condition is complete.
 
 The M7 adapter is `scripts/score_forward_match_m7.py`. It reads only the
 declared feature columns plus fixture identity from the sidecar parquet;
@@ -33,6 +34,15 @@ is `DRAFT`, it fails before importing `joblib`:
 uv run python scripts/score_forward_match_m7.py \
   evaluation/forward_protocol_2026-06-01_2026-07-13.yaml \
   --out forward_eval_out/2026-06-01_2026-07-13/match_m7_predictions.json
+```
+
+The corresponding ball-v7 command is also gated before any simulation or
+model import:
+
+```bash
+uv run python scripts/score_forward_ball_v7.py \
+  evaluation/forward_protocol_2026-06-01_2026-07-13.yaml \
+  --out forward_eval_out/2026-06-01_2026-07-13/ball_v7_predictions.json
 ```
 
 Sealed dataset facts:
@@ -99,9 +109,12 @@ expected to replace the direct match model on match-winner log loss.
 | experiment config | `46a8ec24771648a89c689b74ca06aa31f909b33e8900884e7ec29b2912f1ff99` |
 | `scripts/sim_v1_2.py` | `f20aef46e9a1d6511f28fa8ec84b061406a9c868444b578234a49ba4205c6433` |
 
-Proposed simulation recipe: 100 simulations per fixture, fixed seed 43,
-phase-aware empirical bowler selector, vector ball calibration, and current
-venue-aware/default D15 simulation behavior.
+Frozen-candidate simulation recipe: 100 sequential simulations per fixture,
+fixed seed 43, phase-aware empirical bowler selector, vector ball
+calibration, and current venue-aware/default D15 simulation behavior. Team
+orientation and batting order come only from the ordered
+`info.players[team]` rosters. Winner probabilities exclude simulated ties,
+then apply the landed evaluator's 5–95% clipping and renormalization.
 
 The transient statistics layer is
 `scripts/sim_eval/same_day_stats.py`. At the start of each date it rehydrates
@@ -119,9 +132,17 @@ fixtures cannot. Dates must increase, same-day match IDs must increase, and a
 failed replay restores the pre-replay tracker state. The layer subclasses the
 existing stats memo wrapper so the simulation engine cannot accidentally wrap
 it in a second, stale cache. The sealed SQLite file remains read-only; its
-verified hash is unchanged. This component is implemented and tested, but the
-protocol's `ball_same_day_replay_complete` opening condition remains false
-until the frozen-gated ball scorer is connected and tested end to end.
+verified hash is unchanged.
+
+`scripts/score_forward_ball_v7.py` connects this layer to the pinned model,
+calibrator, encoders, empirical bowler selector, and safe pre-match lineup
+factory. Synthetic tests prove context-only advancement and the strict
+`simulate → lock → replay` sequence for selected matches. A model-free
+contract test loads all 401 context identities, finds all 137 selected
+fixtures, and verifies versioned order. The DRAFT CLI fails before importing
+`joblib` or simulation code and writes no output. The
+`ball_same_day_replay_complete` condition is therefore complete; no sealed
+model probability has been produced.
 
 ## Historical reference only
 
@@ -210,9 +231,9 @@ All must be complete before scoring:
    team order, aliases, ties/no-results, missing odds, and all three liquidity
    boundaries. The ball-simulation path must also prove that it replays an
    earlier same-day fixture in `date_then_match_id_lexicographic_v1` order;
-   its current date-only SQLite query is insufficient by itself. The
-   transient replay provider is complete; frozen-gated scorer integration is
-   still pending.
+   its current date-only SQLite query is insufficient by itself. **The ball
+   replay/scorer subset is complete.** Outcome-join and reporting edge cases
+   remain before the broader scorer-test condition can be marked complete.
 4. The sidecar cache is hashed. The scoring code and final protocol must be
    hashed after I3. Any transient/per-match state artifact introduced for the
    ball-simulation replay must be generated from the sealed context, verified,

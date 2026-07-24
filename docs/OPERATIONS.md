@@ -397,6 +397,22 @@ materializes match features, verifies every selected fixture, and writes
 `NO_MODEL_SCORING`. It does not import a model. See
 `FORWARD_HOLDOUT.md` and `I6_SAME_DAY_ORDERING_AUDIT.md`.
 
+The two prediction adapters remain blocked while the protocol is `DRAFT`:
+
+```bash
+uv run python scripts/score_forward_match_m7.py \
+  evaluation/forward_protocol_2026-06-01_2026-07-13.yaml \
+  --out forward_eval_out/2026-06-01_2026-07-13/match_m7_predictions.json
+
+uv run python scripts/score_forward_ball_v7.py \
+  evaluation/forward_protocol_2026-06-01_2026-07-13.yaml \
+  --out forward_eval_out/2026-06-01_2026-07-13/ball_v7_predictions.json
+```
+
+The ball adapter rehydrates first-of-date state, builds lineups from
+`info.players` only, locks each selected prediction before replaying its
+completed match, and never writes to the sidecar SQLite.
+
 **Parity guarantee**: `scripts/tests/test_phase_a_parity.py` validates that this two-step pipeline produces bit-exact parquet output vs the original monolith across all 9,519 matches. The harness now also passes π into both reference and candidate paths so the 42 outcome-distribution columns are checked column-by-column.
 
 **Temporal Splits** (`scripts/loaders_common.py:DEFAULT_SPLITS`, override via

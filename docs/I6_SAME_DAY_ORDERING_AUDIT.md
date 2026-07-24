@@ -82,9 +82,13 @@ tests cover chronology, ordering, stale-cache invalidation, and pre-prediction
 field access; a model-free smoke test replayed a real three-fixture context
 date while leaving the sidecar SQLite at its recorded SHA-256.
 
-The forward scorer must still connect this provider to ball v7 and pass its
-end-to-end tests before the protocol opening condition can be marked complete.
-No sealed model probability was produced during the overlay test.
+`scripts/score_forward_ball_v7.py` now connects this provider to ball v7
+behind the same frozen-protocol gate as M7. It builds lineups only from
+ordered `info.players` rosters, walks all 401 context matches, and requires
+the `simulate → lock → replay` order for each of the 137 selected fixtures.
+The model-free context inventory and synthetic scorer tests pass, so
+`ball_same_day_replay_complete` is recorded. No sealed model probability was
+produced during implementation or testing.
 
 ## Historical impact audit
 
