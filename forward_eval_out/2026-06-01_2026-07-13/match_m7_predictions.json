@@ -1,0 +1,1406 @@
+{
+  "artifact_type": "locked_outcome_free_predictions",
+  "calibration": "none",
+  "encoder_warnings": {
+    "venue": [
+      "Knight Riders Cricket Ground, Pomona",
+      "Old Deer Park, Richmond"
+    ]
+  },
+  "holdout_fingerprint_sha256": "82ccde16cf2b7e5f13a9236f2788f3c8be1582f312f5c028ec44a6ab76561028",
+  "model_artifacts": [
+    {
+      "path": "models/xgb_match_v3_m7_production/model.pkl",
+      "sha256": "5274a9ed52bf67a4916614bb9c16c88252fc3dbaf6c989840864661d30ca7ac6"
+    },
+    {
+      "path": "models/xgb_match_v3_m7_production/encoders.pkl",
+      "sha256": "a09411274d3885e7e980ad049a5709d795d472223ac68b23ddbea4ea61402e93"
+    },
+    {
+      "path": "models/xgb_match_v3_m7_production/feature_columns.txt",
+      "sha256": "5891d03bbc6694a5dc92c455355102cca06794ff9d20873b3738295abf4ef873"
+    }
+  ],
+  "model_id": "match_m7",
+  "outcome_columns_loaded": false,
+  "outcomes_joined": false,
+  "prediction_count": 137,
+  "predictions": [
+    {
+      "cricsheet_id": "1538445",
+      "date": "2026-06-02",
+      "match_id": "2026-06-02_China_Malaysia_Singapore_National_Cricket_Ground",
+      "p_team1": 0.0721605122089386,
+      "p_team2": 0.9278394877910614,
+      "team1": "China",
+      "team2": "Malaysia",
+      "top6_batting_elo_diff": -8.942033401906201
+    },
+    {
+      "cricsheet_id": "1512813",
+      "date": "2026-06-05",
+      "match_id": "2026-06-05_Hampshire_Surrey_Kennington_Oval,_London",
+      "p_team1": 0.4132211208343506,
+      "p_team2": 0.5867788791656494,
+      "team1": "Hampshire",
+      "team2": "Surrey",
+      "top6_batting_elo_diff": -7.010655402422117
+    },
+    {
+      "cricsheet_id": "1538451",
+      "date": "2026-06-05",
+      "match_id": "2026-06-05_Hong_Kong_Oman_Singapore_National_Cricket_Ground",
+      "p_team1": 0.535259485244751,
+      "p_team2": 0.464740514755249,
+      "team1": "Hong Kong",
+      "team2": "Oman",
+      "top6_batting_elo_diff": 1.2308604523630038
+    },
+    {
+      "cricsheet_id": "1512815",
+      "date": "2026-06-05",
+      "match_id": "2026-06-05_Somerset_Gloucestershire_County_Ground,_Bristol",
+      "p_team1": 0.5157561302185059,
+      "p_team2": 0.48424386978149414,
+      "team1": "Somerset",
+      "team2": "Gloucestershire",
+      "top6_batting_elo_diff": 0.9554048761351623
+    },
+    {
+      "cricsheet_id": "1512814",
+      "date": "2026-06-05",
+      "match_id": "2026-06-05_Sussex_Leicestershire_County_Ground,_Hove",
+      "p_team1": 0.39367935061454773,
+      "p_team2": 0.6063206493854523,
+      "team1": "Sussex",
+      "team2": "Leicestershire",
+      "top6_batting_elo_diff": -5.025730330421538
+    },
+    {
+      "cricsheet_id": "1512816",
+      "date": "2026-06-05",
+      "match_id": "2026-06-05_Warwickshire_Nottinghamshire_Trent_Bridge,_Nottingham",
+      "p_team1": 0.4723602533340454,
+      "p_team2": 0.5276397466659546,
+      "team1": "Warwickshire",
+      "team2": "Nottinghamshire",
+      "top6_batting_elo_diff": -8.263968687828537
+    },
+    {
+      "cricsheet_id": "1512817",
+      "date": "2026-06-05",
+      "match_id": "2026-06-05_Worcestershire_Glamorgan_County_Ground,_New_Road,_Worcester",
+      "p_team1": 0.5860826373100281,
+      "p_team2": 0.4139173626899719,
+      "team1": "Worcestershire",
+      "team2": "Glamorgan",
+      "top6_batting_elo_diff": 1.404224912921336
+    },
+    {
+      "cricsheet_id": "1512812",
+      "date": "2026-06-05",
+      "match_id": "2026-06-05_Yorkshire_Lancashire_Headingley,_Leeds",
+      "p_team1": 0.5248857140541077,
+      "p_team2": 0.47511428594589233,
+      "team1": "Yorkshire",
+      "team2": "Lancashire",
+      "top6_batting_elo_diff": 5.72433313794545
+    },
+    {
+      "cricsheet_id": "1512818",
+      "date": "2026-06-06",
+      "match_id": "2026-06-06_Northamptonshire_Durham_Riverside_Ground,_Chester-le-Street",
+      "p_team1": 0.5649500489234924,
+      "p_team2": 0.43504995107650757,
+      "team1": "Northamptonshire",
+      "team2": "Durham",
+      "top6_batting_elo_diff": 7.246873177385851
+    },
+    {
+      "cricsheet_id": "1512820",
+      "date": "2026-06-07",
+      "match_id": "2026-06-07_Essex_Middlesex_Merchant_Taylors'_School_Ground,_Northwood",
+      "p_team1": 0.48618462681770325,
+      "p_team2": 0.5138153731822968,
+      "team1": "Essex",
+      "team2": "Middlesex",
+      "top6_batting_elo_diff": -4.3275076997665565
+    },
+    {
+      "cricsheet_id": "1512823",
+      "date": "2026-06-07",
+      "match_id": "2026-06-07_Gloucestershire_Worcestershire_County_Ground,_Bristol",
+      "p_team1": 0.4873093366622925,
+      "p_team2": 0.5126906633377075,
+      "team1": "Gloucestershire",
+      "team2": "Worcestershire",
+      "top6_batting_elo_diff": -2.2184235116474156
+    },
+    {
+      "cricsheet_id": "1512821",
+      "date": "2026-06-07",
+      "match_id": "2026-06-07_Kent_Sussex_County_Ground,_Hove",
+      "p_team1": 0.5239858627319336,
+      "p_team2": 0.4760141372680664,
+      "team1": "Kent",
+      "team2": "Sussex",
+      "top6_batting_elo_diff": 1.6266967421217942
+    },
+    {
+      "cricsheet_id": "1512819",
+      "date": "2026-06-07",
+      "match_id": "2026-06-07_Lancashire_Glamorgan_Stanley_Park,_Blackpool",
+      "p_team1": 0.5490503311157227,
+      "p_team2": 0.45094966888427734,
+      "team1": "Lancashire",
+      "team2": "Glamorgan",
+      "top6_batting_elo_diff": -2.7051573905112036
+    },
+    {
+      "cricsheet_id": "1512825",
+      "date": "2026-06-07",
+      "match_id": "2026-06-07_Leicestershire_Yorkshire_Grace_Road,_Leicester",
+      "p_team1": 0.48993417620658875,
+      "p_team2": 0.5100658237934113,
+      "team1": "Leicestershire",
+      "team2": "Yorkshire",
+      "top6_batting_elo_diff": -0.015689883218101386
+    },
+    {
+      "cricsheet_id": "1538453",
+      "date": "2026-06-07",
+      "match_id": "2026-06-07_Malaysia_Hong_Kong_Singapore_National_Cricket_Ground",
+      "p_team1": 0.5541565418243408,
+      "p_team2": 0.4458434581756592,
+      "team1": "Malaysia",
+      "team2": "Hong Kong",
+      "top6_batting_elo_diff": -0.3945740967153597
+    },
+    {
+      "cricsheet_id": "1512824",
+      "date": "2026-06-07",
+      "match_id": "2026-06-07_Nottinghamshire_Derbyshire_Trent_Bridge,_Nottingham",
+      "p_team1": 0.5156723260879517,
+      "p_team2": 0.48432767391204834,
+      "team1": "Nottinghamshire",
+      "team2": "Derbyshire",
+      "top6_batting_elo_diff": 5.164848581468277
+    },
+    {
+      "cricsheet_id": "1512822",
+      "date": "2026-06-07",
+      "match_id": "2026-06-07_Somerset_Warwickshire_The_Cooper_Associates_County_Ground,_Taunton",
+      "p_team1": 0.5259785652160645,
+      "p_team2": 0.47402143478393555,
+      "team1": "Somerset",
+      "team2": "Warwickshire",
+      "top6_batting_elo_diff": 5.031267799866555
+    },
+    {
+      "cricsheet_id": "1538455",
+      "date": "2026-06-08",
+      "match_id": "2026-06-08_Hong_Kong_Nepal_Singapore_National_Cricket_Ground",
+      "p_team1": 0.349886417388916,
+      "p_team2": 0.650113582611084,
+      "team1": "Hong Kong",
+      "team2": "Nepal",
+      "top6_batting_elo_diff": -6.463252239118219
+    },
+    {
+      "cricsheet_id": "1512827",
+      "date": "2026-06-09",
+      "match_id": "2026-06-09_Durham_Lancashire_Riverside_Ground,_Chester-le-Street",
+      "p_team1": 0.500083327293396,
+      "p_team2": 0.499916672706604,
+      "team1": "Durham",
+      "team2": "Lancashire",
+      "top6_batting_elo_diff": -0.31147447849161836
+    },
+    {
+      "cricsheet_id": "1512826",
+      "date": "2026-06-09",
+      "match_id": "2026-06-09_Essex_Kent_County_Ground,_Chelmsford",
+      "p_team1": 0.4898298680782318,
+      "p_team2": 0.5101701319217682,
+      "team1": "Essex",
+      "team2": "Kent",
+      "top6_batting_elo_diff": 1.0770625306420243
+    },
+    {
+      "cricsheet_id": "1512828",
+      "date": "2026-06-09",
+      "match_id": "2026-06-09_Worcestershire_Northamptonshire_County_Ground,_Northampton",
+      "p_team1": 0.4179370403289795,
+      "p_team2": 0.5820629596710205,
+      "team1": "Worcestershire",
+      "team2": "Northamptonshire",
+      "top6_batting_elo_diff": -4.000912929008791
+    },
+    {
+      "cricsheet_id": "1538307",
+      "date": "2026-06-11",
+      "match_id": "2026-06-11_Sri_Lanka_West_Indies_Sabina_Park,_Kingston,_Jamaica",
+      "p_team1": 0.3806012272834778,
+      "p_team2": 0.6193987727165222,
+      "team1": "Sri Lanka",
+      "team2": "West Indies",
+      "top6_batting_elo_diff": -1.3154854038436952
+    },
+    {
+      "cricsheet_id": "1538308",
+      "date": "2026-06-13",
+      "match_id": "2026-06-13_Sri_Lanka_West_Indies_Sabina_Park,_Kingston,_Jamaica",
+      "p_team1": 0.43850648403167725,
+      "p_team2": 0.5614935159683228,
+      "team1": "Sri Lanka",
+      "team2": "West Indies",
+      "top6_batting_elo_diff": 0.636906244396414
+    },
+    {
+      "cricsheet_id": "1538309",
+      "date": "2026-06-14",
+      "match_id": "2026-06-14_Sri_Lanka_West_Indies_Sabina_Park,_Kingston,_Jamaica",
+      "p_team1": 0.3535928428173065,
+      "p_team2": 0.6464071571826935,
+      "team1": "Sri Lanka",
+      "team2": "West Indies",
+      "top6_batting_elo_diff": 0.9445826310370649
+    },
+    {
+      "cricsheet_id": "1539739",
+      "date": "2026-06-18",
+      "match_id": "2026-06-18_Nigeria_Hong_Kong_Namibia_Cricket_Ground,_Windhoek",
+      "p_team1": 0.342678040266037,
+      "p_team2": 0.657321959733963,
+      "team1": "Nigeria",
+      "team2": "Hong Kong",
+      "top6_batting_elo_diff": -6.439764132237542
+    },
+    {
+      "cricsheet_id": "1528557",
+      "date": "2026-06-18",
+      "match_id": "2026-06-18_Seattle_Orcas_Texas_Super_Kings_Grand_Prairie_Stadium,_Dallas",
+      "p_team1": 0.4916558265686035,
+      "p_team2": 0.5083441734313965,
+      "team1": "Seattle Orcas",
+      "team2": "Texas Super Kings",
+      "top6_batting_elo_diff": 8.214359393666655
+    },
+    {
+      "cricsheet_id": "1532484",
+      "date": "2026-06-19",
+      "match_id": "2026-06-19_Australia_Bangladesh_Bir_Sreshtho_Flight_Lieutenant_Matiur_Rahman_Stadium,_Chattogram",
+      "p_team1": 0.7112648487091064,
+      "p_team2": 0.28873515129089355,
+      "team1": "Australia",
+      "team2": "Bangladesh",
+      "top6_batting_elo_diff": 20.241219244803233
+    },
+    {
+      "cricsheet_id": "1539740",
+      "date": "2026-06-19",
+      "match_id": "2026-06-19_Hong_Kong_Namibia_Namibia_Cricket_Ground,_Windhoek",
+      "p_team1": 0.6477974057197571,
+      "p_team2": 0.3522025942802429,
+      "team1": "Hong Kong",
+      "team2": "Namibia",
+      "top6_batting_elo_diff": -2.559880279093022
+    },
+    {
+      "cricsheet_id": "1528558",
+      "date": "2026-06-19",
+      "match_id": "2026-06-19_San_Francisco_Unicorns_Los_Angeles_Knight_Riders_Grand_Prairie_Stadium,_Dallas",
+      "p_team1": 0.47989606857299805,
+      "p_team2": 0.520103931427002,
+      "team1": "San Francisco Unicorns",
+      "team2": "Los Angeles Knight Riders",
+      "top6_batting_elo_diff": 8.115565941424165
+    },
+    {
+      "cricsheet_id": "1528559",
+      "date": "2026-06-19",
+      "match_id": "2026-06-19_Washington_Freedom_Seattle_Orcas_Grand_Prairie_Stadium,_Dallas",
+      "p_team1": 0.557170033454895,
+      "p_team2": 0.442829966545105,
+      "team1": "Washington Freedom",
+      "team2": "Seattle Orcas",
+      "top6_batting_elo_diff": 0.3360071015877111
+    },
+    {
+      "cricsheet_id": "1539741",
+      "date": "2026-06-20",
+      "match_id": "2026-06-20_Namibia_Nigeria_Namibia_Cricket_Ground,_Windhoek",
+      "p_team1": 0.5246307849884033,
+      "p_team2": 0.4753692150115967,
+      "team1": "Namibia",
+      "team2": "Nigeria",
+      "top6_batting_elo_diff": 5.367813584899977
+    },
+    {
+      "cricsheet_id": "1528560",
+      "date": "2026-06-20",
+      "match_id": "2026-06-20_Texas_Super_Kings_San_Francisco_Unicorns_Grand_Prairie_Stadium,_Dallas",
+      "p_team1": 0.5147414803504944,
+      "p_team2": 0.4852585196495056,
+      "team1": "Texas Super Kings",
+      "team2": "San Francisco Unicorns",
+      "top6_batting_elo_diff": -7.2842690192046575
+    },
+    {
+      "cricsheet_id": "1528561",
+      "date": "2026-06-20",
+      "match_id": "2026-06-20_Washington_Freedom_MI_New_York_Grand_Prairie_Stadium,_Dallas",
+      "p_team1": 0.5585180521011353,
+      "p_team2": 0.44148194789886475,
+      "team1": "Washington Freedom",
+      "team2": "MI New York",
+      "top6_batting_elo_diff": 9.206048328625911
+    },
+    {
+      "cricsheet_id": "1532485",
+      "date": "2026-06-21",
+      "match_id": "2026-06-21_Bangladesh_Australia_Bir_Sreshtho_Flight_Lieutenant_Matiur_Rahman_Stadium,_Chattogram",
+      "p_team1": 0.26645296812057495,
+      "p_team2": 0.733547031879425,
+      "team1": "Bangladesh",
+      "team2": "Australia",
+      "top6_batting_elo_diff": -20.930908104242235
+    },
+    {
+      "cricsheet_id": "1528562",
+      "date": "2026-06-21",
+      "match_id": "2026-06-21_Los_Angeles_Knight_Riders_Seattle_Orcas_Grand_Prairie_Stadium,_Dallas",
+      "p_team1": 0.34488898515701294,
+      "p_team2": 0.6551110148429871,
+      "team1": "Los Angeles Knight Riders",
+      "team2": "Seattle Orcas",
+      "top6_batting_elo_diff": -15.816516779928179
+    },
+    {
+      "cricsheet_id": "1539742",
+      "date": "2026-06-21",
+      "match_id": "2026-06-21_Nigeria_Hong_Kong_Namibia_Cricket_Ground,_Windhoek",
+      "p_team1": 0.2538436949253082,
+      "p_team2": 0.7461563050746918,
+      "team1": "Nigeria",
+      "team2": "Hong Kong",
+      "top6_batting_elo_diff": -6.10220561688584
+    },
+    {
+      "cricsheet_id": "1528563",
+      "date": "2026-06-21",
+      "match_id": "2026-06-21_Texas_Super_Kings_MI_New_York_Grand_Prairie_Stadium,_Dallas",
+      "p_team1": 0.5179182291030884,
+      "p_team2": 0.4820817708969116,
+      "team1": "Texas Super Kings",
+      "team2": "MI New York",
+      "top6_batting_elo_diff": -0.7454935841558381
+    },
+    {
+      "cricsheet_id": "1539731",
+      "date": "2026-06-22",
+      "match_id": "2026-06-22_Belize_Bermuda_White_Hill_Field,_Sandys_Parish",
+      "p_team1": 0.23535892367362976,
+      "p_team2": 0.7646410763263702,
+      "team1": "Belize",
+      "team2": "Bermuda",
+      "top6_batting_elo_diff": -9.93003973767668
+    },
+    {
+      "cricsheet_id": "1539743",
+      "date": "2026-06-22",
+      "match_id": "2026-06-22_Namibia_Hong_Kong_Namibia_Cricket_Ground,_Windhoek",
+      "p_team1": 0.4736059010028839,
+      "p_team2": 0.5263940989971161,
+      "team1": "Namibia",
+      "team2": "Hong Kong",
+      "top6_batting_elo_diff": 2.9157067546414055
+    },
+    {
+      "cricsheet_id": "1539732",
+      "date": "2026-06-22",
+      "match_id": "2026-06-22_Panama_Brazil_White_Hill_Field,_Sandys_Parish",
+      "p_team1": 0.40898746252059937,
+      "p_team2": 0.5910125374794006,
+      "team1": "Panama",
+      "team2": "Brazil",
+      "top6_batting_elo_diff": -3.054887093783009
+    },
+    {
+      "cricsheet_id": "1541804",
+      "date": "2026-06-22",
+      "match_id": "2026-06-22_Singapore_Uzbekistan_Singapore_National_Cricket_Ground",
+      "p_team1": 0.5935839414596558,
+      "p_team2": 0.40641605854034424,
+      "team1": "Singapore",
+      "team2": "Uzbekistan",
+      "top6_batting_elo_diff": 0.6707967396425829
+    },
+    {
+      "cricsheet_id": "1541805",
+      "date": "2026-06-23",
+      "match_id": "2026-06-23_Indonesia_Uzbekistan_Singapore_National_Cricket_Ground",
+      "p_team1": 0.4470439851284027,
+      "p_team2": 0.5529560148715973,
+      "team1": "Indonesia",
+      "team2": "Uzbekistan",
+      "top6_batting_elo_diff": -8.78424298531354
+    },
+    {
+      "cricsheet_id": "1539744",
+      "date": "2026-06-23",
+      "match_id": "2026-06-23_Namibia_Nigeria_Namibia_Cricket_Ground,_Windhoek",
+      "p_team1": 0.5062662959098816,
+      "p_team2": 0.4937337040901184,
+      "team1": "Namibia",
+      "team2": "Nigeria",
+      "top6_batting_elo_diff": 0.008738061030726385
+    },
+    {
+      "cricsheet_id": "1541806",
+      "date": "2026-06-23",
+      "match_id": "2026-06-23_Singapore_Thailand_Singapore_National_Cricket_Ground",
+      "p_team1": 0.5921100378036499,
+      "p_team2": 0.4078899621963501,
+      "team1": "Singapore",
+      "team2": "Thailand",
+      "top6_batting_elo_diff": 9.42656876382739
+    },
+    {
+      "cricsheet_id": "1539733",
+      "date": "2026-06-24",
+      "match_id": "2026-06-24_Bahamas_Panama_White_Hill_Field,_Sandys_Parish",
+      "p_team1": 0.30471885204315186,
+      "p_team2": 0.6952811479568481,
+      "team1": "Bahamas",
+      "team2": "Panama",
+      "top6_batting_elo_diff": -6.046759195721279
+    },
+    {
+      "cricsheet_id": "1539734",
+      "date": "2026-06-24",
+      "match_id": "2026-06-24_Brazil_Belize_White_Hill_Field,_Sandys_Parish",
+      "p_team1": 0.41867995262145996,
+      "p_team2": 0.58132004737854,
+      "team1": "Brazil",
+      "team2": "Belize",
+      "top6_batting_elo_diff": 0.13040381370387877
+    },
+    {
+      "cricsheet_id": "1528564",
+      "date": "2026-06-24",
+      "match_id": "2026-06-24_Texas_Super_Kings_San_Francisco_Unicorns_Oakland_Coliseum,Oakland",
+      "p_team1": 0.4865463674068451,
+      "p_team2": 0.5134536325931549,
+      "team1": "Texas Super Kings",
+      "team2": "San Francisco Unicorns",
+      "top6_batting_elo_diff": -9.90887889517603
+    },
+    {
+      "cricsheet_id": "1539736",
+      "date": "2026-06-25",
+      "match_id": "2026-06-25_Brazil_Bahamas_White_Hill_Field,_Sandys_Parish",
+      "p_team1": 0.5049116015434265,
+      "p_team2": 0.4950883984565735,
+      "team1": "Brazil",
+      "team2": "Bahamas",
+      "top6_batting_elo_diff": 4.2609848896918265
+    },
+    {
+      "cricsheet_id": "1539735",
+      "date": "2026-06-25",
+      "match_id": "2026-06-25_Panama_Bermuda_White_Hill_Field,_Sandys_Parish",
+      "p_team1": 0.16354955732822418,
+      "p_team2": 0.8364504426717758,
+      "team1": "Panama",
+      "team2": "Bermuda",
+      "top6_batting_elo_diff": -14.532648932770826
+    },
+    {
+      "cricsheet_id": "1528565",
+      "date": "2026-06-25",
+      "match_id": "2026-06-25_Seattle_Orcas_Washington_Freedom_Oakland_Coliseum,Oakland",
+      "p_team1": 0.46052274107933044,
+      "p_team2": 0.5394772589206696,
+      "team1": "Seattle Orcas",
+      "team2": "Washington Freedom",
+      "top6_batting_elo_diff": 2.9195556895592745
+    },
+    {
+      "cricsheet_id": "1528548",
+      "date": "2026-06-26",
+      "match_id": "2026-06-26_Ireland_India_Civil_Service_Cricket_Club,_Stormont,_Belfast",
+      "p_team1": 0.2960982024669647,
+      "p_team2": 0.7039017975330353,
+      "team1": "Ireland",
+      "team2": "India",
+      "top6_batting_elo_diff": -29.224536695938014
+    },
+    {
+      "cricsheet_id": "1512834",
+      "date": "2026-06-26",
+      "match_id": "2026-06-26_Kent_Nottinghamshire_St_Lawrence_Ground,_Canterbury",
+      "p_team1": 0.4361702799797058,
+      "p_team2": 0.5638297200202942,
+      "team1": "Kent",
+      "team2": "Nottinghamshire",
+      "top6_batting_elo_diff": -6.091680920623048
+    },
+    {
+      "cricsheet_id": "1512835",
+      "date": "2026-06-26",
+      "match_id": "2026-06-26_Leicestershire_Lancashire_Grace_Road,_Leicester",
+      "p_team1": 0.3752245306968689,
+      "p_team2": 0.6247754693031311,
+      "team1": "Leicestershire",
+      "team2": "Lancashire",
+      "top6_batting_elo_diff": -11.481570925673623
+    },
+    {
+      "cricsheet_id": "1528566",
+      "date": "2026-06-26",
+      "match_id": "2026-06-26_MI_New_York_Texas_Super_Kings_Oakland_Coliseum,Oakland",
+      "p_team1": 0.5398789644241333,
+      "p_team2": 0.4601210355758667,
+      "team1": "MI New York",
+      "team2": "Texas Super Kings",
+      "top6_batting_elo_diff": 8.258904251694958
+    },
+    {
+      "cricsheet_id": "1512830",
+      "date": "2026-06-26",
+      "match_id": "2026-06-26_Middlesex_Glamorgan_Sophia_Gardens,_Cardiff",
+      "p_team1": 0.5067762732505798,
+      "p_team2": 0.49322372674942017,
+      "team1": "Middlesex",
+      "team2": "Glamorgan",
+      "top6_batting_elo_diff": 1.3740436916134513
+    },
+    {
+      "cricsheet_id": "1512833",
+      "date": "2026-06-26",
+      "match_id": "2026-06-26_Northamptonshire_Essex_County_Ground,_Northampton",
+      "p_team1": 0.5687429308891296,
+      "p_team2": 0.43125706911087036,
+      "team1": "Northamptonshire",
+      "team2": "Essex",
+      "top6_batting_elo_diff": 4.321878055529396
+    },
+    {
+      "cricsheet_id": "1528567",
+      "date": "2026-06-26",
+      "match_id": "2026-06-26_Seattle_Orcas_San_Francisco_Unicorns_Oakland_Coliseum,Oakland",
+      "p_team1": 0.5570938587188721,
+      "p_team2": 0.44290614128112793,
+      "team1": "Seattle Orcas",
+      "team2": "San Francisco Unicorns",
+      "top6_batting_elo_diff": 2.5027137125807712
+    },
+    {
+      "cricsheet_id": "1512832",
+      "date": "2026-06-26",
+      "match_id": "2026-06-26_Somerset_Gloucestershire_The_Cooper_Associates_County_Ground,_Taunton",
+      "p_team1": 0.4695718586444855,
+      "p_team2": 0.5304281413555145,
+      "team1": "Somerset",
+      "team2": "Gloucestershire",
+      "top6_batting_elo_diff": 2.064481704712307
+    },
+    {
+      "cricsheet_id": "1512831",
+      "date": "2026-06-26",
+      "match_id": "2026-06-26_Sussex_Surrey_County_Ground,_Hove",
+      "p_team1": 0.38881775736808777,
+      "p_team2": 0.6111822426319122,
+      "team1": "Sussex",
+      "team2": "Surrey",
+      "top6_batting_elo_diff": -10.964459267376924
+    },
+    {
+      "cricsheet_id": "1512829",
+      "date": "2026-06-26",
+      "match_id": "2026-06-26_Warwickshire_Worcestershire_Edgbaston,_Birmingham",
+      "p_team1": 0.5808441638946533,
+      "p_team2": 0.4191558361053467,
+      "team1": "Warwickshire",
+      "team2": "Worcestershire",
+      "top6_batting_elo_diff": 2.051671063316462
+    },
+    {
+      "cricsheet_id": "1512836",
+      "date": "2026-06-26",
+      "match_id": "2026-06-26_Yorkshire_Hampshire_The_Rose_Bowl,_Southampton",
+      "p_team1": 0.4536738395690918,
+      "p_team2": 0.5463261604309082,
+      "team1": "Yorkshire",
+      "team2": "Hampshire",
+      "top6_batting_elo_diff": -3.292897797117803
+    },
+    {
+      "cricsheet_id": "1539737",
+      "date": "2026-06-27",
+      "match_id": "2026-06-27_Bahamas_Belize_White_Hill_Field,_Sandys_Parish",
+      "p_team1": 0.5415765643119812,
+      "p_team2": 0.4584234356880188,
+      "team1": "Bahamas",
+      "team2": "Belize",
+      "top6_batting_elo_diff": -6.619359650053411
+    },
+    {
+      "cricsheet_id": "1539738",
+      "date": "2026-06-27",
+      "match_id": "2026-06-27_Bermuda_Brazil_White_Hill_Field,_Sandys_Parish",
+      "p_team1": 0.8904054164886475,
+      "p_team2": 0.10959458351135254,
+      "team1": "Bermuda",
+      "team2": "Brazil",
+      "top6_batting_elo_diff": 22.76808463883117
+    },
+    {
+      "cricsheet_id": "1528568",
+      "date": "2026-06-27",
+      "match_id": "2026-06-27_MI_New_York_Los_Angeles_Knight_Riders_Oakland_Coliseum,Oakland",
+      "p_team1": 0.5255758762359619,
+      "p_team2": 0.4744241237640381,
+      "team1": "MI New York",
+      "team2": "Los Angeles Knight Riders",
+      "top6_batting_elo_diff": 3.080753690332358
+    },
+    {
+      "cricsheet_id": "1539479",
+      "date": "2026-06-27",
+      "match_id": "2026-06-27_Serbia_Luxembourg_Scott_Page_Field,_Vinor",
+      "p_team1": 0.23112986981868744,
+      "p_team2": 0.7688701301813126,
+      "team1": "Serbia",
+      "team2": "Luxembourg",
+      "top6_batting_elo_diff": -5.852918411938845
+    },
+    {
+      "cricsheet_id": "1528569",
+      "date": "2026-06-27",
+      "match_id": "2026-06-27_Texas_Super_Kings_Washington_Freedom_Oakland_Coliseum,Oakland",
+      "p_team1": 0.501923143863678,
+      "p_team2": 0.498076856136322,
+      "team1": "Texas Super Kings",
+      "team2": "Washington Freedom",
+      "top6_batting_elo_diff": -8.745680727180343
+    },
+    {
+      "cricsheet_id": "1539480",
+      "date": "2026-06-28",
+      "match_id": "2026-06-28_Czech_Republic_Luxembourg_Scott_Page_Field,_Vinor",
+      "p_team1": 0.3665669560432434,
+      "p_team2": 0.6334330439567566,
+      "team1": "Czech Republic",
+      "team2": "Luxembourg",
+      "top6_batting_elo_diff": 0.6877642226502303
+    },
+    {
+      "cricsheet_id": "1512838",
+      "date": "2026-06-28",
+      "match_id": "2026-06-28_Durham_Middlesex_Old_Deer_Park,_Richmond",
+      "p_team1": 0.510429859161377,
+      "p_team2": 0.48957014083862305,
+      "team1": "Durham",
+      "team2": "Middlesex",
+      "top6_batting_elo_diff": -0.9904977124888319
+    },
+    {
+      "cricsheet_id": "1512839",
+      "date": "2026-06-28",
+      "match_id": "2026-06-28_Hampshire_Kent_St_Lawrence_Ground,_Canterbury",
+      "p_team1": 0.5916361808776855,
+      "p_team2": 0.40836381912231445,
+      "team1": "Hampshire",
+      "team2": "Kent",
+      "top6_batting_elo_diff": 6.53573562374072
+    },
+    {
+      "cricsheet_id": "1528549",
+      "date": "2026-06-28",
+      "match_id": "2026-06-28_Ireland_India_Civil_Service_Cricket_Club,_Stormont,_Belfast",
+      "p_team1": 0.3170529305934906,
+      "p_team2": 0.6829470694065094,
+      "team1": "Ireland",
+      "team2": "India",
+      "top6_batting_elo_diff": -24.91507921431662
+    },
+    {
+      "cricsheet_id": "1512840",
+      "date": "2026-06-28",
+      "match_id": "2026-06-28_Nottinghamshire_Leicestershire_Grace_Road,_Leicester",
+      "p_team1": 0.5571519136428833,
+      "p_team2": 0.4428480863571167,
+      "team1": "Nottinghamshire",
+      "team2": "Leicestershire",
+      "top6_batting_elo_diff": 5.31827297355926
+    },
+    {
+      "cricsheet_id": "1528570",
+      "date": "2026-06-28",
+      "match_id": "2026-06-28_Seattle_Orcas_Los_Angeles_Knight_Riders_Oakland_Coliseum,Oakland",
+      "p_team1": 0.6101545095443726,
+      "p_team2": 0.38984549045562744,
+      "team1": "Seattle Orcas",
+      "team2": "Los Angeles Knight Riders",
+      "top6_batting_elo_diff": 15.813068884215681
+    },
+    {
+      "cricsheet_id": "1528571",
+      "date": "2026-06-28",
+      "match_id": "2026-06-28_Washington_Freedom_San_Francisco_Unicorns_Oakland_Coliseum,Oakland",
+      "p_team1": 0.5660404562950134,
+      "p_team2": 0.4339595437049866,
+      "team1": "Washington Freedom",
+      "team2": "San Francisco Unicorns",
+      "top6_batting_elo_diff": 4.81232952680034
+    },
+    {
+      "cricsheet_id": "1512841",
+      "date": "2026-06-28",
+      "match_id": "2026-06-28_Worcestershire_Somerset_County_Ground,_New_Road,_Worcester",
+      "p_team1": 0.47340917587280273,
+      "p_team2": 0.5265908241271973,
+      "team1": "Worcestershire",
+      "team2": "Somerset",
+      "top6_batting_elo_diff": -5.574609872432575
+    },
+    {
+      "cricsheet_id": "1512845",
+      "date": "2026-07-01",
+      "match_id": "2026-07-01_Gloucestershire_Northamptonshire_County_Ground,_Bristol",
+      "p_team1": 0.5009535551071167,
+      "p_team2": 0.4990464448928833,
+      "team1": "Gloucestershire",
+      "team2": "Northamptonshire",
+      "top6_batting_elo_diff": 1.7449476810049873
+    },
+    {
+      "cricsheet_id": "1512844",
+      "date": "2026-07-01",
+      "match_id": "2026-07-01_Lancashire_Derbyshire_County_Ground,_Derby",
+      "p_team1": 0.5392049551010132,
+      "p_team2": 0.4607950448989868,
+      "team1": "Lancashire",
+      "team2": "Derbyshire",
+      "top6_batting_elo_diff": 4.573227778241744
+    },
+    {
+      "cricsheet_id": "1528572",
+      "date": "2026-07-01",
+      "match_id": "2026-07-01_Los_Angeles_Knight_Riders_Washington_Freedom_Knight_Riders_Cricket_Ground,_Pomona",
+      "p_team1": 0.3639441728591919,
+      "p_team2": 0.6360558271408081,
+      "team1": "Los Angeles Knight Riders",
+      "team2": "Washington Freedom",
+      "top6_batting_elo_diff": -15.539193310997234
+    },
+    {
+      "cricsheet_id": "1512842",
+      "date": "2026-07-01",
+      "match_id": "2026-07-01_Surrey_Essex_County_Ground,_Chelmsford",
+      "p_team1": 0.5073097944259644,
+      "p_team2": 0.49269020557403564,
+      "team1": "Surrey",
+      "team2": "Essex",
+      "top6_batting_elo_diff": 10.079376128001286
+    },
+    {
+      "cricsheet_id": "1512843",
+      "date": "2026-07-01",
+      "match_id": "2026-07-01_Warwickshire_Sussex_Edgbaston,_Birmingham",
+      "p_team1": 0.6393108367919922,
+      "p_team2": 0.3606891632080078,
+      "team1": "Warwickshire",
+      "team2": "Sussex",
+      "top6_batting_elo_diff": 3.2166409757326164
+    },
+    {
+      "cricsheet_id": "1528573",
+      "date": "2026-07-02",
+      "match_id": "2026-07-02_MI_New_York_Seattle_Orcas_Knight_Riders_Cricket_Ground,_Pomona",
+      "p_team1": 0.5976426005363464,
+      "p_team2": 0.40235739946365356,
+      "team1": "MI New York",
+      "team2": "Seattle Orcas",
+      "top6_batting_elo_diff": -0.41112958000849176
+    },
+    {
+      "cricsheet_id": "1540319",
+      "date": "2026-07-02",
+      "match_id": "2026-07-02_Sweden_Portugal_Botkyrka_Cricket_Center,_Stockholm",
+      "p_team1": 0.31824615597724915,
+      "p_team2": 0.6817538440227509,
+      "team1": "Sweden",
+      "team2": "Portugal",
+      "top6_batting_elo_diff": -2.32958123564822
+    },
+    {
+      "cricsheet_id": "1528574",
+      "date": "2026-07-03",
+      "match_id": "2026-07-03_Texas_Super_Kings_Los_Angeles_Knight_Riders_Knight_Riders_Cricket_Ground,_Pomona",
+      "p_team1": 0.5815040469169617,
+      "p_team2": 0.41849595308303833,
+      "team1": "Texas Super Kings",
+      "team2": "Los Angeles Knight Riders",
+      "top6_batting_elo_diff": 12.023413103920348
+    },
+    {
+      "cricsheet_id": "1496575",
+      "date": "2026-07-04",
+      "match_id": "2026-07-04_India_England_Old_Trafford,_Manchester",
+      "p_team1": 0.5240520238876343,
+      "p_team2": 0.4759479761123657,
+      "team1": "India",
+      "team2": "England",
+      "top6_batting_elo_diff": 15.622433139386203
+    },
+    {
+      "cricsheet_id": "1528576",
+      "date": "2026-07-04",
+      "match_id": "2026-07-04_Los_Angeles_Knight_Riders_MI_New_York_Knight_Riders_Cricket_Ground,_Pomona",
+      "p_team1": 0.4129144847393036,
+      "p_team2": 0.5870855152606964,
+      "team1": "Los Angeles Knight Riders",
+      "team2": "MI New York",
+      "top6_batting_elo_diff": -2.460082321355003
+    },
+    {
+      "cricsheet_id": "1528575",
+      "date": "2026-07-04",
+      "match_id": "2026-07-04_San_Francisco_Unicorns_Washington_Freedom_Knight_Riders_Cricket_Ground,_Pomona",
+      "p_team1": 0.44516700506210327,
+      "p_team2": 0.5548329949378967,
+      "team1": "San Francisco Unicorns",
+      "team2": "Washington Freedom",
+      "top6_batting_elo_diff": 0.8536204177207765
+    },
+    {
+      "cricsheet_id": "1512852",
+      "date": "2026-07-05",
+      "match_id": "2026-07-05_Essex_Middlesex_County_Ground,_Chelmsford",
+      "p_team1": 0.5588275790214539,
+      "p_team2": 0.44117242097854614,
+      "team1": "Essex",
+      "team2": "Middlesex",
+      "top6_batting_elo_diff": 0.6996373568911167
+    },
+    {
+      "cricsheet_id": "1512858",
+      "date": "2026-07-05",
+      "match_id": "2026-07-05_Hampshire_Kent_The_Rose_Bowl,_Southampton",
+      "p_team1": 0.5602995157241821,
+      "p_team2": 0.43970048427581787,
+      "team1": "Hampshire",
+      "team2": "Kent",
+      "top6_batting_elo_diff": 1.0647345028439759
+    },
+    {
+      "cricsheet_id": "1528578",
+      "date": "2026-07-05",
+      "match_id": "2026-07-05_MI_New_York_San_Francisco_Unicorns_Knight_Riders_Cricket_Ground,_Pomona",
+      "p_team1": 0.5162765383720398,
+      "p_team2": 0.4837234616279602,
+      "team1": "MI New York",
+      "team2": "San Francisco Unicorns",
+      "top6_batting_elo_diff": -9.269432719404222
+    },
+    {
+      "cricsheet_id": "1512853",
+      "date": "2026-07-05",
+      "match_id": "2026-07-05_Nottinghamshire_Durham_Riverside_Ground,_Chester-le-Street",
+      "p_team1": 0.5574991106987,
+      "p_team2": 0.44250088930130005,
+      "team1": "Nottinghamshire",
+      "team2": "Durham",
+      "top6_batting_elo_diff": 6.4989415213476605
+    },
+    {
+      "cricsheet_id": "1528577",
+      "date": "2026-07-05",
+      "match_id": "2026-07-05_Seattle_Orcas_Texas_Super_Kings_Knight_Riders_Cricket_Ground,_Pomona",
+      "p_team1": 0.4750766456127167,
+      "p_team2": 0.5249233543872833,
+      "team1": "Seattle Orcas",
+      "team2": "Texas Super Kings",
+      "top6_batting_elo_diff": 0.7331105363648476
+    },
+    {
+      "cricsheet_id": "1512857",
+      "date": "2026-07-05",
+      "match_id": "2026-07-05_Somerset_Northamptonshire_County_Ground,_Northampton",
+      "p_team1": 0.47471117973327637,
+      "p_team2": 0.5252888202667236,
+      "team1": "Somerset",
+      "team2": "Northamptonshire",
+      "top6_batting_elo_diff": -2.401694801183112
+    },
+    {
+      "cricsheet_id": "1512854",
+      "date": "2026-07-05",
+      "match_id": "2026-07-05_Warwickshire_Gloucestershire_Edgbaston,_Birmingham",
+      "p_team1": 0.5567675232887268,
+      "p_team2": 0.4432324767112732,
+      "team1": "Warwickshire",
+      "team2": "Gloucestershire",
+      "top6_batting_elo_diff": 1.9692445000589487
+    },
+    {
+      "cricsheet_id": "1512856",
+      "date": "2026-07-05",
+      "match_id": "2026-07-05_Worcestershire_Glamorgan_Sophia_Gardens,_Cardiff",
+      "p_team1": 0.42019224166870117,
+      "p_team2": 0.5798077583312988,
+      "team1": "Worcestershire",
+      "team2": "Glamorgan",
+      "top6_batting_elo_diff": -9.603253036407295
+    },
+    {
+      "cricsheet_id": "1512855",
+      "date": "2026-07-05",
+      "match_id": "2026-07-05_Yorkshire_Leicestershire_Headingley,_Leeds",
+      "p_team1": 0.5219991207122803,
+      "p_team2": 0.4780008792877197,
+      "team1": "Yorkshire",
+      "team2": "Leicestershire",
+      "top6_batting_elo_diff": -3.410719042554774
+    },
+    {
+      "cricsheet_id": "1496576",
+      "date": "2026-07-07",
+      "match_id": "2026-07-07_England_India_Trent_Bridge,_Nottingham",
+      "p_team1": 0.43701454997062683,
+      "p_team2": 0.5629854500293732,
+      "team1": "England",
+      "team2": "India",
+      "top6_batting_elo_diff": -12.106814684525034
+    },
+    {
+      "cricsheet_id": "1543361",
+      "date": "2026-07-08",
+      "match_id": "2026-07-08_Denmark_Estonia_Svanholm_Park,_Brondby",
+      "p_team1": 0.5478954911231995,
+      "p_team2": 0.45210450887680054,
+      "team1": "Denmark",
+      "team2": "Estonia",
+      "top6_batting_elo_diff": -0.8973012374099198
+    },
+    {
+      "cricsheet_id": "1543362",
+      "date": "2026-07-08",
+      "match_id": "2026-07-08_Gibraltar_Belgium_Koge_Cricket_Club",
+      "p_team1": 0.37319737672805786,
+      "p_team2": 0.6268026232719421,
+      "team1": "Gibraltar",
+      "team2": "Belgium",
+      "top6_batting_elo_diff": -2.4400474127819507
+    },
+    {
+      "cricsheet_id": "1512864",
+      "date": "2026-07-08",
+      "match_id": "2026-07-08_Hampshire_Middlesex_The_Rose_Bowl,_Southampton",
+      "p_team1": 0.6263810396194458,
+      "p_team2": 0.3736189603805542,
+      "team1": "Hampshire",
+      "team2": "Middlesex",
+      "top6_batting_elo_diff": 6.477361153182073
+    },
+    {
+      "cricsheet_id": "1512863",
+      "date": "2026-07-08",
+      "match_id": "2026-07-08_Leicestershire_Durham_Grace_Road,_Leicester",
+      "p_team1": 0.4841495156288147,
+      "p_team2": 0.5158504843711853,
+      "team1": "Leicestershire",
+      "team2": "Durham",
+      "top6_batting_elo_diff": 4.181419595901161
+    },
+    {
+      "cricsheet_id": "1528579",
+      "date": "2026-07-08",
+      "match_id": "2026-07-08_MI_New_York_San_Francisco_Unicorns_Grand_Prairie_Stadium,_Dallas",
+      "p_team1": 0.45361676812171936,
+      "p_team2": 0.5463832318782806,
+      "team1": "MI New York",
+      "team2": "San Francisco Unicorns",
+      "top6_batting_elo_diff": -1.808204256009276
+    },
+    {
+      "cricsheet_id": "1512861",
+      "date": "2026-07-08",
+      "match_id": "2026-07-08_Northamptonshire_Glamorgan_Sophia_Gardens,_Cardiff",
+      "p_team1": 0.599923312664032,
+      "p_team2": 0.400076687335968,
+      "team1": "Northamptonshire",
+      "team2": "Glamorgan",
+      "top6_batting_elo_diff": 6.478108321731725
+    },
+    {
+      "cricsheet_id": "1543364",
+      "date": "2026-07-08",
+      "match_id": "2026-07-08_Serbia_Romania_Koge_Cricket_Club",
+      "p_team1": 0.19924436509609222,
+      "p_team2": 0.8007556349039078,
+      "team1": "Serbia",
+      "team2": "Romania",
+      "top6_batting_elo_diff": -11.424878593905078
+    },
+    {
+      "cricsheet_id": "1512862",
+      "date": "2026-07-08",
+      "match_id": "2026-07-08_Somerset_Derbyshire_County_Ground,_Derby",
+      "p_team1": 0.5194957256317139,
+      "p_team2": 0.48050427436828613,
+      "team1": "Somerset",
+      "team2": "Derbyshire",
+      "top6_batting_elo_diff": -4.38138724405394
+    },
+    {
+      "cricsheet_id": "1512860",
+      "date": "2026-07-08",
+      "match_id": "2026-07-08_Sussex_Surrey_Kennington_Oval,_London",
+      "p_team1": 0.42568832635879517,
+      "p_team2": 0.5743116736412048,
+      "team1": "Sussex",
+      "team2": "Surrey",
+      "top6_batting_elo_diff": -8.256438723360361
+    },
+    {
+      "cricsheet_id": "1543366",
+      "date": "2026-07-09",
+      "match_id": "2026-07-09_Estonia_Norway_Koge_Cricket_Club",
+      "p_team1": 0.27798527479171753,
+      "p_team2": 0.7220147252082825,
+      "team1": "Estonia",
+      "team2": "Norway",
+      "top6_batting_elo_diff": -7.0331445476685985
+    },
+    {
+      "cricsheet_id": "1496577",
+      "date": "2026-07-09",
+      "match_id": "2026-07-09_India_England_County_Ground,_Bristol",
+      "p_team1": 0.49609997868537903,
+      "p_team2": 0.503900021314621,
+      "team1": "India",
+      "team2": "England",
+      "top6_batting_elo_diff": 10.93825604399376
+    },
+    {
+      "cricsheet_id": "1528580",
+      "date": "2026-07-09",
+      "match_id": "2026-07-09_Los_Angeles_Knight_Riders_Washington_Freedom_Grand_Prairie_Stadium,_Dallas",
+      "p_team1": 0.39472153782844543,
+      "p_team2": 0.6052784621715546,
+      "team1": "Los Angeles Knight Riders",
+      "team2": "Washington Freedom",
+      "top6_batting_elo_diff": -5.9297563111611
+    },
+    {
+      "cricsheet_id": "1543369",
+      "date": "2026-07-10",
+      "match_id": "2026-07-10_Belgium_Serbia_Svanholm_Park,_Brondby",
+      "p_team1": 0.7991045713424683,
+      "p_team2": 0.20089542865753174,
+      "team1": "Belgium",
+      "team2": "Serbia",
+      "top6_batting_elo_diff": 9.854415595654928
+    },
+    {
+      "cricsheet_id": "1512866",
+      "date": "2026-07-10",
+      "match_id": "2026-07-10_Durham_Derbyshire_Riverside_Ground,_Chester-le-Street",
+      "p_team1": 0.5408381223678589,
+      "p_team2": 0.4591618776321411,
+      "team1": "Durham",
+      "team2": "Derbyshire",
+      "top6_batting_elo_diff": -2.7589755328458523
+    },
+    {
+      "cricsheet_id": "1543367",
+      "date": "2026-07-10",
+      "match_id": "2026-07-10_Gibraltar_Romania_Svanholm_Park,_Brondby",
+      "p_team1": 0.3254317045211792,
+      "p_team2": 0.6745682954788208,
+      "team1": "Gibraltar",
+      "team2": "Romania",
+      "top6_batting_elo_diff": -7.847719011846948
+    },
+    {
+      "cricsheet_id": "1512867",
+      "date": "2026-07-10",
+      "match_id": "2026-07-10_Glamorgan_Warwickshire_Edgbaston,_Birmingham",
+      "p_team1": 0.3794397711753845,
+      "p_team2": 0.6205602288246155,
+      "team1": "Glamorgan",
+      "team2": "Warwickshire",
+      "top6_batting_elo_diff": -2.646022759983225
+    },
+    {
+      "cricsheet_id": "1512865",
+      "date": "2026-07-10",
+      "match_id": "2026-07-10_Hampshire_Essex_County_Ground,_Chelmsford",
+      "p_team1": 0.5963431596755981,
+      "p_team2": 0.40365684032440186,
+      "team1": "Hampshire",
+      "team2": "Essex",
+      "top6_batting_elo_diff": 7.4267083750014535
+    },
+    {
+      "cricsheet_id": "1543368",
+      "date": "2026-07-10",
+      "match_id": "2026-07-10_Hungary_Estonia_Koge_Cricket_Club",
+      "p_team1": 0.4529498219490051,
+      "p_team2": 0.5470501780509949,
+      "team1": "Hungary",
+      "team2": "Estonia",
+      "top6_batting_elo_diff": 3.431455675073039
+    },
+    {
+      "cricsheet_id": "1512871",
+      "date": "2026-07-10",
+      "match_id": "2026-07-10_Kent_Surrey_St_Lawrence_Ground,_Canterbury",
+      "p_team1": 0.45461180806159973,
+      "p_team2": 0.5453881919384003,
+      "team1": "Kent",
+      "team2": "Surrey",
+      "top6_batting_elo_diff": -9.697728162889689
+    },
+    {
+      "cricsheet_id": "1512868",
+      "date": "2026-07-10",
+      "match_id": "2026-07-10_Lancashire_Yorkshire_Old_Trafford,_Manchester",
+      "p_team1": 0.49010488390922546,
+      "p_team2": 0.5098951160907745,
+      "team1": "Lancashire",
+      "team2": "Yorkshire",
+      "top6_batting_elo_diff": 3.2076497139144067
+    },
+    {
+      "cricsheet_id": "1512872",
+      "date": "2026-07-10",
+      "match_id": "2026-07-10_Leicestershire_Nottinghamshire_Trent_Bridge,_Nottingham",
+      "p_team1": 0.3867127299308777,
+      "p_team2": 0.6132872700691223,
+      "team1": "Leicestershire",
+      "team2": "Nottinghamshire",
+      "top6_batting_elo_diff": -2.4813190570021106
+    },
+    {
+      "cricsheet_id": "1528582",
+      "date": "2026-07-10",
+      "match_id": "2026-07-10_Los_Angeles_Knight_Riders_San_Francisco_Unicorns_Grand_Prairie_Stadium,_Dallas",
+      "p_team1": 0.37684187293052673,
+      "p_team2": 0.6231581270694733,
+      "team1": "Los Angeles Knight Riders",
+      "team2": "San Francisco Unicorns",
+      "top6_batting_elo_diff": -9.809990303117502
+    },
+    {
+      "cricsheet_id": "1528581",
+      "date": "2026-07-10",
+      "match_id": "2026-07-10_MI_New_York_Seattle_Orcas_Grand_Prairie_Stadium,_Dallas",
+      "p_team1": 0.47689321637153625,
+      "p_team2": 0.5231067836284637,
+      "team1": "MI New York",
+      "team2": "Seattle Orcas",
+      "top6_batting_elo_diff": -8.299090042886746
+    },
+    {
+      "cricsheet_id": "1512870",
+      "date": "2026-07-10",
+      "match_id": "2026-07-10_Northamptonshire_Somerset_The_Cooper_Associates_County_Ground,_Taunton",
+      "p_team1": 0.5545417666435242,
+      "p_team2": 0.44545823335647583,
+      "team1": "Northamptonshire",
+      "team2": "Somerset",
+      "top6_batting_elo_diff": 7.344637956884526
+    },
+    {
+      "cricsheet_id": "1512869",
+      "date": "2026-07-10",
+      "match_id": "2026-07-10_Sussex_Middlesex_Merchant_Taylors'_School_Ground,_Northwood",
+      "p_team1": 0.4722142219543457,
+      "p_team2": 0.5277857780456543,
+      "team1": "Sussex",
+      "team2": "Middlesex",
+      "top6_batting_elo_diff": -1.427988273067058
+    },
+    {
+      "cricsheet_id": "1543370",
+      "date": "2026-07-10",
+      "match_id": "2026-07-10_Turkey_Norway_Koge_Cricket_Club",
+      "p_team1": 0.22293272614479065,
+      "p_team2": 0.7770672738552094,
+      "team1": "Turkey",
+      "team2": "Norway",
+      "top6_batting_elo_diff": -7.7349686667485
+    },
+    {
+      "cricsheet_id": "1512873",
+      "date": "2026-07-10",
+      "match_id": "2026-07-10_Worcestershire_Gloucestershire_County_Ground,_New_Road,_Worcester",
+      "p_team1": 0.4527062475681305,
+      "p_team2": 0.5472937524318695,
+      "team1": "Worcestershire",
+      "team2": "Gloucestershire",
+      "top6_batting_elo_diff": -9.193911616744117
+    },
+    {
+      "cricsheet_id": "1496578",
+      "date": "2026-07-11",
+      "match_id": "2026-07-11_England_India_The_Rose_Bowl,_Southampton",
+      "p_team1": 0.5827450752258301,
+      "p_team2": 0.4172549247741699,
+      "team1": "England",
+      "team2": "India",
+      "top6_batting_elo_diff": -1.3099610750741704
+    },
+    {
+      "cricsheet_id": "1528583",
+      "date": "2026-07-11",
+      "match_id": "2026-07-11_Texas_Super_Kings_Washington_Freedom_Grand_Prairie_Stadium,_Dallas",
+      "p_team1": 0.49469369649887085,
+      "p_team2": 0.5053063035011292,
+      "team1": "Texas Super Kings",
+      "team2": "Washington Freedom",
+      "top6_batting_elo_diff": 0.7131268335720051
+    },
+    {
+      "cricsheet_id": "1543372",
+      "date": "2026-07-12",
+      "match_id": "2026-07-12_Belgium_Romania_Koge_Cricket_Club",
+      "p_team1": 0.57920241355896,
+      "p_team2": 0.42079758644104004,
+      "team1": "Belgium",
+      "team2": "Romania",
+      "top6_batting_elo_diff": -2.234359824112289
+    },
+    {
+      "cricsheet_id": "1512874",
+      "date": "2026-07-12",
+      "match_id": "2026-07-12_Durham_Lancashire_Old_Trafford,_Manchester",
+      "p_team1": 0.3856971859931946,
+      "p_team2": 0.6143028140068054,
+      "team1": "Durham",
+      "team2": "Lancashire",
+      "top6_batting_elo_diff": -10.032779463440875
+    },
+    {
+      "cricsheet_id": "1512881",
+      "date": "2026-07-12",
+      "match_id": "2026-07-12_Glamorgan_Gloucestershire_County_Ground,_Bristol",
+      "p_team1": 0.4572827219963074,
+      "p_team2": 0.5427172780036926,
+      "team1": "Glamorgan",
+      "team2": "Gloucestershire",
+      "top6_batting_elo_diff": 1.6102329793600347
+    },
+    {
+      "cricsheet_id": "1543373",
+      "date": "2026-07-12",
+      "match_id": "2026-07-12_Hungary_Turkey_Svanholm_Park,_Brondby",
+      "p_team1": 0.6208528280258179,
+      "p_team2": 0.37914717197418213,
+      "team1": "Hungary",
+      "team2": "Turkey",
+      "top6_batting_elo_diff": 4.658459847009453
+    },
+    {
+      "cricsheet_id": "1512878",
+      "date": "2026-07-12",
+      "match_id": "2026-07-12_Leicestershire_Derbyshire_County_Ground,_Derby",
+      "p_team1": 0.5036805272102356,
+      "p_team2": 0.4963194727897644,
+      "team1": "Leicestershire",
+      "team2": "Derbyshire",
+      "top6_batting_elo_diff": 2.187894167326931
+    },
+    {
+      "cricsheet_id": "1512882",
+      "date": "2026-07-12",
+      "match_id": "2026-07-12_Middlesex_Kent_St_Lawrence_Ground,_Canterbury",
+      "p_team1": 0.4613359570503235,
+      "p_team2": 0.5386640429496765,
+      "team1": "Middlesex",
+      "team2": "Kent",
+      "top6_batting_elo_diff": -0.4880568144112658
+    },
+    {
+      "cricsheet_id": "1512880",
+      "date": "2026-07-12",
+      "match_id": "2026-07-12_Northamptonshire_Warwickshire_County_Ground,_Northampton",
+      "p_team1": 0.5509929656982422,
+      "p_team2": 0.4490070343017578,
+      "team1": "Northamptonshire",
+      "team2": "Warwickshire",
+      "top6_batting_elo_diff": 8.362895360887705
+    },
+    {
+      "cricsheet_id": "1543374",
+      "date": "2026-07-12",
+      "match_id": "2026-07-12_Serbia_Gibraltar_Koge_Cricket_Club",
+      "p_team1": 0.2694380283355713,
+      "p_team2": 0.7305619716644287,
+      "team1": "Serbia",
+      "team2": "Gibraltar",
+      "top6_batting_elo_diff": -8.358483465649442
+    },
+    {
+      "cricsheet_id": "1512879",
+      "date": "2026-07-12",
+      "match_id": "2026-07-12_Somerset_Worcestershire_The_Cooper_Associates_County_Ground,_Taunton",
+      "p_team1": 0.5497571229934692,
+      "p_team2": 0.45024287700653076,
+      "team1": "Somerset",
+      "team2": "Worcestershire",
+      "top6_batting_elo_diff": 7.372454764401027
+    },
+    {
+      "cricsheet_id": "1512876",
+      "date": "2026-07-12",
+      "match_id": "2026-07-12_Surrey_Essex_Kennington_Oval,_London",
+      "p_team1": 0.5543828010559082,
+      "p_team2": 0.4456171989440918,
+      "team1": "Surrey",
+      "team2": "Essex",
+      "top6_batting_elo_diff": 10.959417513438439
+    },
+    {
+      "cricsheet_id": "1512877",
+      "date": "2026-07-12",
+      "match_id": "2026-07-12_Sussex_Hampshire_County_Ground,_Hove",
+      "p_team1": 0.45721131563186646,
+      "p_team2": 0.5427886843681335,
+      "team1": "Sussex",
+      "team2": "Hampshire",
+      "top6_batting_elo_diff": -1.607281195995938
+    },
+    {
+      "cricsheet_id": "1512875",
+      "date": "2026-07-12",
+      "match_id": "2026-07-12_Yorkshire_Nottinghamshire_Headingley,_Leeds",
+      "p_team1": 0.4542344808578491,
+      "p_team2": 0.5457655191421509,
+      "team1": "Yorkshire",
+      "team2": "Nottinghamshire",
+      "top6_batting_elo_diff": -0.8730248622139243
+    },
+    {
+      "cricsheet_id": "1543375",
+      "date": "2026-07-13",
+      "match_id": "2026-07-13_Denmark_Hungary_Svanholm_Park,_Brondby",
+      "p_team1": 0.8287078738212585,
+      "p_team2": 0.17129212617874146,
+      "team1": "Denmark",
+      "team2": "Hungary",
+      "top6_batting_elo_diff": 7.47528290403352
+    }
+  ],
+  "probability_semantics": "p_team1_wins",
+  "protocol_id": "forward_2026-06-01_2026-07-13_v1",
+  "protocol_sha256": "a7c1648ea058b3cbccf550a77dde95d5d95b473c010fa62cc32e5432af9d387f",
+  "schema_version": 1,
+  "state_fingerprint_sha256": "725719e6ab1951cb0fa36544ea2e710ce22f0625e5934bd3dae992e21f9b792f"
+}
