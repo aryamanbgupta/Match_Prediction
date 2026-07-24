@@ -97,6 +97,11 @@ def _intern(d: Dict[str, int], key: str) -> int:
     return i
 
 
+def _has_nonzero_match_stats(stats: dict, fields: tuple[str, ...]) -> bool:
+    """Keep zero-ball rows when runs/dismissals/wickets still occurred."""
+    return any(int(stats.get(field, 0)) != 0 for field in fields)
+
+
 def _verify_outcome_count_conservation(conn, sample_n: int = 500) -> None:
     """Schema v4 guard: Σ(c0..cw) must equal the `balls` column on every
     batting / bowling / batting_vs_type / bowling_vs_hand row, and equal
@@ -646,7 +651,9 @@ def build(
 
         # --- emit match-log rows (schema v3) --------------------------
         for pid_str, st in stats.current_match_batting.items():
-            if st['balls'] <= 0:
+            if not _has_nonzero_match_stats(
+                st, ('runs', 'balls', 'dismissals')
+            ):
                 continue
             pid = _intern(player_ids, pid_str)
             batting_log_rows.append((
@@ -654,7 +661,9 @@ def build(
                 int(st['runs']), int(st['balls']), int(st['dismissals']),
             ))
         for pid_str, st in stats.current_match_bowling.items():
-            if st['balls_bowled'] <= 0:
+            if not _has_nonzero_match_stats(
+                st, ('runs_given', 'balls_bowled', 'wickets')
+            ):
                 continue
             pid = _intern(player_ids, pid_str)
             bowling_log_rows.append((

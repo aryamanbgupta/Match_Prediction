@@ -14,6 +14,7 @@ from parsing_v2 import (  # noqa: E402
     extract_delivery_semantics,
     parse_match_data_v2,
 )
+from build_stats_cache import _has_nonzero_match_stats  # noqa: E402
 
 
 REGISTRY = {
@@ -178,3 +179,18 @@ def test_legacy_parser_contract_remains_the_default():
     assert tracker.batting_stats["bat"]["balls"] == 3
     assert details[0]["total_runs"] == 2
     assert details[0]["total_balls"] == 1
+
+
+def test_match_log_keeps_zero_ball_runs_and_dismissals():
+    assert _has_nonzero_match_stats(
+        {"runs": 0, "balls": 0, "dismissals": 1},
+        ("runs", "balls", "dismissals"),
+    )
+    assert _has_nonzero_match_stats(
+        {"runs": 4, "balls": 0, "dismissals": 0},
+        ("runs", "balls", "dismissals"),
+    )
+    assert not _has_nonzero_match_stats(
+        {"runs": 0, "balls": 0, "dismissals": 0},
+        ("runs", "balls", "dismissals"),
+    )
