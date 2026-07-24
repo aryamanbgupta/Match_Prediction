@@ -152,6 +152,15 @@ class PlayerEloTracker:
 
 
 _OUTCOME_COUNT_KEYS = ('c0', 'c1', 'c2', 'c4', 'c6', 'cw')
+_BOWLER_WICKET_KINDS = {
+    'bowled', 'caught', 'caught and bowled', 'lbw', 'stumped', 'hit wicket',
+}
+LEGACY_DELIVERY_SEMANTICS = 'inclusive_total_runs_v1'
+I5_DELIVERY_SEMANTICS = 'legal_off_bat_v1'
+DELIVERY_SEMANTICS = {
+    LEGACY_DELIVERY_SEMANTICS,
+    I5_DELIVERY_SEMANTICS,
+}
 
 # Zero-valued fallbacks for outcome distribution features. Used when
 # parse_match_data_v2 is invoked without a prior (legacy pre-v4 path).
@@ -420,40 +429,61 @@ class PlayerStatsTracker:
         }
 
     def update_stats(self, batter_id, bowler_id, runs, is_wicket,
-                     batter_hand=None, is_pace=None):
+                     batter_hand=None, is_pace=None, *, bowler_runs=None,
+                     is_legal=True, dismissed_batter_id=None,
+                     is_bowler_wicket=None):
         """
-        Update all statistics after a ball.
+        Update all statistics after a delivery.
 
         Args:
             batter_id: Batter's cricsheet ID
             bowler_id: Bowler's cricsheet ID
-            runs: Runs scored off the ball
-            is_wicket: Whether a wicket fell
+            runs: Runs credited to the batter (off the bat)
+            is_wicket: Whether any team wicket fell (the model target)
             batter_hand: 'left', 'right', or None (for type-based bowling stats)
             is_pace: True/False/None (for type-based batting stats)
+            bowler_runs: Runs charged to the bowler. Defaults to ``runs`` for
+                backwards compatibility with callers that represent a plain
+                legal delivery.
+            is_legal: False for wides and no-balls. Runs still accrue, but
+                balls and legal-ball outcome counts do not.
+            dismissed_batter_id: Player actually dismissed. This can be the
+                non-striker on a run-out; defaults to the striker for legacy
+                wicket calls.
+            is_bowler_wicket: Whether the dismissal is credited to the
+                bowler. Defaults to ``is_wicket`` for legacy calls.
         """
-        ck = _outcome_bucket_key(runs, is_wicket)
+        if bowler_runs is None:
+            bowler_runs = runs
+        if is_bowler_wicket is None:
+            is_bowler_wicket = is_wicket
+        if is_wicket and dismissed_batter_id is None:
+            dismissed_batter_id = batter_id
+        ck = _outcome_bucket_key(runs, is_wicket) if is_legal else None
 
         # Update batting stats
         bs = self.batting_stats[batter_id]
         bs['runs'] += runs
-        bs['balls'] += 1
-        if is_wicket:
-            bs['dismissals'] += 1
-        bs[ck] += 1
+        if is_legal:
+            bs['balls'] += 1
+            bs[ck] += 1
+        if dismissed_batter_id is not None:
+            self.batting_stats[dismissed_batter_id]['dismissals'] += 1
 
         # Update bowling stats
         bw = self.bowling_stats[bowler_id]
-        bw['runs_given'] += runs
-        bw['balls_bowled'] += 1
-        if is_wicket:
+        bw['runs_given'] += bowler_runs
+        if is_legal:
+            bw['balls_bowled'] += 1
+            bw[ck] += 1
+        if is_bowler_wicket:
             bw['wickets'] += 1
-        bw[ck] += 1
 
         # Update h2h (no outcome counts — sparse 2D cell, stays scalar-only)
         self.h2h_stats[(batter_id, bowler_id)]['runs'] += runs
-        self.h2h_stats[(batter_id, bowler_id)]['balls'] += 1
-        if is_wicket:
+        if is_legal:
+            self.h2h_stats[(batter_id, bowler_id)]['balls'] += 1
+        if is_bowler_wicket:
             self.h2h_stats[(batter_id, bowler_id)]['dismissals'] += 1
 
         # NEW: Update type-based batting stats (batter vs pace/spin)
@@ -461,29 +491,33 @@ class PlayerStatsTracker:
             type_key = 'pace' if is_pace else 'spin'
             bvt = self.batting_vs_type[batter_id][type_key]
             bvt['runs'] += runs
-            bvt['balls'] += 1
-            if is_wicket:
+            if is_legal:
+                bvt['balls'] += 1
+                bvt[ck] += 1
+            if dismissed_batter_id == batter_id:
                 bvt['dismissals'] += 1
-            bvt[ck] += 1
 
         # NEW: Update hand-based bowling stats (bowler vs LHB/RHB)
         if batter_hand in ('left', 'right'):
             bvh = self.bowling_vs_hand[bowler_id][batter_hand]
-            bvh['runs_given'] += runs
-            bvh['balls_bowled'] += 1
-            if is_wicket:
+            bvh['runs_given'] += bowler_runs
+            if is_legal:
+                bvh['balls_bowled'] += 1
+                bvh[ck] += 1
+            if is_bowler_wicket:
                 bvh['wickets'] += 1
-            bvh[ck] += 1
 
         # Update current match stats
         self.current_match_batting[batter_id]['runs'] += runs
-        self.current_match_batting[batter_id]['balls'] += 1
-        if is_wicket:
-            self.current_match_batting[batter_id]['dismissals'] += 1
+        if is_legal:
+            self.current_match_batting[batter_id]['balls'] += 1
+        if dismissed_batter_id is not None:
+            self.current_match_batting[dismissed_batter_id]['dismissals'] += 1
 
-        self.current_match_bowling[bowler_id]['runs_given'] += runs
-        self.current_match_bowling[bowler_id]['balls_bowled'] += 1
-        if is_wicket:
+        self.current_match_bowling[bowler_id]['runs_given'] += bowler_runs
+        if is_legal:
+            self.current_match_bowling[bowler_id]['balls_bowled'] += 1
+        if is_bowler_wicket:
             self.current_match_bowling[bowler_id]['wickets'] += 1
 
     # --- Schema v4: empirical outcome distribution getters ------------------
@@ -799,8 +833,18 @@ class InningsFeatureCalculator:
         # NEW: Per-bowler tracking (resets each innings)
         self.bowler_balls_bowled = defaultdict(int)
 
-    def update_ball_history(self, runs, is_boundary, is_wicket=False, batter_id=None, bowler_id=None):
-        """Update rolling windows after each ball"""
+    def update_ball_history(self, runs, is_boundary, is_wicket=False,
+                            batter_id=None, bowler_id=None, *,
+                            batter_runs=None, is_legal=True):
+        """Update innings state after a delivery.
+
+        ``runs`` is the team-score change and feeds momentum/partnership
+        features. ``batter_runs`` is the off-the-bat value and feeds the
+        batter card. Wides/no-balls remain in delivery-history momentum but
+        do not increment balls faced or bowler balls.
+        """
+        if batter_runs is None:
+            batter_runs = runs
         self.last_5_balls.append(runs)
         self.last_10_balls.append(runs)
         self.last_30_balls.append(runs)
@@ -812,11 +856,12 @@ class InningsFeatureCalculator:
 
         # NEW: Update per-batter stats
         if batter_id is not None:
-            self.batter_balls_faced[batter_id] += 1
-            self.batter_runs_scored[batter_id] += runs
+            if is_legal:
+                self.batter_balls_faced[batter_id] += 1
+            self.batter_runs_scored[batter_id] += batter_runs
 
         # NEW: Update per-bowler stats
-        if bowler_id is not None:
+        if bowler_id is not None and is_legal:
             self.bowler_balls_bowled[bowler_id] += 1
 
         # NEW: Update partnership
@@ -887,7 +932,71 @@ def normalize_ball_outcome(runs, is_wicket):
         return 6
     else:
         return runs  # 0,1,2,4,6 stay the same
-    
+
+
+def extract_delivery_semantics(delivery, player_registry):
+    """Return cricket-correct run, legality, boundary, and wicket semantics.
+
+    Cricsheet exposes team, batter, and extras runs separately. Keeping those
+    channels separate is essential: byes/leg-byes affect the score but not
+    the batter or bowler figures, while wides/no-balls are not legal balls.
+    """
+    run_data = delivery.get('runs', {})
+    team_runs = int(run_data.get('total', 0))
+    batter_runs = int(run_data.get('batter', 0))
+    extras_runs = int(run_data.get('extras', team_runs - batter_runs))
+    if team_runs != batter_runs + extras_runs:
+        raise ValueError(
+            "delivery run conservation failed: "
+            f"total={team_runs} batter={batter_runs} extras={extras_runs}"
+        )
+
+    extras = {
+        str(kind): int(value)
+        for kind, value in delivery.get('extras', {}).items()
+    }
+    is_wide = extras.get('wides', 0) > 0
+    is_noball = extras.get('noballs', 0) > 0
+    is_legal = not (is_wide or is_noball)
+    non_bowler_extras = (
+        extras.get('byes', 0)
+        + extras.get('legbyes', 0)
+        + extras.get('penalty', 0)
+    )
+    bowler_runs = team_runs - non_bowler_extras
+
+    wickets = delivery.get('wickets', [])
+    dismissed_ids = tuple(
+        player_registry.get(wicket.get('player_out'), wicket.get('player_out'))
+        for wicket in wickets
+        if wicket.get('player_out') is not None
+    )
+    wicket_kinds = tuple(str(wicket.get('kind', 'unknown')) for wicket in wickets)
+    is_bowler_wicket = any(kind in _BOWLER_WICKET_KINDS for kind in wicket_kinds)
+
+    return {
+        'team_runs': team_runs,
+        'batter_runs': batter_runs,
+        'extras_runs': extras_runs,
+        'bowler_runs': bowler_runs,
+        'extras_types': tuple(sorted(extras)),
+        'wide_runs': extras.get('wides', 0),
+        'noball_runs': extras.get('noballs', 0),
+        'bye_runs': extras.get('byes', 0),
+        'legbye_runs': extras.get('legbyes', 0),
+        'penalty_runs': extras.get('penalty', 0),
+        'is_wide': is_wide,
+        'is_noball': is_noball,
+        'is_legal': is_legal,
+        'is_boundary': (
+            batter_runs in (4, 6) and not bool(run_data.get('non_boundary', False))
+        ),
+        'is_wicket': bool(wickets),
+        'wicket_kinds': wicket_kinds,
+        'dismissed_batter_ids': dismissed_ids,
+        'is_bowler_wicket': is_bowler_wicket,
+    }
+
 
 def extract_raw_state(delivery, player_registry, score, wickets, balls):
     """
@@ -898,27 +1007,20 @@ def extract_raw_state(delivery, player_registry, score, wickets, balls):
     batter = delivery['batter']
     non_striker = delivery['non_striker']
     bowler = delivery['bowler']
-    runs = delivery['runs']['total']
+    delivery_state = extract_delivery_semantics(delivery, player_registry)
     
     # Player IDs from registry
     batter_id = player_registry[batter]
     non_striker_id = player_registry[non_striker]
     bowler_id = player_registry[bowler]
     
-    # Check for events
-    is_wicket = 'wickets' in delivery
-    extra_type = list(delivery.get('extras', {}).keys()) if 'extras' in delivery else []
-    is_wide = 'wides' in extra_type
-    is_noball = 'noballs' in extra_type
-    
     return {
         'batter_id': batter_id,
         'non_striker_id': non_striker_id,
         'bowler_id': bowler_id,
-        'runs': runs,
-        'is_wicket': is_wicket,
-        'is_wide': is_wide,
-        'is_noball': is_noball,
+        # Backwards-compatible alias: ``runs`` remains the team-score change.
+        'runs': delivery_state['team_runs'],
+        **delivery_state,
         'score': score,
         'wickets': wickets,
         'balls_bowled': balls,
@@ -985,7 +1087,8 @@ def calculate_pressure_features(state, innings_calc):
 def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None,
                         player_metadata=None, elo_tracker=None, match_k_factor=None,
                         prior=None, phase_priors=None,
-                        k_player=30.0, k_venue=200.0, match_ref=None):
+                        k_player=30.0, k_venue=200.0, match_ref=None,
+                        delivery_semantics=LEGACY_DELIVERY_SEMANTICS):
     """
     DESIGN DECISION: Pass tracker as parameter rather than global.
     REASONING: Makes dependencies explicit, easier to test, allows multiple trackers
@@ -1010,10 +1113,20 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None,
                process (irreproducible across runs) and collision-prone,
                blocking parquet↔cricsheet joins. Callers that don't emit
                ball rows for joining may omit it (legacy hash fallback).
+        delivery_semantics: Versioned label/state contract. The legacy mode
+               preserves the deployed model's inclusive-total-run behavior;
+               ``legal_off_bat_v1`` enables the isolated I5 rebuild.
 
     Returns:
         Tuple of (all_balls list, innings_totals list for venue update)
     """
+    if delivery_semantics not in DELIVERY_SEMANTICS:
+        raise ValueError(
+            f"unsupported delivery semantics {delivery_semantics!r}; "
+            f"expected one of {sorted(DELIVERY_SEMANTICS)}"
+        )
+    use_i5_semantics = delivery_semantics == I5_DELIVERY_SEMANTICS
+
     data = json.loads(json_data)
     match_key = match_ref if match_ref is not None else hash(json_data) % 100000
     player_registry = data['info']['registry']['people']
@@ -1317,8 +1430,14 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None,
                     'team_batting_sr': team_batting_sr,
                     'team_bowling_avg': team_bowling_avg,
                     'team_bowling_econ': team_bowling_econ,
-                    # Target
-                    'ball_outcome': normalize_ball_outcome(state['runs'], state['is_wicket']),
+                    # I5 uses the legal-delivery, off-the-bat outcome. Raw
+                    # threes remain available as batter_runs even though the
+                    # current six-class target groups 3→2. Legacy mode keeps
+                    # the deployed inclusive-total-run target.
+                    'ball_outcome': normalize_ball_outcome(
+                        (state['batter_runs'] if use_i5_semantics
+                         else state['team_runs']),
+                        state['is_wicket']),
 
                     # Match Context Features
                     'venue': match_info['venue'],
@@ -1331,76 +1450,135 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None,
                     **match_context,
                 }
 
-                all_balls.append(ball_record)
+                # I5: the model represents legal-delivery outcomes. Wides and
+                # no-balls update match/player state below but are modeled by
+                # the simulator's separate extras process.
+                if state['is_legal'] or not use_i5_semantics:
+                    all_balls.append(ball_record)
 
                 # Update states AFTER recording the ball
                 # DESIGN DECISION: Update after recording
                 # REASONING: Features should reflect pre-ball state
-                player_stats_tracker.update_stats(
-                    state['batter_id'],
-                    state['bowler_id'],
-                    state['runs'],
-                    state['is_wicket'],
-                    batter_hand=batter_hand if batter_hand != 'unknown' else None,
-                    is_pace=is_pace
-                )
+                if use_i5_semantics:
+                    player_stats_tracker.update_stats(
+                        state['batter_id'],
+                        state['bowler_id'],
+                        state['batter_runs'],
+                        state['is_wicket'],
+                        batter_hand=(
+                            batter_hand if batter_hand != 'unknown' else None
+                        ),
+                        is_pace=is_pace,
+                        bowler_runs=state['bowler_runs'],
+                        is_legal=state['is_legal'],
+                        dismissed_batter_id=(
+                            state['dismissed_batter_ids'][0]
+                            if state['dismissed_batter_ids'] else None
+                        ),
+                        is_bowler_wicket=state['is_bowler_wicket'],
+                    )
+                else:
+                    player_stats_tracker.update_stats(
+                        state['batter_id'],
+                        state['bowler_id'],
+                        state['team_runs'],
+                        state['is_wicket'],
+                        batter_hand=(
+                            batter_hand if batter_hand != 'unknown' else None
+                        ),
+                        is_pace=is_pace,
+                    )
 
-                # Update ELO ratings AFTER recording the ball
-                if elo_tracker is not None:
+                # ELO describes the legal batter-vs-bowler outcome channel.
+                if elo_tracker is not None and (
+                    state['is_legal'] or not use_i5_semantics
+                ):
                     elo_tracker.update(
                         state['batter_id'],
                         state['bowler_id'],
-                        state['runs'],
+                        (state['batter_runs'] if use_i5_semantics
+                         else state['team_runs']),
                         state['is_wicket'],
                         k_factor=match_k_factor
                     )
 
                 # NEW: Pass batter/bowler IDs and wicket status for tracking
-                innings_calc.update_ball_history(
-                    state['runs'],
-                    is_boundary=(state['runs'] >= 4),
-                    is_wicket=state['is_wicket'],
-                    batter_id=state['batter_id'],
-                    bowler_id=state['bowler_id']
-                )
+                if use_i5_semantics:
+                    innings_calc.update_ball_history(
+                        state['team_runs'],
+                        is_boundary=state['is_boundary'],
+                        is_wicket=state['is_wicket'],
+                        batter_id=state['batter_id'],
+                        bowler_id=state['bowler_id'],
+                        batter_runs=state['batter_runs'],
+                        is_legal=state['is_legal'],
+                    )
+                else:
+                    innings_calc.update_ball_history(
+                        state['team_runs'],
+                        is_boundary=(state['team_runs'] >= 4),
+                        is_wicket=state['is_wicket'],
+                        batter_id=state['batter_id'],
+                        bowler_id=state['bowler_id'],
+                    )
 
                 # Update match state
                 if state['is_wicket']:
                     wickets += 1
-                score += state['runs']
-                is_legal = not (state['is_wide'] or state['is_noball'])
-                if is_legal:
+                score += state['team_runs']
+                if state['is_legal']:
                     balls += 1
 
-                # Accumulate per-innings stats for venue profile
-                if is_legal:
+                # Accumulate per-innings stats for venue profile.
+                if use_i5_semantics:
+                    # All score changes count toward venue/phase run rates;
+                    # only legal balls count in denominators/outcome dists.
+                    inn_agg['total_runs'] += state['team_runs']
+                    if state['balls_bowled'] < 36:
+                        inn_agg['powerplay_runs'] += state['team_runs']
+                    if state['balls_bowled'] >= 90:
+                        inn_agg['death_runs'] += state['team_runs']
+
+                    if state['is_legal']:
+                        inn_agg['total_balls'] += 1
+                        if (state['team_runs'] == 0
+                                and not state['is_wicket']):
+                            inn_agg['dots'] += 1
+                        if state['is_boundary'] and not state['is_wicket']:
+                            inn_agg['boundaries'] += 1
+                        if state['is_wicket']:
+                            inn_agg['wickets'] += 1
+                        bucket = _outcome_bucket_key(
+                            state['batter_runs'], state['is_wicket'])
+                        inn_agg[bucket] += 1
+                        pre_phase = _classify_phase_pre_ball(
+                            state['balls_bowled'])
+                        inn_agg[f"{bucket}_{pre_phase}"] += 1
+                        if state['balls_bowled'] < 36:
+                            inn_agg['powerplay_balls'] += 1
+                        if state['balls_bowled'] >= 90:
+                            inn_agg['death_balls'] += 1
+                elif state['is_legal']:
+                    # Exact deployed legacy accounting.
                     inn_agg['total_balls'] += 1
-                    inn_agg['total_runs'] += state['runs']
-                    if state['runs'] == 0 and not state['is_wicket']:
+                    inn_agg['total_runs'] += state['team_runs']
+                    if state['team_runs'] == 0 and not state['is_wicket']:
                         inn_agg['dots'] += 1
-                    if state['runs'] >= 4 and not state['is_wicket']:
+                    if state['team_runs'] >= 4 and not state['is_wicket']:
                         inn_agg['boundaries'] += 1
                     if state['is_wicket']:
                         inn_agg['wickets'] += 1
-                    # Schema v4: 6-class outcome bucket. Gated on is_legal so
-                    # venue total_balls == Σ venue cX; wides/noballs are
-                    # already excluded from venue ball counts.
-                    bucket = _outcome_bucket_key(state['runs'], state['is_wicket'])
+                    bucket = _outcome_bucket_key(
+                        state['team_runs'], state['is_wicket'])
                     inn_agg[bucket] += 1
-                    # Phase 3: phase-split bucket using PRE-ball phase
-                    # boundaries (state['balls_bowled']). This intentionally
-                    # uses a different convention than the venue PP/death
-                    # accumulators below (which use post-ball `balls`) so
-                    # the per-ball phase emitted to the model at training
-                    # time matches the inference-time `_classify_phase_pre_ball`.
-                    pre_phase = _classify_phase_pre_ball(state['balls_bowled'])
+                    pre_phase = _classify_phase_pre_ball(
+                        state['balls_bowled'])
                     inn_agg[f"{bucket}_{pre_phase}"] += 1
-                    # Phase stats (balls is already incremented)
-                    if balls <= 36:  # powerplay: first 6 overs
-                        inn_agg['powerplay_runs'] += state['runs']
+                    if balls <= 36:
+                        inn_agg['powerplay_runs'] += state['team_runs']
                         inn_agg['powerplay_balls'] += 1
-                    if balls > 90:  # death: overs 16-20 (balls 91-120)
-                        inn_agg['death_runs'] += state['runs']
+                    if balls > 90:
+                        inn_agg['death_runs'] += state['team_runs']
                         inn_agg['death_balls'] += 1
 
         # NEW: Store first innings score for chase calculation
@@ -1426,4 +1604,3 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None,
     player_stats_tracker.end_match()
 
     return all_balls, innings_totals, match_info['venue'], innings_details, chase_won
-
