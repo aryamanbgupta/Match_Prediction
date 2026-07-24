@@ -194,3 +194,24 @@ def test_match_log_keeps_zero_ball_runs_and_dismissals():
         {"runs": 0, "balls": 0, "dismissals": 0},
         ("runs", "balls", "dismissals"),
     )
+
+
+def test_all_zero_wide_appearance_does_not_consume_recent_batting_slot():
+    tracker = PlayerStatsTracker()
+    tracker.start_match()
+    tracker.update_stats(
+        "bat",
+        "bowl",
+        0,
+        False,
+        bowler_runs=1,
+        is_legal=False,
+    )
+    tracker.end_match()
+
+    assert list(tracker.recent_batting["bat"]) == []
+    assert list(tracker.recent_bowling["bowl"]) == [{
+        "runs_given": 1,
+        "balls_bowled": 0,
+        "wickets": 0,
+    }]

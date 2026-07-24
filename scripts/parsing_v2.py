@@ -303,10 +303,16 @@ class PlayerStatsTracker:
     def end_match(self):
         """Push current match stats to recent history"""
         for player_id, stats in self.current_match_batting.items():
-            self.recent_batting[player_id].append(stats.copy())
+            # I5 can touch a striker on a wide without adding batter runs,
+            # a legal ball, or a dismissal. That is not a batting
+            # performance and must not consume one of the five recent-form
+            # slots (nor create a match-log row).
+            if any(int(value) != 0 for value in stats.values()):
+                self.recent_batting[player_id].append(stats.copy())
 
         for player_id, stats in self.current_match_bowling.items():
-            self.recent_bowling[player_id].append(stats.copy())
+            if any(int(value) != 0 for value in stats.values()):
+                self.recent_bowling[player_id].append(stats.copy())
 
     def get_batting_features(self, batter_id):
         """Get batting stats features at current point in time"""
