@@ -2,26 +2,33 @@
 materialization pipeline.
 
 Default model: xgb_match_v3_m7_production. Override with --model-dir.
-Per-fixture unfrozen inference: rehydrate SQLite + tracker queries
-as-of the fixture date. Golden-test data (2026-04-17+) is excluded
-from the SQLite cache and tracker snapshot — fixtures past 2026-04-16
-fall back to the latest non-golden state.
+Per-fixture inference rehydrates SQLite + tracker queries as of the fixture
+date. The CLI inspects both state sources before loading the model and blocks
+silently stale or internally mismatched state. Refreshed state must live
+outside the frozen production model directory and can be selected explicitly.
 
 Usage:
     uv run python scripts/predict_fixture.py --fixture fixtures/<id>.json
     uv run python scripts/predict_fixture.py --fixture <path> --out predictions/<id>.json
     uv run python scripts/predict_fixture.py --fixture <path> --model-dir models/<other>
-
-First run builds the tracker snapshot pickle (~30s); subsequent runs sub-second.
+    uv run python scripts/predict_fixture.py --fixture <path> \
+        --state-dir data/forward_state/2026-06-01_2026-07-13 \
+        --tracker-snapshot tmp/live_state/tracker_snapshot.pkl \
+        --tracker-source-dir data/t20s_json \
+        --tracker-source-dir \
+          data/forward_holdout/2026-06-01_2026-07-13/context_t20s_json \
+        --rebuild-snapshot
 """
 from __future__ import annotations
 
 import argparse
 import json
 import pickle
+import sqlite3
 import sys
 import time
-from datetime import datetime
+from collections.abc import Sequence
+from datetime import date, datetime
 from pathlib import Path
 
 import joblib
@@ -36,7 +43,10 @@ from materialize_match_features import (  # noqa: E402
     _lineup_mix_counts, _split_elo, FEATURE_COLUMNS,
 )
 from parsing_v2 import classify_match_context  # noqa: E402
-from loaders_common import iter_matches_chronological  # noqa: E402
+from loaders_common import (  # noqa: E402
+    SAME_DAY_ORDER_VERSION,
+    iter_matches_chronological_multi,
+)
 from player_metadata import PlayerMetadataProvider  # noqa: E402
 from stats_provider import StatsProvider  # noqa: E402
 from tracker_rehydration import (  # noqa: E402
@@ -46,17 +56,43 @@ from tracker_rehydration import (  # noqa: E402
 
 MODEL_DIR = REPO / "models" / "xgb_match_v3_m7_production"
 TRACKER_SNAPSHOT = REPO / "data" / "tracker_snapshot_test_end.pkl"
+DEFAULT_STATE_DIR = REPO / "models"
+DEFAULT_TRACKER_SOURCE_DIRS = (REPO / "data" / "t20s_json",)
+DEFAULT_MAX_STATE_AGE_DAYS = 14
 EDGE_THRESHOLD = 0.0
 
 
-def build_tracker_snapshot(source_dir: Path = REPO / "data" / "t20s_json") -> dict:
+def _normalize_source_dirs(
+    source_dirs: Sequence[Path | str] | Path | str,
+) -> tuple[Path, ...]:
+    if isinstance(source_dirs, (str, Path)):
+        source_dirs = (source_dirs,)
+    normalized = tuple(Path(p).resolve() for p in source_dirs)
+    if not normalized:
+        raise ValueError("at least one tracker source directory is required")
+    missing = [str(p) for p in normalized if not p.is_dir()]
+    if missing:
+        raise FileNotFoundError(
+            "tracker source directories do not exist: " + ", ".join(missing)
+        )
+    return normalized
+
+
+def build_tracker_snapshot(
+    source_dirs: Sequence[Path | str] | Path | str = DEFAULT_TRACKER_SOURCE_DIRS,
+    snapshot_path: Path = TRACKER_SNAPSHOT,
+) -> dict:
     """Walk every match in the corpus and snapshot the three Phase A2
-    trackers. The corpus excludes golden data (2026-04-17+) by design —
-    that's reserved for final eval. Records are stored chronologically
-    and filtered by query date at lookup time, so a single snapshot
-    serves all fixture-date queries.
+    trackers.
+
+    Multiple source pools are merged in the versioned I6
+    ``(date, Cricsheet ID)`` order and duplicate match IDs fail closed.
+    Records are filtered by query date at lookup time, so one snapshot can
+    safely serve earlier fixture-date queries too.
     """
-    print(f"Building Phase A2 tracker snapshot from {source_dir} "
+    normalized_dirs = _normalize_source_dirs(source_dirs)
+    print(f"Building Phase A2 tracker snapshot from "
+          f"{', '.join(str(p) for p in normalized_dirs)} "
           f"(one-time, ~30s)...")
     t0 = time.time()
     form = TeamFormTracker()
@@ -65,8 +101,8 @@ def build_tracker_snapshot(source_dir: Path = REPO / "data" / "t20s_json") -> di
 
     n = 0
     latest = None
-    for mid, json_text, match_date in iter_matches_chronological(
-            str(source_dir), gender="male"):
+    for mid, json_text, match_date in iter_matches_chronological_multi(
+            normalized_dirs, gender="male"):
         n += 1
         latest = match_date if latest is None or match_date > latest else latest
         data = json.loads(json_text)
@@ -100,28 +136,42 @@ def build_tracker_snapshot(source_dir: Path = REPO / "data" / "t20s_json") -> di
         "home_records": dict(home.records),
         "n_matches_walked": n,
         "built_at": datetime.utcnow().isoformat() + "Z",
+        "source_dirs": [str(p) for p in normalized_dirs],
+        "same_day_order_version": SAME_DAY_ORDER_VERSION,
     }
-    TRACKER_SNAPSHOT.parent.mkdir(parents=True, exist_ok=True)
-    with open(TRACKER_SNAPSHOT, "wb") as f:
+    snapshot_path = Path(snapshot_path)
+    snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(snapshot_path, "wb") as f:
         pickle.dump(snapshot, f)
     dt = time.time() - t0
-    print(f"  walked {n} matches in {dt:.1f}s -> {TRACKER_SNAPSHOT}")
+    print(f"  walked {n} matches in {dt:.1f}s -> {snapshot_path}")
     return snapshot
 
 
-def _peek_snapshot_as_of() -> str | None:
+def _read_tracker_snapshot(snapshot_path: Path = TRACKER_SNAPSHOT) -> dict:
+    if not Path(snapshot_path).exists():
+        raise FileNotFoundError(f"tracker snapshot not found: {snapshot_path}")
+    with open(snapshot_path, "rb") as f:
+        snapshot = pickle.load(f)
+    if not isinstance(snapshot, dict):
+        raise RuntimeError(f"tracker snapshot is not a dict: {snapshot_path}")
+    return snapshot
+
+
+def _peek_snapshot_as_of(snapshot_path: Path = TRACKER_SNAPSHOT) -> str | None:
     """Return the tracker snapshot's `as_of` field for diagnostics."""
-    if not TRACKER_SNAPSHOT.exists():
+    if not Path(snapshot_path).exists():
         return None
-    with open(TRACKER_SNAPSHOT, "rb") as f:
-        return pickle.load(f).get("as_of")
+    return _read_tracker_snapshot(snapshot_path).get("as_of")
 
 
-def load_trackers() -> tuple[TeamFormTracker, H2HTracker, HomeVenueTracker]:
-    if not TRACKER_SNAPSHOT.exists():
-        build_tracker_snapshot()
-    with open(TRACKER_SNAPSHOT, "rb") as f:
-        snap = pickle.load(f)
+def load_trackers(
+    snapshot_path: Path = TRACKER_SNAPSHOT,
+    source_dirs: Sequence[Path | str] | Path | str = DEFAULT_TRACKER_SOURCE_DIRS,
+) -> tuple[TeamFormTracker, H2HTracker, HomeVenueTracker]:
+    if not Path(snapshot_path).exists():
+        build_tracker_snapshot(source_dirs, snapshot_path)
+    snap = _read_tracker_snapshot(snapshot_path)
 
     form = TeamFormTracker()
     for team, recs in snap["form_records"].items():
@@ -133,6 +183,98 @@ def load_trackers() -> tuple[TeamFormTracker, H2HTracker, HomeVenueTracker]:
     for k, recs in snap["home_records"].items():
         home.records[k] = list(recs)
     return form, h2h, home
+
+
+def read_sqlite_state_metadata(
+    state_dir: Path,
+    version: str = "v3",
+) -> dict:
+    """Read live-state coverage without mutating or fully loading the cache."""
+    sqlite_path = Path(state_dir) / f"player_stats_cache_{version}.sqlite"
+    if not sqlite_path.exists():
+        raise FileNotFoundError(
+            f"{sqlite_path} not found; build a separate refreshed cache first"
+        )
+    uri = f"{sqlite_path.resolve().as_uri()}?mode=ro"
+    with sqlite3.connect(uri, uri=True) as conn:
+        row = conn.execute("SELECT MAX(date) FROM dates").fetchone()
+        meta = dict(conn.execute("SELECT key, value FROM _meta"))
+    as_of = row[0] if row else None
+    if not as_of:
+        raise RuntimeError(f"SQLite cache has no dated state: {sqlite_path}")
+    source_count = meta.get("source_match_count")
+    return {
+        "path": str(sqlite_path.resolve()),
+        "as_of": as_of,
+        "source_match_count": int(source_count) if source_count else None,
+        "build_timestamp": meta.get("build_timestamp"),
+        "same_day_order_version": meta.get("same_day_order_version"),
+    }
+
+
+def read_tracker_state_metadata(snapshot_path: Path) -> dict:
+    snapshot = _read_tracker_snapshot(snapshot_path)
+    as_of = snapshot.get("as_of")
+    if not as_of:
+        raise RuntimeError(
+            f"tracker snapshot has no as_of date: {snapshot_path}"
+        )
+    count = snapshot.get("n_matches_walked")
+    return {
+        "path": str(Path(snapshot_path).resolve()),
+        "as_of": as_of,
+        "source_match_count": int(count) if count is not None else None,
+        "built_at": snapshot.get("built_at"),
+        "source_dirs": snapshot.get("source_dirs"),
+        "same_day_order_version": snapshot.get("same_day_order_version"),
+    }
+
+
+def assess_state_freshness(
+    fixture_date: str,
+    sqlite_state: dict,
+    tracker_state: dict,
+    max_state_age_days: int = DEFAULT_MAX_STATE_AGE_DAYS,
+) -> dict:
+    """Return a fail-closed freshness/consistency assessment.
+
+    State newer than the fixture is safe because every lookup is filtered by
+    fixture date. State older than the fixture is allowed only within the
+    explicit age budget.
+    """
+    if max_state_age_days < 0:
+        raise ValueError("max_state_age_days must be non-negative")
+    try:
+        fixture_day = date.fromisoformat(fixture_date)
+        sqlite_day = date.fromisoformat(str(sqlite_state["as_of"]))
+        tracker_day = date.fromisoformat(str(tracker_state["as_of"]))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(f"invalid state or fixture date: {exc}") from exc
+
+    sqlite_count = sqlite_state.get("source_match_count")
+    tracker_count = tracker_state.get("source_match_count")
+    if (sqlite_count is not None and tracker_count is not None
+            and sqlite_count != tracker_count):
+        raise RuntimeError(
+            "SQLite/tracker source-count mismatch: "
+            f"SQLite={sqlite_count}, tracker={tracker_count}. Rebuild both "
+            "from the same ordered source directories."
+        )
+
+    sqlite_age = max(0, (fixture_day - sqlite_day).days)
+    tracker_age = max(0, (fixture_day - tracker_day).days)
+    effective_day = min(sqlite_day, tracker_day)
+    effective_age = max(sqlite_age, tracker_age)
+    stale = effective_age > max_state_age_days
+    return {
+        "status": "stale" if stale else "fresh",
+        "fixture_date": fixture_date,
+        "effective_as_of": effective_day.isoformat(),
+        "age_days": effective_age,
+        "max_state_age_days": max_state_age_days,
+        "sqlite": {**sqlite_state, "age_days": sqlite_age},
+        "tracker": {**tracker_state, "age_days": tracker_age},
+    }
 
 
 _NAME_TO_ID_CACHE: dict[str, str] | None = None
@@ -412,20 +554,98 @@ def main() -> int:
                     help="Force rebuild of the Phase A2 tracker snapshot.")
     ap.add_argument("--model-dir", type=Path, default=MODEL_DIR,
                     help=f"Model artifact dir (default: {MODEL_DIR.name})")
+    ap.add_argument(
+        "--state-dir",
+        type=Path,
+        default=DEFAULT_STATE_DIR,
+        help=(
+            "Directory containing player_stats_cache_v3.sqlite "
+            f"(default: {DEFAULT_STATE_DIR})"
+        ),
+    )
+    ap.add_argument(
+        "--tracker-snapshot",
+        type=Path,
+        default=TRACKER_SNAPSHOT,
+        help=f"Tracker snapshot path (default: {TRACKER_SNAPSHOT})",
+    )
+    ap.add_argument(
+        "--tracker-source-dir",
+        type=Path,
+        action="append",
+        dest="tracker_source_dirs",
+        help=(
+            "Ordered-state source pool used to build the tracker snapshot; "
+            "repeat for multiple directories"
+        ),
+    )
+    ap.add_argument(
+        "--max-state-age-days",
+        type=int,
+        default=DEFAULT_MAX_STATE_AGE_DAYS,
+        help=(
+            "Block when either state source is older than the fixture by "
+            f"more than this many days (default: {DEFAULT_MAX_STATE_AGE_DAYS})"
+        ),
+    )
+    ap.add_argument(
+        "--allow-stale-state",
+        action="store_true",
+        help=(
+            "Allow a diagnostic prediction with stale state. The output is "
+            "marked stale and any betting recommendation is suppressed."
+        ),
+    )
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
-    if args.rebuild_snapshot and TRACKER_SNAPSHOT.exists():
-        TRACKER_SNAPSHOT.unlink()
+    tracker_sources = tuple(
+        args.tracker_source_dirs or DEFAULT_TRACKER_SOURCE_DIRS
+    )
+    if args.rebuild_snapshot:
+        build_tracker_snapshot(tracker_sources, args.tracker_snapshot)
+    elif not args.tracker_snapshot.exists():
+        if (args.tracker_snapshot != TRACKER_SNAPSHOT
+                and not args.tracker_source_dirs):
+            raise RuntimeError(
+                "a custom tracker snapshot does not exist; pass each matching "
+                "--tracker-source-dir and --rebuild-snapshot"
+            )
+        build_tracker_snapshot(tracker_sources, args.tracker_snapshot)
 
     fixture = json.loads(args.fixture.read_text())
     print(f"Predicting: {fixture['date']}  "
           f"{fixture['team1']} vs {fixture['team2']}  @ {fixture['venue']}")
 
+    sqlite_state = read_sqlite_state_metadata(args.state_dir)
+    tracker_state = read_tracker_state_metadata(args.tracker_snapshot)
+    state_freshness = assess_state_freshness(
+        fixture["date"],
+        sqlite_state,
+        tracker_state,
+        max_state_age_days=args.max_state_age_days,
+    )
+    if state_freshness["status"] == "stale":
+        message = (
+            f"live state is {state_freshness['age_days']} days behind fixture "
+            f"{fixture['date']} (maximum {args.max_state_age_days}); effective "
+            f"as-of is {state_freshness['effective_as_of']}. Rebuild a "
+            "separate SQLite cache and tracker snapshot from the same sources, "
+            "then pass --state-dir/--tracker-snapshot. "
+            "--allow-stale-state is diagnostic-only and suppresses betting."
+        )
+        if not args.allow_stale_state:
+            raise RuntimeError(message)
+        state_freshness["status"] = "stale_override"
+        state_freshness["override_used"] = True
+        print(f"  WARN: {message}")
+    else:
+        state_freshness["override_used"] = False
+
     print("Loading providers + trackers...")
-    provider = StatsProvider(str(REPO / "models"), version="v3")
+    provider = StatsProvider(str(args.state_dir), version="v3")
     metadata = PlayerMetadataProvider(str(REPO / "data" / "all_players_enriched.csv"))
-    form, h2h, home = load_trackers()
+    form, h2h, home = load_trackers(args.tracker_snapshot, tracker_sources)
 
     print("Computing features...")
     record = compute_features(fixture, provider, metadata, form, h2h, home)
@@ -467,7 +687,12 @@ def main() -> int:
         "diagnostics": {
             "model": str(args.model_dir),
             "rehydrate_as_of": fixture["date"],
-            "tracker_snapshot_as_of": _peek_snapshot_as_of(),
+            "state_freshness": state_freshness,
+            "sqlite_cache": sqlite_state["path"],
+            "tracker_snapshot": tracker_state["path"],
+            "tracker_snapshot_as_of": _peek_snapshot_as_of(
+                args.tracker_snapshot
+            ),
             "toss_known": toss_known,
             "toss_branch_probs": toss_branch_probs,
             "encoder_warnings": debug["encoder_warnings"],
