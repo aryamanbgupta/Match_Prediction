@@ -166,6 +166,19 @@ betting row becomes negative: M7 flat -14.03%, M7 A7 -17.96%, ball-v7 flat
 -17.03%, and ball-v7 A7 -8.24%. This reinforces that the defensible result is
 specific to the frozen ≥$50k primary slice.
 
+The stored provenance for both outliers was audited after evaluation:
+
+| Date | Polymarket event/market | Price time | Scheduled start | Lag | Volume | Cricsheet result |
+|---|---|---|---|---:|---:|---|
+| 2026-06-26 | 626207 / 2652647 | 12:00:04Z | 12:30:00Z | 1,796s | $1,273,352 | Ireland by 34 runs |
+| 2026-06-28 | 639388 / 2701986 | 12:00:22Z | 12:30:00Z | 1,778s | $507,750 | Ireland by 1 run |
+
+Both source rows are exact-title `Ireland vs India` head-to-head markets,
+male T20 scope, and exact date/team/venue joins. Their price ticks are roughly
+30 minutes before scheduled start and are not low-liquidity observations.
+There is no evidence in the sealed provenance that either win is an in-play,
+wrong-market, duplicate-selection, or result-matching artifact.
+
 A separate derived diagnostic for the 76 fixtures below $50,000 shows M7
 flat ROI of -40.90% and M7 A7 ROI of -40.19%. This was not a preregistered
 reporting slice, so it must not be used to tune a new threshold on this
