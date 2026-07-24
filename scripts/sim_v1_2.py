@@ -79,6 +79,9 @@ class Outcome(Enum):
     WICKET = 7
     WIDE = 8
     NO_BALL = 9
+    BYE = 10
+    LEG_BYE = 11
+    PENALTY = 12
 
 
 # D15 (D4 mechanism): empirical dismissal-type split for sampled WICKETs.
@@ -154,6 +157,9 @@ class MatchState:
     # None (no wicket) / 'bowler' / 'runout_striker' / 'runout_nonstriker'.
     # Per-ball transient; the innings loop reads it for bowling-card credit.
     last_dismissal: Optional[str] = None
+    last_batter_runs: int = 0
+    last_bowler_runs: int = 0
+    last_is_legal: bool = True
 
     # NEW: Partnership tracking (runs since last wicket)
     partnership_runs: int = 0
@@ -298,7 +304,10 @@ class MatchState:
         return available
     
     def update(self, outcome: Outcome, runs: int = 0,
-               dismissal: Optional[str] = None):
+               dismissal: Optional[str] = None, *,
+               batter_runs: Optional[int] = None,
+               bowler_runs: Optional[int] = None,
+               strike_rotation_runs: Optional[int] = None):
         """Update state after a ball.
 
         dismissal (D15): for WICKET balls, 'bowler' / 'runout_striker' /
@@ -325,8 +334,27 @@ class MatchState:
         ]
         self.history_idx += 1
 
+        is_legal = outcome not in [Outcome.WIDE, Outcome.NO_BALL]
+        if batter_runs is None:
+            batter_runs = (
+                runs if outcome in {
+                    Outcome.ONE, Outcome.TWO, Outcome.FOUR, Outcome.SIX,
+                } else 0
+            )
+        if bowler_runs is None:
+            bowler_runs = (
+                runs
+                if outcome not in {
+                    Outcome.BYE, Outcome.LEG_BYE, Outcome.PENALTY,
+                }
+                else 0
+            )
+        self.last_batter_runs = int(batter_runs)
+        self.last_bowler_runs = int(bowler_runs)
+        self.last_is_legal = is_legal
+
         # Update balls and bowler tracking
-        if outcome not in [Outcome.WIDE, Outcome.NO_BALL]:
+        if is_legal:
             self.balls += 1
             bowler_key = (self.bowling_team_idx, self.bowler_idx)
             self.bowler_balls[bowler_key] = self.bowler_balls.get(bowler_key, 0) + 1
@@ -337,13 +365,15 @@ class MatchState:
         # NEW: Update partnership runs
         self.partnership_runs += runs
 
-        # Update batsman stats (fixed: removed non-existent BYE, LEG_BYE)
-        # Legal deliveries only: wide/no-ball runs are extras, not off the
-        # bat, and neither counts as a ball faced (D2)
-        if outcome not in [Outcome.WIDE, Outcome.NO_BALL]:
+        # Batter runs can accrue on a no-ball, but only legal deliveries
+        # increment balls faced.
+        if is_legal or batter_runs:
             batsman_key = (self.current_team_idx, self.striker_idx)
             stats = self.batsman_stats.get(batsman_key, (0, 0))
-            self.batsman_stats[batsman_key] = (stats[0] + runs, stats[1] + 1)
+            self.batsman_stats[batsman_key] = (
+                stats[0] + batter_runs,
+                stats[1] + int(is_legal),
+            )
 
         # Handle wicket
         if outcome == Outcome.WICKET:
@@ -365,16 +395,18 @@ class MatchState:
         else:
             self.last_dismissal = None
         
-        # Rotate strike on odd off-the-bat runs only — the single extra run
-        # of a wide/no-ball never swaps the striker (D2)
-        if outcome not in [Outcome.WIDE, Outcome.NO_BALL] and runs % 2 == 1:
+        # I5 can pass the actual completed-run channel for extras. Legacy
+        # callers retain the old legal, off-the-bat behavior.
+        if strike_rotation_runs is None:
+            strike_rotation_runs = batter_runs if is_legal else 0
+        if strike_rotation_runs % 2 == 1:
             self.striker_idx, self.non_striker_idx = self.non_striker_idx, self.striker_idx
         
         # Add to current over
         self.current_over.append(outcome)
         
         # End of over
-        if self.balls % 6 == 0 and outcome not in [Outcome.WIDE, Outcome.NO_BALL]:
+        if self.balls % 6 == 0 and is_legal:
             self.end_over()
 
     def end_over(self):
@@ -392,6 +424,9 @@ class MatchState:
         """Setup for second innings"""
         self.innings = 2
         self.balls = 0
+        self.last_batter_runs = 0
+        self.last_bowler_runs = 0
+        self.last_is_legal = True
         self.striker_idx = 0
         self.non_striker_idx = 1
         self.bowler_idx = 0  # Will be selected by strategy
@@ -596,7 +631,11 @@ class T20Rules:
         return True
     
     def process_ball(self, state: MatchState, outcome: Outcome,
-                     dismissal: Optional[str] = None) -> int:
+                     dismissal: Optional[str] = None, *,
+                     team_runs: Optional[int] = None,
+                     batter_runs: Optional[int] = None,
+                     bowler_runs: Optional[int] = None,
+                     strike_rotation_runs: Optional[int] = None) -> int:
         """Process a ball and return runs scored.
 
         Deterministic given its arguments — the D15 dismissal-type draw
@@ -606,24 +645,152 @@ class T20Rules:
         """
         runs = 0
 
+        if team_runs is not None:
+            runs = int(team_runs)
+
         # Direct run outcomes (fixed: removed non-existent THREE, FIVE)
-        if outcome in [Outcome.ONE, Outcome.TWO, Outcome.FOUR, Outcome.SIX]:
+        elif outcome in [Outcome.ONE, Outcome.TWO, Outcome.FOUR, Outcome.SIX]:
             runs = outcome.value
 
-        # Extras
-        elif outcome == Outcome.WIDE:
-            runs = 1  # Simplified: 1 run for wide
-        elif outcome == Outcome.NO_BALL:
-            runs = 1  # Simplified: 1 run for no-ball
-
-        # Wicket - no runs (simplified, ignoring run outs with runs)
-        elif outcome == Outcome.WICKET:
-            runs = 0
+        # Legacy extras default to one run; I5 passes composed team_runs.
+        elif outcome in [Outcome.WIDE, Outcome.NO_BALL]:
+            runs = 1
 
         # Update state
-        state.update(outcome, runs, dismissal=dismissal)
+        state.update(
+            outcome,
+            runs,
+            dismissal=dismissal,
+            batter_runs=batter_runs,
+            bowler_runs=bowler_runs,
+            strike_rotation_runs=strike_rotation_runs,
+        )
 
         return runs
+
+    @staticmethod
+    def _sample_named_outcome(
+        probs: Dict[str, float],
+        names: Tuple[str, ...],
+    ) -> Outcome:
+        outcome_map = {
+            'dot': Outcome.DOT,
+            'one': Outcome.ONE,
+            'two': Outcome.TWO,
+            'four': Outcome.FOUR,
+            'six': Outcome.SIX,
+            'wicket': Outcome.WICKET,
+        }
+        weights = [max(float(probs.get(name, 0.0)), 0.0) for name in names]
+        if sum(weights) <= 0:
+            raise RuntimeError(
+                f"model assigned zero mass to required outcomes {names}")
+        return outcome_map[random.choices(names, weights=weights)[0]]
+
+    @staticmethod
+    def _sample_dismissal(outcome: Outcome) -> Optional[str]:
+        if outcome != Outcome.WICKET:
+            return None
+        if random.random() < RUNOUT_P:
+            return (
+                'runout_nonstriker'
+                if random.random() < RUNOUT_NONSTRIKER_SHARE
+                else 'runout_striker'
+            )
+        return 'bowler'
+
+    def _simulate_i5_delivery(
+        self,
+        state: MatchState,
+        model: 'PredictionModel',
+        probs: Dict[str, float],
+    ) -> Tuple[Outcome, int]:
+        """Compose empirical extras with a legal off-the-bat model draw."""
+        extras_process = getattr(model, 'extras_process', None)
+        if extras_process is None:
+            raise RuntimeError(
+                "I5 model is missing its empirical extras-process artifact")
+
+        event = extras_process.draw_delivery_event()
+        if event == 'wide':
+            outcome = Outcome.WIDE
+            team_runs = extras_process.draw_wide_team_runs()
+            runs = self.process_ball(
+                state,
+                outcome,
+                team_runs=team_runs,
+                batter_runs=0,
+                bowler_runs=team_runs,
+                # One automatic wide; any additional runs involve running.
+                strike_rotation_runs=max(team_runs - 1, 0),
+            )
+            return outcome, runs
+
+        if event == 'no_ball':
+            batter_outcome = self._sample_named_outcome(
+                probs, ('dot', 'one', 'two', 'four', 'six'))
+            batter_runs = (
+                batter_outcome.value
+                if batter_outcome != Outcome.DOT else 0
+            )
+            bowler_extra_runs, non_bowler_extra_runs = (
+                extras_process.draw_noball_extras()
+            )
+            extra_runs = bowler_extra_runs + non_bowler_extra_runs
+            outcome = Outcome.NO_BALL
+            runs = self.process_ball(
+                state,
+                outcome,
+                team_runs=batter_runs + extra_runs,
+                batter_runs=batter_runs,
+                bowler_runs=batter_runs + bowler_extra_runs,
+                # One automatic no-ball; additional extras can involve
+                # completed runs and therefore affect strike.
+                strike_rotation_runs=(
+                    batter_runs + max(extra_runs - 1, 0)
+                ),
+            )
+            return outcome, runs
+
+        if event != 'legal':
+            raise RuntimeError(f"unknown I5 delivery event {event!r}")
+
+        outcome = self._sample_named_outcome(
+            probs, ('dot', 'one', 'two', 'four', 'six', 'wicket'))
+        dismissal = self._sample_dismissal(outcome)
+        if outcome == Outcome.DOT:
+            extra_type, extra_runs = extras_process.draw_legal_dot_extra()
+            if extra_type != 'none':
+                outcome = {
+                    'byes': Outcome.BYE,
+                    'legbyes': Outcome.LEG_BYE,
+                    'penalty': Outcome.PENALTY,
+                }[extra_type]
+                runs = self.process_ball(
+                    state,
+                    outcome,
+                    team_runs=extra_runs,
+                    batter_runs=0,
+                    bowler_runs=0,
+                    strike_rotation_runs=(
+                        0 if extra_type == 'penalty' else extra_runs
+                    ),
+                )
+                return outcome, runs
+
+        runs = self.process_ball(
+            state,
+            outcome,
+            dismissal=dismissal,
+            batter_runs=(
+                outcome.value
+                if outcome in {
+                    Outcome.ONE, Outcome.TWO, Outcome.FOUR, Outcome.SIX,
+                }
+                else 0
+            ),
+        )
+        return outcome, runs
     
     def simulate_ball(self, state: MatchState, model: 'PredictionModel') -> Tuple[Outcome, int]:
         """Simulate next ball using prediction model"""
@@ -632,6 +799,15 @@ class T20Rules:
         
         # Get outcome probabilities
         probs = model.predict_next_ball(features)
+
+        if getattr(model, 'delivery_semantics', None) == 'legal_off_bat_v1':
+            outcome, runs = self._simulate_i5_delivery(state, model, probs)
+            if (outcome not in [Outcome.WIDE, Outcome.NO_BALL]
+                    and state.balls % 6 == 0
+                    and state.balls > 0
+                    and not state.is_innings_over()):
+                state.bowler_idx = self.select_next_bowler(state)
+            return outcome, runs
         
         # Map string outcomes to Enum
         outcome_map = {
@@ -663,14 +839,7 @@ class T20Rules:
         # D15: dismissal-type draw for sampled wickets — attribution only,
         # the total wicket rate is untouched. Same seeded `random` stream as
         # the outcome draw. Empirical as-of rates; see the module constants.
-        dismissal = None
-        if outcome == Outcome.WICKET:
-            if random.random() < RUNOUT_P:
-                dismissal = ('runout_nonstriker'
-                             if random.random() < RUNOUT_NONSTRIKER_SHARE
-                             else 'runout_striker')
-            else:
-                dismissal = 'bowler'
+        dismissal = self._sample_dismissal(outcome)
 
         # Process the ball
         runs = self.process_ball(state, outcome, dismissal=dismissal)
@@ -708,6 +877,29 @@ class XGBoostModelV2(PredictionModel):
         from pathlib import Path as _P
         _model_path = _P(model_path)
         _artifact_suffix = _model_path.stem.removeprefix('xgboost_model_')
+        self.delivery_semantics = 'inclusive_total_runs_v1'
+        self.extras_process = None
+        _training_contract_path = (
+            _model_path.parent
+            / f'training_contract_{_artifact_suffix}.json'
+        )
+        if _training_contract_path.exists():
+            import json as _contract_json
+            with _training_contract_path.open() as _contract_handle:
+                _training_contract = _contract_json.load(_contract_handle)
+            self.delivery_semantics = _training_contract.get(
+                'delivery_semantics', self.delivery_semantics)
+        if self.delivery_semantics == 'legal_off_bat_v1':
+            from i5_extras import EmpiricalExtrasProcess
+            _extras_path = (
+                _model_path.parent
+                / f'extras_model_{_artifact_suffix}.json'
+            )
+            if not _extras_path.exists():
+                raise FileNotFoundError(
+                    f"I5 model is missing extras artifact {_extras_path}")
+            self.extras_process = EmpiricalExtrasProcess.from_path(
+                _extras_path)
 
         # NEW: Load matchup encoder if provided
         self.matchup_encoder = None
@@ -1213,9 +1405,12 @@ class XGBoostModelV2(PredictionModel):
                 outcome_name = self.class_to_outcome[class_idx]
                 outcome_probs[outcome_name] = prob
 
-        # Add small probabilities for extras (not in your model)
-        outcome_probs['wide'] = 0.01
-        outcome_probs['no_ball'] = 0.01
+        # I5 composes empirical extras in T20Rules after the calibrated
+        # legal/off-bat draw. Legacy models retain their historical flat
+        # graft so deployed behavior is unchanged.
+        if self.delivery_semantics != 'legal_off_bat_v1':
+            outcome_probs['wide'] = 0.01
+            outcome_probs['no_ball'] = 0.01
 
         # Normalize
         total = sum(outcome_probs.values())
@@ -3509,6 +3704,9 @@ class BallResult:
     ball: int
     outcome: Outcome
     runs: int
+    batter_runs: int
+    extras_runs: int
+    is_legal: bool
     striker_idx: int
     bowler_idx: int
     team_runs: int
@@ -3637,6 +3835,9 @@ class SimulationEngine:
                 ball=pre_ball,
                 outcome=outcome,
                 runs=runs,
+                batter_runs=state.last_batter_runs,
+                extras_runs=runs - state.last_batter_runs,
+                is_legal=state.last_is_legal,
                 striker_idx=pre_striker_idx,
                 bowler_idx=pre_bowler_idx,
                 team_runs=int(state.runs[state.current_team_idx]),
@@ -3645,10 +3846,34 @@ class SimulationEngine:
             balls.append(ball_result)
 
             # Update batting card
-            if outcome != Outcome.WIDE:
+            if getattr(
+                self.model, 'delivery_semantics', None
+            ) == 'legal_off_bat_v1':
                 key = pre_striker_idx
-                runs_scored = runs if outcome not in [Outcome.WIDE, Outcome.NO_BALL] else 0
-                balls_faced = 1 if outcome not in [Outcome.WIDE, Outcome.NO_BALL] else 0
+                runs_scored = state.last_batter_runs
+                balls_faced = int(state.last_is_legal)
+                fours = int(state.last_batter_runs == 4)
+                sixes = int(state.last_batter_runs == 6)
+
+                if key in batting_card:
+                    prev = batting_card[key]
+                    batting_card[key] = (
+                        prev[0] + runs_scored,
+                        prev[1] + balls_faced,
+                        prev[2] + fours,
+                        prev[3] + sixes
+                    )
+                else:
+                    batting_card[key] = (runs_scored, balls_faced, fours, sixes)
+            elif outcome != Outcome.WIDE:
+                key = pre_striker_idx
+                runs_scored = (
+                    runs
+                    if outcome not in [Outcome.WIDE, Outcome.NO_BALL]
+                    else 0
+                )
+                balls_faced = int(
+                    outcome not in [Outcome.WIDE, Outcome.NO_BALL])
                 fours = 1 if outcome == Outcome.FOUR else 0
                 sixes = 1 if outcome == Outcome.SIX else 0
 
@@ -3661,10 +3886,32 @@ class SimulationEngine:
                         prev[3] + sixes
                     )
                 else:
-                    batting_card[key] = (runs_scored, balls_faced, fours, sixes)
+                    batting_card[key] = (
+                        runs_scored, balls_faced, fours, sixes)
 
             # Update bowling card
-            if outcome not in [Outcome.WIDE, Outcome.NO_BALL]:
+            if getattr(
+                self.model, 'delivery_semantics', None
+            ) == 'legal_off_bat_v1':
+                key = pre_bowler_idx
+                wickets = 1 if (
+                    outcome == Outcome.WICKET
+                    and state.last_dismissal == 'bowler'
+                ) else 0
+                if key in bowling_card:
+                    prev = bowling_card[key]
+                    bowling_card[key] = (
+                        prev[0] + int(state.last_is_legal),
+                        prev[1] + state.last_bowler_runs,
+                        prev[2] + wickets,
+                    )
+                else:
+                    bowling_card[key] = (
+                        int(state.last_is_legal),
+                        state.last_bowler_runs,
+                        wickets,
+                    )
+            elif outcome not in [Outcome.WIDE, Outcome.NO_BALL]:
                 key = pre_bowler_idx
                 # D15: run-outs carry no bowler credit (matches the actuals
                 # convention in prop_backtest — kind "run out" excluded).

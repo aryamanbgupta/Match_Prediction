@@ -458,10 +458,32 @@ with open(od_path, 'w') as _f:
 print(f"  Saved {od_path.name} (k_player={_od_cfg_out['k_player']}, "
       f"k_venue={_od_cfg_out['k_venue']})")
 
+delivery_semantics = _config.get('data', {}).get(
+    'delivery_semantics', 'inclusive_total_runs_v1')
+extras_contract = None
+if delivery_semantics == 'legal_off_bat_v1':
+    from i5_extras import build_i5_extras_model, write_i5_extras_model
+
+    data_cfg = _config.get('data', {})
+    extras_model = build_i5_extras_model(
+        Path(data_cfg.get('source_dir', 'data/t20s_json')),
+        splits=data_cfg.get('splits', {}),
+        gender=data_cfg.get('gender_filter', 'male') or None,
+    )
+    extras_path = model_dir / f'extras_model_{artifact_suffix}.json'
+    write_i5_extras_model(extras_model, extras_path)
+    extras_contract = extras_model['contract']
+    print(
+        f"  Saved {extras_path.name} "
+        f"(wide={extras_model['delivery_event_probabilities']['wide']:.4%}, "
+        f"no_ball="
+        f"{extras_model['delivery_event_probabilities']['no_ball']:.4%})"
+    )
+
 training_contract = {
     'data_version': data_version,
-    'delivery_semantics': _config.get('data', {}).get(
-        'delivery_semantics', 'inclusive_total_runs_v1'),
+    'delivery_semantics': delivery_semantics,
+    'extras_contract': extras_contract,
     'train_rows': int(len(train_df)),
     'validation_rows': int(len(val_df)),
     'test_rows': int(len(test_df)),

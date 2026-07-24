@@ -293,6 +293,11 @@ def build_training_cmd(config: dict, feature_list: list) -> list:
             "version": config["data"].get("version", "v3"),
             "delivery_semantics": config["data"].get(
                 "delivery_semantics", LEGACY_DELIVERY_SEMANTICS),
+            "source_dir": config["data"].get(
+                "source_dir", "data/t20s_json"),
+            "gender_filter": config["data"].get(
+                "gender_filter", "male"),
+            "splits": config["data"].get("splits", {}),
         },
     })
 
