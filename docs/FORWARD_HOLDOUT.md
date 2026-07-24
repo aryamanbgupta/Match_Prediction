@@ -170,6 +170,16 @@ fields, validates all 137 identities and team orientations, and emits a
 write-once prediction artifact plus SHA-256 sidecar. Do not run it on the
 sealed set while the machine-readable protocol remains `DRAFT`.
 
+`scripts/evaluate_forward_predictions.py` is the only outcome join. It
+requires both locked/checksummed prediction files, verifies that each is bound
+to the current frozen protocol and sealed fingerprints, then reads exact-team
+Polymarket odds and actual results. It reports all/≥$50k/≥$100k probability
+metrics, flat and A7 betting results, 10,000-resample tournament-block
+intervals, reliability tables, and the pre-registered decision assessment.
+Unresolved results remain in the inventory but are explicitly excluded from
+binary metrics and bets. Missing fixtures, fuzzy aliases, reversed team
+orientation, and checksum drift fail closed.
+
 ## Opening the holdout
 
 Before any model probabilities are scored, freeze and document:
@@ -183,8 +193,9 @@ Before any model probabilities are scored, freeze and document:
 
 The proposed choices and current artifact hashes are in
 `docs/FORWARD_EVALUATION_PROTOCOL_DRAFT.md`. It is deliberately marked DRAFT:
-I3, I6, and ball same-day replay are complete, but review and freeze it only
-after the remaining scorer tests and scoring-code hashes are complete.
+I3, I6, both scorers, post-lock reporting, and ball same-day replay are
+complete, but review and freeze it only after scoring-code hashes are
+recorded.
 
 The tracked machine-readable contract is
 `evaluation/forward_protocol_2026-06-01_2026-07-13.yaml`. Its model-free

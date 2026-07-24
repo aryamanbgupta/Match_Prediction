@@ -100,7 +100,7 @@ decision:
 opening_conditions:
   i3_complete: true
   i6_complete: true
-  scorer_tests_complete: false
+  scorer_tests_complete: true
   ball_same_day_replay_complete: true
   scoring_code_hashes_recorded: false
   user_approved: false

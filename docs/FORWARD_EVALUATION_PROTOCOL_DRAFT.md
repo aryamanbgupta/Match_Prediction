@@ -19,9 +19,9 @@ uv run python scripts/forward_eval_contract.py \
   evaluation/forward_protocol_2026-06-01_2026-07-13.yaml
 ```
 
-Adding `--require-frozen` must fail until the remaining scorer tests,
-scoring-code hashes, and explicit user approval are all recorded. The
-ball-v7 same-day replay condition is complete.
+Adding `--require-frozen` must fail until scoring-code hashes and explicit
+user approval are recorded. I3, I6, both scorers, the outcome/reporting
+tests, and ball-v7 same-day replay are complete.
 
 The M7 adapter is `scripts/score_forward_match_m7.py`. It reads only the
 declared feature columns plus fixture identity from the sidecar parquet;
@@ -44,6 +44,24 @@ uv run python scripts/score_forward_ball_v7.py \
   evaluation/forward_protocol_2026-06-01_2026-07-13.yaml \
   --out forward_eval_out/2026-06-01_2026-07-13/ball_v7_predictions.json
 ```
+
+Only after both write-once prediction artifacts exist, run the separate
+outcome/odds join:
+
+```bash
+uv run python scripts/evaluate_forward_predictions.py \
+  evaluation/forward_protocol_2026-06-01_2026-07-13.yaml \
+  --match-predictions \
+    forward_eval_out/2026-06-01_2026-07-13/match_m7_predictions.json \
+  --ball-predictions \
+    forward_eval_out/2026-06-01_2026-07-13/ball_v7_predictions.json \
+  --out forward_eval_out/2026-06-01_2026-07-13/evaluation_report.json
+```
+
+This evaluator verifies both prediction SHA-256 sidecars and their exact
+protocol/fingerprint bindings before it reads `betting_odds.json`. It joins
+teams and fixture IDs exactly—no fuzzy aliases or result-assisted matching—
+and reports every frozen slice and policy.
 
 Sealed dataset facts:
 
@@ -227,13 +245,14 @@ All must be complete before scoring:
    the hashed holdout-specific sidecar. Production caches remain untouched.
 2. **COMPLETE:** I3 fixes zero-P&L bet placement and defines/tests the shared
    tournament/team fallback block bootstrap used for every reported CI.
-3. The scorer is tested on synthetic and legacy data only, including reversed
+3. **COMPLETE:** The scorer is tested on synthetic and legacy data only,
+   including reversed
    team order, aliases, ties/no-results, missing odds, and all three liquidity
    boundaries. The ball-simulation path must also prove that it replays an
    earlier same-day fixture in `date_then_match_id_lexicographic_v1` order;
-   its current date-only SQLite query is insufficient by itself. **The ball
-   replay/scorer subset is complete.** Outcome-join and reporting edge cases
-   remain before the broader scorer-test condition can be marked complete.
+   its current date-only SQLite query is insufficient by itself. The separate
+   post-lock evaluator also tests strict A7 boundaries, explicit bet placement,
+   unresolved-result inventory, checksum tampering, and write-once reports.
 4. The sidecar cache is hashed. The scoring code and final protocol must be
    hashed after I3. Any transient/per-match state artifact introduced for the
    ball-simulation replay must be generated from the sealed context, verified,
