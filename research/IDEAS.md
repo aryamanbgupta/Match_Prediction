@@ -1510,9 +1510,12 @@ metadata coverage, effective block count, and a `<10 blocks = descriptive`
 guard. Historical point ROIs are unchanged but prior CI-clean claims do not
 survive: M7 ≥$50k +21.90% **[-10.79,+50.18]** (19 blocks); A7 +36.93%
 **[-1.52,+59.81]** (17); ball-v7 +6.11% **[-7.99,+25.70]** (19).
-The sealed forward set was not scored; its ≥$50k slice has only 7 blocks, so
-this window cannot alone confirm economic ROI. See
-`reports/i3_eval_statistics_hardening.md`.
+The frozen forward evaluation completed on 2026-07-23. Its ≥$50k M7 A7 result
+was +96.72% **[-3.29,+623.85]** across only five betting blocks, so economic
+confirmation failed; M7 probability confirmation passed (LL 0.6823 vs market
+0.7445 and ball-v7 0.7015). See
+`reports/i3_eval_statistics_hardening.md` and
+`reports/forward_evaluation_2026-06-01_2026-07-13.md`.
 
 ## I4 [INTERACTIVE] Odds-build integrity (`build_polymarket_odds.py` + eval odds)
 True pre-match check (price_timestamp < scheduled start; 259/261 stamps are
@@ -1526,9 +1529,12 @@ extractor now enforces explicit scheduled start, last CLOB tick strictly
 before start, exact-title H2H, male scope, resolved two-team outcomes, and
 full provenance. The outcome-blind forward builder sealed 137 new matches
 (61 ≥$50k / 30 ≥$100k) with zero timing/result/overlap violations; see
-`docs/FORWARD_HOLDOUT.md`. This completes the guardrails for future data but
-does **not** rehabilitate or re-baseline the legacy 261-match odds, so I4
-remains interactive if historical headline metrics are ever regenerated.
+`docs/FORWARD_HOLDOUT.md`. The set was subsequently evaluated under its
+frozen protocol; the locked report is
+`reports/forward_evaluation_2026-06-01_2026-07-13.md`. This completes the
+guardrails for future data but does **not** rehabilitate or re-baseline the
+legacy 261-match odds, so I4 remains interactive if historical headline
+metrics are ever regenerated.
 
 ## I5 [INTERACTIVE] Extras/threes label rework (`parsing_v2.py`, full ball retrain)
 Train the ball model on off-the-bat runs; exclude wide/no-ball rows from

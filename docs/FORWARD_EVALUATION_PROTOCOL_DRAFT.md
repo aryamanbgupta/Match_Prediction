@@ -30,8 +30,8 @@ The M7 adapter is `scripts/score_forward_match_m7.py`. It reads only the
 declared feature columns plus fixture identity from the sidecar parquet;
 `team1_wins` and every outcome field are excluded at the parquet read. It
 writes an outcome-free, write-once prediction JSON and SHA-256 sidecar. The
-command below is documented for the eventual frozen run; while this protocol
-is `DRAFT`, it fails before importing `joblib`:
+frozen command below completed and locked all 137 predictions before ball-v7
+ran:
 
 ```bash
 uv run python scripts/score_forward_match_m7.py \
@@ -39,8 +39,8 @@ uv run python scripts/score_forward_match_m7.py \
   --out forward_eval_out/2026-06-01_2026-07-13/match_m7_predictions.json
 ```
 
-The corresponding ball-v7 command is also gated before any simulation or
-model import:
+The corresponding ball-v7 command completed next and locked all 137
+predictions after replaying the 401 context matches:
 
 ```bash
 uv run python scripts/score_forward_ball_v7.py \
@@ -48,8 +48,8 @@ uv run python scripts/score_forward_ball_v7.py \
   --out forward_eval_out/2026-06-01_2026-07-13/ball_v7_predictions.json
 ```
 
-Only after both write-once prediction artifacts exist, run the separate
-outcome/odds join:
+Only after both write-once prediction artifacts existed, the separate
+outcome/odds join ran:
 
 ```bash
 uv run python scripts/evaluate_forward_predictions.py \
@@ -65,6 +65,10 @@ This evaluator verifies both prediction SHA-256 sidecars and their exact
 protocol/fingerprint bindings before it reads `betting_odds.json`. It joins
 teams and fixture IDs exactly—no fuzzy aliases or result-assisted matching—
 and reports every frozen slice and policy.
+
+The completed interpretation is in
+`reports/forward_evaluation_2026-06-01_2026-07-13.md`: probability
+confirmation passed, while economic confirmation did not.
 
 Sealed dataset facts:
 
@@ -173,10 +177,10 @@ calibrator, encoders, empirical bowler selector, and safe pre-match lineup
 factory. Synthetic tests prove context-only advancement and the strict
 `simulate → lock → replay` sequence for selected matches. A model-free
 contract test loads all 401 context identities, finds all 137 selected
-fixtures, and verifies versioned order. The DRAFT CLI fails before importing
-`joblib` or simulation code and writes no output. The
-`ball_same_day_replay_complete` condition is therefore complete; no sealed
-model probability has been produced.
+fixtures, and verifies versioned order. Before approval, the DRAFT CLI failed
+before importing `joblib` or simulation code and wrote no output. After
+freeze, the scorer locked the outcome-free ball-v7 artifact before the
+evaluator joined outcomes.
 
 ## Historical reference only
 

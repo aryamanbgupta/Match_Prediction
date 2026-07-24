@@ -161,14 +161,14 @@ every match. It never writes the sidecar.
 gate. It uses only ordered `info.players` rosters to create pre-match states,
 scores selected fixtures before replay, and advances all 401 context fixtures
 in the I6 order. Its model-free inventory and synthetic chronology tests pass,
-so the replay opening condition is complete. Do not run it on the sealed set
-while the protocol remains `DRAFT`.
+so the replay opening condition is complete. The frozen run locked 137
+outcome-free predictions before the outcome join.
 
 `scripts/score_forward_match_m7.py` implements the direct-model half behind
 the frozen-protocol gate. Its parquet projection excludes target/outcome
 fields, validates all 137 identities and team orientations, and emits a
-write-once prediction artifact plus SHA-256 sidecar. Do not run it on the
-sealed set while the machine-readable protocol remains `DRAFT`.
+write-once prediction artifact plus SHA-256 sidecar. The frozen run locked all
+137 predictions before ball-v7 ran.
 
 `scripts/evaluate_forward_predictions.py` is the only outcome join. It
 requires both locked/checksummed prediction files, verifies that each is bound
@@ -180,9 +180,9 @@ Unresolved results remain in the inventory but are explicitly excluded from
 binary metrics and bets. Missing fixtures, fuzzy aliases, reversed team
 orientation, and checksum drift fail closed.
 
-## Opening the holdout
+## Holdout status
 
-Before any model probabilities are scored, freeze and document:
+Before any model probabilities were scored, the protocol froze and documented:
 
 - incumbent and challenger model artifact hashes;
 - whether the A7 conditional betting filter is included;
@@ -191,11 +191,12 @@ Before any model probabilities are scored, freeze and document:
 - all/≥$50k/≥$100k slices;
 - the one-time decision rule.
 
-The proposed choices and current artifact hashes are in
-`docs/FORWARD_EVALUATION_PROTOCOL_DRAFT.md`. It is deliberately marked DRAFT:
-I3, I6, both scorers, post-lock reporting, and ball same-day replay are
-complete. The 17-file `scoring_code_sha256_v1` manifest is also recorded and
-verified. Explicit user approval is the only remaining opening condition.
+The choices and artifact hashes are in
+`docs/FORWARD_EVALUATION_PROTOCOL_DRAFT.md`. The user approved the protocol
+unchanged on 2026-07-23, its status changed to `FROZEN`, and the model-free
+preflight passed before scoring. I3, I6, both scorers, post-lock reporting,
+ball same-day replay, and the 17-file `scoring_code_sha256_v1` manifest were
+complete before opening.
 
 The tracked machine-readable contract is
 `evaluation/forward_protocol_2026-06-01_2026-07-13.yaml`. Its model-free
@@ -207,5 +208,7 @@ uv run python scripts/forward_eval_contract.py \
   evaluation/forward_protocol_2026-06-01_2026-07-13.yaml
 ```
 
-After scoring, this holdout is consumed. Subsequent tuning requires a new
-forward window.
+This holdout is now consumed. Its probability decision passed and its
+economic decision did not confirm. See
+`reports/forward_evaluation_2026-06-01_2026-07-13.md`. Subsequent tuning or
+candidate selection requires a new forward window.

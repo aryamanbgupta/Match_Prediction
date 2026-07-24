@@ -397,7 +397,9 @@ materializes match features, verifies every selected fixture, and writes
 `NO_MODEL_SCORING`. It does not import a model. See
 `FORWARD_HOLDOUT.md` and `I6_SAME_DAY_ORDERING_AUDIT.md`.
 
-The two prediction adapters remain blocked while the protocol is `DRAFT`:
+The protocol froze and the commands below completed on 2026-07-23. Their
+outputs are write-once; do not delete or rerun them as a way to change the
+consumed result:
 
 ```bash
 uv run python scripts/score_forward_match_m7.py \
@@ -425,9 +427,9 @@ first point where realized outcomes and odds enter the workflow.
 
 The protocol also pins a 17-file `scoring_code_sha256_v1` manifest covering
 the full executable path and locked Python environment. The model-free
-preflight verifies it on every run. While status is `DRAFT`, explicit user
-approval is the sole remaining blocker and all three commands above still
-fail closed.
+preflight verified it before the first model import. The frozen result passed
+the probability decision and did not confirm the economic decision; see
+`reports/forward_evaluation_2026-06-01_2026-07-13.md`.
 
 **Parity guarantee**: `scripts/tests/test_phase_a_parity.py` validates that this two-step pipeline produces bit-exact parquet output vs the original monolith across all 9,519 matches. The harness now also passes π into both reference and candidate paths so the 42 outcome-distribution columns are checked column-by-column.
 
