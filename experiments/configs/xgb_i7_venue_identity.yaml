@@ -13,7 +13,7 @@ data:
   version: "i7"
   source_dir: "data/t20s_json"
   gender_filter: "male"
-  delivery_semantics: "legacy_delivery_total_v1"
+  delivery_semantics: "inclusive_total_runs_v1"
   test_dir: "data/polymarket_test"
   odds_file: "betting_odds_polymarket.json"
   splits:
