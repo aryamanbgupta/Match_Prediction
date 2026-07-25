@@ -1603,6 +1603,15 @@ Proceed only with a reviewed, versioned venue map; do not create a player
 merge map from display-name equality. See
 `reports/i7_identity_collision_audit.md`.
 
+**Map proposal checkpoint:** the conservative edges collapse to 92 venue
+components and 94 alias strings, recovering 2,170 historical matches into
+their proposed canonical labels. The frozen
+`config/identity/venue_aliases_v1.csv` remains inactive with every row marked
+`proposed`; `scripts/propose_venue_aliases.py` rejects conflicts, chains, and
+self-aliases. Canonical targets prefer the most specific city-qualified
+spelling, then recency and volume. Review
+`reports/i7_venue_alias_proposal.md` before activation.
+
 ## I8 [INTERACTIVE] Per-player phase dists + batter-vs-bowler cell (schema-v5 plumbing)
 The flagged highest-value untried ball features need new SQLite
 getters/tables (`stats_sqlite_backend.py` — forbidden to the loop). Do the

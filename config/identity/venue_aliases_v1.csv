@@ -1,0 +1,95 @@
+version,alias,canonical,status,evidence,alias_matches,canonical_matches,component_matches,cities
+venue_aliases_v1,Amini Park,"Amini Park, Port Moresby",proposed,likely alias — explicit city suffix,6,11,17,Port Moresby
+venue_aliases_v1,Arun Jaitley Stadium,"Arun Jaitley Stadium, Delhi",proposed,likely alias — explicit city suffix,45,32,77,Delhi
+venue_aliases_v1,Aurora Stadium,"Aurora Stadium, Launceston",proposed,likely alias — explicit city suffix,7,1,8,Launceston
+venue_aliases_v1,Barabati Stadium,"Barabati Stadium, Cuttack",proposed,likely alias — explicit city suffix,33,2,35,Cuttack
+venue_aliases_v1,Barsapara Cricket Stadium,"Barsapara Cricket Stadium, Guwahati",proposed,likely alias — explicit city suffix,1,11,12,Guwahati
+venue_aliases_v1,Basin Reserve,"Basin Reserve, Wellington",proposed,likely alias — explicit city suffix,21,24,45,Wellington
+venue_aliases_v1,Bay Oval,"Bay Oval, Mount Maunganui",proposed,likely alias — explicit city suffix,17,19,36,Mount Maunganui
+venue_aliases_v1,Bellerive Oval,"Bellerive Oval, Hobart",proposed,likely alias — explicit city suffix,47,39,86,Hobart
+venue_aliases_v1,Bharat Ratna Shri Atal Bihari Vajpayee Ekana Cricket Stadium,"Bharat Ratna Shri Atal Bihari Vajpayee Ekana Cricket Stadium, Lucknow",proposed,likely alias — explicit city suffix,8,26,34,Lucknow
+venue_aliases_v1,Boland Park,"Boland Park, Paarl",proposed,likely alias — explicit city suffix,1,37,38,Paarl
+venue_aliases_v1,Brabourne Stadium,"Brabourne Stadium, Mumbai",proposed,likely alias — explicit city suffix,11,17,28,Mumbai
+venue_aliases_v1,"Brisbane Cricket Ground, Woolloongabba","Brisbane Cricket Ground, Woolloongabba, Brisbane",proposed,likely alias — explicit city suffix,42,30,72,Brisbane
+venue_aliases_v1,Buffalo Park,"Buffalo Park, East London",proposed,likely alias — explicit city suffix,6,16,22,East London
+venue_aliases_v1,Central Broward Regional Park Stadium Turf Ground,"Central Broward Regional Park Stadium Turf Ground, Lauderhill",proposed,likely alias — explicit city suffix,23,19,42,Lauderhill
+venue_aliases_v1,"Civil Service Cricket Club, Stormont","Civil Service Cricket Club, Stormont, Belfast",proposed,likely alias — explicit city suffix,7,5,12,Belfast
+venue_aliases_v1,College Field,"College Field, St Peter Port",proposed,likely alias — explicit city suffix,5,1,6,St Peter Port
+venue_aliases_v1,College Ground,"College Ground, Cheltenham",proposed,likely alias — explicit city suffix,12,6,18,Cheltenham
+venue_aliases_v1,"County Ground, New Road","County Ground, New Road, Worcester",proposed,likely alias — explicit city suffix,40,33,73,Worcester
+venue_aliases_v1,De Beers Diamond Oval,"De Beers Diamond Oval, Kimberley",proposed,likely alias — explicit city suffix,4,5,9,Kimberley
+venue_aliases_v1,Desert Springs Cricket Ground,"Desert Springs Cricket Ground, Almeria",proposed,likely alias — explicit city suffix,2,27,29,Almeria
+venue_aliases_v1,Docklands Stadium,"Docklands Stadium, Melbourne",proposed,likely alias — explicit city suffix,44,28,72,Melbourne
+venue_aliases_v1,Dr. Y.S. Rajasekhara Reddy ACA VDCA Cricket Stadium,"Dr. Y.S. Rajasekhara Reddy ACA-VDCA Cricket Stadium, Visakhapatnam",proposed,high-confidence formatting alias,23,7,45,Visakhapatnam
+venue_aliases_v1,Dr. Y.S. Rajasekhara Reddy ACA-VDCA Cricket Stadium,"Dr. Y.S. Rajasekhara Reddy ACA-VDCA Cricket Stadium, Visakhapatnam",proposed,high-confidence formatting alias; likely alias — explicit city suffix,15,7,45,Visakhapatnam
+venue_aliases_v1,Eden Gardens,"Eden Gardens, Kolkata",proposed,likely alias — explicit city suffix,100,45,145,Kolkata
+venue_aliases_v1,Eden Park Outer Oval,"Eden Park Outer Oval, Auckland",proposed,likely alias — explicit city suffix,22,18,40,Auckland
+venue_aliases_v1,Eden Park,"Eden Park, Auckland",proposed,likely alias — explicit city suffix,24,14,38,Auckland
+venue_aliases_v1,Edgbaston,"Edgbaston, Birmingham",proposed,likely alias — explicit city suffix,69,58,127,Birmingham
+venue_aliases_v1,Gaddafi Stadium,"Gaddafi Stadium, Lahore",proposed,likely alias — explicit city suffix,27,82,109,Lahore
+venue_aliases_v1,Gahanga International Cricket Stadium. Rwanda,"Gahanga International Cricket Stadium, Rwanda",proposed,high-confidence formatting alias,52,63,115,Kigali City
+venue_aliases_v1,Grace Road,"Grace Road, Leicester",proposed,likely alias — explicit city suffix,41,35,76,Leicester
+venue_aliases_v1,"Grange Cricket Club Ground, Raeburn Place","Grange Cricket Club Ground, Raeburn Place, Edinburgh",proposed,likely alias — explicit city suffix,3,19,22,Edinburgh
+venue_aliases_v1,Greenfield International Stadium,"Greenfield International Stadium, Thiruvananthapuram",proposed,likely alias — explicit city suffix,2,3,5,Thiruvananthapuram
+venue_aliases_v1,Gymkhana Club Ground,"Gymkhana Club Ground, Nairobi",proposed,likely alias — explicit city suffix,3,27,30,Nairobi
+venue_aliases_v1,Hagley Oval,"Hagley Oval, Christchurch",proposed,likely alias — explicit city suffix,19,40,59,Christchurch
+venue_aliases_v1,Headingley,"Headingley, Leeds",proposed,likely alias — explicit city suffix,44,34,78,Leeds
+venue_aliases_v1,Holkar Cricket Stadium,"Holkar Cricket Stadium, Indore",proposed,likely alias — explicit city suffix,11,13,24,Indore
+venue_aliases_v1,ICC Academy,"ICC Academy, Dubai",proposed,likely alias — explicit city suffix,20,21,41,Dubai
+venue_aliases_v1,Indian Association Ground,"Indian Association Ground, Singapore",proposed,likely alias — explicit city suffix,14,5,19,Singapore
+venue_aliases_v1,International Sports Stadium,"International Sports Stadium, Coffs Harbour",proposed,likely alias — explicit city suffix,1,4,5,Coffs Harbour
+venue_aliases_v1,JSCA International Stadium Complex,"JSCA International Stadium Complex, Ranchi",proposed,likely alias — explicit city suffix,19,13,32,Ranchi
+venue_aliases_v1,Kennington Oval,"Kennington Oval, London",proposed,likely alias — explicit city suffix,67,37,104,London
+venue_aliases_v1,King George V Sports Ground,"King George V Sports Ground, Castel",proposed,likely alias — explicit city suffix,9,16,25,Castel
+venue_aliases_v1,Kingsmead,"Kingsmead, Durban",proposed,likely alias — explicit city suffix,29,74,103,Durban
+venue_aliases_v1,Lord's,"Lord's, London",proposed,likely alias — explicit city suffix,39,20,59,London
+venue_aliases_v1,M Chinnaswamy Stadium,"M Chinnaswamy Stadium, Bengaluru",proposed,high-confidence formatting alias,70,29,116,Bangalore; Bengaluru
+venue_aliases_v1,M.Chinnaswamy Stadium,"M Chinnaswamy Stadium, Bengaluru",proposed,high-confidence formatting alias; likely alias — explicit city suffix,17,29,116,Bangalore; Bengaluru
+venue_aliases_v1,"MA Chidambaram Stadium, Chepauk","MA Chidambaram Stadium, Chepauk, Chennai",proposed,likely alias — explicit city suffix,50,43,93,Chennai
+venue_aliases_v1,Maharashtra Cricket Association Stadium,"Maharashtra Cricket Association Stadium, Pune",proposed,likely alias — explicit city suffix,24,15,39,Pune
+venue_aliases_v1,"Mahinda Rajapaksa International Cricket Stadium, Sooriyawewa","Mahinda Rajapaksa International Cricket Stadium, Sooriyawewa, Hambantota",proposed,likely alias — explicit city suffix,7,32,39,Hambantota
+venue_aliases_v1,Mangaung Oval,"Mangaung Oval, Bloemfontein",proposed,likely alias — explicit city suffix,1,11,12,Bloemfontein
+venue_aliases_v1,Manuka Oval,"Manuka Oval, Canberra",proposed,likely alias — explicit city suffix,21,14,35,Canberra
+venue_aliases_v1,Maple Leaf North-West Ground,"Maple Leaf North-West Ground, King City",proposed,likely alias — explicit city suffix,2,17,19,King City
+venue_aliases_v1,McLean Park,"McLean Park, Napier",proposed,likely alias — explicit city suffix,12,11,23,Napier
+venue_aliases_v1,Merchant Taylors' School Ground,"Merchant Taylors' School Ground, Northwood",proposed,likely alias — explicit city suffix,2,5,7,Northwood
+venue_aliases_v1,Molyneux Park,"Molyneux Park, Alexandra",proposed,likely alias — explicit city suffix,6,8,14,Alexandra
+venue_aliases_v1,Narendra Modi Stadium,"Narendra Modi Stadium, Ahmedabad",proposed,likely alias — explicit city suffix,5,42,47,Ahmedabad
+venue_aliases_v1,New Wanderers Stadium,"New Wanderers Stadium, Johannesburg",proposed,likely alias — explicit city suffix,32,26,58,Johannesburg
+venue_aliases_v1,Newlands,"Newlands, Cape Town",proposed,likely alias — explicit city suffix,28,45,73,Cape Town
+venue_aliases_v1,Old Trafford,"Old Trafford, Manchester",proposed,likely alias — explicit city suffix,51,36,87,Manchester
+venue_aliases_v1,Pukekura Park,"Pukekura Park, New Plymouth",proposed,likely alias — explicit city suffix,9,8,17,New Plymouth
+venue_aliases_v1,"Punjab Cricket Association IS Bindra Stadium, Mohali","Punjab Cricket Association IS Bindra Stadium, Mohali, Chandigarh",proposed,likely alias — explicit city suffix,15,13,28,Chandigarh
+venue_aliases_v1,Queens Sports Club,"Queens Sports Club, Bulawayo",proposed,likely alias — explicit city suffix,2,21,23,Bulawayo
+venue_aliases_v1,R Premadasa Stadium,"R Premadasa Stadium, Colombo",proposed,likely alias — explicit city suffix,24,75,99,Colombo
+venue_aliases_v1,Radlett Cricket Club,"Radlett Cricket Club, Radlett",proposed,likely alias — explicit city suffix,1,7,8,Radlett
+venue_aliases_v1,"Rajiv Gandhi International Stadium, Uppal","Rajiv Gandhi International Stadium, Uppal, Hyderabad",proposed,likely alias — explicit city suffix,50,23,73,Hyderabad
+venue_aliases_v1,Riverside Ground,"Riverside Ground, Chester-le-Street",proposed,likely alias — explicit city suffix,49,38,87,Chester-le-Street
+venue_aliases_v1,Saurashtra Cricket Association Stadium,"Saurashtra Cricket Association Stadium, Rajkot",proposed,likely alias — explicit city suffix,23,15,38,Rajkot
+venue_aliases_v1,Sawai Mansingh Stadium,"Sawai Mansingh Stadium, Jaipur",proposed,likely alias — explicit city suffix,47,40,87,Jaipur
+venue_aliases_v1,Saxton Oval,"Saxton Oval, Nelson",proposed,likely alias — explicit city suffix,3,7,10,Nelson
+venue_aliases_v1,Seddon Park,"Seddon Park, Hamilton",proposed,likely alias — explicit city suffix,27,15,42,Hamilton
+venue_aliases_v1,Senwes Park,"Senwes Park, Potchefstroom",proposed,likely alias — explicit city suffix,2,43,45,Potchefstroom
+venue_aliases_v1,Shaheed Veer Narayan Singh International Stadium,"Shaheed Veer Narayan Singh International Stadium, Raipur",proposed,likely alias — explicit city suffix,20,2,22,Raipur
+venue_aliases_v1,Sheikh Abu Naser Stadium,"Sheikh Abu Naser Stadium, Khulna",proposed,likely alias — explicit city suffix,4,7,11,Khulna
+venue_aliases_v1,Sheikh Zayed Stadium,"Sheikh Zayed Stadium, Abu Dhabi",proposed,likely alias — explicit city suffix,70,21,91,Abu Dhabi
+venue_aliases_v1,Sky Stadium,"Sky Stadium, Wellington",proposed,likely alias — explicit city suffix,1,3,4,Wellington
+venue_aliases_v1,Sophia Gardens,"Sophia Gardens, Cardiff",proposed,likely alias — explicit city suffix,49,39,88,Cardiff
+venue_aliases_v1,Sportpark Het Schootsveld,"Sportpark Het Schootsveld, Deventer",proposed,likely alias — explicit city suffix,2,5,7,Deventer
+venue_aliases_v1,Sportpark Maarschalkerweerd,"Sportpark Maarschalkerweerd, Utrecht",proposed,likely alias — explicit city suffix,1,4,5,Utrecht
+venue_aliases_v1,Sportpark Westvliet,"Sportpark Westvliet, The Hague",proposed,likely alias — explicit city suffix,3,9,12,The Hague
+venue_aliases_v1,St George's Park,"St George's Park, Port Elizabeth",proposed,likely alias — explicit city suffix,10,49,59,Port Elizabeth
+venue_aliases_v1,St Lawrence Ground,"St Lawrence Ground, Canterbury",proposed,likely alias — explicit city suffix,39,35,74,Canterbury
+venue_aliases_v1,SuperSport Park,"SuperSport Park, Centurion",proposed,likely alias — explicit city suffix,22,61,83,Centurion
+venue_aliases_v1,Terdthai Cricket Ground,"Terdthai Cricket Ground, Bangkok",proposed,likely alias — explicit city suffix,8,44,52,Bangkok
+venue_aliases_v1,The Cooper Associates County Ground,"The Cooper Associates County Ground, Taunton",proposed,likely alias — explicit city suffix,36,38,74,Taunton
+venue_aliases_v1,The Rose Bowl,"The Rose Bowl, Southampton",proposed,likely alias — explicit city suffix,50,40,90,Southampton
+venue_aliases_v1,"The Village, Malahide","The Village, Malahide, Dublin",proposed,likely alias — explicit city suffix,10,5,15,Dublin
+venue_aliases_v1,The Wanderers Stadium,"The Wanderers Stadium, Johannesburg",proposed,likely alias — explicit city suffix,4,38,42,Johannesburg
+venue_aliases_v1,Trent Bridge,"Trent Bridge, Nottingham",proposed,likely alias — explicit city suffix,61,39,100,Nottingham
+venue_aliases_v1,Tribhuvan University International Cricket Ground,"Tribhuvan University International Cricket Ground, Kirtipur",proposed,likely alias — explicit city suffix,4,30,34,Kirtipur
+venue_aliases_v1,United Cricket Club Ground,"United Cricket Club Ground, Windhoek",proposed,likely alias — explicit city suffix,4,15,19,Windhoek
+venue_aliases_v1,University Oval,"University Oval, Dunedin",proposed,likely alias — explicit city suffix,12,19,31,Dunedin
+venue_aliases_v1,"Vidarbha Cricket Association Stadium, Jamtha","Vidarbha Cricket Association Stadium, Jamtha, Nagpur",proposed,likely alias — explicit city suffix,20,2,22,Nagpur
+venue_aliases_v1,Wanderers Cricket Ground,"Wanderers Cricket Ground, Windhoek",proposed,likely alias — explicit city suffix,2,22,24,Windhoek
+venue_aliases_v1,Wankhede Stadium,"Wankhede Stadium, Mumbai",proposed,likely alias — explicit city suffix,110,65,175,Mumbai
