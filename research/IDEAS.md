@@ -1615,6 +1615,16 @@ historical odds/evaluation artifacts remain unchanged. Full cache/parquet
 rebuild, both model retrains, and the paired iteration evaluation remain
 before I7 can be marked done. See `docs/I7_VENUE_IDENTITY_CONTRACT.md`.
 
+**Rebuild checkpoint (2026-07-25):** the isolated cache preserved 9,519
+matches and reduced 467 raw venue strings to 373 canonical identities. Raw
+ball LL is mixed/neutral (validation -0.00129 better, test +0.00195 worse).
+The direct M7 retrain is directionally worse on all paired iteration slices:
+≥$50k LL 0.6299 → 0.6421 and ROI +21.90% → +17.49%, although
+competition-block Δ intervals cross zero. The intended venue-enriched slice
+does not improve. Do not promote the direct model; ball simulation remains
+before the I7 model verdict. See
+`reports/i7_rebuild_checkpoint_20260725.md`.
+
 ## I8 [INTERACTIVE] Per-player phase dists + batter-vs-bowler cell (schema-v5 plumbing)
 The flagged highest-value untried ball features need new SQLite
 getters/tables (`stats_sqlite_backend.py` — forbidden to the loop). Do the
@@ -1711,3 +1721,15 @@ grounds: MCG 1.0587%, SCG 0.9506%, Mirpur 0.2464%. This is one reason to retain
 raw batter threes for future physical-venue modeling. It is not a reason to add
 a three-run simulator sub-draw before the geometry exists: doing so now adds
 complexity and runtime without a demonstrated downstream gain.
+
+## I15 [INTERACTIVE] Stable match identity for same-day doubleheaders
+The synthetic `{date}_{team1}_{team2}_{venue}` key is not unique. The I7 test
+parquet has 798 rows but only 788 keys across ten same-day same-team/same-venue
+doubleheaders; prediction JSON serialization is silently last-write-wins.
+The frozen production test already had nine collisions. No collision overlaps
+the current 261-match Polymarket set, so published iteration metrics are not
+affected. Replace internal primary keys with Cricsheet ID, retain the
+synthetic key only as display/join metadata, and make odds manifests carry the
+Cricsheet ID resolved during construction. Fail closed on any remaining
+one-to-many join. Do this before expanding evaluation to markets that can
+contain same-day doubleheaders.
