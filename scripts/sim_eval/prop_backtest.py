@@ -862,6 +862,11 @@ def main():
     ap.add_argument("--batter-encoder", default="models/xgb_v3/batter_encoder_v3.pkl")
     ap.add_argument("--bowler-encoder", default="models/xgb_v3/bowler_encoder_v3.pkl")
     ap.add_argument("--feature-columns", default="models/xgb_v3/feature_columns_v3.txt")
+    ap.add_argument(
+        "--stats-version",
+        default="v3",
+        help="StatsProvider artifact version (for example v3 or i5).",
+    )
     ap.add_argument("--bowler-selector", choices=["empirical", "random"],
                     default="empirical",
                     help="Bowler selection strategy. Default = empirical (phase-aware).")
@@ -889,7 +894,7 @@ def main():
 
     # Load model + providers.
     print("Loading stats provider + player metadata + model ...")
-    stats_provider = StatsProvider("models", version="v3")
+    stats_provider = StatsProvider("models", version=args.stats_version)
     player_metadata = PlayerMetadataProvider("data/all_players_enriched.csv")
     model = XGBoostModelV2(
         model_path=args.model_path,
@@ -991,7 +996,8 @@ def main():
             flat[fam].extend(d["obs"].get(fam, []))
 
     lines = []
-    lines.append("# v7 sim — prop calibration backtest (Phase 1)")
+    model_label = Path(args.model_path).stem
+    lines.append(f"# {model_label} — prop calibration backtest")
     lines.append("")
     lines.append(
         f"Matches: {len(detail)} | Sims/match: {args.n_sims} | "

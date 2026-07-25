@@ -1536,12 +1536,38 @@ guardrails for future data but does **not** rehabilitate or re-baseline the
 legacy 261-match odds, so I4 remains interactive if historical headline
 metrics are ever regenerated.
 
-## I5 [INTERACTIVE] Extras/threes label rework (`parsing_v2.py`, full ball retrain)
-Train the ball model on off-the-bat runs; exclude wide/no-ball rows from
-training; stop folding 3s away (or at least preserve their strike
-rotation); byes/legbyes not credited to the batter; sim gains an explicit
-extras process (D3 is the sim-side stopgap). Label/schema change + full
-retrain — plan as its own session.
+## I5 [DONE 2026-07-24 — NOT PROMOTED] Extras/threes label rework (`parsing_v2.py`, full ball retrain)
+Implemented as the isolated `legal_off_bat_v1` / `i5` stack without modifying
+the legacy default or production v3/v7 artifacts. Only legal deliveries enter
+the six-class off-bat target; wides/no-balls/byes/leg-byes are composed through
+a validation-only empirical extras model; scorecard attribution now handles
+no-ball balls faced, byes/leg-byes, and non-striker run-outs correctly. Raw
+threes are preserved but remain in the combined 2/3 class: they are only
+10,463 / 2,477,116 = 0.4224% of local legal balls and have strong venue
+dependence (MCG 239/22,574 = 1.0587%; SCG 190/19,987 = 0.9506%; Mirpur
+170/68,991 = 0.2464%). A standalone draw is deliberately **not prioritized**:
+it adds a seventh sparse probability, calibration burden, odd-run strike
+rotation, and another per-delivery branch. Profiling subsequently reduced a
+fixed calibrated I5 prop benchmark from 31.1 to 9.2 seconds, but that is a
+reason to protect the recovered throughput, not spend it on a 0.42% event.
+Preserve the raw signal now; revisit the sub-draw only after I14 supplies
+time-indexed ground dimensions and an ablation demonstrates value beyond the
+combined 2/3 class.
+
+The full cache/parquet/model build passed legal-ball, tracker-log, and outcome
+conservation checks. Raw I5 ball test LL improves 1.629655 → 1.626158, but
+each model's validation-only vector calibration reverses the comparison
+(v3 1.508998 vs I5 1.514956). On the used 261-match iteration set, raw I5
+improves LL overall (0.7158 → 0.7097) and at ≥$50k (0.7402 → 0.7075), but
+flat ROI is +0.37% overall and becomes -7.11% after removing one 19-unit
+long-shot win. The full paired n=261, seed-43, 100-sim prop gate is TABLED:
+batter-runs MAE is noise (+0.136 [-0.125,+0.386]) and bowler 2+/3+ wicket
+Brier improves, but PP >55.5 and all innings total lines (>160.5/>170.5/
+>180.5) are CI-clean worse. Profiling reduced the full prop runtime to 56.2
+minutes via a byte-identical date-normalization hot-path fix. Verdict:
+implementation DONE; promotion TABLED pending component ablations and a new
+untouched post-2026-07-13 forward window. See
+`reports/i5_legal_off_bat_evaluation_20260724.md`.
 
 ## I6 [DONE 2026-07-23] Same-day match ordering determinism
 All chronological loaders now use the versioned
@@ -1640,3 +1666,10 @@ six/four rates, innings totals, and chase calibration. Prerequisites: I7 venue
 canonicalization, source/licensing audit, missing-value indicators, and an
 as-of join test. Gate on grouped-by-venue holdout performance so repeated
 matches at major grounds cannot hide regressions at sparse venues.
+
+**Three-run motivation (2026-07-24):** threes are rare overall
+(10,463/2,477,116 legal balls, 0.4224%) but differ sharply at high-volume
+grounds: MCG 1.0587%, SCG 0.9506%, Mirpur 0.2464%. This is one reason to retain
+raw batter threes for future physical-venue modeling. It is not a reason to add
+a three-run simulator sub-draw before the geometry exists: doing so now adds
+complexity and runtime without a demonstrated downstream gain.

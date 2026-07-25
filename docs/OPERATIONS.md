@@ -433,6 +433,110 @@ the probability decision and did not confirm the economic decision; see
 
 **Parity guarantee**: `scripts/tests/test_phase_a_parity.py` validates that this two-step pipeline produces bit-exact parquet output vs the original monolith across all 9,519 matches. The harness now also passes π into both reference and candidate paths so the 42 outcome-distribution columns are checked column-by-column.
 
+### I5 legal/off-bat experimental pipeline
+
+I5 is a versioned experimental stack. It does not replace or overwrite the
+production v3/v7 cache, parquet, model, encoders, or evaluation outputs.
+Its delivery contract is `legal_off_bat_v1`: train only on legal deliveries
+and off-bat runs, then compose validation-fitted wides, no-balls, byes, and
+leg-byes in the simulator.
+
+**Three-run policy.** Keep raw `batter_runs=3` in I5 data, but retain the
+combined 2/3-run model class and do not add a simulator sub-draw. Corpus
+frequency is 10,463 / 2,477,116 legal balls (0.4224%), with strong venue
+variation (MCG 1.0587%, SCG 0.9506%, Mirpur 0.2464%). A separate draw would
+add sparse calibration, odd-run strike-rotation logic, and per-delivery
+branches for a 0.42% event. Reconsider only after I14's time-indexed stadium
+dimensions exist and a controlled ablation demonstrates downstream value.
+
+Build and train:
+
+```bash
+uv run python scripts/build_stats_cache.py \
+  --delivery-semantics legal_off_bat_v1 \
+  --out models/player_stats_cache_i5.sqlite \
+  --force-rebuild
+
+uv run python scripts/materialize_features.py \
+  --config experiments/configs/xgb_i5_legal_off_bat.yaml
+
+uv run python scripts/run_experiment.py \
+  experiments/configs/xgb_i5_legal_off_bat.yaml \
+  --skip-parsing
+```
+
+The experiment runner passes the YAML's feature/model/data block to the
+trainer, then runs the configured historical evaluation. The trainer fits the
+I5 vector calibrator from validation balls and records it in
+`models/xgb_i5/training_contract_i5.json`. To refit that artifact explicitly:
+
+```bash
+uv run python scripts/fit_i5_ball_calibrator.py --version i5
+```
+
+Raw historical match evaluation and liquidity re-slicing:
+
+```bash
+uv run python scripts/sim_eval/run_sim_eval.py \
+  --model-type xgboost \
+  --model-version i5 \
+  --test-dir data/polymarket_test \
+  --odds betting_odds_polymarket.json \
+  --n-sims 100 \
+  --bootstrap-resamples 1000 \
+  --output-dir eval_out/i5_raw
+
+uv run python scripts/sim_eval/reslice_eval_json.py \
+  --in <I5_MATCH_RESULT_JSON> \
+  --odds betting_odds_polymarket.json \
+  --out-dir eval_out/i5_raw/sliced \
+  --bootstrap-resamples 1000
+```
+
+Load the validation-fitted ball calibrator with:
+
+```bash
+uv run python scripts/sim_eval/run_sim_eval.py \
+  --model-type xgboost \
+  --model-version i5 \
+  --test-dir data/polymarket_test \
+  --odds betting_odds_polymarket.json \
+  --n-sims 100 \
+  --bootstrap-resamples 1000 \
+  --ball-calibrator-path \
+    models/xgb_i5/vector_scaling_calibrator_i5.pkl \
+  --output-dir eval_out/i5_calibrated
+```
+
+Initial paired prop gate:
+
+```bash
+uv run python scripts/sim_eval/prop_backtest.py \
+  --n-matches 30 \
+  --n-sims 100 \
+  --seed 43 \
+  --stats-version i5 \
+  --model-path models/xgb_i5/xgboost_model_i5.pkl \
+  --batter-encoder models/xgb_i5/batter_encoder_i5.pkl \
+  --bowler-encoder models/xgb_i5/bowler_encoder_i5.pkl \
+  --feature-columns models/xgb_i5/feature_columns_i5.txt \
+  --ball-calibrator vector \
+  --ball-calibrator-path \
+    models/xgb_i5/vector_scaling_calibrator_i5.pkl \
+  --detail-out models/auto/i5/detail_i5_s43_n30.json \
+  --report-out reports/i5_prop_report_n30.md
+```
+
+Run match and prop evaluations sequentially on this machine. The
+`StatsProviderCache` date-normalization hot-path fix reduced a fixed calibrated
+I5 prop benchmark from 31.1 to 9.2 seconds at 100 simulations with
+byte-identical detail output; the completed 261-match pass took 56.2 minutes.
+Concurrent full match and prop runs cause severe contention. The full paired
+prop gate TABLED I5: bowler 2+/3+ wicket Brier improved, but PP >55.5 and all
+three innings-total lines were confidence-clean worse. See
+`../reports/i5_legal_off_bat_evaluation_20260724.md` for results and the
+current not-promoted decision.
+
 **Temporal Splits** (`scripts/loaders_common.py:DEFAULT_SPLITS`, override via
 YAML `data.splits`):
 - Train: matches with date < `train_end` (default `2024-12-31`)

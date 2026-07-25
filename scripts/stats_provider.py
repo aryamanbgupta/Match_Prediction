@@ -224,7 +224,10 @@ class StatsProviderCache:
     @staticmethod
     def _norm_date(as_of_date) -> str:
         if isinstance(as_of_date, datetime):
-            return as_of_date.strftime('%Y-%m-%d')
+            # `strftime('%Y-%m-%d')` is unusually expensive on the simulator
+            # hot path (~17 calls per delivery). `date().isoformat()` has the
+            # same YYYY-MM-DD contract and is hundreds of times faster.
+            return as_of_date.date().isoformat()
         return as_of_date
 
     def _team_key(self, player_ids, as_of_date):

@@ -462,7 +462,21 @@ delivery_semantics = _config.get('data', {}).get(
     'delivery_semantics', 'inclusive_total_runs_v1')
 extras_contract = None
 if delivery_semantics == 'legal_off_bat_v1':
+    from calibration import VectorScalingCalibrator
     from i5_extras import build_i5_extras_model, write_i5_extras_model
+
+    vector_calibrator = VectorScalingCalibrator().fit(
+        y_val_proba, y_val.to_numpy())
+    calibrated_val = vector_calibrator.calibrate_probs(y_val_proba)
+    vector_path = (
+        model_dir / f'vector_scaling_calibrator_{artifact_suffix}.pkl'
+    )
+    joblib.dump(vector_calibrator, vector_path)
+    print(
+        f"  Saved {vector_path.name} "
+        f"(val LL {val_logloss:.6f} -> "
+        f"{log_loss(y_val, calibrated_val):.6f})"
+    )
 
     data_cfg = _config.get('data', {})
     extras_model = build_i5_extras_model(
@@ -484,6 +498,10 @@ training_contract = {
     'data_version': data_version,
     'delivery_semantics': delivery_semantics,
     'extras_contract': extras_contract,
+    'ball_calibrator': (
+        f'vector_scaling_calibrator_{artifact_suffix}.pkl'
+        if delivery_semantics == 'legal_off_bat_v1' else None
+    ),
     'train_rows': int(len(train_df)),
     'validation_rows': int(len(val_df)),
     'test_rows': int(len(test_df)),

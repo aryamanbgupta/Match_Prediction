@@ -118,6 +118,12 @@ def main():
                        help='Enable ball-level calibration (per-class isotonic on validation data)')
     parser.add_argument('--ball-calibrate-data', type=str, default=None,
                        help='Path to validation parquet for fitting ball-level calibrator (default: auto-detect)')
+    parser.add_argument(
+        '--ball-calibrator-path',
+        type=str,
+        default=None,
+        help='Load a pre-fitted ball calibrator (for example I5 vector scaling)',
+    )
     parser.add_argument('--ball-diagnostics', action='store_true',
                        help='Run ball-level ECE diagnostics (read-only, no correction)')
     parser.add_argument('--save-calibrator', type=str, default=None,
@@ -206,7 +212,17 @@ def main():
     # Ball-level calibration is loaded after model init (needs raw XGBoost model)
     ball_calibrator = None
     _ball_cal_data_path = None
+    if args.ball_calibrator_path:
+        ball_calibrator = joblib.load(args.ball_calibrator_path)
+        print(
+            f"✓ Loaded ball calibrator: {args.ball_calibrator_path}"
+        )
     if args.ball_calibrate or args.ball_diagnostics:
+        if args.ball_calibrator_path and args.ball_calibrate:
+            parser.error(
+                "--ball-calibrator-path and --ball-calibrate are mutually "
+                "exclusive"
+            )
         if args.ball_calibrate_data:
             _ball_cal_data_path = args.ball_calibrate_data
         else:
@@ -530,7 +546,9 @@ def main():
                 'post_calibration_log_loss': results.post_calibration_log_loss,
                 'pre_calibration_brier': results.pre_calibration_brier,
                 'post_calibration_brier': results.post_calibration_brier,
-                'ball_calibration_enabled': args.ball_calibrate,
+                'ball_calibration_enabled': bool(
+                    args.ball_calibrate or args.ball_calibrator_path),
+                'ball_calibrator_path': args.ball_calibrator_path,
             },
             'matches': []
         }

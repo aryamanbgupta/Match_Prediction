@@ -384,6 +384,11 @@ def build_eval_cmd(config: dict) -> list:
         cmd.append("--ball-calibrate")
     if eval_config.get("ball_calibrate_data"):
         cmd.extend(["--ball-calibrate-data", eval_config["ball_calibrate_data"]])
+    if eval_config.get("ball_calibrator_path"):
+        cmd.extend([
+            "--ball-calibrator-path",
+            eval_config["ball_calibrator_path"],
+        ])
     if eval_config.get("ball_diagnostics"):
         cmd.append("--ball-diagnostics")
     if eval_config.get("save_calibrator"):

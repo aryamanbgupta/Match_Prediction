@@ -99,6 +99,22 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
    the team-fours over-count bias. Pass `--bowler-selector random` to
    `run_sim_eval.py` for A/B baselines.
 
+   **I5 experimental legal/off-bat stack (2026-07-24; not promoted):**
+   `legal_off_bat_v1` trains only on legal off-bat outcomes and composes
+   validation-fitted extras separately. It is isolated under the `i5` cache,
+   parquet, model, calibrator, and evaluation paths; production v3/v7 remains
+   the model of record. Raw ball and historical match LL improve slightly, but
+   calibrated ball LL is worse than v3, historical ROI is long-shot-dependent,
+   and the full paired n=261 prop gate fails on PP >55.5 plus all three
+   innings-total lines despite improving bowler 2+/3+ wicket Brier. Raw threes
+   are preserved but stay in the combined 2/3 class: they are 0.4224% of legal
+   balls and range from 1.0587% at the MCG to 0.2464% at Mirpur. Do not
+   prioritize a separate three-run draw until physical ground dimensions exist
+   and an ablation justifies the added calibration, strike-rotation complexity,
+   and simulation runtime. Do not score the consumed forward set with I5. See
+   `reports/i5_legal_off_bat_evaluation_20260724.md` and `docs/OPERATIONS.md`
+   § "I5 legal/off-bat experimental pipeline".
+
 Schema-v4 SQLite stats cache at `models/player_stats_cache_v3.sqlite` —
 schema unchanged from v6; v7 differs only in the shrinkage *composition*
 (narrow cells shrink toward player overall, not π directly). Per-phase

@@ -53,7 +53,7 @@ class _CountingFake:
                 'venue_death_avg': 55.0, 'venue_first_innings_avg': 160.0,
                 'venue_chase_win_pct': 0.52}
 
-    # A method the cache does NOT override — must still work via __getattr__.
+    # One of the Tier-2 per-player methods cached by StatsProviderCache.
     def get_batting_vs_type_stats(self, batter_id, as_of_date):
         self.calls['get_batting_vs_type_stats'] += 1
         return {'avg_vs_pace': 30.0, 'sr_vs_pace': 140.0,
@@ -108,15 +108,15 @@ def test_datetime_and_string_dates_are_same_key():
     assert provider.calls['get_venue_profile'] == 1
 
 
-def test_passthrough_for_uncached_methods():
+def test_batting_vs_type_stats_hits_tier2_cache():
     provider = _CountingFake()
     cache = StatsProviderCache(provider)
     assert hasattr(cache, 'get_batting_vs_type_stats')
     got = cache.get_batting_vs_type_stats('p1', '2024-06-15')
     assert got['avg_vs_pace'] == 30.0
-    # Uncached — every call hits the underlying provider.
+    # Tier-2 memoization means the repeated lookup does not hit the provider.
     cache.get_batting_vs_type_stats('p1', '2024-06-15')
-    assert provider.calls['get_batting_vs_type_stats'] == 2
+    assert provider.calls['get_batting_vs_type_stats'] == 1
 
 
 def test_pickle_roundtrip_preserves_memo():
