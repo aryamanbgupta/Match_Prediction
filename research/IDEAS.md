@@ -1583,7 +1583,7 @@ On 791 already-consumed test rows, M7 LL changed 0.592629 → 0.592474 and mean
 absolute prediction movement was 0.079 percentage points. No forward fixture
 was scored. See `docs/I6_SAME_DAY_ORDERING_AUDIT.md`.
 
-## I7 [INTERACTIVE] Venue canonicalization + duplicate player-ID merge
+## I7 [DONE 2026-07-25 — IDENTITY LANDED, MODELS NOT PROMOTED] Venue canonicalization + duplicate player-ID merge
 ~149 venue substring-collision pairs ("Bay Oval" vs "Bay Oval, Mount
 Maunganui") fragment venue history; 94 player names map to >1 registry ID
 (split ELO/stats histories, double cold-start). Alias/merge maps at
@@ -1612,8 +1612,9 @@ inference fail closed on old or missing contracts. Cache building, ball and
 match features, live fixtures, same-day replay, Polymarket construction, and
 evaluation IDs now share the same canonicalization. Raw JSON and frozen
 historical odds/evaluation artifacts remain unchanged. Full cache/parquet
-rebuild, both model retrains, and the paired iteration evaluation remain
-before I7 can be marked done. See `docs/I7_VENUE_IDENTITY_CONTRACT.md`.
+rebuilds and both model retrains were completed in isolated I7 namespaces;
+neither model replaced production. See
+`docs/I7_VENUE_IDENTITY_CONTRACT.md`.
 
 **Rebuild checkpoint (2026-07-25):** the isolated cache preserved 9,519
 matches and reduced 467 raw venue strings to 373 canonical identities. Raw
@@ -1621,8 +1622,17 @@ ball LL is mixed/neutral (validation -0.00129 better, test +0.00195 worse).
 The direct M7 retrain is directionally worse on all paired iteration slices:
 ≥$50k LL 0.6299 → 0.6421 and ROI +21.90% → +17.49%, although
 competition-block Δ intervals cross zero. The intended venue-enriched slice
-does not improve. Do not promote the direct model; ball simulation remains
-before the I7 model verdict. See
+does not improve.
+
+The final ball-simulation gate used a fresh frozen-v3 control under the exact
+same current D15 simulator. I7 is directionally worse overall (LL 0.6845 →
+0.7042, Brier 0.2433 → 0.2530, ROI +9.07% → +0.46%) and at ≥$50k
+(LL 0.6970 → 0.7176, ROI +9.79% → +1.38%); block-bootstrap delta intervals
+cross zero. The venue-enriched slice also worsens directionally (LL 0.6959 →
+0.7160; ROI +15.01% → -0.30%). Do not promote either I7 model. Retain the
+reviewed identity layer, provenance contracts, fail-closed compatibility
+checks, and isolated artifacts; do not attach I7 metadata to legacy models.
+The consumed forward holdout remained closed. See
 `reports/i7_rebuild_checkpoint_20260725.md`.
 
 ## I8 [INTERACTIVE] Per-player phase dists + batter-vs-bowler cell (schema-v5 plumbing)

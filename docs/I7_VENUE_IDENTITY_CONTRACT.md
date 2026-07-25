@@ -92,6 +92,34 @@ The already-consumed forward holdout and its locked predictions remain
 immutable historical artifacts. Do not rebuild them merely to attach the new
 identity contract.
 
+## Evaluation outcome and operational state
+
+The isolated rebuild completed on 2026-07-25. It preserved all 9,519 modeling
+matches while reducing 467 raw venue labels to 373 canonical identities.
+Neither retrained model passed its promotion gate:
+
+- the direct match model was directionally worse on all paired liquidity
+  slices; and
+- under the same current simulator, the ball model moved overall LL from
+  0.6845 to 0.7042, Brier from 0.2433 to 0.2530, and flat ROI from +9.07% to
+  +0.46%. Competition-block delta intervals crossed zero, so this is a
+  rejection of promotion rather than proof of a stable regression.
+
+The identity implementation and isolated I7 artifacts remain available, but
+production v3/v7 and M7 artifacts are not relabeled or overwritten. The live
+path intentionally fails closed when legacy state or model artifacts lack the
+active identity provenance. Before restoring live use, choose and evaluate
+one explicit path:
+
+1. keep I7 opt-in until a later retrained model passes its gate; or
+2. add a separately versioned legacy-compatibility mode and test its inference
+   behavior, especially for fixtures arriving under an alias spelling.
+
+Copying the I7 metadata onto a legacy artifact is not a compatibility fix: it
+would falsely claim that fragmented venue histories were rebuilt.
+
+Full results are in `reports/i7_rebuild_checkpoint_20260725.md`.
+
 ## Polymarket-specific rule
 
 `build_polymarket_odds.py` and `build_forward_holdout.py` canonicalize the
