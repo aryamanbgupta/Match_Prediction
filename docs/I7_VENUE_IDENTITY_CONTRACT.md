@@ -61,6 +61,33 @@ contract.
    selection. A new post-decision terminal window is required for final
    confirmation.
 
+The isolated reproducible commands are:
+
+```bash
+# Cache + ball parquet + ball model; simulation evaluation intentionally skips.
+uv run python scripts/run_experiment.py \
+  experiments/configs/xgb_i7_venue_identity.yaml
+
+# Full match materialization from the same I7 cache.
+uv run python scripts/materialize_match_features.py \
+  --version i7 \
+  --out-dir data/xgb_match_data_i7_full
+
+# Restrict to the exact current M7 production feature order.
+uv run python scripts/build_i7_match_frame.py
+
+# Retrain the unchanged M7 architecture in an isolated directory.
+uv run python scripts/xgboost_match_v1.py \
+  --cmd both \
+  --data-dir data/xgb_match_data_i7 \
+  --model-dir models/xgb_match_i7 \
+  --monotone
+```
+
+The modeling corpus remains the existing 9,519 male matches through
+2026-04-16. Later refreshed matches are held-out evaluation/context data and
+must not enter this I7 retrain.
+
 The already-consumed forward holdout and its locked predictions remain
 immutable historical artifacts. Do not rebuild them merely to attach the new
 identity contract.
