@@ -67,13 +67,15 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
    anywhere ball-level resolution matters and match-level supervision
    can't help.
 
-   **Prop-bet framework (2026-05-12; REVISED 2026-06-09 by E2+E5)**:
+   **Prop-bet framework (2026-05-12; REVISED 2026-07-24 by I13)**:
    `scripts/sim_eval/prop_backtest.py` backtests ~25 prop families against
-   cricsheet actuals. **E2 fair-baseline audit
+   cricsheet actuals. **E2 v2 fair-baseline audit
    (`reports/e2_prop_fair_baselines.md`): no binary prop family beats an
-   as-of fair baseline** (EB-shrunk career/venue/positional) — the
+   as-of fair baseline** (EB-shrunk career/venue/positional plus
+   usage-aware `top_bowler`) — the
    2026-05-12 "ship as-is" list was a base-rate artifact; any prop claim
-   must clear `scripts/sim_eval/prop_fair_baselines.py`, not base rates.
+   must clear the versioned bar in
+   `scripts/sim_eval/prop_fair_baselines.py`, not base rates.
    **E5 root cause of the tail-event overshoot
    (`reports/e5_class_weight_fix.md`)**: v7 trains with `balanced` class
    weights and the sim sampled the tilted probabilities raw (P(wkt) 2×
@@ -81,10 +83,12 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
    (`models/xgb_v3/vector_scaling_calibrator_v1.pkl`) — pass
    `--ball-calibrator vector` to `prop_backtest.py` for all prop/score
    work. Calibrated, the PP-total overshoot disappears, bowler-wicket
-   overshoot halves, and `top_bowler` becomes the first binary family to
-   beat a fair baseline; known cost: per-batter runs MAE (read that from
-   the raw sim or the career baseline). "Inverse plays" are dead — fair
-   baselines beat both the raw sim and its inverse.
+   overshoot halves, but the I13 usage-share baseline beats calibrated
+   `top_bowler` CI-clean (sim − baseline +0.0038
+   [+0.0026, +0.0051]). The old "first binary family with skill" claim is
+   superseded. Known cost: per-batter runs MAE (read that from the raw sim
+   or the career baseline). "Inverse plays" are dead — fair baselines beat
+   both the raw sim and its inverse.
 
    **In-play win probability (E6, 2026-06-09)**: use
    `models/inplay_winprob_v1` (direct P(win|ball state), LL 0.5418 / AUC

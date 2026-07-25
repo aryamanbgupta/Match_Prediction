@@ -11,7 +11,7 @@ as the SQLite cache).
 
 Baselines per family:
   top_batter            positional prior P(top scorer | lineup slot), as-of
-  top_bowler            career wickets share: p ∝ (career wkts + 1) within XI
+  top_bowler            usage share: expected balls × wicket rate within XI
   batter_50plus         EB-shrunk career P(50+ | batted), k=20
   batter_6plus_six      EB-shrunk career P(>=1 six | batted), k=20
   batter_fours_{1,2,3}plus  EB-shrunk career P(>=k fours | batted), k=20
@@ -54,12 +54,15 @@ import numpy as np
 
 REPO = Path(__file__).resolve().parents[2]
 SOURCE_DIR = REPO / "data" / "t20s_json"
-CACHE = REPO / "models" / "prop_fair_baseline_corpus.pkl"
+CACHE = REPO / "models" / "prop_fair_baseline_corpus_v2.pkl"
 
 BOWLER_KINDS = {"bowled", "caught", "lbw", "stumped", "caught and bowled",
                 "hit wicket"}
+BASELINE_VERSION = "e2-v2-usage-top-bowler"
 K_PLAYER = 20.0
 K_VENUE = 20.0
+K_USAGE = 5.0
+K_WICKET_RATE = 120.0
 
 
 # ------------------------------------------------------------- corpus pass
@@ -71,6 +74,8 @@ def build_corpus_logs(source_dir: Path) -> dict:
     """
     batter_log = defaultdict(list)   # name -> [(date, runs, fours, sixes)]
     bowler_log = defaultdict(list)   # name -> [(date, wkts)]
+    # name -> [(date, balls, wkts)], including zero-ball XI appearances
+    bowling_usage = defaultdict(list)
     venue_inn = defaultdict(list)    # venue -> [(date, total, pp, top_score,
                                      #            first_wkt_runs, first_over,
                                      #            team_fours)]
@@ -91,6 +96,8 @@ def build_corpus_logs(source_dir: Path) -> dict:
         if not dates:
             continue
         date = str(dates[0])
+        teams = info.get("teams") or []
+        players = info.get("players") or {}
         venue = info.get("venue", "?")
         innings = j.get("innings", [])[:2]
         match_sixes = 0
@@ -103,11 +110,13 @@ def build_corpus_logs(source_dir: Path) -> dict:
             first_over = 0
             first_wkt_runs = None
             wkts_by_bowler = defaultdict(int)
+            balls_by_bowler = defaultdict(int)
             for ov in inn.get("overs", []):
                 over_no = ov.get("over", 0)
                 over_runs = 0
                 for d in ov.get("deliveries", []):
                     b = d["batter"]
+                    balls_by_bowler[d["bowler"]] += 1
                     if b not in batters:
                         batters[b] = {"runs": 0, "fours": 0, "sixes": 0}
                         appear.append(b)
@@ -146,12 +155,17 @@ def build_corpus_logs(source_dir: Path) -> dict:
             for bw, w in wkts_by_bowler.items():
                 bowler_log[bw].append((date, w))
             # bowlers with 0 wickets still bowled — capture them too
-            seen_bowlers = set()
-            for ov in inn.get("overs", []):
-                for d in ov.get("deliveries", []):
-                    seen_bowlers.add(d["bowler"])
+            seen_bowlers = set(balls_by_bowler)
             for bw in seen_bowlers - set(wkts_by_bowler):
                 bowler_log[bw].append((date, 0))
+            bat_team = inn.get("team")
+            bowl_teams = [team for team in teams if team != bat_team]
+            if len(bowl_teams) == 1:
+                bowl_team = bowl_teams[0]
+                appearances = set(players.get(bowl_team, [])) | seen_bowlers
+                for bw in appearances:
+                    bowling_usage[bw].append(
+                        (date, balls_by_bowler[bw], wkts_by_bowler[bw]))
             venue_inn[venue].append((date, total, pp, top_score,
                                      first_wkt_runs, first_over, team_fours))
         venue_match[venue].append((date, match_sixes, match_max_over))
@@ -164,6 +178,7 @@ def build_corpus_logs(source_dir: Path) -> dict:
     return {
         "batter": _sortlog(batter_log),
         "bowler": _sortlog(bowler_log),
+        "bowling_usage": _sortlog(bowling_usage),
         "venue_inn": _sortlog(venue_inn),
         "venue_match": _sortlog(venue_match),
         "pos_top": sorted(pos_top),
@@ -181,10 +196,19 @@ class AsOf:
             row for rows in logs["batter"].values() for row in rows)
         self.all_bowler = sorted(
             row for rows in logs["bowler"].values() for row in rows)
+        self.all_bowling_usage = sorted(
+            row for rows in logs["bowling_usage"].values() for row in rows)
         self.all_venue_inn = sorted(
             row for rows in logs["venue_inn"].values() for row in rows)
         self.all_venue_match = sorted(
             row for rows in logs["venue_match"].values() for row in rows)
+        self._usage_dates = [row[0] for row in self.all_bowling_usage]
+        self._usage_cum_balls = np.cumsum(
+            [row[1] for row in self.all_bowling_usage])
+        self._usage_cum_wkts = np.cumsum(
+            [row[2] for row in self.all_bowling_usage])
+        self._usage_global_cache = {}
+        self._usage_player_cache = {}
 
     @staticmethod
     def _before(rows, date):
@@ -224,6 +248,50 @@ class AsOf:
         rows = self._before(self.logs["bowler"].get(name, []), date)
         return float(sum(r[1] for r in rows))
 
+    def global_bowling_usage(self, date) -> tuple[float, float]:
+        """Mean balls/XI appearance and bowler wickets/ball before date."""
+        if date in self._usage_global_cache:
+            return self._usage_global_cache[date]
+        i = bisect_left(self._usage_dates, date)
+        if i == 0:
+            result = (120.0 / 11.0, 0.05)
+        else:
+            balls = float(self._usage_cum_balls[i - 1])
+            wkts = float(self._usage_cum_wkts[i - 1])
+            result = (balls / i, wkts / balls if balls else 0.05)
+        self._usage_global_cache[date] = result
+        return result
+
+    def player_bowling_usage(self, name, date) -> tuple[int, int, int]:
+        """XI appearances, deliveries and bowler wickets strictly before date."""
+        key = (name, date)
+        if key not in self._usage_player_cache:
+            rows = self._before(self.logs["bowling_usage"].get(name, []), date)
+            self._usage_player_cache[key] = (
+                len(rows),
+                sum(row[1] for row in rows),
+                sum(row[2] for row in rows),
+            )
+        return self._usage_player_cache[key]
+
+    def bowling_expectation(self, name, date) -> tuple[float, float]:
+        """EB-shrunk expected deliveries and wickets/delivery."""
+        prior_balls, global_rate = self.global_bowling_usage(date)
+        appearances, balls, wkts = self.player_bowling_usage(name, date)
+        expected_balls = (
+            (K_USAGE * prior_balls + balls) / (K_USAGE + appearances)
+            if appearances else prior_balls
+        )
+        wicket_rate = (
+            (K_WICKET_RATE * global_rate + wkts) /
+            (K_WICKET_RATE + balls)
+        )
+        return expected_balls, wicket_rate
+
+    def expected_wickets(self, name, date) -> float:
+        expected_balls, wicket_rate = self.bowling_expectation(name, date)
+        return expected_balls * wicket_rate
+
     def pos_top_prior(self, date, pos) -> float:
         sel = self._before(self.logs["pos_top"], date)
         if not sel:
@@ -231,6 +299,19 @@ class AsOf:
         hits = sum(1 for r in sel if r[1] == pos)
         # +1/+11 smoothing so deep positions never get exactly 0
         return (hits + 1) / (len(sel) + 11)
+
+
+def poisson_at_least(expected_count: float, threshold: int) -> float:
+    """P(X >= threshold) for X ~ Poisson(expected_count)."""
+    if threshold <= 0:
+        return 1.0
+    expected_count = max(0.0, float(expected_count))
+    term = 1.0
+    cdf = term
+    for value in range(1, threshold):
+        term *= expected_count / value
+        cdf += term
+    return float(np.clip(1.0 - np.exp(-expected_count) * cdf, 0.0, 1.0))
 
 
 # ---------------------------------------------------------------- baselines
@@ -260,12 +341,14 @@ def baseline_rows(detail: list, asof: AsOf) -> dict:
                     {"p_sim": r["p"], "p_base": float(pb), "y": r["y"],
                      "mid": mid})
 
-        # --- top_bowler: career wickets share within XI
+        # --- top_bowler: expected usage × wicket rate, normalized within XI
         rows = obs.get("top_bowler", [])
         for team in {r["team"] for r in rows}:
             trows = [r for r in rows if r["team"] == team]
-            w = np.array([asof.career_wickets(r["name"], date) + 1.0
+            w = np.array([asof.expected_wickets(r["name"], date)
                           for r in trows])
+            if w.sum() <= 0:
+                w = np.ones(len(trows), dtype=float)
             w = w / w.sum()
             for r, pb in zip(trows, w):
                 out["top_bowler"].append(
@@ -287,15 +370,20 @@ def baseline_rows(detail: list, asof: AsOf) -> dict:
                 out[fam].append({"p_sim": r["p"], "p_base": pb, "y": r["y"],
                                  "mid": mid})
 
-        # --- per-bowler career-rate families
+        # --- per-bowler career-rate families. The I13 usage × rate Poisson
+        # candidate is retained on each row for an explicit stronger-bar
+        # comparison in the report, but is not promoted unless it wins.
         for thr, fam in ((1, "bowler_wkts_1plus"), (2, "bowler_wkts_2plus"),
                          (3, "bowler_wkts_3plus")):
             fn = (lambda t: lambda row: row[1] >= t)(thr)
             for r in obs.get(fam, []):
-                pb = asof.shrunk_rate(asof.logs["bowler"].get(r["name"], []),
-                                      asof.all_bowler, date, fn, K_PLAYER)
+                pb = asof.shrunk_rate(
+                    asof.logs["bowler"].get(r["name"], []),
+                    asof.all_bowler, date, fn, K_PLAYER)
+                p_usage_count = poisson_at_least(
+                    asof.expected_wickets(r["name"], date), thr)
                 out[fam].append({"p_sim": r["p"], "p_base": pb, "y": r["y"],
-                                 "mid": mid})
+                                 "p_usage_count": p_usage_count, "mid": mid})
 
         # --- venue-shrunk innings-level O/U families
         inn_fams = {
@@ -448,13 +536,20 @@ def main():
     mae_fams = [f for f in paired if f.endswith("_mae")]
 
     lines = [
-        "# E2 — Prop families vs FAIR baselines (not base rates)",
+        "# E2 v2 — Prop families vs FAIR baselines (not base rates)",
         "",
         f"Detail: `{args.detail.name}` (n={len(detail)} matches). "
         "Baselines built strictly as-of each match date from "
         "`data/t20s_json` (male T20s, innings 1–2). Δ = sim − baseline; "
         "**negative Δ ⇒ sim beats the fair baseline**. 95% CIs from "
         "cluster bootstrap by match (2,000 resamples).",
+        "",
+        f"**Baseline version:** `{BASELINE_VERSION}`. `top_bowler` uses "
+        f"EB-shrunk expected deliveries (K={K_USAGE:g} XI appearances) × "
+        f"wickets/delivery (K={K_WICKET_RATE:g} deliveries), normalized "
+        "within the team. XI histories include zero-ball appearances. "
+        "`bowler_wkts_{1,2,3}plus` retains the stronger EB-shrunk as-of "
+        "threshold-rate baseline (K=20 bowling appearances).",
         "",
         "## Binary families (Brier)",
         "",
@@ -479,7 +574,46 @@ def main():
         lines.append(f"| `{fam}` | {len(rows)} | {bs:.4f} | {bb:.4f} | "
                      f"{bs - bb:+.4f} | [{lo:+.4f}, {hi:+.4f}] | {verdict} |")
         summary[fam] = {"n": len(rows), "brier_sim": bs, "brier_base": bb,
-                        "delta_ci": [lo, hi], "verdict": verdict}
+                        "delta_ci": [lo, hi], "verdict": verdict,
+                        "baseline_version": BASELINE_VERSION}
+
+    lines += [
+        "",
+        "## I13 count-baseline candidate decision",
+        "",
+        "The analogous expected-balls × wicket-rate Poisson tail was "
+        "evaluated but not promoted. Positive Δ below means that candidate "
+        "has worse Brier score than the retained as-of threshold-rate "
+        "baseline.",
+        "",
+        "| family | retained Brier | usage-count Brier | Δ candidate − "
+        "retained | Δ 95% CI | decision |",
+        "|---|---:|---:|---:|---|---|",
+    ]
+    for fam in ("bowler_wkts_1plus", "bowler_wkts_2plus",
+                "bowler_wkts_3plus"):
+        rows = paired[fam]
+        retained = float(np.mean([
+            (r["p_base"] - r["y"]) ** 2 for r in rows]))
+        candidate = float(np.mean([
+            (r["p_usage_count"] - r["y"]) ** 2 for r in rows]))
+        lo, hi = cluster_bootstrap_delta(
+            rows,
+            lambda r: ((r["p_usage_count"] - r["y"]) ** 2 -
+                       (r["p_base"] - r["y"]) ** 2),
+        )
+        decision = ("retain threshold-rate"
+                    if candidate >= retained else "promote usage-count")
+        lines.append(
+            f"| `{fam}` | {retained:.4f} | {candidate:.4f} | "
+            f"{candidate - retained:+.4f} | [{lo:+.4f}, {hi:+.4f}] | "
+            f"{decision} |")
+        summary[fam]["usage_count_candidate"] = {
+            "brier": candidate,
+            "delta_vs_retained": candidate - retained,
+            "delta_ci": [lo, hi],
+            "decision": decision,
+        }
 
     lines += ["", "## Continuous families (MAE)", "",
               "| family | n | MAE sim | MAE fair-base | ΔMAE | Δ 95% CI | verdict |",
@@ -499,15 +633,14 @@ def main():
         lines.append(f"| `{fam}` | {len(rows)} | {ms:.2f} | {mb:.2f} | "
                      f"{ms - mb:+.2f} | [{lo:+.2f}, {hi:+.2f}] | {verdict} |")
         summary[fam] = {"n": len(rows), "mae_sim": ms, "mae_base": mb,
-                        "delta_ci": [lo, hi], "verdict": verdict}
+                        "delta_ci": [lo, hi], "verdict": verdict,
+                        "baseline_version": BASELINE_VERSION}
 
     lines += ["", "## Skipped families",
               "",
               "- `bowler_economy_ou_*`: fair career baseline ill-defined "
               "without modelling overs bowled per spell.",
               "- `p_tie`: degenerate (ties ~0.4% of matches).",
-              "- `team_total_fours_mae`: team fours not tracked in the "
-              "corpus venue log (add on next corpus-cache rebuild).",
               ""]
     args.out.write_text("\n".join(lines))
     json.dump(summary, open(args.out.with_suffix(".json"), "w"), indent=2)

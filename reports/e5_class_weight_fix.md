@@ -6,6 +6,15 @@
 `scripts/sim_eval/prop_backtest.py --ball-calibrator vector` (wiring)
 **Artifact**: `models/xgb_v3/vector_scaling_calibrator_v1.pkl` (6 params, val-fit)
 
+> **I13 correction (2026-07-24):** The calibration mechanism and its
+> marginal-rate improvements remain valid, but the claim below that
+> `top_bowler` was the first binary family to beat a fair baseline is
+> superseded. E2 v2 replaces career-wicket share with a strictly as-of
+> expected-deliveries × wicket-rate usage baseline. On the canonical
+> 261-match D15 detail, the usage baseline beats the calibrated sim:
+> Brier 0.0747 vs 0.0785; sim − baseline +0.0038
+> [+0.0026, +0.0051]. See `reports/e2_prop_fair_baselines.md`.
+
 ## What started as "add intent features" became a root-cause hunt
 
 Original hypothesis: the sim over-states PP totals / bowler wickets because the
@@ -105,10 +114,12 @@ families are fixed. Follow-up: **phase-conditional vector scaling**
 context into `calibrate_probs` (wrapper signature change), so it's filed
 as the next ball-level iteration rather than landed here.
 
-**Usage guidance (per family)**: use the calibrated sim for wicket-count,
-PP/innings totals, top-bowler, team-highest, fours/sixes counts; use the
-raw sim (or E2 career baseline) for per-batter runs, first-over, and
-highest-over families.
+**Current usage guidance (corrected by I13):** keep the calibrated sim for
+score distributions and scenario work, but do not treat its binary prop
+outputs as fair-baseline-beating forecasts. In particular, use the E2 v2
+usage-share baseline as the `top_bowler` benchmark until the simulator's
+bowler-selection model closes the measured gap. Use the raw sim (or E2
+career baseline) for per-batter runs, first-over, and highest-over families.
 
 ## Verdict
 

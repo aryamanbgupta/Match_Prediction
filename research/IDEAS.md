@@ -1631,7 +1631,7 @@ Byte-identical numerics for any seed ≠ 0 (guard-only changes);
 separate women's model is zero-download new coverage. No odds/eval gate
 exists yet — needs its own eval design first.
 
-## I13 [INTERACTIVE] Upgrade the E2 fair-baseline bar (flagged by loop iteration B9, 2026-07-21)
+## I13 [DONE 2026-07-24] Upgrade the E2 fair-baseline bar
 B9 built a usage-share top_bowler baseline (as-of EB-shrunk
 expected-deliveries × per-ball wicket rate, lineup-uniform debutant
 prior) that beats BOTH the E2 career-share baseline (ΔBrier −0.0055
@@ -1646,6 +1646,19 @@ consider the analogous expected-balls × rate count-model upgrade for
 (E2/E5 reports, CLAUDE.md prop-framework paragraph) after the bar moves;
 sim-gate guard families that reference "margin vs fair baseline" keep
 meaning only relative to the bar version in force.
+
+**Done:** `prop_fair_baselines.py` now emits the versioned
+`e2-v2-usage-top-bowler` bar from a v2 corpus that includes zero-ball XI
+appearances. On the canonical D15 n=261 detail, the usage baseline
+reproduces B9 exactly: Brier 0.0747 vs sim 0.0785; sim − baseline
+**+0.0038 [+0.0026, +0.0051]**, so the baseline wins CI-clean. The
+analogous Poisson expected-balls × rate candidates for
+`bowler_wkts_{1,2,3}plus` were all CI-clean weaker than the existing
+EB-shrunk threshold-rate baselines (candidate − retained +0.0067
+[+0.0031,+0.0106], +0.0043 [+0.0022,+0.0064], +0.0011
+[+0.0004,+0.0020]), so they were explicitly rejected. E2, E5, and the
+standing prop guidance now state that no binary prop family clears the
+fair-baseline bar.
 
 ## I14 [INTERACTIVE] Physical venue context: dimensions, altitude, and seasonal weather
 The learned venue ID embedding has to infer physical ground characteristics
