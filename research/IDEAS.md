@@ -1590,6 +1590,19 @@ Maunganui") fragment venue history; 94 player names map to >1 registry ID
 cache-build; full rebuild + retrain both models; sharpens LANDED venue
 features.
 
+**Audit checkpoint (2026-07-24):** the refreshed male-T20 corpus contains
+9,519 matches, 467 venue strings, 187 normalized equality/substring pairs,
+and the same 94 repeated player display names. The player premise is
+falsified: zero of the 94 groups shares a non-empty Cricinfo ID or full-name
+and DOB signature; inspected examples are distinct homonyms, so no player-ID
+merge is currently justified. Venue candidates also contain dangerous generic
+labels (`County Ground`, `National Stadium`) and real subvenues (`Eden Park`
+vs `Eden Park Outer Oval`). `scripts/audit_identity_collisions.py` therefore
+keeps all substring-only, multi-city, and possible-subvenue pairs review-only.
+Proceed only with a reviewed, versioned venue map; do not create a player
+merge map from display-name equality. See
+`reports/i7_identity_collision_audit.md`.
+
 ## I8 [INTERACTIVE] Per-player phase dists + batter-vs-bowler cell (schema-v5 plumbing)
 The flagged highest-value untried ball features need new SQLite
 getters/tables (`stats_sqlite_backend.py` — forbidden to the loop). Do the
