@@ -37,6 +37,11 @@ from loaders_common import (
     iter_matches_chronological,
     iter_matches_chronological_multi,
 )
+from identity_maps import (
+    assert_venue_alias_contract,
+    canonicalize_venue,
+    venue_alias_contract,
+)
 from materialize_features import classify_split, group_by_date
 from parsing_v2 import parse_match_data_v2
 from player_metadata import PlayerMetadataProvider
@@ -804,7 +809,7 @@ def _build_match_record(
         t2_bow_avg = float(inn2.get("team_bowling_avg", 0.0))
         t2_bow_econ = float(inn2.get("team_bowling_econ", 0.0))
 
-    venue = info.get("venue", "unknown")
+    venue = canonicalize_venue(info.get("venue"))
     competition_tier = inn1.get("competition_tier", "unknown")
 
     # Synthesize match_id in the same format as
@@ -1007,6 +1012,10 @@ def materialize(
     metadata = PlayerMetadataProvider(str(metadata_csv))
 
     provider._backend._ensure_conn()
+    cache_meta = dict(
+        provider._backend._conn.execute("SELECT key, value FROM _meta")
+    )
+    assert_venue_alias_contract(cache_meta, context="SQLite stats cache")
     prior = provider._backend._prior
     phase_priors = provider._backend._phase_priors
 
@@ -1179,6 +1188,8 @@ def materialize(
         df.to_parquet(out_path, index=False)
         print(f"  wrote {out_path} ({len(records):,} rows, "
               f"{out_path.stat().st_size / 1e6:.1f} MB)")
+    with (out_dir / "venue_identity.json").open("w") as handle:
+        json.dump(venue_alias_contract(), handle, indent=2)
 
     print(f"  dropped {n_dropped} matches with no valid winner / abandoned")
     return n_matches, counts

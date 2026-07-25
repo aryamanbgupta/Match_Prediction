@@ -26,6 +26,8 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
+from identity_maps import canonicalize_match_id, canonicalize_venue
+
 REPO = Path(__file__).resolve().parent.parent
 LIVE_POOL = REPO / 'data' / 't20s_json'
 GOLDEN_POOL = REPO / 'data' / 'golden' / 't20s_json'
@@ -41,6 +43,7 @@ EDGE_THRESHOLD = 0.0  # match blend_eval_json.py
 def synth_match_id(date: str, team1: str, team2: str, venue: str) -> str:
     """Mirror build_polymarket_odds.build_match_id and
     materialize_match_features._build_match_record."""
+    venue = canonicalize_venue(venue)
     return f'{date}_{team1}_{team2}_{venue}'.replace(' ', '_')
 
 
@@ -108,7 +111,7 @@ def collect_ipl_matches() -> list[dict]:
             seen_ids.add(cricsheet_id)
 
             teams = info.get('teams', [])
-            venue = info.get('venue', 'unknown')
+            venue = canonicalize_venue(info.get('venue'))
             mid = synth_match_id(date, teams[0], teams[1], venue) if len(teams) == 2 else None
 
             innings_data = d.get('innings') or []
@@ -146,7 +149,7 @@ def load_odds_lookup() -> dict:
         for m in data.get('matches', []):
             entry = dict(m)
             entry['_odds_source'] = label
-            lookup[m['match_id']] = entry
+            lookup[canonicalize_match_id(m['match_id'])] = entry
     return lookup
 
 
@@ -163,7 +166,7 @@ def load_predictions() -> dict:
         for mid, pred in data.items():
             entry = dict(pred)
             entry['_pred_source'] = label
-            out[mid] = entry
+            out[canonicalize_match_id(mid)] = entry
     return out
 
 

@@ -7,6 +7,8 @@ from collections import defaultdict, deque
 from datetime import datetime
 import pickle
 
+from identity_maps import canonicalize_venue
+
 # Import player metadata provider for Tier 1/2/3 features
 from player_metadata import (
     PlayerMetadataProvider,
@@ -1140,7 +1142,7 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None,
     # DESIGN DECISION: Store match metadata for potential venue/team features
     # REASONING: Might want venue-specific features later
     match_info = {
-        'venue': data['info'].get('venue', 'unknown'),
+        'venue': canonicalize_venue(data['info'].get('venue')),
         'date': data['info']['dates'][0] if 'dates' in data['info'] else None,
         'teams': data['info'].get('teams', []),
         'toss_winner': data['info'].get('toss', {}).get('winner', 'unknown'),

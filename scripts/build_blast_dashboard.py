@@ -34,6 +34,7 @@ sys.path.insert(0, str(REPO / "scripts"))
 from build_ipl_dashboard import (  # noqa: E402
     innings_score, format_outcome, synth_match_id, compute_bet, build_rows,
 )
+from identity_maps import canonicalize_venue  # noqa: E402
 
 POOL = REPO / "data" / "golden_blast" / "t20s_json"
 ODDS = REPO / "data" / "golden_blast" / "betting_odds_blast.json"
@@ -57,7 +58,7 @@ def collect_blast_matches() -> list[dict]:
         date = (info.get("dates") or [""])[0]
         cricsheet_id = os.path.basename(fp).replace(".json", "")
         teams = info.get("teams", [])
-        venue = info.get("venue", "unknown")
+        venue = canonicalize_venue(info.get("venue"))
         mid = synth_match_id(date, teams[0], teams[1], venue) if len(teams) == 2 else None
         scores = [innings_score(inn) for inn in (d.get("innings") or [])[:2]]
         rows.append({

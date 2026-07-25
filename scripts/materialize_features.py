@@ -51,6 +51,10 @@ from loaders_common import (
     extract_match_metadata,
     iter_matches_chronological,
 )
+from identity_maps import (
+    assert_venue_alias_contract,
+    venue_alias_contract,
+)
 from parsing_v2 import (
     DELIVERY_SEMANTICS,
     I5_DELIVERY_SEMANTICS,
@@ -154,6 +158,7 @@ def materialize(
     cache_meta = dict(
         provider._backend._conn.execute("SELECT key, value FROM _meta")
     )
+    assert_venue_alias_contract(cache_meta, context="SQLite stats cache")
     cache_semantics = cache_meta.get(
         "delivery_semantics", LEGACY_DELIVERY_SEMANTICS)
     if cache_semantics != delivery_semantics:
@@ -339,6 +344,7 @@ def main() -> int:
             # composition, but the cache key must reflect intent.
             "gender_filter": gender if gender is not None else "all",
             "delivery_semantics": delivery_semantics,
+            **venue_alias_contract(),
         }
     except ImportError:
         pass  # feature_registry unavailable — skip the marker

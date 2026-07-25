@@ -119,6 +119,10 @@ def _write_meta_cache(
         ("source_json_mtime_max", str(source_mtime)),
         ("source_json_file_count", str(source_count)),
     ]
+    rows.extend(
+        (key, str(value))
+        for key, value in cache_builder.venue_alias_contract().items()
+    )
     if order_version is not None:
         rows.append(("same_day_order_version", order_version))
     conn.executemany("INSERT INTO _meta VALUES (?, ?)", rows)

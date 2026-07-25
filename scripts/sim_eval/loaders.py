@@ -5,6 +5,7 @@ from datetime import datetime
 import numpy as np
 
 # Import from the simulation file
+from identity_maps import canonicalize_match_id, canonicalize_venue
 from sim_v1_2 import MatchState, Player, TeamLineup
 from parsing_v2 import classify_match_context
 
@@ -65,7 +66,7 @@ class TestMatchLoader:
             team2_name = teams[1]
             
             # Get venue and date
-            venue = info.get('venue', 'Unknown')
+            venue = canonicalize_venue(info.get('venue'))
             dates = info.get('dates', ['2024-01-01'])
             match_date = datetime.strptime(dates[0], '%Y-%m-%d')
             
@@ -218,7 +219,12 @@ class BettingOddsLoader:
                     if vol < min_volume:
                         dropped += 1
                         continue
-                match_id = match['match_id']
+                match_id = canonicalize_match_id(match['match_id'])
+                if match_id in odds_lookup:
+                    raise ValueError(
+                        f"duplicate odds match ID after venue "
+                        f"canonicalization: {match_id}"
+                    )
                 odds_lookup[match_id] = match
                 kept += 1
 

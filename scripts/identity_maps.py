@@ -142,6 +142,26 @@ def venue_alias_contract(
     }
 
 
+def assert_venue_alias_contract(
+    metadata: Mapping[str, object],
+    *,
+    context: str,
+    path: Path | str = DEFAULT_VENUE_ALIAS_PATH,
+) -> None:
+    """Fail closed when an artifact used a different venue identity map."""
+    expected = venue_alias_contract(path)
+    mismatches = {
+        key: (metadata.get(key), value)
+        for key, value in expected.items()
+        if str(metadata.get(key, "")) != str(value)
+    }
+    if mismatches:
+        raise RuntimeError(
+            f"{context} venue-alias contract mismatch: {mismatches}. "
+            "Rebuild the artifact from the active identity map."
+        )
+
+
 def clear_identity_map_caches() -> None:
     """Clear process-local loader caches (primarily useful in tests)."""
     _load_venue_aliases_cached.cache_clear()

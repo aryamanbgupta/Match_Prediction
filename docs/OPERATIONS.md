@@ -362,8 +362,9 @@ uv run python scripts/build_stats_cache.py
 # Options: --source-dir data/t20s_json, --out models/player_stats_cache_v3.sqlite,
 #          --extra-source-dir (repeatable), --prior-source-sqlite,
 #          --gender-filter male, --force-rebuild.
-# Idempotent only when schema, deterministic ordering version, exact source
-# directory list/file count, and max JSON mtime all match.
+# Idempotent only when schema, deterministic ordering version, active venue-map
+# version/SHA/count, exact source directory list/file count, and max JSON mtime
+# all match.
 
 # 1b. Materialize feature parquet (per-date batching, SQLite rehydration).
 uv run python scripts/materialize_features.py \
@@ -377,8 +378,13 @@ uv run python scripts/materialize_features.py \
 - `materialize_features.py`: **~5 min**, ~2 GB RAM, 9,519 matches → 2.2M ball records across 4 parquets, 105 columns (63 + 42 outcome-dist). **~3× faster than the old monolith** because the tracker walk is skipped.
 
 **What it does**:
-1. **`build_stats_cache.py`**: Loads matches in versioned `(date, match_id)` order, runs `PlayerStatsTracker` + `PlayerEloTracker` + `VenueStatsTracker`, takes first-write-wins snapshots per date, emits delta-compressed rows to SQLite, and writes one `batting_match_log` / `bowling_match_log` row per (player, match) for recent-form reconstruction. Multiple non-overlapping source directories can be merged; duplicate match IDs fail closed. Schema v4 also writes 6 outcome-count columns (`c0..cw`) per row on `batting`, `bowling`, `batting_vs_type`, `bowling_vs_hand`, `venue`, plus the global prior π in `_meta`. `--prior-source-sqlite` freezes the global/phase priors from an earlier cache for forward state. Two integrity checks run before close: `_verify_log_denormalized_consistency` (deque-vs-sum) and `_verify_outcome_count_conservation` (Σ cX ≡ balls).
-2. **`materialize_features.py`**: Groups matches by date, rehydrates trackers from SQLite once per date using the union of same-day players + venues, loads π from `_meta` once at startup, replays same-day matches in deterministic match-ID order, calls `parse_match_data_v2(..., prior=π)` per match, and writes per-split parquets. It requires the cache ordering metadata and fails on a legacy/unversioned cache. Splits come from the YAML `data.splits` block (falls back to the hardcoded defaults).
+1. **`build_stats_cache.py`**: Loads matches in versioned `(date, match_id)` order, canonicalizes venues through the active exact I7 map, runs `PlayerStatsTracker` + `PlayerEloTracker` + `VenueStatsTracker`, takes first-write-wins snapshots per date, emits delta-compressed rows to SQLite, and writes one `batting_match_log` / `bowling_match_log` row per (player, match) for recent-form reconstruction. Multiple non-overlapping source directories can be merged; duplicate match IDs fail closed. Schema v4 also writes 6 outcome-count columns (`c0..cw`) per row on `batting`, `bowling`, `batting_vs_type`, `bowling_vs_hand`, `venue`, plus the global prior π and venue-map version/SHA/count in `_meta`. `--prior-source-sqlite` freezes the global/phase priors from an earlier cache for forward state. Two integrity checks run before close: `_verify_log_denormalized_consistency` (deque-vs-sum) and `_verify_outcome_count_conservation` (Σ cX ≡ balls).
+2. **`materialize_features.py`**: Groups matches by date, rehydrates trackers from SQLite once per date using the union of same-day players + canonical venues, loads π from `_meta` once at startup, replays same-day matches in deterministic match-ID order, calls `parse_match_data_v2(..., prior=π)` per match, and writes per-split parquets. It requires matching cache ordering and venue-identity metadata and fails on a legacy/unversioned cache. Splits come from the YAML `data.splits` block (falls back to the hardcoded defaults).
+
+After changing `config/identity/venue_aliases_v1.csv`, rebuild SQLite,
+ball/match parquet, and both venue encoders in that order. Do not combine a
+pre-I7 cache or model with canonicalized features. See
+`I7_VENUE_IDENTITY_CONTRACT.md`.
 
 ### Forward holdout state (never training input)
 

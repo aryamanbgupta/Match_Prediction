@@ -27,8 +27,10 @@ from typing import Dict, List, Optional
 import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "sim_eval"))
 
+from identity_maps import canonicalize_match_id  # noqa: E402
 from reslice_eval_json import (  # noqa: E402
     SLICE_NAMES,
     _bootstrap_ci,
@@ -73,7 +75,8 @@ def walk_forward(eval_json_path: str, odds_json_path: str,
     """Group matches by YYYY-MM and recompute per-month stats."""
     eval_data = json.load(open(eval_json_path))
     odds_data = json.load(open(odds_json_path))
-    vol_by_id = {m["match_id"]: m.get("polymarket_volume_usd")
+    vol_by_id = {canonicalize_match_id(m["match_id"]):
+                 m.get("polymarket_volume_usd")
                  for m in odds_data.get("matches", [])}
     feat_lookup = _load_feature_lookup(feature_parquet)
     predicate = _slice_predicate(slice_name, mismatch_thresh, close_thresh)
@@ -89,7 +92,9 @@ def walk_forward(eval_json_path: str, odds_json_path: str,
     )
 
     by_month: Dict[str, List[dict]] = {}
-    for match in eval_data.get("matches", []):
+    for raw_match in eval_data.get("matches", []):
+        match = dict(raw_match)
+        match["match_id"] = canonicalize_match_id(match["match_id"])
         if min_volume is not None:
             vol = vol_by_id.get(match["match_id"])
             if vol is None or vol < min_volume:

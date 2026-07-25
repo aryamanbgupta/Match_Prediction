@@ -33,6 +33,7 @@ sys.path.insert(0, str(REPO / "scripts"))
 from calibration import (DewVectorScalingCalibrator,  # noqa: E402
                          VectorScalingCalibrator, _apply_encoders_to_df,
                          _fit_scaling_vector)
+from identity_maps import canonicalize_venue  # noqa: E402
 
 MATCH_DIR = REPO / "data/xgb_match_data_v2_clean"          # for the RH lookup
 VAL = REPO / "data/xgb_data_v3/cricket_data_v3_validation.parquet"
@@ -108,7 +109,7 @@ def poly_coverage(lookup):
     for fp in sorted(POLY_DIR.glob("*.json")):
         j = json.load(open(fp))
         info = j.get("info", {})
-        ven = info.get("venue")
+        ven = canonicalize_venue(info.get("venue"))
         dates = info.get("dates") or []
         if not ven or not dates:
             continue

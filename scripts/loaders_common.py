@@ -13,6 +13,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Iterator, Tuple
 
+from identity_maps import canonicalize_venue
+
 
 # Bump this whenever the within-date ordering rule changes. Cache builders
 # persist it in SQLite _meta so old filesystem-ordered artifacts cannot be
@@ -164,5 +166,5 @@ def extract_match_metadata(data: dict) -> dict:
         "team_type": team_type,
         "teams": teams,
         "k_factor": classify_match_k_factor(event_name, team_type, teams),
-        "venue": info.get("venue", "unknown"),
+        "venue": canonicalize_venue(info.get("venue")),
     }

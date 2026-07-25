@@ -1,8 +1,14 @@
 # I7 — Proposed venue alias map v1
 
+**Activation note (2026-07-25):** the user approved all 94 rows and they are
+now active under the validated contract in
+`docs/I7_VENUE_IDENTITY_CONTRACT.md`. The proposal evidence below is retained
+as the review record.
+
 Source: `data/t20s_json`. Frozen proposal: `config/identity/venue_aliases_v1.csv`.
 
-This map is **review-only and inactive**. Every CSV row has `status=proposed`; no cache builder or model consumes it.
+At proposal time this map was review-only and inactive. Activation occurred
+only after the separate user review and validated-loader commit noted above.
 
 ## Summary
 

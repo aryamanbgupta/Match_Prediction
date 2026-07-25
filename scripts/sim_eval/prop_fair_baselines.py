@@ -46,11 +46,16 @@ from __future__ import annotations
 import argparse
 import json
 import pickle
+import sys
 from bisect import bisect_left
 from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from identity_maps import canonicalize_venue
 
 REPO = Path(__file__).resolve().parents[2]
 SOURCE_DIR = REPO / "data" / "t20s_json"
@@ -98,7 +103,7 @@ def build_corpus_logs(source_dir: Path) -> dict:
         date = str(dates[0])
         teams = info.get("teams") or []
         players = info.get("players") or {}
-        venue = info.get("venue", "?")
+        venue = canonicalize_venue(info.get("venue"), fallback="?")
         innings = j.get("innings", [])[:2]
         match_sixes = 0
         match_max_over = 0

@@ -35,6 +35,8 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 
+from identity_maps import canonicalize_venue
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 POLYMARKET_PATH = Path("/Users/aryamangupta/Projects/polymarket-cricket/data/polymarket_prematch_odds.json")
 CRICSHEET_DIR = REPO_ROOT / "data" / "t20s_json"
@@ -131,7 +133,7 @@ def load_cricsheet_index(match_dir: Path) -> dict:
         index[dates[0]].append({
             "path": path,
             "teams": [t.strip() for t in teams],
-            "venue": info.get("venue", "Unknown"),
+            "venue": canonicalize_venue(info.get("venue")),
             "event_name": event_name,
             "winner": winner,
         })
@@ -291,6 +293,7 @@ def match_markets(markets: list[dict], cricsheet_index: dict) -> tuple[list[dict
 # ---------------------------------------------------------------------------
 
 def build_match_id(date_str: str, team1: str, team2: str, venue: str) -> str:
+    venue = canonicalize_venue(venue)
     return f"{date_str}_{team1}_{team2}_{venue}".replace(" ", "_")
 
 

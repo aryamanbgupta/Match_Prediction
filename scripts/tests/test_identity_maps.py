@@ -13,6 +13,7 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 from identity_maps import (  # noqa: E402
+    assert_venue_alias_contract,
     canonicalize_match_id,
     canonicalize_venue,
     clear_identity_map_caches,
@@ -105,6 +106,24 @@ class VenueIdentityMapTests(unittest.TestCase):
                 "venue_alias_active_count": 1,
             },
         )
+        assert_venue_alias_contract(
+            {
+                "venue_alias_version": "venue_aliases_v1",
+                "venue_alias_sha256": expected_hash,
+                "venue_alias_active_count": "1",
+            },
+            context="test artifact",
+            path=self.path,
+        )
+
+    def test_contract_mismatch_requires_rebuild(self) -> None:
+        self._write([self._row("A", "A, City")])
+        with self.assertRaisesRegex(RuntimeError, "Rebuild the artifact"):
+            assert_venue_alias_contract(
+                {},
+                context="old cache",
+                path=self.path,
+            )
 
     def test_self_alias_is_rejected(self) -> None:
         self._write([self._row("A", "A")])

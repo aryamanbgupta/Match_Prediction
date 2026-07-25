@@ -30,8 +30,10 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "sim_eval"))
 
+from identity_maps import canonicalize_match_id  # noqa: E402
 from reslice_eval_json import (  # noqa: E402
     _bootstrap_ci,
     _load_feature_lookup,
@@ -215,9 +217,14 @@ def main() -> int:
 
     with open(args.in_path) as f:
         matches = json.load(f).get("matches", [])
+    matches = [
+        {**match, "match_id": canonicalize_match_id(match["match_id"])}
+        for match in matches
+    ]
     with open(args.odds) as f:
         odds_data = json.load(f)
-    vol_by_id = {m["match_id"]: m.get("polymarket_volume_usd")
+    vol_by_id = {canonicalize_match_id(m["match_id"]):
+                 m.get("polymarket_volume_usd")
                  for m in odds_data.get("matches", [])}
     feat_lookup = (_load_feature_lookup(args.feature_parquet)
                    if args.feature_parquet else {})

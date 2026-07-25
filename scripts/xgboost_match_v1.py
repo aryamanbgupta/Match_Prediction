@@ -28,6 +28,8 @@ from sklearn.metrics import brier_score_loss, log_loss
 from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBClassifier
 
+from identity_maps import assert_venue_alias_contract, venue_alias_contract
+
 ROOT = Path(__file__).resolve().parent.parent
 
 # Columns excluded from the feature set. Includes metadata (match_id,
@@ -237,6 +239,15 @@ def _feature_columns(numeric: list, encoders: dict) -> list:
 def train_model(args) -> tuple:
     data_dir = Path(args.data_dir)
     model_dir = Path(args.model_dir)
+    identity_path = data_dir / "venue_identity.json"
+    if not identity_path.exists():
+        raise RuntimeError(
+            f"{identity_path} is missing; rematerialize match features"
+        )
+    assert_venue_alias_contract(
+        json.loads(identity_path.read_text()),
+        context="match training parquet",
+    )
     train = _load_split(data_dir, "train")
     val = _load_split(data_dir, "validation")
     test = _load_split(data_dir, "test")
@@ -335,7 +346,10 @@ def train_model(args) -> tuple:
                 feat: float(imp)
                 for feat, imp in zip(feat_cols, model.feature_importances_)
             },
+            "venue_identity": venue_alias_contract(),
         }, f, indent=2)
+    with open(model_dir / "venue_identity.json", "w") as f:
+        json.dump(venue_alias_contract(), f, indent=2)
     print(f"\n  saved → {model_dir}")
     return model, encoders, feat_cols
 

@@ -18,6 +18,7 @@ from predict_fixture import (  # noqa: E402
     read_sqlite_state_metadata,
     read_tracker_state_metadata,
 )
+from identity_maps import venue_alias_contract  # noqa: E402
 
 
 def _write_sqlite(path: Path, as_of: str, source_count: int) -> None:
@@ -25,16 +26,20 @@ def _write_sqlite(path: Path, as_of: str, source_count: int) -> None:
         conn.execute("CREATE TABLE dates (id INTEGER PRIMARY KEY, date TEXT)")
         conn.execute("INSERT INTO dates(date) VALUES (?)", (as_of,))
         conn.execute("CREATE TABLE _meta (key TEXT PRIMARY KEY, value TEXT)")
+        rows = [
+            ("source_match_count", str(source_count)),
+            ("build_timestamp", "2026-07-20T00:00:00Z"),
+            (
+                "same_day_order_version",
+                "date_then_match_id_lexicographic_v1",
+            ),
+        ]
+        rows.extend(
+            (key, str(value)) for key, value in venue_alias_contract().items()
+        )
         conn.executemany(
             "INSERT INTO _meta(key, value) VALUES (?, ?)",
-            [
-                ("source_match_count", str(source_count)),
-                ("build_timestamp", "2026-07-20T00:00:00Z"),
-                (
-                    "same_day_order_version",
-                    "date_then_match_id_lexicographic_v1",
-                ),
-            ],
+            rows,
         )
 
 
@@ -49,6 +54,7 @@ def _write_snapshot(path: Path, as_of: str, source_count: int) -> None:
                 "same_day_order_version": (
                     "date_then_match_id_lexicographic_v1"
                 ),
+                **venue_alias_contract(),
             },
             handle,
         )

@@ -9,6 +9,8 @@ import joblib
 import argparse
 import json as _json
 
+from identity_maps import assert_venue_alias_contract, venue_alias_contract
+
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Train XGBoost v3 model')
 parser.add_argument('--tune', action='store_true', help='Run Optuna hyperparameter tuning (slow, ~30-60 min)')
@@ -43,6 +45,17 @@ DEFAULT_BEST_PARAMS = {
 # Load split data
 # Data with player metadata features (Tier 1/2/3).
 print(f"Loading split datasets ({data_version})...")
+feature_hash_path = data_dir / '.feature_hash'
+if not feature_hash_path.exists():
+    raise RuntimeError(
+        f"{feature_hash_path} is missing; rematerialize ball features"
+    )
+with feature_hash_path.open() as _f:
+    feature_hash_metadata = _json.load(_f)
+assert_venue_alias_contract(
+    feature_hash_metadata,
+    context="ball training parquet",
+)
 train_df = pd.read_parquet(
     data_dir / f'cricket_data_{data_version}_train.parquet')
 val_df = pd.read_parquet(
@@ -506,6 +519,7 @@ training_contract = {
     'validation_rows': int(len(val_df)),
     'test_rows': int(len(test_df)),
     'classes': [0, 1, 2, 4, 6, 'wicket'],
+    'venue_identity': venue_alias_contract(),
 }
 contract_path = model_dir / f'training_contract_{artifact_suffix}.json'
 with open(contract_path, 'w') as _f:

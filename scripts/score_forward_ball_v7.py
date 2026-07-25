@@ -22,6 +22,7 @@ from forward_eval_contract import (  # noqa: E402
     preflight,
     repo_path,
 )
+from identity_maps import canonicalize_venue  # noqa: E402
 from score_forward_match_m7 import (  # noqa: E402
     _assert_outcome_free,
     _candidate_artifacts,
@@ -106,7 +107,7 @@ def pre_match_spec(match_data: Mapping[str, Any]) -> dict[str, Any]:
             raise ValueError(f"duplicate player ID in {team} roster")
         players[str(team)] = resolved
 
-    venue = str(info.get("venue", "unknown"))
+    venue = canonicalize_venue(info.get("venue"))
     toss = info.get("toss") or {}
     toss_winner = str(toss.get("winner", ""))
     toss_decision = str(toss.get("decision", ""))

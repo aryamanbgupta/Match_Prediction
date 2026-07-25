@@ -16,6 +16,8 @@ from typing import Any, Iterable, Mapping, Optional, Sequence
 
 import numpy as np
 
+from identity_maps import canonicalize_venue
+
 
 BOOTSTRAP_CONTRACT_VERSION = "tournament_time_block_v1"
 DEFAULT_BOOTSTRAP_SEED = 42
@@ -46,7 +48,7 @@ def match_id_from_info(info: Mapping[str, Any]) -> str:
     dates = info.get("dates") or []
     if len(teams) != 2 or not dates:
         raise ValueError("match info must contain two teams and a date")
-    venue = info.get("venue", "Unknown")
+    venue = canonicalize_venue(info.get("venue"))
     return f"{dates[0]}_{teams[0]}_{teams[1]}_{venue}".replace(" ", "_")
 
 

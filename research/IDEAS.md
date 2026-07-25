@@ -1603,14 +1603,17 @@ Proceed only with a reviewed, versioned venue map; do not create a player
 merge map from display-name equality. See
 `reports/i7_identity_collision_audit.md`.
 
-**Map proposal checkpoint:** the conservative edges collapse to 92 venue
-components and 94 alias strings, recovering 2,170 historical matches into
-their proposed canonical labels. The frozen
-`config/identity/venue_aliases_v1.csv` remains inactive with every row marked
-`proposed`; `scripts/propose_venue_aliases.py` rejects conflicts, chains, and
-self-aliases. Canonical targets prefer the most specific city-qualified
-spelling, then recency and volume. Review
-`reports/i7_venue_alias_proposal.md` before activation.
+**Activation checkpoint (2026-07-25):** all 94 reviewed aliases are active.
+`scripts/identity_maps.py` is the single exact-match implementation and rejects
+conflicts, chains, self-aliases, invalid statuses, and wrong versions. The map
+version/SHA/count now travels with SQLite, ball/match parquet, trained-model,
+live-snapshot, and new forward-holdout artifacts; smart caches and live
+inference fail closed on old or missing contracts. Cache building, ball and
+match features, live fixtures, same-day replay, Polymarket construction, and
+evaluation IDs now share the same canonicalization. Raw JSON and frozen
+historical odds/evaluation artifacts remain unchanged. Full cache/parquet
+rebuild, both model retrains, and the paired iteration evaluation remain
+before I7 can be marked done. See `docs/I7_VENUE_IDENTITY_CONTRACT.md`.
 
 ## I8 [INTERACTIVE] Per-player phase dists + batter-vs-bowler cell (schema-v5 plumbing)
 The flagged highest-value untried ball features need new SQLite

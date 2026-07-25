@@ -37,6 +37,7 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
+from identity_maps import canonicalize_match_id  # noqa: E402
 from sim_eval.eval_statistics import (  # noqa: E402
     BOOTSTRAP_CONTRACT_VERSION,
     DEFAULT_BOOTSTRAP_RESAMPLES,
@@ -98,7 +99,8 @@ def _load_feature_lookup(feature_parquet: Optional[Path]) -> Dict[str, Dict]:
     cols = ["match_id", "team1", "team2", "is_international",
             "top6_batting_elo_diff", "competition_tier", "match_date"]
     have = [c for c in cols if c in df.columns]
-    return {row["match_id"]: {c: row[c] for c in have if c != "match_id"}
+    return {canonicalize_match_id(row["match_id"]):
+            {c: row[c] for c in have if c != "match_id"}
             for _, row in df[have].iterrows()}
 
 
@@ -176,7 +178,8 @@ def reslice(eval_json_path: str, odds_json_path: str,
     with open(odds_json_path) as f:
         odds_data = json.load(f)
 
-    vol_by_id = {m['match_id']: m.get('polymarket_volume_usd')
+    vol_by_id = {canonicalize_match_id(m['match_id']):
+                 m.get('polymarket_volume_usd')
                  for m in odds_data.get('matches', [])}
     feat_lookup = _load_feature_lookup(feature_parquet)
     predicate = _slice_predicate(slice_name, mismatch_thresh, close_thresh)
@@ -191,7 +194,11 @@ def reslice(eval_json_path: str, odds_json_path: str,
         else {}
     )
 
-    matches = eval_data.get('matches', [])
+    matches = []
+    for raw_match in eval_data.get('matches', []):
+        match = dict(raw_match)
+        match["match_id"] = canonicalize_match_id(match["match_id"])
+        matches.append(match)
     kept_matches = []
     for match in matches:
         if min_volume is not None:

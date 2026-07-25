@@ -151,7 +151,8 @@ quick "scope sniff."
 |---|---|
 | `scripts/fetch_cricsheet.py` | Idempotent Cricsheet refresh. 14 men's T20 leagues + player register. SHA-256 manifest, append-only JSON merge. |
 | `scripts/enrich_players_cricketdata.py` | Fills `data/all_players_enriched.csv` via R `cricketdata` package over `rpy2`. Uses `key_cricinfo` from Cricsheet's `people.csv`. |
-| `scripts/build_polymarket_odds.py` | Matches Polymarket markets → Cricsheet JSONs → emits `betting_odds_polymarket.json` + copies the matched JSONs to `data/polymarket_test/`. Filters to senior men's T20 with volume ≥ $1 K. |
+| `scripts/build_polymarket_odds.py` | Matches Polymarket markets → Cricsheet JSONs → emits `betting_odds_polymarket.json` + copies the matched JSONs to `data/polymarket_test/`. Filters to senior men's T20 with volume ≥ $1 K and applies the reviewed exact venue map before constructing evaluation IDs. |
+| `scripts/identity_maps.py` | Loads and validates the active versioned venue-alias CSV. It is shared by cache, feature, live, Polymarket, and evaluation paths; artifact contracts carry its version/SHA/count. |
 
 ### 2.8 Calibration & analysis
 
@@ -651,6 +652,9 @@ file). Adds `polymarket_event_slug`, `polymarket_volume_usd`, `tournament`
 metadata.
 
 `BettingOddsLoader.load_odds` returns `Dict[match_id → odds_data]` either way.
+It canonicalizes the exact venue suffix of legacy IDs at load time, so old
+odds files can join newly canonicalized evaluation IDs without rewriting the
+frozen source artifact. See `I7_VENUE_IDENTITY_CONTRACT.md`.
 
 ### 5.5 Evaluation results JSON
 

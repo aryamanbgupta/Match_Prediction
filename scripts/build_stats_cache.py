@@ -45,6 +45,7 @@ from loaders_common import (
     iter_matches_chronological,
     iter_matches_chronological_multi,
 )
+from identity_maps import venue_alias_contract
 from parsing_v2 import (
     DELIVERY_SEMANTICS,
     I5_DELIVERY_SEMANTICS,
@@ -334,6 +335,11 @@ def sqlite_up_to_date(
     cached_semantics = meta.get(
         "delivery_semantics", LEGACY_DELIVERY_SEMANTICS)
     if cached_semantics != delivery_semantics:
+        return False
+    if any(
+        str(meta.get(key, "")) != str(value)
+        for key, value in venue_alias_contract().items()
+    ):
         return False
     if meta.get("source_dirs_json") != _source_paths_json(normalized_dirs):
         return False
@@ -832,6 +838,9 @@ def build(
         ('prior_p6', f"{prior[4]:.10f}"),
         ('prior_pw', f"{prior[5]:.10f}"),
     ]
+    meta_rows.extend(
+        (key, str(value)) for key, value in venue_alias_contract().items()
+    )
     # Phase 3: 18 phase-prior _meta rows. Schema unchanged; we widen the
     # _meta key/value table with new keys instead of bumping schema.
     # Naming: prior_{pp,mid,death}_p{0,1,2,4,6,w} (matches the keys read

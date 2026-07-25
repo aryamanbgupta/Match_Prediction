@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Iterable, Mapping, Optional
 
 from loaders_common import extract_match_metadata
+from identity_maps import canonicalize_venue
 from parsing_v2 import parse_match_data_v2
 from stats_provider import StatsProviderCache
 from tracker_rehydration import (
@@ -155,7 +156,7 @@ class _TrackerStatsView:
             "prediction_locked": False,
             "date": self._current_date,
             "teams": tuple(info.get("teams", [])),
-            "venue": info.get("venue", "unknown"),
+            "venue": canonicalize_venue(info.get("venue")),
         }
 
     def lock_prediction(self, match_id: str) -> None:
@@ -181,7 +182,7 @@ class _TrackerStatsView:
         identity = (
             _match_date(match_data),
             tuple(info.get("teams", [])),
-            info.get("venue", "unknown"),
+            canonicalize_venue(info.get("venue")),
         )
         expected = (
             active["date"],

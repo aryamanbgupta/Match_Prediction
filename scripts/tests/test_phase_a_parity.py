@@ -68,7 +68,10 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from loaders_common import iter_matches_chronological  # noqa: E402
+from loaders_common import (  # noqa: E402
+    extract_match_metadata,
+    iter_matches_chronological,
+)
 from parsing_v2 import (  # noqa: E402
     PlayerEloTracker,
     PlayerStatsTracker,
@@ -165,7 +168,7 @@ def _group_by_date(source_dir: Path) -> Iterator[tuple[datetime, list]]:
         team_type = data["info"].get("team_type", "unknown")
         teams = data["info"].get("teams", [])
         k_factor = classify_match_k_factor(event_name, team_type, teams)
-        venue = data["info"].get("venue", "unknown")
+        venue = extract_match_metadata(data)["venue"]
         entry = (match_id, json_text, data, venue, k_factor)
 
         if buf_date is None:

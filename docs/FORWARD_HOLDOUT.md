@@ -105,6 +105,14 @@ Team-name joins use an explicit alias table only; the builder never performs
 fuzzy or result-assisted matching. Ambiguous same-day doubleheaders remain
 unmatched.
 
+For holdouts built after 2026-07-25, Cricsheet venues are canonicalized with
+the reviewed exact `venue_aliases_v1` map before evaluation IDs are created.
+Both `manifest.json` and `betting_odds.json` persist the map version,
+SHA-256, and active-row count. This changes no market-selection logic. The
+already-consumed 2026-06-01 to 2026-07-13 holdout remains frozen under its
+original identity strings and must not be rebuilt to retrofit this metadata.
+See `I7_VENUE_IDENTITY_CONTRACT.md`.
+
 ## Chronological feature state
 
 I6 completed this prerequisite on 2026-07-23. The later scoring workflow must

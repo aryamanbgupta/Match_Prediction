@@ -49,6 +49,7 @@ from build_polymarket_odds import (  # noqa: E402
     TEAM_NAME_MAP,
     build_match_id,
 )
+from identity_maps import canonicalize_venue, venue_alias_contract  # noqa: E402
 
 DEFAULT_ZIP_DIR = Path(
     "/Users/aryamangupta/Projects/stat-generator/data/cricsheet"
@@ -294,7 +295,7 @@ def _read_cricsheet_member(
             cricsheet_id=Path(member_name).stem,
             date=dates[0],
             teams=(str(teams[0]).strip(), str(teams[1]).strip()),
-            venue=str(info.get("venue") or "Unknown"),
+            venue=canonicalize_venue(info.get("venue")),
             winner=str(winner),
             event_name=str(event_name),
             source_zip=zip_path,
@@ -693,11 +694,13 @@ def build(args: argparse.Namespace) -> dict:
             "duplicate_selection_uses_winner": False,
         },
         "matches": odds_entries,
+        "venue_identity": venue_alias_contract(),
     }
     manifest = {
         "schema_version": 1,
         "purpose": "sealed forward audit; terminal evaluation only",
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "venue_identity": venue_alias_contract(),
         "model_scoring_performed": False,
         "holdout_window": {"start": args.start, "end": args.end},
         "context_window": {

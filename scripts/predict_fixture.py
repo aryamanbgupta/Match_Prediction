@@ -47,6 +47,11 @@ from loaders_common import (  # noqa: E402
     SAME_DAY_ORDER_VERSION,
     iter_matches_chronological_multi,
 )
+from identity_maps import (  # noqa: E402
+    assert_venue_alias_contract,
+    canonicalize_venue,
+    venue_alias_contract,
+)
 from player_metadata import PlayerMetadataProvider  # noqa: E402
 from stats_provider import StatsProvider  # noqa: E402
 from tracker_rehydration import (  # noqa: E402
@@ -124,7 +129,7 @@ def build_tracker_snapshot(
             winner = outcome.get("eliminator")
         if not winner or winner not in teams:
             continue
-        venue = info.get("venue", "unknown")
+        venue = canonicalize_venue(info.get("venue"))
         t1, t2 = teams
         t1_won = winner == t1
         form.update(t1, match_date, t1_won)
@@ -142,6 +147,7 @@ def build_tracker_snapshot(
         "built_at": datetime.utcnow().isoformat() + "Z",
         "source_dirs": [str(p) for p in normalized_dirs],
         "same_day_order_version": SAME_DAY_ORDER_VERSION,
+        **venue_alias_contract(),
     }
     snapshot_path = Path(snapshot_path)
     snapshot_path.parent.mkdir(parents=True, exist_ok=True)
@@ -207,12 +213,17 @@ def read_sqlite_state_metadata(
     if not as_of:
         raise RuntimeError(f"SQLite cache has no dated state: {sqlite_path}")
     source_count = meta.get("source_match_count")
+    assert_venue_alias_contract(meta, context="live SQLite stats cache")
     return {
         "path": str(sqlite_path.resolve()),
         "as_of": as_of,
         "source_match_count": int(source_count) if source_count else None,
         "build_timestamp": meta.get("build_timestamp"),
         "same_day_order_version": meta.get("same_day_order_version"),
+        **{
+            key: meta.get(key)
+            for key in venue_alias_contract()
+        },
     }
 
 
@@ -224,6 +235,7 @@ def read_tracker_state_metadata(snapshot_path: Path) -> dict:
             f"tracker snapshot has no as_of date: {snapshot_path}"
         )
     count = snapshot.get("n_matches_walked")
+    assert_venue_alias_contract(snapshot, context="live tracker snapshot")
     return {
         "path": str(Path(snapshot_path).resolve()),
         "as_of": as_of,
@@ -231,6 +243,10 @@ def read_tracker_state_metadata(snapshot_path: Path) -> dict:
         "built_at": snapshot.get("built_at"),
         "source_dirs": snapshot.get("source_dirs"),
         "same_day_order_version": snapshot.get("same_day_order_version"),
+        **{
+            key: snapshot.get(key)
+            for key in venue_alias_contract()
+        },
     }
 
 
@@ -342,7 +358,7 @@ def compute_features(fixture: dict,
     date_str = fixture["date"]
     match_date = datetime.strptime(date_str, "%Y-%m-%d")
     team1, team2 = fixture["team1"], fixture["team2"]
-    venue = fixture["venue"]
+    venue = canonicalize_venue(fixture["venue"])
     event_name = fixture.get("competition_tier", "Indian Premier League")
     team_type = fixture.get("team_type", "club")
     # Compute the encoded tier (1..4) and is_international the same way
@@ -494,6 +510,16 @@ def compute_features(fixture: dict,
 
 def apply_encoders_and_predict(record: dict,
                                 model_dir: Path = MODEL_DIR) -> tuple[float, dict]:
+    identity_path = model_dir / "venue_identity.json"
+    if not identity_path.exists():
+        raise RuntimeError(
+            f"{identity_path} is missing; retrain the match model with the "
+            "active venue identity map"
+        )
+    assert_venue_alias_contract(
+        json.loads(identity_path.read_text()),
+        context="match model",
+    )
     model = joblib.load(model_dir / "model.pkl")
     encoders = joblib.load(model_dir / "encoders.pkl")
     with open(model_dir / "feature_columns.txt") as f:

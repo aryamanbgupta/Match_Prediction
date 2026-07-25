@@ -43,6 +43,8 @@ import pandas as pd
 from sklearn.metrics import log_loss, roc_auc_score
 from xgboost import XGBClassifier
 
+from identity_maps import canonicalize_venue
+
 REPO = Path(__file__).resolve().parent.parent
 BALL_DIR = REPO / "data" / "xgb_data_v3"
 CORPUS = REPO / "data" / "t20s_json"
@@ -116,7 +118,8 @@ def build_winner_map() -> dict:
                 if "wides" not in ex and "noballs" not in ex:
                     i1_balls += 1
                 i1_runs += d["runs"]["total"]
-        key = f"{info['dates'][0]}|{info.get('venue', '?')}"
+        venue = canonicalize_venue(info.get("venue"), fallback="?")
+        key = f"{info['dates'][0]}|{venue}"
         out[key].append({"winner": winner,
                          "inn1": inns[0].get("team"),
                          "inn2": inns[1].get("team"),

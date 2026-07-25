@@ -116,6 +116,16 @@ def _check_parquet_cache(config: dict, feature_list: list) -> bool:
         "delivery_semantics", LEGACY_DELIVERY_SEMANTICS)
     if cached_semantics != want_semantics:
         return False
+    try:
+        from identity_maps import venue_alias_contract
+        alias_contract = venue_alias_contract()
+    except (ImportError, OSError, ValueError):
+        return False
+    if any(
+        str(cached.get(key, "")) != str(value)
+        for key, value in alias_contract.items()
+    ):
+        return False
 
     # Phase 6: outcome_dist k_player / k_venue. parquet content depends
     # on these (shrinkage strength), so a k-sweep config must invalidate
@@ -187,6 +197,16 @@ def _check_sqlite_cache(config: dict) -> bool:
     cached_semantics = meta.get(
         "delivery_semantics", LEGACY_DELIVERY_SEMANTICS)
     if cached_semantics != want_semantics:
+        return False
+    try:
+        from identity_maps import venue_alias_contract
+        alias_contract = venue_alias_contract()
+    except (ImportError, OSError, ValueError):
+        return False
+    if any(
+        str(meta.get(key, "")) != str(value)
+        for key, value in alias_contract.items()
+    ):
         return False
 
     # JSON membership + mtime check — SQLite is stale if a file was
