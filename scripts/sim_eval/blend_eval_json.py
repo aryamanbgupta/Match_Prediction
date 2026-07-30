@@ -37,6 +37,7 @@ from sim_eval.eval_statistics import (  # noqa: E402
     cluster_id_for_record,
     flat_bet_team,
 )
+from match_identity import build_compatibility_alias_lookup  # noqa: E402
 
 # Match the existing eval pipeline's edge threshold so realized_pnl is
 # computed identically.
@@ -208,16 +209,44 @@ def _blend_match(match: dict, p_direct_team1: Optional[float], w: float) -> dict
 
 def blend(sim_json: dict, direct_preds: dict, w: float) -> dict:
     """Return a new eval JSON with each match blended at weight `w`."""
+    direct_rows = []
+    for key, value in direct_preds.items():
+        row = dict(value)
+        row.setdefault("match_id", str(key))
+        direct_rows.append(row)
+    direct_lookup = build_compatibility_alias_lookup(
+        direct_rows,
+        context="direct prediction artifact",
+    )
     matches = sim_json.get("matches", [])
     out_matches = []
     n_blended = 0
     n_passthrough = 0
+    # id(direct entry) -> sim match_id. Two sim rows resolving the same
+    # direct row means a doubleheader is sharing one legacy display alias;
+    # blending both against a single prediction must fail closed.
+    consumed_entries: dict[int, str] = {}
     for m in matches:
         mid = m["match_id"]
         teams = m.get("teams", [])
         team1 = teams[0] if teams else None
-        if mid in direct_preds and team1:
-            entry = direct_preds[mid]
+        # Join by primary ID first, then by the sim row's own aliases so a
+        # cricsheet-keyed sim JSON still joins a frozen synthetic-keyed
+        # direct artifact (and vice versa).
+        entry = None
+        for join_key in (mid, m.get("cricsheet_id"), m.get("display_match_id")):
+            if join_key and join_key in direct_lookup:
+                entry = direct_lookup[join_key]
+                break
+        if entry is not None and team1:
+            prior = consumed_entries.get(id(entry))
+            if prior is not None and prior != str(mid):
+                raise RuntimeError(
+                    f"direct prediction row already blended into match "
+                    f"{prior}; match {mid} resolves the same row via a "
+                    "shared legacy display alias"
+                )
+            consumed_entries[id(entry)] = str(mid)
             # Direct predictions key team1/team2 per their own roster ordering
             # — align to the eval JSON's team1.
             if entry["team1"] == team1:

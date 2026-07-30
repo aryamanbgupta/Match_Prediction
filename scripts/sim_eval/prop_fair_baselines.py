@@ -327,9 +327,10 @@ def baseline_rows(detail: list, asof: AsOf) -> dict:
 
     for m in detail:
         mid = m["match_id"]
-        date = mid[:10]
+        display_mid = m.get("display_match_id") or mid
+        date = display_mid[:10]
         obs = m["obs"]
-        venue_key = _venue_from_match_id(mid, asof)
+        venue_key = _venue_from_match_id(display_mid, asof)
 
         v_inn = asof.logs["venue_inn"].get(venue_key, []) if venue_key else []
         v_match = asof.logs["venue_match"].get(venue_key, []) if venue_key else []
@@ -463,7 +464,7 @@ _VENUE_CACHE: dict = {}
 
 
 def _venue_from_match_id(mid: str, asof: AsOf):
-    """match_id = '<date>_<Team1>_<Team2>_<venue with underscores>'.
+    """Parse a legacy/display ID ending in the venue with underscores.
 
     Match the trailing portion against known corpus venue names
     (underscores vs spaces/commas make exact split unreliable).

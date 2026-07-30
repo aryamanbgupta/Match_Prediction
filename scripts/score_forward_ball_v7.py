@@ -352,6 +352,14 @@ def walk_context_and_score(
                 row = {
                     "match_id": str(manifest_row["match_id"]),
                     "cricsheet_id": str(cricsheet_id),
+                    **({
+                        "display_match_id": str(
+                            manifest_row["display_match_id"]
+                        ),
+                        "match_identity_version": str(
+                            manifest_row["match_identity_version"]
+                        ),
+                    } if manifest_row.get("display_match_id") else {}),
                     "date": spec["date"],
                     "team1": spec["teams"][0],
                     "team2": spec["teams"][1],

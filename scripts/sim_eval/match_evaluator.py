@@ -60,6 +60,9 @@ class MatchEvaluationResult:
     bet_placed: Optional[bool] = None
     bet_team: Optional[str] = None
     competition_cluster_id: Optional[str] = None
+    cricsheet_id: Optional[str] = None
+    display_match_id: Optional[str] = None
+    match_identity_version: Optional[str] = None
 
 
 @dataclass
@@ -154,6 +157,45 @@ class MatchLevelEvaluator:
         self.parallel = parallel
         self.bootstrap_resamples = bootstrap_resamples
         self.cluster_lookup = dict(cluster_lookup or {})
+
+    @staticmethod
+    def _resolve_odds_row(
+        match_id: str,
+        match_state: MatchState,
+        odds_lookup: Dict[str, Dict],
+        claimed_rows: Optional[Dict[int, str]] = None,
+    ) -> Optional[Dict]:
+        """Join new primary IDs or one unambiguous frozen display ID.
+
+        ``claimed_rows`` (``id(row) -> match_id``) must span one evaluation
+        pass: two different matches resolving to the same odds row means a
+        doubleheader is sharing one legacy display key, and scoring both
+        matches against that single market must fail closed.
+        """
+        keys = [str(match_id)]
+        display_id = getattr(match_state, "display_match_id", None)
+        if display_id and str(display_id) not in keys:
+            keys.append(str(display_id))
+        found = [(key, odds_lookup[key]) for key in keys if key in odds_lookup]
+        if not found:
+            return None
+        distinct_rows = {id(row) for _key, row in found}
+        if len(distinct_rows) != 1:
+            raise RuntimeError(
+                f"multiple odds rows resolve match {match_id}: "
+                f"{[key for key, _row in found]}"
+            )
+        row = found[0][1]
+        if claimed_rows is not None:
+            prior = claimed_rows.get(id(row))
+            if prior is not None and prior != str(match_id):
+                raise RuntimeError(
+                    f"odds row {found[0][0]!r} already resolved by match "
+                    f"{prior}; match {match_id} maps to the same row via a "
+                    "shared legacy display alias"
+                )
+            claimed_rows[id(row)] = str(match_id)
+        return row
     
     def evaluate_all(self, matches: List[Tuple[str, MatchState]], 
                      odds_lookup: Dict[str, Dict]) -> OverallEvaluationResults:
@@ -166,20 +208,31 @@ class MatchLevelEvaluator:
         """
         match_results = []
         total_time = 0
-        
+        claimed_odds_rows: Dict[int, str] = {}
+
         print(f"\nEvaluating {len(matches)} matches with {self.n_simulations} simulations each...")
-        
+
         for i, (match_id, match_state) in enumerate(matches):
             print(f"\n[{i+1}/{len(matches)}] Evaluating {match_id}")
-            
+
             # Check if we have odds for this match
-            if match_id not in odds_lookup:
+            odds_data = self._resolve_odds_row(
+                match_id,
+                match_state,
+                odds_lookup,
+                claimed_rows=claimed_odds_rows,
+            )
+            if odds_data is None:
                 print(f"  Warning: No odds found for {match_id}, skipping...")
                 continue
             
             # Evaluate single match
             try:
-                result = self._evaluate_single_match(match_id, match_state, odds_lookup[match_id])
+                result = self._evaluate_single_match(
+                    match_id,
+                    match_state,
+                    odds_data,
+                )
                 match_results.append(result)
                 total_time += result.simulation_time
                 
@@ -219,11 +272,18 @@ class MatchLevelEvaluator:
         # ── Pass 1: run all simulations, collect raw probabilities ──
         raw_data = []  # list of dicts with match info + raw probs
         total_time = 0
+        claimed_odds_rows: Dict[int, str] = {}
 
         for i, (match_id, match_state) in enumerate(matches):
             print(f"\n[{i+1}/{len(matches)}] Simulating {match_id}")
 
-            if match_id not in odds_lookup:
+            odds_data = self._resolve_odds_row(
+                match_id,
+                match_state,
+                odds_lookup,
+                claimed_rows=claimed_odds_rows,
+            )
+            if odds_data is None:
                 print(f"  Warning: No odds found for {match_id}, skipping...")
                 continue
 
@@ -252,7 +312,6 @@ class MatchLevelEvaluator:
                 else:
                     t1_norm = 0.5
 
-                odds_data = odds_lookup[match_id]
                 market_odds = odds_data.get('odds', {}).get('winner', {})
                 market_win_prob = BettingOddsLoader.get_implied_probabilities(market_odds)
                 actual_winner = odds_data.get('actual_winner')
@@ -273,6 +332,21 @@ class MatchLevelEvaluator:
                     'actual_winner': actual_winner,
                     'aggregated': aggregated,
                     'sim_time': sim_time,
+                    'cricsheet_id': getattr(
+                        match_state,
+                        'cricsheet_id',
+                        None,
+                    ),
+                    'display_match_id': getattr(
+                        match_state,
+                        'display_match_id',
+                        None,
+                    ),
+                    'match_identity_version': getattr(
+                        match_state,
+                        'match_identity_version',
+                        None,
+                    ),
                 })
             except Exception as e:
                 print(f"  Error simulating match: {e}")
@@ -437,6 +511,9 @@ class MatchLevelEvaluator:
                 bet_placed=bet_team is not None,
                 bet_team=bet_team,
                 competition_cluster_id=competition_cluster_id,
+                cricsheet_id=d.get('cricsheet_id'),
+                display_match_id=d.get('display_match_id'),
+                match_identity_version=d.get('match_identity_version'),
             )
             match_results.append(result)
 
@@ -593,6 +670,17 @@ class MatchLevelEvaluator:
             bet_placed=bet_team is not None,
             bet_team=bet_team,
             competition_cluster_id=competition_cluster_id,
+            cricsheet_id=getattr(match_state, "cricsheet_id", None),
+            display_match_id=getattr(
+                match_state,
+                "display_match_id",
+                None,
+            ),
+            match_identity_version=getattr(
+                match_state,
+                "match_identity_version",
+                None,
+            ),
         )
     
     def _calculate_log_loss(self, sim_prob: Dict[str, float], actual_winner: Optional[str],

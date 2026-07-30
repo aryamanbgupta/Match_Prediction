@@ -30,7 +30,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Callable, Dict, Iterable, List, Mapping, Optional
 
 import numpy as np
 
@@ -38,6 +38,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
 from identity_maps import canonicalize_match_id  # noqa: E402
+from match_identity import (  # noqa: E402
+    CompatibilityAliasLookup,
+    build_compatibility_alias_lookup,
+)
 from sim_eval.eval_statistics import (  # noqa: E402
     BOOTSTRAP_CONTRACT_VERSION,
     DEFAULT_BOOTSTRAP_RESAMPLES,
@@ -72,6 +76,47 @@ _IPL_TEAMS = frozenset({
 })
 
 
+def _identity_keys(row: Mapping) -> List[str]:
+    keys = []
+    for field in ("match_id", "cricsheet_id", "display_match_id"):
+        value = canonicalize_match_id(row.get(field))
+        if value and value not in keys:
+            keys.append(value)
+    return keys
+
+
+def _build_identity_lookup(
+    rows: Iterable[Mapping],
+    *,
+    value_fn: Callable[[Mapping], object],
+    context: str,
+) -> CompatibilityAliasLookup:
+    """Index stable IDs and unique legacy aliases without last-write-wins."""
+    return build_compatibility_alias_lookup(
+        rows,
+        context=context,
+        value_fn=value_fn,
+    )
+
+
+def _lookup_for_match(lookup: Mapping, match: Mapping, default=None):
+    for key in _identity_keys(match):
+        value = lookup.get(key)
+        if value is not None:
+            return value
+    return default
+
+
+def _load_odds_volume_lookup(
+    odds_data: Mapping,
+) -> CompatibilityAliasLookup:
+    return _build_identity_lookup(
+        odds_data.get("matches", []),
+        value_fn=lambda row: row.get("polymarket_volume_usd"),
+        context="odds volume join",
+    )
+
+
 def _bootstrap_ci(values: List[float], n: int = 1000, ci: float = 0.95,
                   seed: int = DEFAULT_BOOTSTRAP_SEED,
                   strata: Optional[List] = None,
@@ -96,12 +141,18 @@ def _load_feature_lookup(feature_parquet: Optional[Path]) -> Dict[str, Dict]:
         return {}
     import pandas as pd
     df = pd.read_parquet(feature_parquet)
-    cols = ["match_id", "team1", "team2", "is_international",
+    cols = ["match_id", "cricsheet_id", "display_match_id",
+            "team1", "team2", "is_international",
             "top6_batting_elo_diff", "competition_tier", "match_date"]
     have = [c for c in cols if c in df.columns]
-    return {canonicalize_match_id(row["match_id"]):
-            {c: row[c] for c in have if c != "match_id"}
-            for _, row in df[have].iterrows()}
+    identity_cols = {"match_id", "cricsheet_id", "display_match_id"}
+    return _build_identity_lookup(
+        (row.to_dict() for _, row in df[have].iterrows()),
+        value_fn=lambda row: {
+            c: row[c] for c in have if c not in identity_cols
+        },
+        context=f"feature parquet {feature_parquet}",
+    )
 
 
 def _slice_predicate(slice_name: str, mismatch_thresh: float,
@@ -144,16 +195,16 @@ def _build_strata(matches: List[dict], feat_lookup: Dict[str, Dict],
     if mode != "tier_x_half":
         raise ValueError(f"Unknown stratify mode: {mode}")
     dates = sorted(set(
-        feat_lookup.get(m["match_id"], {}).get("match_date")
+        _lookup_for_match(feat_lookup, m, {}).get("match_date")
         for m in matches
-        if feat_lookup.get(m["match_id"], {}).get("match_date") is not None
+        if _lookup_for_match(feat_lookup, m, {}).get("match_date") is not None
     ))
     if not dates:
         return None
     median_date = dates[len(dates) // 2]
     strata = []
     for m in matches:
-        f = feat_lookup.get(m["match_id"], {})
+        f = _lookup_for_match(feat_lookup, m, {})
         tier = f.get("competition_tier", "unknown")
         d = f.get("match_date")
         half = "early" if d is not None and d <= median_date else "late"
@@ -178,9 +229,7 @@ def reslice(eval_json_path: str, odds_json_path: str,
     with open(odds_json_path) as f:
         odds_data = json.load(f)
 
-    vol_by_id = {canonicalize_match_id(m['match_id']):
-                 m.get('polymarket_volume_usd')
-                 for m in odds_data.get('matches', [])}
+    vol_by_id = _load_odds_volume_lookup(odds_data)
     feat_lookup = _load_feature_lookup(feature_parquet)
     predicate = _slice_predicate(slice_name, mismatch_thresh, close_thresh)
     if cluster_source_dir is None:
@@ -202,10 +251,10 @@ def reslice(eval_json_path: str, odds_json_path: str,
     kept_matches = []
     for match in matches:
         if min_volume is not None:
-            vol = vol_by_id.get(match['match_id'])
+            vol = _lookup_for_match(vol_by_id, match)
             if vol is None or vol < min_volume:
                 continue
-        feat = feat_lookup.get(match['match_id'], {})
+        feat = _lookup_for_match(feat_lookup, match, {})
         if not predicate(match, feat):
             continue
         bet_team = flat_bet_team(match)

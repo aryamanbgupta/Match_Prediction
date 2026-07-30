@@ -36,6 +36,11 @@ from datetime import datetime
 from pathlib import Path
 
 from identity_maps import canonicalize_venue
+from match_identity import (
+    build_display_match_id,
+    identity_contract,
+    new_match_identity,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 POLYMARKET_PATH = Path("/Users/aryamangupta/Projects/polymarket-cricket/data/polymarket_prematch_odds.json")
@@ -132,6 +137,7 @@ def load_cricsheet_index(match_dir: Path) -> dict:
         winner = outcome.get("winner")
         index[dates[0]].append({
             "path": path,
+            "cricsheet_id": Path(path).stem,
             "teams": [t.strip() for t in teams],
             "venue": canonicalize_venue(info.get("venue")),
             "event_name": event_name,
@@ -293,8 +299,8 @@ def match_markets(markets: list[dict], cricsheet_index: dict) -> tuple[list[dict
 # ---------------------------------------------------------------------------
 
 def build_match_id(date_str: str, team1: str, team2: str, venue: str) -> str:
-    venue = canonicalize_venue(venue)
-    return f"{date_str}_{team1}_{team2}_{venue}".replace(" ", "_")
+    """Compatibility name for the historical display-ID builder."""
+    return build_display_match_id(date_str, team1, team2, venue)
 
 
 def build_odds_entry(matched: dict) -> dict | None:
@@ -321,8 +327,15 @@ def build_odds_entry(matched: dict) -> dict | None:
         return round(1.0 / price, 4) if price and price > 0 else 0.0
 
     venue = cric["venue"]
+    identity = new_match_identity(
+        cric["cricsheet_id"],
+        date_text=date_str,
+        team1=cric_team1,
+        team2=cric_team2,
+        venue=venue,
+    )
     entry = {
-        "match_id": build_match_id(date_str, cric_team1, cric_team2, venue),
+        **identity.as_fields(),
         "date": date_str,
         "team1": cric_team1,
         "team2": cric_team2,
@@ -437,6 +450,7 @@ def write_outputs(matched: list[dict], unmatched: list[dict]) -> None:
     output = {
         "source": "polymarket",
         "generated_at": datetime.utcnow().isoformat() + "Z",
+        "match_identity": identity_contract(),
         "total_matches": len(odds_entries),
         "filters": {
             "min_volume_usd": MIN_VOLUME_USD,

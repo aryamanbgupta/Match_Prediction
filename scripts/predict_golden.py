@@ -71,16 +71,36 @@ def main() -> int:
 
     proba = model.predict_proba(df[feat_cols])[:, 1]
 
+    # I15 identity contract: key by the unique Cricsheet ID, never the
+    # synthetic display string — same-day doubleheaders share the synthetic
+    # key and dict insertion would silently drop a match (last-write-wins).
+    use_cricsheet = "cricsheet_id" in df.columns
+    if not use_cricsheet and df["match_id"].duplicated().any():
+        dupes = sorted(df["match_id"][df["match_id"].duplicated()].unique())
+        print(f"ERROR: duplicate synthetic match_id values {dupes[:5]} and no "
+              "cricsheet_id column to disambiguate them.")
+        print("  Re-materialize the parquet with the I15 identity contract "
+              "before predicting.")
+        return 1
+
     predictions = {}
     for (_, row), p in zip(df.iterrows(), proba):
-        predictions[row["match_id"]] = {
+        key = str(row["cricsheet_id"]) if use_cricsheet else str(row["match_id"])
+        if key in predictions:
+            print(f"ERROR: duplicate primary match key {key!r} in {args.parquet}")
+            return 1
+        record = {
             "team1": row["team1"],
             "team2": row["team2"],
             "p_team1": float(p),
             "p_team2": float(1.0 - p),
             "team1_wins": int(row["team1_wins"]),
             "match_date": row["match_date"],
+            "display_match_id": str(row["match_id"]),
         }
+        if use_cricsheet:
+            record["cricsheet_id"] = key
+        predictions[key] = record
 
     args.out_json.parent.mkdir(parents=True, exist_ok=True)
     with open(args.out_json, "w") as f:

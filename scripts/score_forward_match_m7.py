@@ -218,6 +218,12 @@ def build_prediction_artifact(
         predictions.append({
             "match_id": str(manifest_row["match_id"]),
             "cricsheet_id": str(manifest_row["cricsheet_id"]),
+            **({
+                "display_match_id": str(manifest_row["display_match_id"]),
+                "match_identity_version": str(
+                    manifest_row["match_identity_version"]
+                ),
+            } if manifest_row.get("display_match_id") else {}),
             "date": str(manifest_row["date"]),
             "team1": str(feature_row["team1"]),
             "team2": str(feature_row["team2"]),

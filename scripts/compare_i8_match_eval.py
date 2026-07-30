@@ -24,7 +24,13 @@ def _sibling_slice(path: Path, suffix: str) -> Path:
 
 def _load(path: Path) -> dict[str, dict]:
     data = json.loads(path.read_text())
-    return {row["match_id"]: row for row in data["matches"]}
+    rows = data["matches"]
+    result = {row["match_id"]: row for row in rows}
+    if len(result) != len(rows):
+        raise RuntimeError(
+            f"duplicate match_id keys in {path} — a doubleheader is sharing "
+            "a synthetic id; re-key the eval JSON with Cricsheet primary IDs")
+    return result
 
 
 def _finite(value) -> bool:

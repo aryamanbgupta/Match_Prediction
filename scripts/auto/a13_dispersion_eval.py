@@ -183,7 +183,10 @@ def iter_sims(engine, files, n_sims, seed):
     for i, fp in enumerate(files):
         with open(fp) as f:
             data = json.load(f)
-        match_id, state = loader._create_match_state(data)
+        match_id, state = loader._create_match_state(
+            data,
+            cricsheet_id=fp.stem,
+        )
         if state is None:
             continue
         t0 = time.time()

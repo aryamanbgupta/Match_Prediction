@@ -70,6 +70,7 @@ generation names in several places. At minimum it should declare:
 
 - model family and artifact paths;
 - feature count, ordered feature hash, and outcome semantics;
+- match identity version, primary key, and display key;
 - stats schema version;
 - venue identity map version, SHA-256, and row count;
 - same-day ordering version;
@@ -160,6 +161,9 @@ changing punctuation or appending/removing the city.
   from 0.781231 to 0.779532. On the consumed match diagnostic, log loss
   improved from 0.7042 to 0.6825 while flat ROI fell from +0.46% to -1.49%.
   It remains unpromoted pending a new untouched post-2026-07-30 window.
+- I15 made Cricsheet ID the primary key for every future match artifact,
+  retained the synthetic fixture string only as display/legacy metadata, and
+  made ambiguous compatibility joins fail closed.
 
 Detailed contracts and results:
 
@@ -167,6 +171,7 @@ Detailed contracts and results:
 - `docs/I7_VENUE_IDENTITY_CONTRACT.md`
 - `docs/I7_LIVE_COMPATIBILITY.md`
 - `docs/I8_FEATURE_CONTRACT.md`
+- `docs/I15_MATCH_IDENTITY_CONTRACT.md`
 - `reports/i7_rebuild_checkpoint_20260725.md`
 - `reports/i8_phase_matchup_checkpoint_20260730.md`
 

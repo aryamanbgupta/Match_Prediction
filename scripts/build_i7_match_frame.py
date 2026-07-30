@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from identity_maps import assert_venue_alias_contract  # noqa: E402
+from match_identity import identity_contract  # noqa: E402
 
 
 METADATA = [
@@ -32,6 +33,11 @@ METADATA = [
     "venue",
     "competition_tier",
     "team1_wins",
+]
+OPTIONAL_IDENTITY_METADATA = [
+    "display_match_id",
+    "match_identity_version",
+    "elo_update_version",
 ]
 ENCODED = {"venue_id_encoded", "competition_tier_encoded"}
 SPLITS = ("train", "validation", "test", "golden_test")
@@ -74,7 +80,11 @@ def build_frame(
         if not source_path.exists():
             continue
         frame = pd.read_parquet(source_path)
-        columns = METADATA + numeric_features
+        optional_identity = [
+            column for column in OPTIONAL_IDENTITY_METADATA
+            if column in frame
+        ]
+        columns = METADATA + optional_identity + numeric_features
         missing = [column for column in columns if column not in frame]
         if missing:
             raise RuntimeError(f"{split} is missing columns: {missing}")
@@ -89,6 +99,21 @@ def build_frame(
     (out_dir / "venue_identity.json").write_text(
         json.dumps(identity, indent=2) + "\n"
     )
+    match_identity_path = source_dir / "match_identity.json"
+    if match_identity_path.exists():
+        match_identity = json.loads(match_identity_path.read_text())
+        if match_identity != identity_contract():
+            raise RuntimeError(
+                f"{match_identity_path} has an unsupported contract"
+            )
+        (out_dir / "match_identity.json").write_text(
+            json.dumps(match_identity, indent=2) + "\n"
+        )
+    elo_update_path = source_dir / "elo_update.json"
+    if elo_update_path.exists():
+        (out_dir / "elo_update.json").write_text(
+            elo_update_path.read_text()
+        )
     print(
         f"wrote {out_dir}: {len(METADATA)} metadata + "
         f"{len(numeric_features)} numeric columns"

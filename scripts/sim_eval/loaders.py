@@ -6,11 +6,18 @@ import numpy as np
 
 # Import from the simulation file
 from identity_maps import canonicalize_match_id, canonicalize_venue
+from match_identity import (
+    MATCH_IDENTITY_VERSION,
+    build_display_match_id_from_info,
+    resolve_match_identity,
+)
 from sim_v1_2 import MatchState, Player, TeamLineup
 from parsing_v2 import classify_match_context
 
 class TestMatchLoader:
     """Loads test matches and creates initial MatchState objects for simulation"""
+
+    __test__ = False
     
     def __init__(self, batter_encoder=None, bowler_encoder=None):
         """
@@ -20,6 +27,7 @@ class TestMatchLoader:
         """
         self.batter_encoder = batter_encoder
         self.bowler_encoder = bowler_encoder
+        self.identities: Dict[str, Dict[str, str]] = {}
     
     def load_matches(self, folder_path: str) -> List[Tuple[str, MatchState]]:
         """Load all test matches from folder
@@ -27,6 +35,7 @@ class TestMatchLoader:
         Returns:
             List of (match_id, initial_match_state) tuples
         """
+        self.identities = {}
         matches = []
         json_files = sorted(Path(folder_path).glob('*.json'))
         
@@ -37,18 +46,40 @@ class TestMatchLoader:
                 with open(file_path, 'r') as f:
                     data = json.load(f)
                 
-                match_id, match_state = self._create_match_state(data)
+                match_id, match_state = self._create_match_state(
+                    data,
+                    cricsheet_id=file_path.stem,
+                )
                 if match_state:
+                    if match_id in self.identities:
+                        raise RuntimeError(
+                            f"duplicate Cricsheet match ID: {match_id}"
+                        )
+                    self.identities[match_id] = {
+                        "match_id": match_id,
+                        "cricsheet_id": file_path.stem,
+                        "display_match_id": getattr(
+                            match_state,
+                            "display_match_id",
+                        ),
+                        "match_identity_version": MATCH_IDENTITY_VERSION,
+                    }
                     matches.append((match_id, match_state))
                     print(f"  Loaded: {match_id}")
                 
+            except RuntimeError:
+                raise
             except Exception as e:
                 print(f"  Error loading {file_path.name}: {e}")
         
         print(f"Successfully loaded {len(matches)} matches")
         return matches
     
-    def _create_match_state(self, data: dict) -> Tuple[Optional[str], Optional[MatchState]]:
+    def _create_match_state(
+        self,
+        data: dict,
+        cricsheet_id: Optional[str] = None,
+    ) -> Tuple[Optional[str], Optional[MatchState]]:
         """Create initial MatchState from match JSON
         
         Design decisions:
@@ -70,8 +101,8 @@ class TestMatchLoader:
             dates = info.get('dates', ['2024-01-01'])
             match_date = datetime.strptime(dates[0], '%Y-%m-%d')
             
-            # Create match ID
-            match_id = f"{dates[0]}_{team1_name}_{team2_name}_{venue}".replace(' ', '_')
+            display_match_id = build_display_match_id_from_info(info)
+            match_id = str(cricsheet_id or display_match_id)
             
             # Get toss info
             toss = info.get('toss', {})
@@ -128,6 +159,18 @@ class TestMatchLoader:
                 match_importance=match_ctx['match_importance'],
                 is_international=match_ctx['is_international'],
                 competition_tier=match_ctx['competition_tier'],
+            )
+            # MatchState is intentionally a simulation-domain object. These
+            # non-feature attributes carry identity through evaluation without
+            # making the simulator depend on artifact schemas.
+            match_state.cricsheet_id = (
+                str(cricsheet_id) if cricsheet_id is not None else None
+            )
+            match_state.display_match_id = display_match_id
+            match_state.match_identity_version = (
+                MATCH_IDENTITY_VERSION
+                if cricsheet_id is not None
+                else "synthetic_fixture_v1"
             )
 
             return match_id, match_state
@@ -219,11 +262,15 @@ class BettingOddsLoader:
                     if vol < min_volume:
                         dropped += 1
                         continue
-                match_id = canonicalize_match_id(match['match_id'])
+                identity = resolve_match_identity(match)
+                match_id = identity.primary_id
+                if identity.cricsheet_id is None:
+                    # Frozen rows use the synthetic display ID, whose venue
+                    # suffix must still honor the active exact alias map.
+                    match_id = canonicalize_match_id(match_id)
                 if match_id in odds_lookup:
                     raise ValueError(
-                        f"duplicate odds match ID after venue "
-                        f"canonicalization: {match_id}"
+                        f"duplicate odds primary match ID: {match_id}"
                     )
                 odds_lookup[match_id] = match
                 kept += 1
@@ -236,8 +283,9 @@ class BettingOddsLoader:
             return odds_lookup
 
         except Exception as e:
-            print(f"Error loading odds file: {e}")
-            return {}
+            raise RuntimeError(
+                f"failed to load odds file {file_path}: {e}"
+            ) from e
     
     @staticmethod
     def get_implied_probabilities(odds: Dict[str, float], remove_margin: bool = True) -> Dict[str, float]:

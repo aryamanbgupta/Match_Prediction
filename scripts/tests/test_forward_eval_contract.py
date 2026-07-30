@@ -6,15 +6,20 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
+import forward_eval_contract as contract_module  # noqa: E402
 from forward_eval_contract import (  # noqa: E402
+    _verify_scoring_code,
     liquidity_slice_counts,
+    load_protocol,
     preflight,
     repo_path,
+    sha256_file,
 )
 
 
@@ -23,29 +28,29 @@ PROTOCOL = (
 )
 
 
-def test_draft_preflight_verifies_everything_without_scoring():
-    report = preflight(PROTOCOL)
-    assert report["status"] == "PASS"
-    assert report["protocol_status"] == "DRAFT"
-    assert report["selected_matches"] == 137
-    assert report["liquidity_slices"] == {
-        "all": 137,
-        "min_volume_50000": 61,
-        "min_volume_100000": 30,
-    }
-    assert report["candidate_artifacts_verified"] == 14
-    assert report["scoring_code_artifacts_verified"] == 17
-    assert report["scoring_allowed"] is False
-    assert report["model_imports_performed"] is False
-    assert report["model_scoring_performed"] is False
-    assert report["opening_condition_blockers"] == [
-        "user_approved",
-    ]
+def test_consumed_preflight_fails_closed_after_source_drift():
+    assert load_protocol(PROTOCOL)["status"] == "FROZEN"
+    with pytest.raises(RuntimeError, match="artifact hash mismatch"):
+        preflight(PROTOCOL)
 
 
-def test_require_frozen_fails_closed_on_draft():
+def test_require_frozen_fails_closed_on_draft(tmp_path, monkeypatch):
+    protocol = load_protocol(PROTOCOL)
+    protocol["status"] = "DRAFT"
+    draft = tmp_path / "protocol.yaml"
+    draft.write_text(yaml.safe_dump(protocol, sort_keys=False))
+    monkeypatch.setattr(
+        contract_module,
+        "_verify_artifacts",
+        lambda _protocol: [],
+    )
+    monkeypatch.setattr(
+        contract_module,
+        "_verify_scoring_code",
+        lambda _protocol: [],
+    )
     with pytest.raises(RuntimeError, match="model scoring is blocked"):
-        preflight(PROTOCOL, require_frozen=True)
+        preflight(draft, require_frozen=True)
 
 
 def test_liquidity_boundaries_are_inclusive():
@@ -82,13 +87,11 @@ def test_tampered_fingerprint_is_rejected(tmp_path: Path):
         preflight(tampered)
 
 
-def test_tampered_scoring_code_hash_is_rejected(tmp_path: Path):
-    tampered = tmp_path / "protocol.yaml"
-    text = PROTOCOL.read_text().replace(
-        "625a78fe1d98902482fd483e2dab86e33b9f026b1563cd87526ab7a24bb30837",
-        "0" * 64,
-        1,
-    )
-    tampered.write_text(text)
+def test_tampered_scoring_code_hash_is_rejected():
+    protocol = load_protocol(PROTOCOL)
+    artifacts = protocol["scoring_code"]["artifacts"]
+    for artifact in artifacts:
+        artifact["sha256"] = sha256_file(repo_path(artifact["path"]))
+    artifacts[0]["sha256"] = "0" * 64
     with pytest.raises(RuntimeError, match="scoring-code hash mismatch"):
-        preflight(tampered)
+        _verify_scoring_code(protocol)

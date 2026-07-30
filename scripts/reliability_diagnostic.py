@@ -40,12 +40,35 @@ NBINS = 10
 
 def load_joined(pred_path=PRED, odds_path=ODDS):
     preds = json.load(open(pred_path))
-    odds = {m["match_id"]: m for m in json.load(open(odds_path))["matches"]}
+    odds_rows = json.load(open(odds_path))["matches"]
+    odds = {}
+    for m in odds_rows:
+        for key in {str(m["match_id"]), str(m.get("cricsheet_id") or "")}:
+            if not key:
+                continue
+            if key in odds:
+                raise RuntimeError(
+                    f"duplicate odds key {key!r} in {odds_path} — rebuild "
+                    "the odds file with Cricsheet primary IDs")
+            odds[key] = m
+    claimed = {}
     rows = []
     for mid, p in preds.items():
-        oe = odds.get(mid)
+        # I15: predictions may be keyed by Cricsheet ID; frozen odds files
+        # by synthetic id. Try the primary first, then carried aliases.
+        oe = None
+        for key in (mid, p.get("cricsheet_id"), p.get("display_match_id")):
+            if key and str(key) in odds:
+                oe = odds[str(key)]
+                break
         if not oe:
             continue
+        prior = claimed.get(id(oe))
+        if prior is not None and prior != mid:
+            raise RuntimeError(
+                f"odds row shared by predictions {prior} and {mid} — "
+                "doubleheader alias must not join one market to two matches")
+        claimed[id(oe)] = mid
         t1, t2 = p["team1"], p["team2"]
         o = oe["odds"]["winner"]
         if not (o.get(t1) and o.get(t2)):

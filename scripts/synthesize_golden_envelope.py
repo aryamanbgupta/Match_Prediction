@@ -46,8 +46,19 @@ def main() -> int:
         odds_data = json.load(f)
 
     matches_out = []
+    seen_keys: set[str] = set()
     for m in odds_data["matches"]:
         team1, team2 = m["team1"], m["team2"]
+        # I15 identity contract: prefer the unique Cricsheet ID as primary;
+        # keep the synthetic string as display metadata. Legacy odds files
+        # without cricsheet_id keep their old key, but duplicates (same-day
+        # doubleheaders) fail closed instead of emitting colliding rows.
+        primary_id = str(m.get("cricsheet_id") or m["match_id"])
+        if primary_id in seen_keys:
+            print(f"ERROR: duplicate match key {primary_id!r} in {args.odds}; "
+                  "rebuild the odds file with Cricsheet primary IDs.")
+            return 1
+        seen_keys.add(primary_id)
         market_odds = {team1: m["odds"]["winner"][team1],
                        team2: m["odds"]["winner"][team2]}
         market_prob = implied_probs(market_odds, source=odds_data["source"])
@@ -59,7 +70,9 @@ def main() -> int:
         actual_winner = m["actual_winner"]
         edge = {t: sim_prob[t] - market_prob[t] for t in (team1, team2)}
         matches_out.append({
-            "match_id": m["match_id"],
+            "match_id": primary_id,
+            "cricsheet_id": m.get("cricsheet_id"),
+            "display_match_id": m.get("display_match_id", m["match_id"]),
             "teams": [team1, team2],
             "match_date": m["date"],
             "venue": m["venue"],

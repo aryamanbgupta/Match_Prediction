@@ -107,9 +107,17 @@ def _per_match_decomposition(sliced_dir: Path,
                 return json.load(f)["matches"]
         return []
 
-    matches_sim = {m["match_id"]: m for m in _load(1.0)}
-    matches_direct = {m["match_id"]: m for m in _load(0.0)}
-    matches_best = {m["match_id"]: m for m in _load(best_w)}
+    def _index(matches: List[dict]) -> dict:
+        out = {m["match_id"]: m for m in matches}
+        if len(out) != len(matches):
+            raise RuntimeError(
+                "duplicate match_id keys in sliced eval JSON — re-key with "
+                "Cricsheet primary IDs (I15)")
+        return out
+
+    matches_sim = _index(_load(1.0))
+    matches_direct = _index(_load(0.0))
+    matches_best = _index(_load(best_w))
 
     n = 0
     blend_beats_both = 0

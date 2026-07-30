@@ -207,7 +207,10 @@ def prepare_match(fp, loader, checkpoints=CHECKPOINTS):
         raise ReplayError(f"not a 20-over match (overs={info.get('overs')})")
     if not data.get("innings"):
         raise ReplayError("no innings data")
-    match_id, state = loader._create_match_state(data)
+    match_id, state = loader._create_match_state(
+        data,
+        cricsheet_id=Path(fp).stem,
+    )
     if state is None:
         raise ReplayError("loader could not build state")
     inn1 = data["innings"][0]

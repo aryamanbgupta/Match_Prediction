@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from forward_eval_contract import load_protocol  # noqa: E402
+import score_forward_match_m7 as scorer_module  # noqa: E402
 from score_forward_match_m7 import (  # noqa: E402
     FORBIDDEN_INPUT_COLUMNS,
     build_prediction_artifact,
@@ -170,7 +171,7 @@ def test_locked_artifact_is_write_once(tmp_path: Path):
         write_locked_artifact(output, artifact)
 
 
-def test_draft_gate_blocks_before_joblib_import(
+def test_preflight_gate_blocks_before_joblib_import(
     tmp_path: Path,
     monkeypatch,
 ):
@@ -182,6 +183,16 @@ def test_draft_gate_blocks_before_joblib_import(
         return original_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", guarded_import)
-    with pytest.raises(RuntimeError, match="model scoring is blocked"):
+
+    def _blocked_preflight(_path, *, require_frozen):
+        assert require_frozen is True
+        raise RuntimeError("synthetic preflight block")
+
+    monkeypatch.setattr(
+        scorer_module,
+        "preflight",
+        _blocked_preflight,
+    )
+    with pytest.raises(RuntimeError, match="synthetic preflight block"):
         score(PROTOCOL_PATH, tmp_path / "must_not_exist.json")
     assert not (tmp_path / "must_not_exist.json").exists()

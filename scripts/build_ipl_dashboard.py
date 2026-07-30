@@ -139,25 +139,49 @@ def collect_ipl_matches() -> list[dict]:
 
 
 def load_odds_lookup() -> dict:
-    """Build match_id -> odds entry from both polymarket files."""
+    """Build match_id -> odds entry from both polymarket files.
+
+    I15: index by Cricsheet ID too when present; a duplicate key *within* one
+    file means a same-day doubleheader is sharing a synthetic id and the
+    lookup would silently drop a market — fail closed. Cross-file overlap
+    keeps the historical golden-takes-precedence semantics.
+    """
     lookup = {}
     for path, label in [(ODDS_MAIN, 'iteration'), (ODDS_GOLDEN, 'golden')]:
         if not path.exists():
             continue
         with open(path) as f:
             data = json.load(f)
+        seen_in_file = set()
         for m in data.get('matches', []):
             entry = dict(m)
             entry['_odds_source'] = label
-            lookup[canonicalize_match_id(m['match_id'])] = entry
+            keys = {canonicalize_match_id(m['match_id'])}
+            if m.get('cricsheet_id'):
+                keys.add(canonicalize_match_id(m['cricsheet_id']))
+            for key in keys:
+                if key in seen_in_file:
+                    raise RuntimeError(
+                        f"duplicate odds key {key!r} in {path} — rebuild the "
+                        "odds file with Cricsheet primary IDs")
+                seen_in_file.add(key)
+                lookup[key] = entry
     return lookup
 
 
 def load_predictions() -> dict:
     """Build match_id -> prediction. golden takes precedence (newer model
     state — though for v2_frozen they should be identical for any overlap,
-    which there shouldn't be since the cutoffs are disjoint)."""
+    which there shouldn't be since the cutoffs are disjoint).
+
+    I15: prediction JSONs may be keyed by Cricsheet ID (new) or synthetic id
+    (frozen); index every alias each entry carries, but drop any alias that
+    two different fixtures share — a doubleheader display id must not
+    silently join one fixture's prediction to the other match.
+    """
     out = {}
+    owners: dict[str, str] = {}
+    dropped: set[str] = set()
     for path, label in [(PRED_TEST, 'iteration'), (PRED_GOLDEN, 'golden')]:
         if not path.exists():
             continue
@@ -166,7 +190,22 @@ def load_predictions() -> dict:
         for mid, pred in data.items():
             entry = dict(pred)
             entry['_pred_source'] = label
-            out[canonicalize_match_id(mid)] = entry
+            primary = canonicalize_match_id(pred.get('cricsheet_id') or mid)
+            keys = {canonicalize_match_id(mid), primary}
+            if pred.get('display_match_id'):
+                keys.add(canonicalize_match_id(pred['display_match_id']))
+            for key in keys:
+                prev_owner = owners.get(key)
+                if prev_owner is not None and prev_owner != primary:
+                    dropped.add(key)
+                    out.pop(key, None)
+                    continue
+                owners[key] = primary
+                if key not in dropped:
+                    out[key] = entry
+    if dropped:
+        print(f"  WARN: dropped {len(dropped)} ambiguous doubleheader "
+              f"prediction alias(es): {sorted(dropped)[:3]}")
     return out
 
 
@@ -214,10 +253,33 @@ def build_rows(matches, odds_lookup, preds) -> list[dict]:
     cumulative_stake = 0.0
     cumulative_wins = 0
     cumulative_bets = 0
+    claimed: dict[int, str] = {}
     for m in matches:
         mid = m['match_id']
-        odds_entry = odds_lookup.get(mid) if mid else None
-        pred = preds.get(mid) if mid else None
+        # Join Cricsheet-primary first (I15); the synthetic id remains a
+        # legacy fallback for frozen artifacts.
+        join_keys = [k for k in (m.get('cricsheet_id'), mid) if k]
+        odds_entry = next(
+            (odds_lookup[k] for k in join_keys if k in odds_lookup), None)
+        pred = next((preds[k] for k in join_keys if k in preds), None)
+        # Two rows resolving the same entry = doubleheader sharing one
+        # legacy alias; keep the dashboard rendering but never attribute
+        # one market/prediction to both matches.
+        row_id = m.get('cricsheet_id') or mid
+        for label in ('odds', 'pred'):
+            obj = odds_entry if label == 'odds' else pred
+            if obj is None:
+                continue
+            prior = claimed.get(id(obj))
+            if prior is not None and prior != row_id:
+                print(f"  WARN: {label} entry shared by {prior} and {row_id} "
+                      "(doubleheader alias) — dropping join for the latter")
+                if label == 'odds':
+                    odds_entry = None
+                else:
+                    pred = None
+            else:
+                claimed[id(obj)] = row_id
         bet = compute_bet(pred, odds_entry) if (odds_entry and pred) else \
               {'bet_team': None, 'best_edge': None, 'placed': False,
                'pnl': None, 'note': 'no prediction or odds'}

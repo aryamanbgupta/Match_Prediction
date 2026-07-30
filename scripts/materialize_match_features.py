@@ -42,7 +42,15 @@ from identity_maps import (
     canonicalize_venue,
     venue_alias_contract,
 )
+from elo_update import (
+    BASELINE_ELO_UPDATE_VERSION,
+    ELO_UPDATE_VERSIONS,
+    PROVISIONAL_ELO_UPDATE_VERSION,
+    assert_elo_update_version,
+    elo_update_contract,
+)
 from materialize_features import classify_split, group_by_date
+from match_identity import identity_contract, new_match_identity
 from parsing_v2 import parse_match_data_v2
 from player_metadata import PlayerMetadataProvider
 from stats_provider import StatsProvider
@@ -164,7 +172,9 @@ FEATURE_COLUMNS = [
 ]
 
 METADATA_COLUMNS = [
-    "match_id", "cricsheet_id", "match_date", "team1", "team2", "venue",
+    "match_id", "cricsheet_id", "display_match_id",
+    "match_identity_version", "elo_update_version",
+    "match_date", "team1", "team2", "venue",
     "competition_tier",  # raw string, encoded at training time
     "team1_wins",
 ]
@@ -812,11 +822,14 @@ def _build_match_record(
     venue = canonicalize_venue(info.get("venue"))
     competition_tier = inn1.get("competition_tier", "unknown")
 
-    # Synthesize match_id in the same format as
-    # `sim_eval/loaders.py:73` and `betting_odds_polymarket.json` so this
-    # parquet's test rows can be joined to the eval JSONs by match_id.
     date_str = match_date.strftime("%Y-%m-%d")
-    synth_match_id = f"{date_str}_{team1}_{team2}_{venue}".replace(" ", "_")
+    identity = new_match_identity(
+        match_id,
+        date_text=date_str,
+        team1=team1,
+        team2=team2,
+        venue=venue,
+    )
 
     # === Phase A2 ===
     # Resolve lineup player IDs (squad-list order). Same pattern as
@@ -871,8 +884,8 @@ def _build_match_record(
         ]}
 
     record = {
-        "match_id": synth_match_id,
-        "cricsheet_id": match_id,  # keep the JSON filename stem for debug
+        **identity.as_fields(),
+        "elo_update_version": elo_tracker.elo_update_version,
         "match_date": date_str,
         "team1": team1,
         "team2": team2,
@@ -998,11 +1011,13 @@ def materialize(
     k_player: float = 30.0,
     k_venue: float = 200.0,
     freeze_trackers_after: Optional[str] = None,
+    elo_update_version: str = BASELINE_ELO_UPDATE_VERSION,
 ) -> Tuple[int, dict]:
     provider = StatsProvider(
         str(sqlite_dir),
         version=version,
         require_order_contract=True,
+        required_elo_update_version=elo_update_version,
     )
     if provider.backend_name != "sqlite":
         raise RuntimeError(
@@ -1016,6 +1031,11 @@ def materialize(
         provider._backend._conn.execute("SELECT key, value FROM _meta")
     )
     assert_venue_alias_contract(cache_meta, context="SQLite stats cache")
+    assert_elo_update_version(
+        cache_meta,
+        expected=elo_update_version,
+        context="SQLite stats cache",
+    )
     prior = provider._backend._prior
     phase_priors = provider._backend._phase_priors
 
@@ -1061,7 +1081,12 @@ def materialize(
                 union_pids.update(extract_match_player_ids(data))
                 union_venues.add(venue)
             temp_stats = rehydrate_stats_tracker(provider, match_date, union_pids)
-            temp_elo = rehydrate_elo_tracker(provider, match_date, union_pids)
+            temp_elo = rehydrate_elo_tracker(
+                provider,
+                match_date,
+                union_pids,
+                elo_update_version=elo_update_version,
+            )
             temp_venue = rehydrate_venue_tracker(
                 provider, match_date, union_venues)
 
@@ -1076,7 +1101,11 @@ def materialize(
                 temp_stats = rehydrate_stats_tracker(
                     provider, freeze_as_of, one_match_pids)
                 temp_elo = rehydrate_elo_tracker(
-                    provider, freeze_as_of, one_match_pids)
+                    provider,
+                    freeze_as_of,
+                    one_match_pids,
+                    elo_update_version=elo_update_version,
+                )
                 temp_venue = rehydrate_venue_tracker(
                     provider, freeze_as_of, one_match_venues)
 
@@ -1086,9 +1115,15 @@ def materialize(
             # the live temp_elo so subsequent same-day matches get the
             # post-this-match ELO (matches monolith chronological semantics).
             from parsing_v2 import PlayerEloTracker  # local import; cheap
-            pre_match_elo = PlayerEloTracker()
+            pre_match_elo = PlayerEloTracker(elo_update_version)
             pre_match_elo.batting_elo = dict(temp_elo.batting_elo)
             pre_match_elo.bowling_elo = dict(temp_elo.bowling_elo)
+            pre_match_elo.batting_exposure = dict(
+                temp_elo.batting_exposure
+            )
+            pre_match_elo.bowling_exposure = dict(
+                temp_elo.bowling_exposure
+            )
 
             # M2 + M3: compute lineup-aggregate features against
             # PRE-MATCH live trackers — same temporal semantics as
@@ -1190,6 +1225,14 @@ def materialize(
               f"{out_path.stat().st_size / 1e6:.1f} MB)")
     with (out_dir / "venue_identity.json").open("w") as handle:
         json.dump(venue_alias_contract(), handle, indent=2)
+    with (out_dir / "match_identity.json").open("w") as handle:
+        json.dump(identity_contract(), handle, indent=2)
+    with (out_dir / "elo_update.json").open("w") as handle:
+        json.dump(
+            elo_update_contract(elo_update_version),
+            handle,
+            indent=2,
+        )
 
     print(f"  dropped {n_dropped} matches with no valid winner / abandoned")
     return n_matches, counts
@@ -1217,10 +1260,24 @@ def main() -> int:
                     "test — matches with date > this value all see the "
                     "snapshot at this date+1, with no cross-match updates "
                     "during the test period. Default: None (no freeze).")
+    ap.add_argument(
+        "--elo-update-version",
+        choices=ELO_UPDATE_VERSIONS,
+        default=BASELINE_ELO_UPDATE_VERSION,
+        help="Versioned player-ELO update contract.",
+    )
     args = ap.parse_args()
 
     splits = dict(DEFAULT_SPLITS)
     source_dirs = [args.source_dir] + list(args.extra_source_dir)
+    if (
+        args.elo_update_version == PROVISIONAL_ELO_UPDATE_VERSION
+        and not args.version.startswith("i9")
+    ):
+        ap.error(
+            "I9 provisional ELO requires an isolated --version beginning "
+            "with 'i9'"
+        )
     print(f"Source dir(s): {source_dirs}")
     t0 = time.time()
     n_matches, counts = materialize(
@@ -1232,6 +1289,7 @@ def main() -> int:
         gender="male",
         metadata_csv=args.metadata_csv,
         freeze_trackers_after=args.freeze_trackers_after,
+        elo_update_version=args.elo_update_version,
     )
     dt = time.time() - t0
     print(f"\nDONE: {n_matches:,} matches → {args.out_dir} in {dt:.0f}s")

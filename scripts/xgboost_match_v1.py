@@ -11,8 +11,8 @@ Subcommands:
                     save model + encoders + feature_columns.txt, then
                     score the test split for sanity (no JSON written).
     predict-test  — score test.parquet, write
-                    models/xgb_match_v1/test_predictions.json keyed by
-                    match_id (synth format compatible with eval JSONs).
+                    models/xgb_match_v1/test_predictions.json keyed by the
+                    stable Cricsheet primary match ID.
     both          — run train then predict-test in one shot (default).
 """
 from __future__ import annotations
@@ -29,6 +29,18 @@ from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBClassifier
 
 from identity_maps import assert_venue_alias_contract, venue_alias_contract
+from elo_update import (
+    BASELINE_ELO_UPDATE_VERSION,
+    assert_elo_update_version,
+    elo_update_contract,
+    resolve_elo_update_version,
+)
+from match_identity import (
+    MATCH_IDENTITY_VERSION,
+    identity_contract,
+    legacy_identity_contract,
+    resolve_match_identity,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -36,7 +48,8 @@ ROOT = Path(__file__).resolve().parent.parent
 # team names, dates, target) and the categorical raw strings that are
 # label-encoded separately.
 METADATA_COLS = {
-    "match_id", "cricsheet_id", "match_date",
+    "match_id", "cricsheet_id", "display_match_id",
+    "match_identity_version", "elo_update_version", "match_date",
     "team1", "team2", "venue", "competition_tier",
     "team1_wins",
 }
@@ -140,7 +153,9 @@ _SWAP_ONE_MINUS = [
     "team1_batting_first", "team1_wins",
 ]
 _SWAP_INVARIANT = [
-    "match_id", "cricsheet_id", "match_date", "venue", "competition_tier",
+    "match_id", "cricsheet_id", "display_match_id",
+    "match_identity_version", "elo_update_version",
+    "match_date", "venue", "competition_tier",
     "venue_avg_score", "venue_chase_win_pct", "venue_dot_pct",
     "venue_boundary_pct", "is_international", "toss_decision_bat",
     "h2h_n_meetings",
@@ -251,6 +266,66 @@ def train_model(args) -> tuple:
     train = _load_split(data_dir, "train")
     val = _load_split(data_dir, "validation")
     test = _load_split(data_dir, "test")
+    match_identity_path = data_dir / "match_identity.json"
+    if match_identity_path.exists():
+        match_identity = json.loads(match_identity_path.read_text())
+        if match_identity != identity_contract():
+            raise RuntimeError(
+                f"{match_identity_path} has an unsupported match identity "
+                "contract"
+            )
+        for split_name, frame in (
+            ("train", train),
+            ("validation", val),
+            ("test", test),
+        ):
+            for row in frame[
+                [
+                    "match_id",
+                    "cricsheet_id",
+                    "display_match_id",
+                    "match_identity_version",
+                ]
+            ].to_dict("records"):
+                resolved = resolve_match_identity(row)
+                if resolved.version != MATCH_IDENTITY_VERSION:
+                    raise RuntimeError(
+                        f"{split_name} contains a legacy match identity "
+                        "under a Cricsheet-primary sidecar"
+                    )
+    else:
+        # Existing frozen materializations remain trainable for replay, but
+        # their model artifact is explicitly marked legacy.
+        match_identity = legacy_identity_contract()
+    elo_update_path = data_dir / "elo_update.json"
+    if elo_update_path.exists():
+        elo_update_metadata = json.loads(elo_update_path.read_text())
+    else:
+        elo_update_metadata = elo_update_contract(
+            BASELINE_ELO_UPDATE_VERSION
+        )
+    elo_update_version = resolve_elo_update_version(elo_update_metadata)
+    assert_elo_update_version(
+        elo_update_metadata,
+        expected=elo_update_version,
+        context="match training parquet",
+    )
+    if "elo_update_version" in train.columns:
+        for split_name, frame in (
+            ("train", train),
+            ("validation", val),
+            ("test", test),
+        ):
+            versions = set(frame["elo_update_version"].astype(str))
+            if versions != {elo_update_version}:
+                raise RuntimeError(
+                    f"{split_name} ELO update versions {sorted(versions)} "
+                    f"do not match sidecar {elo_update_version!r}"
+                )
+    elif elo_update_version != BASELINE_ELO_UPDATE_VERSION:
+        raise RuntimeError(
+            "provisional-ELO match parquet is missing row provenance"
+        )
 
     print(f"  train: {len(train):,}   val: {len(val):,}   test: {len(test):,}")
 
@@ -342,14 +417,21 @@ def train_model(args) -> tuple:
             "n_train": int(len(X_train)),
             "n_val": int(len(X_val)),
             "n_test": int(len(X_test)),
+            "seed": int(args.seed),
             "feature_importances": {
                 feat: float(imp)
                 for feat, imp in zip(feat_cols, model.feature_importances_)
             },
             "venue_identity": venue_alias_contract(),
+            "match_identity": match_identity,
+            "elo_update": elo_update_contract(elo_update_version),
         }, f, indent=2)
     with open(model_dir / "venue_identity.json", "w") as f:
         json.dump(venue_alias_contract(), f, indent=2)
+    with open(model_dir / "match_identity.json", "w") as f:
+        json.dump(match_identity, f, indent=2)
+    with open(model_dir / "elo_update.json", "w") as f:
+        json.dump(elo_update_contract(elo_update_version), f, indent=2)
     print(f"\n  saved → {model_dir}")
     return model, encoders, feat_cols
 
@@ -371,7 +453,28 @@ def predict_test(args, model=None, encoders=None, feat_cols=None) -> Path:
 
     predictions = {}
     for (_, row), p in zip(test.iterrows(), proba):
-        predictions[row["match_id"]] = {
+        identity = resolve_match_identity(row.to_dict())
+        if not identity.cricsheet_id:
+            raise ValueError(
+                "test prediction requires a Cricsheet ID; rematerialize "
+                "before writing a primary-keyed artifact"
+            )
+        if identity.primary_id in predictions:
+            raise ValueError(
+                "duplicate test prediction primary match ID: "
+                f"{identity.primary_id}"
+            )
+        predictions[identity.primary_id] = {
+            "match_id": identity.primary_id,
+            "cricsheet_id": identity.cricsheet_id,
+            "display_match_id": identity.display_id,
+            "match_identity_version": MATCH_IDENTITY_VERSION,
+            "elo_update_version": str(
+                row.get(
+                    "elo_update_version",
+                    BASELINE_ELO_UPDATE_VERSION,
+                )
+            ),
             "team1": row["team1"],
             "team2": row["team2"],
             "p_team1": float(p),

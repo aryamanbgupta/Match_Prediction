@@ -113,6 +113,14 @@ already-consumed 2026-06-01 to 2026-07-13 holdout remains frozen under its
 original identity strings and must not be rebuilt to retrofit this metadata.
 See `I7_VENUE_IDENTITY_CONTRACT.md`.
 
+For holdouts built after 2026-07-30, manifest schema 2 uses the Cricsheet file
+stem as `match_id` and also persists `cricsheet_id`, `display_match_id`, and
+`match_identity_version = cricsheet_primary_v1`. The root manifest and odds
+file both declare the match-identity contract. Primary IDs must be unique;
+display aliases may repeat and are never used to select between fixtures. The
+already-consumed schema-1 holdout remains frozen and is read through the
+legacy compatibility path. See `I15_MATCH_IDENTITY_CONTRACT.md`.
+
 ## Chronological feature state
 
 I6 completed this prerequisite on 2026-07-23. The later scoring workflow must

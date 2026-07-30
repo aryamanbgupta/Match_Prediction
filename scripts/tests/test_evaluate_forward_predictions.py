@@ -11,6 +11,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import evaluate_forward_predictions as evaluator_module  # noqa: E402
 from evaluate_forward_predictions import (  # noqa: E402
     betting_summary,
     build_evaluation_report,
@@ -343,9 +344,21 @@ def test_locked_prediction_checksum_and_report_write_once(tmp_path):
         )
 
 
-def test_draft_gate_precedes_prediction_or_outcome_reads(tmp_path):
+def test_preflight_gate_precedes_prediction_or_outcome_reads(
+    tmp_path,
+    monkeypatch,
+):
+    def _blocked_preflight(_path, *, require_frozen):
+        assert require_frozen is True
+        raise RuntimeError("synthetic preflight block")
+
+    monkeypatch.setattr(
+        evaluator_module,
+        "preflight",
+        _blocked_preflight,
+    )
     output = tmp_path / "must_not_exist.json"
-    with pytest.raises(RuntimeError, match="model scoring is blocked"):
+    with pytest.raises(RuntimeError, match="synthetic preflight block"):
         evaluate(
             PROTOCOL_PATH,
             tmp_path / "missing_m7.json",
@@ -356,5 +369,5 @@ def test_draft_gate_precedes_prediction_or_outcome_reads(tmp_path):
     assert not output.with_suffix(".json.sha256").exists()
 
 
-def test_current_protocol_remains_draft():
-    assert load_protocol(PROTOCOL_PATH)["status"] == "DRAFT"
+def test_consumed_protocol_remains_frozen():
+    assert load_protocol(PROTOCOL_PATH)["status"] == "FROZEN"

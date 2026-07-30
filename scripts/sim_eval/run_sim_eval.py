@@ -26,6 +26,7 @@ from sim_eval.eval_statistics import (
     DEFAULT_BOOTSTRAP_SEED,
     load_competition_clusters,
 )
+from match_identity import identity_contract
 
 
 def create_example_odds_file():
@@ -496,6 +497,7 @@ def main():
         
         # Convert results to JSON-serializable format
         results_dict = {
+            'match_identity': identity_contract(),
             'summary': {
                 'model_type': args.model_type,
                 'slice': slice_tag,
@@ -556,6 +558,9 @@ def main():
         for match in results.match_results:
             results_dict['matches'].append({
                 'match_id': match.match_id,
+                'cricsheet_id': match.cricsheet_id,
+                'display_match_id': match.display_match_id,
+                'match_identity_version': match.match_identity_version,
                 'teams': [match.team1, match.team2],
                 'actual_winner': match.actual_winner,
                 'simulated_prob': match.simulated_win_prob,

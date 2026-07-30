@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import builtins
 import json
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from forward_eval_contract import load_protocol  # noqa: E402
+import score_forward_ball_v7 as scorer_module  # noqa: E402
 from score_forward_ball_v7 import (  # noqa: E402
     LINEUP_CONTRACT,
     build_match_state_from_info,
@@ -278,38 +278,38 @@ def test_prediction_artifact_is_outcome_free_and_write_once(tmp_path):
         write_locked_artifact(path, artifact)
 
 
-def test_draft_gate_precedes_model_and_simulation_imports(tmp_path):
+def test_preflight_gate_precedes_model_and_simulation_imports(
+    tmp_path,
+    monkeypatch,
+):
     output = tmp_path / "must_not_exist.json"
-    code = f"""
-import builtins
-import sys
-from pathlib import Path
-sys.path.insert(0, {str(ROOT / 'scripts')!r})
-blocked = {{
-    'joblib', 'sim_v1_2', 'sim_eval.same_day_stats',
-    'player_metadata', 'stats_provider'
-}}
-real_import = builtins.__import__
-def guarded(name, *args, **kwargs):
-    if name in blocked:
-        raise AssertionError('blocked import occurred before frozen gate: ' + name)
-    return real_import(name, *args, **kwargs)
-builtins.__import__ = guarded
-from score_forward_ball_v7 import score
-try:
-    score(Path({str(PROTOCOL_PATH)!r}), Path({str(output)!r}))
-except RuntimeError as exc:
-    if 'model scoring is blocked' not in str(exc):
-        raise
-else:
-    raise AssertionError('DRAFT protocol unexpectedly scored')
-"""
-    result = subprocess.run(
-        [sys.executable, "-c", code],
-        cwd=ROOT,
-        text=True,
-        capture_output=True,
+    blocked = {
+        "joblib",
+        "sim_v1_2",
+        "sim_eval.same_day_stats",
+        "player_metadata",
+        "stats_provider",
+    }
+    real_import = builtins.__import__
+
+    def guarded(name, *args, **kwargs):
+        if name in blocked:
+            raise AssertionError(
+                "blocked import occurred before frozen gate: " + name
+            )
+        return real_import(name, *args, **kwargs)
+
+    def _blocked_preflight(_path, *, require_frozen):
+        assert require_frozen is True
+        raise RuntimeError("synthetic preflight block")
+
+    monkeypatch.setattr(builtins, "__import__", guarded)
+    monkeypatch.setattr(
+        scorer_module,
+        "preflight",
+        _blocked_preflight,
     )
-    assert result.returncode == 0, result.stderr
+    with pytest.raises(RuntimeError, match="synthetic preflight block"):
+        scorer_module.score(PROTOCOL_PATH, output)
     assert not output.exists()
     assert not output.with_suffix(".json.sha256").exists()

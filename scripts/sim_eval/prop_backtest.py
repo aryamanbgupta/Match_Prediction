@@ -926,7 +926,10 @@ def main():
     for i, fp in enumerate(files):
         with open(fp) as f:
             data = json.load(f)
-        match_id, state = loader._create_match_state(data)
+        match_id, state = loader._create_match_state(
+            data,
+            cricsheet_id=fp.stem,
+        )
         if state is None:
             print(f"  [{i+1}/{len(files)}] SKIP (could not build state): {fp.name}")
             continue
@@ -942,6 +945,9 @@ def main():
         sim_agg = aggregate_per_player(state, sims)
         actuals = compute_actuals(data)
         obs = build_observations(match_id, sim_agg, actuals)
+        obs["cricsheet_id"] = fp.stem
+        obs["display_match_id"] = state.display_match_id
+        obs["match_identity_version"] = state.match_identity_version
         detail.append(obs)
 
         elapsed = time.time() - t0

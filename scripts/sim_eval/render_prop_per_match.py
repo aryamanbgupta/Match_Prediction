@@ -59,11 +59,12 @@ def _ou_hit(rows: List[dict]) -> bool:
 
 def render_match(match_obs: dict) -> str:
     mid = match_obs["match_id"]
+    display_mid = match_obs.get("display_match_id") or mid
     obs = match_obs["obs"]
-    date, header = _parse_match_id(mid)
+    date, header = _parse_match_id(display_mid)
 
     L: List[str] = []
-    L.append(f"# {mid}")
+    L.append(f"# {display_mid}")
     L.append("")
     L.append(f"**Date**: {date}    **Match**: {header}")
     L.append("")
@@ -201,7 +202,8 @@ def render_index(all_matches: List[dict]) -> str:
     L.append("|---|:---:|:---:|:---:|")
     for d in all_matches:
         mid = d["match_id"]
-        date, _ = _parse_match_id(mid)
+        display_mid = d.get("display_match_id") or mid
+        date, _ = _parse_match_id(display_mid)
         # Per-team correctness for binary picks.
         tb = defaultdict(list)
         for r in d["obs"].get("top_batter", []):
@@ -220,7 +222,7 @@ def render_index(all_matches: List[dict]) -> str:
         runs = d["obs"].get("innings_runs_ou_170_5", [])
         runs_correct = sum(1 for r in runs if (r["p"] > 0.5) == bool(r["y"]))
         L.append(
-            f"| [{mid}]({mid}.md) | {tb_hits}/{len(tb)} | "
+            f"| [{display_mid}]({mid}.md) | {tb_hits}/{len(tb)} | "
             f"{bw_hits}/{len(bw)} | {runs_correct}/{len(runs)} |"
         )
     L.append("")

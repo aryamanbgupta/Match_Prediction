@@ -35,6 +35,8 @@ from reslice_eval_json import (  # noqa: E402
     SLICE_NAMES,
     _bootstrap_ci,
     _load_feature_lookup,
+    _load_odds_volume_lookup,
+    _lookup_for_match,
     _slice_predicate,
 )
 from eval_statistics import (  # noqa: E402
@@ -59,7 +61,7 @@ def _match_year_month(match: dict, feat_row: dict) -> Optional[str]:
     d = feat_row.get("match_date")
     if d is not None:
         return str(d)[:7]
-    mid = match.get("match_id", "")
+    mid = match.get("display_match_id") or match.get("match_id", "")
     m = _DATE_RE.match(mid)
     return f"{m.group(1)}-{m.group(2)}" if m else None
 
@@ -75,9 +77,7 @@ def walk_forward(eval_json_path: str, odds_json_path: str,
     """Group matches by YYYY-MM and recompute per-month stats."""
     eval_data = json.load(open(eval_json_path))
     odds_data = json.load(open(odds_json_path))
-    vol_by_id = {canonicalize_match_id(m["match_id"]):
-                 m.get("polymarket_volume_usd")
-                 for m in odds_data.get("matches", [])}
+    vol_by_id = _load_odds_volume_lookup(odds_data)
     feat_lookup = _load_feature_lookup(feature_parquet)
     predicate = _slice_predicate(slice_name, mismatch_thresh, close_thresh)
     if cluster_source_dir is None:
@@ -96,10 +96,10 @@ def walk_forward(eval_json_path: str, odds_json_path: str,
         match = dict(raw_match)
         match["match_id"] = canonicalize_match_id(match["match_id"])
         if min_volume is not None:
-            vol = vol_by_id.get(match["match_id"])
+            vol = _lookup_for_match(vol_by_id, match)
             if vol is None or vol < min_volume:
                 continue
-        feat = feat_lookup.get(match["match_id"], {})
+        feat = _lookup_for_match(feat_lookup, match, {})
         if not predicate(match, feat):
             continue
         ym = _match_year_month(match, feat)

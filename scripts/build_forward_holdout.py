@@ -45,11 +45,9 @@ from typing import Iterable
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from build_polymarket_odds import (  # noqa: E402
-    TEAM_NAME_MAP,
-    build_match_id,
-)
+from build_polymarket_odds import TEAM_NAME_MAP  # noqa: E402
 from identity_maps import canonicalize_venue, venue_alias_contract  # noqa: E402
+from match_identity import identity_contract, new_match_identity  # noqa: E402
 
 DEFAULT_ZIP_DIR = Path(
     "/Users/aryamangupta/Projects/stat-generator/data/cricsheet"
@@ -627,12 +625,16 @@ def build(args: argparse.Namespace) -> dict:
     for record in selected_records:
         row = selected[record.cricsheet_id]
         price_for_team1, price_for_team2 = _aligned_prices(row, record)
-        match_id = build_match_id(
-            record.date, record.teams[0], record.teams[1], record.venue
+        match_identity = new_match_identity(
+            record.cricsheet_id,
+            date_text=record.date,
+            team1=record.teams[0],
+            team2=record.teams[1],
+            venue=record.venue,
         )
         odds_entries.append(
             {
-                "match_id": match_id,
+                **match_identity.as_fields(),
                 "date": record.date,
                 "team1": record.teams[0],
                 "team2": record.teams[1],
@@ -659,8 +661,7 @@ def build(args: argparse.Namespace) -> dict:
         )
         manifest_matches.append(
             {
-                "match_id": match_id,
-                "cricsheet_id": record.cricsheet_id,
+                **match_identity.as_fields(),
                 "date": record.date,
                 "teams": list(record.teams),
                 "venue": record.venue,
@@ -683,6 +684,7 @@ def build(args: argparse.Namespace) -> dict:
     odds_blob = {
         "source": "polymarket_strict",
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "match_identity": identity_contract(),
         "total_matches": len(odds_entries),
         "filters": {
             "min_volume_usd": args.min_volume,
@@ -697,9 +699,10 @@ def build(args: argparse.Namespace) -> dict:
         "venue_identity": venue_alias_contract(),
     }
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "purpose": "sealed forward audit; terminal evaluation only",
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "match_identity": identity_contract(),
         "venue_identity": venue_alias_contract(),
         "model_scoring_performed": False,
         "holdout_window": {"start": args.start, "end": args.end},

@@ -180,6 +180,15 @@ def _validate_prediction_identity(
             f"{model_id} fixture identity/team order mismatch: "
             f"{actual!r} != {expected!r}"
         )
+    if manifest_row.get("display_match_id") and (
+        str(row.get("display_match_id"))
+        != str(manifest_row.get("display_match_id"))
+        or str(row.get("match_identity_version"))
+        != str(manifest_row.get("match_identity_version"))
+    ):
+        raise RuntimeError(
+            f"{model_id} match-identity contract mismatch"
+        )
 
 
 def join_evaluation_rows(
@@ -249,6 +258,15 @@ def join_evaluation_rows(
                 f"odds identity/team order mismatch: "
                 f"{odds_identity!r} != {expected_odds_identity!r}"
             )
+        if manifest_row.get("display_match_id") and (
+            str(odds_row.get("cricsheet_id"))
+            != str(manifest_row.get("cricsheet_id"))
+            or str(odds_row.get("display_match_id"))
+            != str(manifest_row.get("display_match_id"))
+            or str(odds_row.get("match_identity_version"))
+            != str(manifest_row.get("match_identity_version"))
+        ):
+            raise RuntimeError("odds match-identity contract mismatch")
 
         decimal_odds, market_probability = _market_probabilities(
             odds_row,
@@ -272,6 +290,12 @@ def join_evaluation_rows(
         record = {
             "match_id": match_id,
             "cricsheet_id": str(manifest_row["cricsheet_id"]),
+            **({
+                "display_match_id": str(manifest_row["display_match_id"]),
+                "match_identity_version": str(
+                    manifest_row["match_identity_version"]
+                ),
+            } if manifest_row.get("display_match_id") else {}),
             "date": str(manifest_row["date"]),
             "teams": teams,
             "team1": teams[0],

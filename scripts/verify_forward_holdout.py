@@ -18,6 +18,12 @@ import hashlib
 import json
 from pathlib import Path
 
+from match_identity import (
+    build_primary_lookup,
+    identity_contract,
+    resolve_match_identity,
+)
+
 ROOT = Path(__file__).resolve().parent.parent
 EXISTING_EVALUATED_DIRS = (
     ROOT / "data" / "t20s_json",
@@ -69,6 +75,12 @@ def verify(dataset_dir: Path) -> dict:
     manifest = _load_json(dataset_dir / "manifest.json")
     integrity = _load_json(dataset_dir / "integrity_report.json")
     odds = _load_json(dataset_dir / "betting_odds.json")
+    if int(manifest.get("schema_version", 1)) >= 2:
+        expected_identity = identity_contract()
+        if manifest.get("match_identity") != expected_identity:
+            raise RuntimeError("manifest match-identity contract mismatch")
+        if odds.get("match_identity") != expected_identity:
+            raise RuntimeError("odds match-identity contract mismatch")
 
     if manifest.get("model_scoring_performed") is not False:
         raise RuntimeError("manifest does not attest model_scoring_performed=false")
@@ -99,6 +111,15 @@ def verify(dataset_dir: Path) -> dict:
         raise RuntimeError("duplicate Cricsheet ID in manifest")
     if len(set(market_ids)) != len(market_ids):
         raise RuntimeError("duplicate Polymarket market ID in manifest")
+    if int(manifest.get("schema_version", 1)) >= 2:
+        try:
+            build_primary_lookup(manifest_rows, context="holdout manifest")
+            for row in manifest_rows:
+                identity = resolve_match_identity(row)
+                if identity.primary_id != str(row["cricsheet_id"]):
+                    raise ValueError("primary ID differs from Cricsheet ID")
+        except ValueError as exc:
+            raise RuntimeError(f"invalid manifest match identity: {exc}") from exc
 
     selected_dir = dataset_dir / "polymarket_test"
     selected_files = {path.stem: path for path in selected_dir.glob("*.json")}
@@ -113,6 +134,16 @@ def verify(dataset_dir: Path) -> dict:
     odds_rows = odds.get("matches") or []
     if odds.get("total_matches") != expected_count or len(odds_rows) != expected_count:
         raise RuntimeError("betting_odds count does not match manifest")
+    if int(manifest.get("schema_version", 1)) >= 2:
+        try:
+            odds_by_id = build_primary_lookup(
+                odds_rows,
+                context="holdout odds",
+            )
+        except ValueError as exc:
+            raise RuntimeError(f"invalid odds match identity: {exc}") from exc
+        if set(odds_by_id) != set(cricsheet_ids):
+            raise RuntimeError("odds primary IDs do not match Cricsheet IDs")
     for row in manifest_rows:
         cricsheet_id = str(row["cricsheet_id"])
         selected_path = selected_files[cricsheet_id]

@@ -37,6 +37,8 @@ from identity_maps import canonicalize_match_id  # noqa: E402
 from reslice_eval_json import (  # noqa: E402
     _bootstrap_ci,
     _load_feature_lookup,
+    _load_odds_volume_lookup,
+    _lookup_for_match,
     _slice_predicate,
     SLICE_NAMES,
 )
@@ -121,10 +123,10 @@ def evaluate(matches: List[dict], vol_by_id: Dict[str, Optional[float]],
     cluster_metadata_coverage = 0
     for match in matches:
         if min_volume is not None:
-            vol = vol_by_id.get(match["match_id"])
+            vol = _lookup_for_match(vol_by_id, match)
             if vol is None or vol < min_volume:
                 continue
-        feat = feat_lookup.get(match["match_id"], {})
+        feat = _lookup_for_match(feat_lookup, match, {})
         if not predicate(match, feat):
             continue
         n_eligible += 1
@@ -223,9 +225,7 @@ def main() -> int:
     ]
     with open(args.odds) as f:
         odds_data = json.load(f)
-    vol_by_id = {canonicalize_match_id(m["match_id"]):
-                 m.get("polymarket_volume_usd")
-                 for m in odds_data.get("matches", [])}
+    vol_by_id = _load_odds_volume_lookup(odds_data)
     feat_lookup = (_load_feature_lookup(args.feature_parquet)
                    if args.feature_parquet else {})
     cluster_lookup = (

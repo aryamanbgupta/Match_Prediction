@@ -24,6 +24,9 @@ DEFAULT_BOOTSTRAP_SEED = 42
 DEFAULT_BOOTSTRAP_RESAMPLES = 10_000
 MAX_EVENT_GAP_DAYS = 120
 MIN_RECOMMENDED_CLUSTERS = 10
+# Sentinel for a display alias shared by a same-day doubleheader: clustering
+# through such an alias is ambiguous and must fail loudly at use.
+AMBIGUOUS_CLUSTER_ALIAS = "__ambiguous_doubleheader_alias__"
 _DATE_PREFIX = re.compile(r"^(\d{4})-(\d{2})-(\d{2})(?:_|$)")
 
 
@@ -99,12 +102,13 @@ def load_competition_clusters(source_dir: Path | str) -> dict[str, str]:
     source = Path(source_dir)
     if not source.is_dir():
         raise FileNotFoundError(source)
-    records: list[tuple[str, str, datetime]] = []
+    records: list[tuple[str, str, str, datetime]] = []
     for path in sorted(source.glob("*.json")):
         try:
             payload = json.loads(path.read_text())
             info = payload["info"]
-            match_id = match_id_from_info(info)
+            primary_id = path.stem
+            display_id = match_id_from_info(info)
             teams = [str(team) for team in (info.get("teams") or [])]
             event = info.get("event") or {}
             event_name = (
@@ -115,19 +119,21 @@ def load_competition_clusters(source_dir: Path | str) -> dict[str, str]:
             elif len(teams) == 2:
                 identity = "pair:" + "|".join(sorted(teams))
             else:
-                identity = f"match:{match_id}"
+                identity = f"match:{primary_id}"
             match_date = datetime.strptime(
                 str(info["dates"][0]),
                 "%Y-%m-%d",
             )
         except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
             continue
-        records.append((match_id, identity, match_date))
+        records.append((primary_id, display_id, identity, match_date))
 
     lookup: dict[str, str] = {}
     by_identity: dict[str, list[tuple[str, datetime]]] = defaultdict(list)
-    for match_id, identity, match_date in records:
-        by_identity[identity].append((match_id, match_date))
+    display_ids: dict[str, list[str]] = defaultdict(list)
+    for primary_id, display_id, identity, match_date in records:
+        by_identity[identity].append((primary_id, match_date))
+        display_ids[display_id].append(primary_id)
     for identity, members in sorted(by_identity.items()):
         block_start: Optional[datetime] = None
         previous_date: Optional[datetime] = None
@@ -151,6 +157,16 @@ def load_competition_clusters(source_dir: Path | str) -> dict[str, str]:
                 )
             lookup[match_id] = cluster_id
             previous_date = match_date
+    # Frozen eval JSONs carry display IDs. Preserve compatibility only where
+    # that alias resolves to exactly one Cricsheet primary; doubleheader
+    # aliases map to a sentinel so a join through them fails loudly in
+    # cluster_id_for_record instead of silently landing in the team-pair
+    # fallback block.
+    for display_id, primary_ids in display_ids.items():
+        if len(primary_ids) == 1:
+            lookup[display_id] = lookup[primary_ids[0]]
+        elif display_id not in lookup:
+            lookup[display_id] = AMBIGUOUS_CLUSTER_ALIAS
     return lookup
 
 
@@ -163,9 +179,26 @@ def cluster_id_for_record(
         explicit = _field(record, "cluster_id")
     if explicit:
         return str(explicit)
-    match_id = str(_field(record, "match_id", "unknown"))
-    if cluster_lookup and match_id in cluster_lookup:
-        return str(cluster_lookup[match_id])
+    identity_keys = [
+        str(value) for value in (
+            _field(record, "match_id"),
+            _field(record, "cricsheet_id"),
+            _field(record, "display_match_id"),
+        )
+        if value
+    ]
+    if cluster_lookup:
+        for match_id in identity_keys:
+            if match_id in cluster_lookup:
+                cluster = str(cluster_lookup[match_id])
+                if cluster == AMBIGUOUS_CLUSTER_ALIAS:
+                    raise RuntimeError(
+                        f"match alias {match_id!r} is shared by a same-day "
+                        "doubleheader; a competition cluster cannot be "
+                        "assigned through it — re-key the eval artifact "
+                        "with Cricsheet primary IDs"
+                    )
+                return cluster
     return fallback_competition_cluster(record)
 
 
