@@ -68,6 +68,7 @@ def main() -> int:
     print()
 
     total_copied = 0
+    total_skipped_excluded = 0
     total_skipped_already = 0
     total_skipped_in_local = 0
     total_skipped_format = 0
@@ -145,6 +146,7 @@ def main() -> int:
             "skipped_error": skipped_error,
         }
         total_copied += copied
+        total_skipped_excluded += skipped_excluded
         total_skipped_in_local += skipped_local
         total_skipped_already += skipped_already
         total_skipped_format += skipped_format
@@ -152,17 +154,19 @@ def main() -> int:
         total_skipped_date += skipped_date
         total_skipped_error += skipped_error
 
-    print(f"{'zip':<18} {'copied':>7} {'in_local':>9} {'already':>8} "
-          f"{'non_t20':>8} {'non_male':>9} {'pre_cut':>8} {'error':>6}")
+    print(f"{'zip':<18} {'copied':>7} {'excluded':>9} {'in_local':>9} "
+          f"{'already':>8} {'non_t20':>8} {'non_male':>9} {'pre_cut':>8} "
+          f"{'error':>6}")
     for z, s in per_zip_stats.items():
-        print(f"{z:<18} {s['copied']:>7} {s['skipped_in_local_pool']:>9} "
-              f"{s['skipped_already_in_golden']:>8} {s['skipped_non_t20']:>8} "
-              f"{s['skipped_non_male']:>9} {s['skipped_pre_cutoff']:>8} "
-              f"{s['skipped_error']:>6}")
-    print(f"{'TOTAL':<18} {total_copied:>7} {total_skipped_in_local:>9} "
-          f"{total_skipped_already:>8} {total_skipped_format:>8} "
-          f"{total_skipped_gender:>9} {total_skipped_date:>8} "
-          f"{total_skipped_error:>6}")
+        print(f"{z:<18} {s['copied']:>7} {s['skipped_excluded_pool']:>9} "
+              f"{s['skipped_in_local_pool']:>9} "
+              f"{s['skipped_already_in_golden']:>8} "
+              f"{s['skipped_non_t20']:>8} {s['skipped_non_male']:>9} "
+              f"{s['skipped_pre_cutoff']:>8} {s['skipped_error']:>6}")
+    print(f"{'TOTAL':<18} {total_copied:>7} {total_skipped_excluded:>9} "
+          f"{total_skipped_in_local:>9} {total_skipped_already:>8} "
+          f"{total_skipped_format:>8} {total_skipped_gender:>9} "
+          f"{total_skipped_date:>8} {total_skipped_error:>6}")
     print()
     if args.dry_run:
         print(f"Dry run; would copy {total_copied} files into {GOLDEN_POOL}")
