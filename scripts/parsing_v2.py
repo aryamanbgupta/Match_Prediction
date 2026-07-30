@@ -170,7 +170,16 @@ class PlayerEloTracker:
         return int(self.bowling_exposure.get(player_id, 0))
 
     def update(self, batter_id, bowler_id, runs, is_wicket, k_factor=None):
-        """Update ELO after a ball."""
+        """Update ELO after a ball.
+
+        I9 exposure advances exactly when this method runs. That matches
+        rehydration in BOTH delivery semantics: under legacy semantics the
+        batting/bowling ``balls`` counters are inclusive of extras (the
+        legacy stats path never passes ``is_legal``), and under i5
+        semantics both this update and the counters are legal-only.
+        Verified by the extras-bearing parity test in
+        test_i9_provisional_elo.py.
+        """
         k = k_factor if k_factor is not None else self.DEFAULT_K_FACTOR
         batting_k = self.effective_k_factor(
             k,

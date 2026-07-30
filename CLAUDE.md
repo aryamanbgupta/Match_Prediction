@@ -67,12 +67,12 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
 
    **The Hundred (2026-07-27)**: the match model runs on 100-ball fixtures
    via `--tracker-aux-dir` / `--team-aliases` / `--state-version`
-   (`docs/OPERATIONS.md` § "Operation 7"). It picks the winner 63.5% of the
-   time over 159 historical Hundred matches (p = 0.0004 i.i.d.; both figures
-   qualified by the alias-fold and season-correlation caveats in the
-   report's "Known limitations" — season-block sign test p ≈ 0.03) but its
-   probabilities compress into 0.37–0.62 (mean |p−0.5| 0.034 vs 0.105 on a
-   401-match T20 control), so LL 0.6829 vs coinflip 0.6931, and it lands
+   (`docs/OPERATIONS.md` § "Operation 7"). After the 2026-07-30 alias
+   copy-fold fix and rerun, it picks the winner **61.0%** of the time over
+   159 historical Hundred matches (i.i.d. p = 0.0034; season-block sign
+   test p ≈ 0.03 — see the report's "Known limitations") but its
+   probabilities compress into 0.37–0.62 (mean |p−0.5| 0.036 vs 0.105 on a
+   401-match T20 control), so LL 0.6795 vs coinflip 0.6931, and it lands
    within ~3pp of the Polymarket line on every 2026 fixture. **Directional
    lean only — no edge, no betting.** The Hundred path deliberately uses
    `models/xgb_match_i7` with `--venue-identity-mode i7` and a matching

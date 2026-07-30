@@ -264,30 +264,44 @@ def merge_team_aliases(form: "TeamFormTracker", h2h: "H2HTracker",
     are continuity of the same league slot under a new label. Tracker state
     is keyed by team name, so without this the renamed side looks like an
     expansion team with no form, no head-to-head and no home ground.
+
+    Old-name records are COPIED to the new name, never moved: fixtures
+    dated before the rebrand still query the historical name, and stripping
+    its records (the pre-2026-07-30 pop-fold) silently served neutral form,
+    zero H2H, and no home flag to every pre-rename backtest fixture
+    involving a renamed side. Per-name queries never sum both labels, so
+    retaining the old records cannot double-count.
     """
     if not aliases:
         return
     for old, new in aliases.items():
+        if old == new:
+            continue
         if old in form.records:
             form.records[new] = sorted(
-                list(form.records.get(new, [])) + list(form.records.pop(old)),
+                list(form.records.get(new, [])) + list(form.records[old]),
                 key=lambda rec: rec[0],
             )
     for key in [k for k in h2h.records if k & set(aliases)]:
-        recs = h2h.records.pop(key)
         new_key = frozenset(aliases.get(team, team) for team in key)
-        if len(new_key) < 2:  # both sides folded onto one name; drop
+        if new_key == key:
             continue
-        remapped = [(when, aliases.get(winner, winner)) for when, winner in recs]
+        if len(new_key) < 2:  # both sides folded onto one name; skip copy
+            continue
+        remapped = [
+            (when, aliases.get(winner, winner))
+            for when, winner in h2h.records[key]
+        ]
         h2h.records[new_key] = sorted(
             list(h2h.records.get(new_key, [])) + remapped,
             key=lambda rec: rec[0],
         )
     for key in [k for k in home.records if k[0] in aliases]:
-        dates = home.records.pop(key)
         new_key = (aliases[key[0]], key[1])
+        if new_key == key:
+            continue
         home.records[new_key] = sorted(
-            list(home.records.get(new_key, [])) + list(dates)
+            list(home.records.get(new_key, [])) + list(home.records[key])
         )
 
 

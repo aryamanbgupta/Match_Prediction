@@ -281,10 +281,16 @@ def test_team_aliases_fold_renamed_franchise_history(tmp_path: Path):
                                     team_aliases=aliases)
     as_of = datetime(2026, 6, 10)
     assert form.get_last_n_win_rate("New Name", as_of) == (0.5, 2)
-    assert form.get_last_n_win_rate("Old Name", as_of) == (0.5, 0)
+    # Copy-fold (2026-07-30): pre-rename fixtures query the OLD name and
+    # must still see its history — the earlier pop-fold zeroed it and
+    # silently handicapped every pre-rename backtest fixture.
+    assert form.get_last_n_win_rate("Old Name", as_of) == (0.5, 2)
     rate, meetings = h2h.get_h2h("New Name", "Rival", as_of)
     assert meetings == 2 and rate == pytest.approx(0.5)
+    old_rate, old_meetings = h2h.get_h2h("Old Name", "Rival", as_of)
+    assert old_meetings == 2 and old_rate == pytest.approx(0.5)
     assert home.records[("New Name", "Kennington Oval, London")]
+    assert home.records[("Old Name", "Kennington Oval, London")]
 
 
 @pytest.fixture(autouse=True)

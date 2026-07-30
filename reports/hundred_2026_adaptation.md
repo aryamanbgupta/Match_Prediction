@@ -244,19 +244,22 @@ what makes a 175-match backtest through the live code path practical.
 Three caveats qualify the numbers above; none changes the no-edge verdict,
 but the exact headline figures should not be quoted without them.
 
-1. **The alias fold handicapped the historical backtest.** The 2026
-   team-alias merge `pop()`s each renamed franchise's records out of the
-   form/H2H/home trackers and re-keys them under the 2026 name. Correct for
-   2026 fixtures — but the 2021–2025 backtest matches are keyed by the
-   *old* names, so 99 of the 159 headline matches involving Oval
-   Invincibles, Northern Superchargers, or Manchester Originals were scored
-   with neutral form, zero H2H, and no home flag on at least one side. The
-   headline 63.5% / p = 0.0004 / LL 0.6829 (and the trackers-A/B) therefore
-   measured a partially handicapped configuration, direction of the bias
-   unknown. The 60 unaffected matches still show the compression
-   (mean |p−0.5| 0.036 vs 0.105 T20 control) and 60% accuracy, so the
-   qualitative finding stands. A rerun needs a date-aware fold (aliases
-   applied only from each rebrand date) before the exact numbers are quoted.
+1. **The alias fold handicapped the historical backtest — FIXED and rerun
+   (2026-07-30).** The original 2026 team-alias merge `pop()`ed each
+   renamed franchise's records out of the form/H2H/home trackers, so 99 of
+   the 159 historical matches were scored with neutral form, zero H2H, and
+   no home flag on at least one side. `merge_team_aliases` is now a
+   **copy-fold** (old-name records retained for pre-rename queries; 2026
+   fixtures unchanged), and the backtest was rerun
+   (`eval_out/hundred/backtest_final_pre_toss_datefold.json`). Corrected
+   2021–2025 numbers: **97/159 = 61.0%** (was 101/159 = 63.5%), LL
+   **0.6763** (was 0.6799 on the same recompute), mean |p−0.5| 0.0358,
+   i.i.d. binomial p **0.0034** (was 0.0004). Rows with a neutral-form side
+   drop 124 → 62; the remainder are genuine no-history cases (season
+   openers). So the handicap had been *inflating* directional accuracy
+   while slightly worsening log loss; every conclusion — directional lean,
+   heavy compression, no edge — survives with the corrected, less
+   dramatic headline. The 2026 rows are identical under either fold.
 2. **The pooled p-value assumes independence it doesn't have.** 159 matches
    from five seasons of the same eight teams are not i.i.d. Bernoulli
    trials — the same correlation concern I3 codified for ROI. A
@@ -277,10 +280,10 @@ but the exact headline figures should not be quoted without them.
 ## Verdict
 
 The pipeline adapts to The Hundred cleanly, and the adaptation is honest about
-what it produces: a directional lean that has been right ~63% of the time
-across five seasons (subject to caveats 1–2 above), expressed as
-probabilities so close to 50% that they carry
-almost no information beyond that lean. There is no edge to bet, no
+what it produces: a directional lean that has been right **61%** of the time
+across five seasons (corrected rerun, caveat 1; season-block sign test
+p ≈ 0.03 per caveat 2), expressed as probabilities so close to 50% that
+they carry almost no information beyond that lean. There is no edge to bet, no
 disagreement with the market worth acting on, and eight matches of 2026 (3/8,
 market also 3/7) neither confirm nor refute anything.
 

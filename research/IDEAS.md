@@ -580,14 +580,14 @@ table `research/reports/auto/B4_pricing.md`; numbers
 shown weak in the tail → B9 appended (usage-share baseline re-test). Kept
 `74856a6`+`b387cbb`. See `research/reports/auto/B4.md`.
 
-## B5 [P2] [STALE-RUNNING — SUPERVISED RELAY NEEDED (flagged 2026-07-30)] In-play over/under quote prototype (analytics-engine seed)
-**Status note (2026-07-30 review):** claimed `d97d4ab` + implemented
-`26a7fd9` on 2026-07-23, but the eval died at session limits (night.log
-iters 26–31) and no verdict/tsv row/report exists. The harness
-`scripts/auto/b5_inplay_quotes.py` has since been modified by the I15
-match-identity work, so a relay must re-verify the pre-committed gate
-against the current code, or revert and record CRASH. Do not treat as
-RUNNING; do not silently re-run without acknowledging the harness drift.
+## B5 [P2] [PENDING] In-play over/under quote prototype (analytics-engine seed)
+**Resolution (2026-07-30):** the stale 2026-07-23 RUNNING claim was closed
+with a supervised CRASH row in `results.tsv` (eval died at session limits;
+no result ever produced). The additive harness
+(`scripts/auto/b5_{inplay_quotes,gate_analysis,unit_check}.py`) is kept,
+but it was I15-compat-patched after implementation, so the old claim is
+void: a fresh claim must re-run `b5_unit_check` and re-verify the
+pre-committed gate against current code before any eval.
 **Hypothesis:** `models/inplay_winprob_v1` (P(win|state)) + the calibrated sim
 (score distributions from any mid-innings state) can produce live over/under
 quotes for remaining-innings runs. Feasibility prototype: quote quality

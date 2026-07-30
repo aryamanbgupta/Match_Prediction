@@ -223,3 +223,73 @@ def test_cache_rehydration_matches_uninterrupted_same_day_state(
             version="i9",
             required_elo_update_version=BASELINE_ELO_UPDATE_VERSION,
         )
+
+
+def test_exposure_parity_holds_on_extras_bearing_matches(tmp_path: Path):
+    """Extras-bearing parity pin (2026-07-30): under legacy semantics BOTH
+    the live update (fires on every delivery) and the rehydration seed (the
+    ``balls`` counters, which the legacy stats path counts inclusive of
+    extras) include wides — so exposure is consistent at 2 here, not 1.
+    A 2026-07-30 review note claimed these two paths diverged on extras;
+    writing this test refuted that claim, and it now pins the verified
+    contract so the question stays settled."""
+    match = _match("2026-01-01", runs=4)
+    deliveries = match["innings"][0]["overs"][0]["deliveries"]
+    deliveries.insert(0, {
+        "batter": "Alice",
+        "non_striker": "Beth",
+        "bowler": "Cara",
+        "runs": {"batter": 0, "extras": 1, "total": 1},
+        "extras": {"wides": 1},
+    })
+    source = tmp_path / "json"
+    source.mkdir()
+    (source / "100.json").write_text(json.dumps(match))
+    # A next-day match creates the 2026-01-02 snapshot (which reflects only
+    # matches strictly before it, i.e. the wide-bearing match above).
+    (source / "300.json").write_text(
+        json.dumps(_match("2026-01-02", runs=1))
+    )
+    output = tmp_path / "player_stats_cache_i9.sqlite"
+    build(
+        source,
+        output,
+        gender="male",
+        metadata_csv=ROOT / "data" / "all_players_enriched.csv",
+        elo_update_version=PROVISIONAL_ELO_UPDATE_VERSION,
+    )
+
+    provider = StatsProvider(
+        str(tmp_path),
+        version="i9",
+        required_elo_update_version=PROVISIONAL_ELO_UPDATE_VERSION,
+    )
+    rehydrated = rehydrate_elo_tracker(
+        provider,
+        "2026-01-02",
+        {"p_alice", "p_cara"},
+        elo_update_version=PROVISIONAL_ELO_UPDATE_VERSION,
+    )
+
+    # Live chronological pass under legacy semantics: the wide (team run 1)
+    # updates ratings AND exposure, exactly like the rehydration counters.
+    uninterrupted = PlayerEloTracker(PROVISIONAL_ELO_UPDATE_VERSION)
+    uninterrupted.update("p_alice", "p_cara", 1, False, k_factor=1.0)
+    uninterrupted.update("p_alice", "p_cara", 4, False, k_factor=1.0)
+
+    assert uninterrupted.batting_exposure["p_alice"] == 2
+    assert uninterrupted.bowling_exposure["p_cara"] == 2
+    assert rehydrated.batting_exposure["p_alice"] == 2
+    assert rehydrated.bowling_exposure["p_cara"] == 2
+    assert math.isclose(
+        rehydrated.batting_elo["p_alice"],
+        uninterrupted.batting_elo["p_alice"],
+        rel_tol=0.0,
+        abs_tol=0.0,
+    )
+    assert math.isclose(
+        rehydrated.bowling_elo["p_cara"],
+        uninterrupted.bowling_elo["p_cara"],
+        rel_tol=0.0,
+        abs_tol=0.0,
+    )

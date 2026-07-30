@@ -113,22 +113,20 @@ The candidate was worse at every seed, so the direct guardrail failed.
 The exact recipe and CLI commands are in
 `docs/I9_PROVISIONAL_ELO_EXPERIMENT.md`.
 
-## Review note (2026-07-30): exposure-contract inconsistency, disclosed
+## Review note (2026-07-30, revised same day): exposure contract verified
 
-Under the legacy delivery semantics this experiment used, the live ELO
-update runs on every delivery (wides/no-balls included), and exposure
-advances with it — but SQLite rehydration seeds exposure from the
-legal-ball-only batting/bowling counters. Rehydrated exposure is therefore
-lower than an uninterrupted chronological pass by each player's career
-extras faced (~4–5% of deliveries), so the "same-day replay matches one
-chronological pass" property holds only on extras-free fixtures — which is
-exactly what the parity test uses. This does **not** overturn the verdict:
-both arms shared the same inconsistency in a paired design, exposure only
-affects updates made after rehydration, and the direct-model guardrail
-failed at all five seeds regardless. But any re-opening of I9 must first
-pick one side of the contract (most plausibly: advance exposure only on
-legal deliveries, matching the rehydration counters), add an extras-bearing
-fixture to the parity test, and re-precommit.
+A first version of this note claimed live exposure (advancing on every
+delivery) and rehydrated exposure (seeded from the batting/bowling `balls`
+counters) diverge by each player's career extras. Writing the
+extras-bearing parity test **refuted that claim**: under the legacy
+delivery semantics this experiment used, the stats path never passes
+`is_legal`, so the `balls` counters count every delivery — wides included —
+and match the all-delivery live updates exactly. Under i5 semantics both
+sides are legal-only. The contract is consistent in both modes; nothing
+about this experiment's state handling was wrong, and the FAILED verdict
+stands on its own gates. The verified behavior is pinned by
+`test_i9_provisional_elo.py::test_exposure_parity_holds_on_extras_bearing_matches`
+so the original parity suite is no longer blind to extras.
 
 ## Disposition
 

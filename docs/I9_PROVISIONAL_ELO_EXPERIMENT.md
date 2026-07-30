@@ -33,14 +33,15 @@ An exposure count advances exactly when the corresponding baseline
 delivery-semantics contract rather than mixing an extras/legal-ball change
 into I9.
 
-> **Known inconsistency (review, 2026-07-30):** under the legacy semantics
-> this experiment ran with, `update` fires on every delivery, but SQLite
-> rehydration seeds exposure from the legal-ball-only counters — the two
-> definitions diverge by each player's career extras faced. The FAILED
-> verdict is insulated (paired arms, guardrail failed 5/5 seeds), but any
-> re-opened I9 must resolve the contract to one side (most plausibly
-> legal-only, matching rehydration), add an extras-bearing parity fixture,
-> and re-precommit. See the checkpoint report's review note.
+> **Contract verified on extras (2026-07-30, superseding a same-day review
+> note):** a review note first claimed live updates (every delivery) and
+> rehydration (the `balls` counters) diverge on wides/no-balls. Writing the
+> extras-bearing parity test refuted that claim: under legacy semantics the
+> stats path never passes `is_legal`, so the `balls` counters are inclusive
+> of extras and match the all-delivery updates exactly; under i5 semantics
+> both sides are legal-only. The contract is consistent in both modes and
+> is now pinned by
+> `test_i9_provisional_elo.py::test_exposure_parity_holds_on_extras_bearing_matches`.
 
 No threshold or multiplier sweep is allowed in the first experiment. If this
 fixed candidate fails, changing 120 or 4.0 is a new hypothesis.
