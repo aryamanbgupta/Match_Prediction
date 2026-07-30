@@ -413,8 +413,12 @@ class StatsProviderCache:
         k_player: float = 30.0,
         k_phase: float = 30.0,
     ) -> Dict[str, float]:
+        phase_code = (
+            0 if int(balls_bowled) < 36
+            else (1 if int(balls_bowled) < 96 else 2)
+        )
         key = (
-            player_id, self._norm_date(as_of_date), int(balls_bowled),
+            player_id, self._norm_date(as_of_date), phase_code,
             k_player, k_phase,
         )
         cached = self._batter_phase_outcome_dist.get(key)
@@ -437,8 +441,12 @@ class StatsProviderCache:
         k_player: float = 30.0,
         k_phase: float = 30.0,
     ) -> Dict[str, float]:
+        phase_code = (
+            0 if int(balls_bowled) < 36
+            else (1 if int(balls_bowled) < 96 else 2)
+        )
         key = (
-            player_id, self._norm_date(as_of_date), int(balls_bowled),
+            player_id, self._norm_date(as_of_date), phase_code,
             k_player, k_phase,
         )
         cached = self._bowler_phase_outcome_dist.get(key)

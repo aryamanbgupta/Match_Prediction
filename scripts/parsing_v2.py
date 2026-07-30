@@ -183,6 +183,15 @@ _ZERO_VENUE_DIST = {f'venue_p{c}': 0.0 for c in ('0', '1', '2', '4', '6', 'w')}
 # `phase_priors` is a dict {'powerplay'|'middle'|'death': (p0,p1,p2,p4,p6,pw)}.
 # When absent, all 6 phase features fall back to zero.
 _ZERO_PHASE_DIST = {f'phase_p{c}': 0.0 for c in ('0', '1', '2', '4', '6', 'w')}
+_ZERO_BATTER_PHASE_DIST = {
+    f'batter_phase_p{c}': 0.0 for c in ('0', '1', '2', '4', '6', 'w')
+}
+_ZERO_BOWLER_PHASE_DIST = {
+    f'bowler_phase_p{c}': 0.0 for c in ('0', '1', '2', '4', '6', 'w')
+}
+_ZERO_H2H_OUTCOME_DIST = {
+    f'h2h_p{c}': 0.0 for c in ('0', '1', '2', '4', '6', 'w')
+}
 _PHASE_OUTCOME_KEYS = ('c0', 'c1', 'c2', 'c4', 'c6', 'cw')
 
 
@@ -1233,7 +1242,8 @@ def calculate_pressure_features(state, innings_calc):
 def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None,
                         player_metadata=None, elo_tracker=None, match_k_factor=None,
                         prior=None, phase_priors=None,
-                        k_player=30.0, k_venue=200.0, match_ref=None,
+                        k_player=30.0, k_venue=200.0,
+                        k_phase=30.0, k_h2h=60.0, match_ref=None,
                         delivery_semantics=LEGACY_DELIVERY_SEMANTICS):
     """
     DESIGN DECISION: Pass tracker as parameter rather than global.
@@ -1253,6 +1263,8 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None,
                provided, 6 phase_p{0,1,2,4,6,w} features are emitted per
                ball, dispatched by pre-ball phase. Phase 3 of the
                outcome-dist follow-up plan; loaded from SQLite _meta.
+        k_phase: I8 child-cell prior sample size for batter/bowler phase.
+        k_h2h: I8 child-cell prior sample size for exact batter-bowler H2H.
         match_ref: Optional stable match identifier (cricsheet filename
                stem) used as the innings_id suffix. B2 fix (2026-07-16):
                the legacy `hash(json_data) % 100000` suffix was salted per
@@ -1449,6 +1461,49 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None,
                     batter_vs_type_dist = _ZERO_BATTER_VS_TYPE_DIST
                     bowler_vs_hand_dist = _ZERO_BOWLER_VS_HAND_DIST
 
+                if player_stats_tracker.enable_i8:
+                    if prior is not None:
+                        batter_phase_dist = (
+                            player_stats_tracker
+                            .get_batter_phase_outcome_dist(
+                                state['batter_id'],
+                                prior,
+                                state['balls_bowled'],
+                                k_player=k_player,
+                                k_phase=k_phase,
+                            )
+                        )
+                        bowler_phase_dist = (
+                            player_stats_tracker
+                            .get_bowler_phase_outcome_dist(
+                                state['bowler_id'],
+                                prior,
+                                state['balls_bowled'],
+                                k_player=k_player,
+                                k_phase=k_phase,
+                            )
+                        )
+                        h2h_outcome_dist = (
+                            player_stats_tracker.get_h2h_outcome_dist(
+                                state['batter_id'],
+                                state['bowler_id'],
+                                prior,
+                                k_player=k_player,
+                                k_h2h=k_h2h,
+                            )
+                        )
+                    else:
+                        batter_phase_dist = _ZERO_BATTER_PHASE_DIST
+                        bowler_phase_dist = _ZERO_BOWLER_PHASE_DIST
+                        h2h_outcome_dist = _ZERO_H2H_OUTCOME_DIST
+                    i8_outcome_dists = {
+                        **batter_phase_dist,
+                        **bowler_phase_dist,
+                        **h2h_outcome_dist,
+                    }
+                else:
+                    i8_outcome_dists = {}
+
                 # Phase 3: phase prior (6 features, dispatched by ball phase).
                 phase_dist = _phase_dist_from_priors(
                     phase_priors, state['balls_bowled'])
@@ -1545,6 +1600,9 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None,
                     **batter_vs_type_dist,
                     **bowler_vs_hand_dist,
                     **venue_dist,
+                    # I8: emitted only by schema-v5-enabled trackers, so
+                    # legacy schema-v4 parquet remains byte-contract stable.
+                    **i8_outcome_dists,
                     # Phase 3: phase prior (6 features for this ball's phase).
                     **phase_dist,
                     # NEW: Chase features

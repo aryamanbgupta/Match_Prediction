@@ -131,6 +131,9 @@ def materialize(
     feature_hash_info: Optional[dict] = None,
     k_player: float = 30.0,
     k_venue: float = 200.0,
+    k_phase: float = 30.0,
+    k_h2h: float = 60.0,
+    cache_schema_version: int = 4,
     delivery_semantics: str = LEGACY_DELIVERY_SEMANTICS,
 ) -> Tuple[int, dict]:
     """Walk the corpus per-date; for each date, rehydrate temp trackers
@@ -142,6 +145,7 @@ def materialize(
         str(sqlite_dir),
         version=version,
         require_order_contract=True,
+        required_schema_version=cache_schema_version,
     )
     if provider.backend_name != "sqlite":
         raise RuntimeError(
@@ -201,6 +205,7 @@ def materialize(
                     elo_tracker=temp_elo, match_k_factor=k_factor,
                     prior=prior, phase_priors=phase_priors,
                     k_player=k_player, k_venue=k_venue,
+                    k_phase=k_phase, k_h2h=k_h2h,
                     match_ref=match_id,
                     delivery_semantics=delivery_semantics,
                 )
@@ -311,9 +316,17 @@ def main() -> int:
     od_cfg = config.get("outcome_dist", {}) if config else {}
     k_player = float(od_cfg.get("k_player", 30.0))
     k_venue  = float(od_cfg.get("k_venue", 200.0))
-    if k_player != 30.0 or k_venue != 200.0:
+    k_phase = float(od_cfg.get("k_phase", 30.0))
+    k_h2h = float(od_cfg.get("k_h2h", 60.0))
+    cache_schema_version = int(data_cfg.get("cache_schema_version", 4))
+    if (
+        k_player != 30.0
+        or k_venue != 200.0
+        or k_phase != 30.0
+        or k_h2h != 60.0
+    ):
         print(f"  outcome_dist overrides: k_player={k_player}, "
-              f"k_venue={k_venue}")
+              f"k_venue={k_venue}, k_phase={k_phase}, k_h2h={k_h2h}")
 
     # Compute feature hash via feature_registry so the .feature_hash
     # marker matches parsing_v2.py's output for cache-hit detection.
@@ -357,6 +370,9 @@ def main() -> int:
         feature_hash_info = dict(feature_hash_info)
         feature_hash_info["k_player"] = k_player
         feature_hash_info["k_venue"] = k_venue
+        feature_hash_info["k_phase"] = k_phase
+        feature_hash_info["k_h2h"] = k_h2h
+        feature_hash_info["cache_schema_version"] = cache_schema_version
 
     n_matches, counts = materialize(
         source_dir=args.source_dir,
@@ -369,6 +385,9 @@ def main() -> int:
         feature_hash_info=feature_hash_info,
         k_player=k_player,
         k_venue=k_venue,
+        k_phase=k_phase,
+        k_h2h=k_h2h,
+        cache_schema_version=cache_schema_version,
         delivery_semantics=delivery_semantics,
     )
     dt = time.time() - t0

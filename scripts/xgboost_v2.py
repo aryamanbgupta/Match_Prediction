@@ -56,6 +56,18 @@ assert_venue_alias_contract(
     feature_hash_metadata,
     context="ball training parquet",
 )
+expected_cache_schema = int(
+    _config.get('data', {}).get('cache_schema_version', 4)
+)
+materialized_cache_schema = int(
+    feature_hash_metadata.get('cache_schema_version', 4)
+)
+if materialized_cache_schema != expected_cache_schema:
+    raise RuntimeError(
+        "ball parquet/cache schema mismatch: "
+        f"materialized={materialized_cache_schema}, "
+        f"config={expected_cache_schema}"
+    )
 train_df = pd.read_parquet(
     data_dir / f'cricket_data_{data_version}_train.parquet')
 val_df = pd.read_parquet(
@@ -459,17 +471,28 @@ with open(model_dir / f'feature_columns_{artifact_suffix}.txt', 'w') as f:
 # wrappers (sim_v1_2.XGBoostModelV2.__init__) can recover them at load
 # time. Without this, a model trained on k=10 features would be
 # evaluated with the default k=30 distributions — silent drift.
-_od_cfg_out = {'k_player': 30.0, 'k_venue': 200.0}
+_od_cfg_out = {
+    'k_player': 30.0,
+    'k_venue': 200.0,
+    'k_phase': 30.0,
+    'k_h2h': 60.0,
+}
 if args.config_json:
     _od_yaml = _config.get('outcome_dist', {}) if '_config' in dir() else {}
     if _od_yaml:
         _od_cfg_out['k_player'] = float(_od_yaml.get('k_player', 30.0))
         _od_cfg_out['k_venue'] = float(_od_yaml.get('k_venue', 200.0))
+        _od_cfg_out['k_phase'] = float(_od_yaml.get('k_phase', 30.0))
+        _od_cfg_out['k_h2h'] = float(_od_yaml.get('k_h2h', 60.0))
 od_path = model_dir / f'outcome_dist_config_{artifact_suffix}.json'
 with open(od_path, 'w') as _f:
     _json.dump(_od_cfg_out, _f, indent=2)
-print(f"  Saved {od_path.name} (k_player={_od_cfg_out['k_player']}, "
-      f"k_venue={_od_cfg_out['k_venue']})")
+print(
+    f"  Saved {od_path.name} (k_player={_od_cfg_out['k_player']}, "
+    f"k_venue={_od_cfg_out['k_venue']}, "
+    f"k_phase={_od_cfg_out['k_phase']}, "
+    f"k_h2h={_od_cfg_out['k_h2h']})"
+)
 
 delivery_semantics = _config.get('data', {}).get(
     'delivery_semantics', 'inclusive_total_runs_v1')
@@ -509,6 +532,9 @@ if delivery_semantics == 'legal_off_bat_v1':
 
 training_contract = {
     'data_version': data_version,
+    'cache_schema_version': int(
+        _config.get('data', {}).get('cache_schema_version', 4)
+    ),
     'delivery_semantics': delivery_semantics,
     'extras_contract': extras_contract,
     'ball_calibrator': (

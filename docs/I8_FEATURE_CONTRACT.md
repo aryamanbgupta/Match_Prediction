@@ -71,10 +71,21 @@ It writes only to:
 - `data/xgb_data_i8/`; and
 - `models/xgb_i8/`.
 
+Global and global-phase priors are copied from the frozen I7 SQLite artifact,
+not recomputed from any post-test context that happens to exist when I8 is
+built. Player, phase, and H2H rows remain as-of-date queried; the frozen prior
+closes the only corpus-wide constant that could otherwise see later matches.
+
 Schema-v4 readers remain supported for frozen production. Schema-v4 caches
 must fail clearly if an I8 getter is requested. The I8 model sidecar records
 all four shrinkage strengths, the schema version, and the venue identity
 contract so simulation cannot silently serve a different feature definition.
+
+I8 simulation runs through `scripts/sim_eval/run_sim_eval_i8.py`, which layers
+the 18 new values onto the unchanged frozen simulator. It requires the I8
+model, all 18 feature columns, the four-value shrinkage sidecar, and a
+schema-v5 provider. Any mismatch aborts the run; I8 never substitutes zeros or
+the base runner's demonstration-only dummy model.
 
 ## Evaluation
 

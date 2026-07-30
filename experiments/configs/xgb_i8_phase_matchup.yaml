@@ -8,6 +8,7 @@ experiment:
 data:
   version: "i8"
   cache_schema_version: 5
+  prior_source_sqlite: "models/player_stats_cache_i7.sqlite"
   source_dir: "data/t20s_json"
   gender_filter: "male"
   delivery_semantics: "inclusive_total_runs_v1"

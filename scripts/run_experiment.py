@@ -9,6 +9,7 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -28,6 +29,14 @@ from parsing_v2 import (
     I5_DELIVERY_SEMANTICS,
     LEGACY_DELIVERY_SEMANTICS,
 )
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(128 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def load_config(config_path: str) -> dict:
@@ -134,8 +143,12 @@ def _check_parquet_cache(config: dict, feature_list: list) -> bool:
     od_cfg = config.get("outcome_dist", {}) or {}
     want_k_player = float(od_cfg.get("k_player", 30.0))
     want_k_venue  = float(od_cfg.get("k_venue", 200.0))
+    want_k_phase = float(od_cfg.get("k_phase", 30.0))
+    want_k_h2h = float(od_cfg.get("k_h2h", 60.0))
     cached_k_player = cached.get("k_player")
     cached_k_venue  = cached.get("k_venue")
+    cached_k_phase = cached.get("k_phase")
+    cached_k_h2h = cached.get("k_h2h")
     if cached_k_player is not None and float(cached_k_player) != want_k_player:
         return False
     if cached_k_venue  is not None and float(cached_k_venue)  != want_k_venue:
@@ -146,6 +159,19 @@ def _check_parquet_cache(config: dict, feature_list: list) -> bool:
     if cached_k_player is None and want_k_player != 30.0:
         return False
     if cached_k_venue is None and want_k_venue != 200.0:
+        return False
+    if cached_k_phase is not None and float(cached_k_phase) != want_k_phase:
+        return False
+    if cached_k_h2h is not None and float(cached_k_h2h) != want_k_h2h:
+        return False
+    if cached_k_phase is None and want_k_phase != 30.0:
+        return False
+    if cached_k_h2h is None and want_k_h2h != 60.0:
+        return False
+
+    want_schema = int(config.get("data", {}).get("cache_schema_version", 4))
+    cached_schema = int(cached.get("cache_schema_version", 4))
+    if cached_schema != want_schema:
         return False
 
     # Parquet mtime >= SQLite mtime. A rebuild of SQLite invalidates the
@@ -182,11 +208,16 @@ def _check_sqlite_cache(config: dict) -> bool:
     try:
         sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
         from loaders_common import SAME_DAY_ORDER_VERSION
-        from stats_sqlite_backend import SCHEMA_VERSION
+        from stats_sqlite_backend import SUPPORTED_SCHEMA_VERSIONS
     except ImportError:
         return False
     try:
-        if int(meta.get("schema_version", -1)) != SCHEMA_VERSION:
+        want_schema = int(
+            config.get("data", {}).get("cache_schema_version", 4)
+        )
+        if want_schema not in SUPPORTED_SCHEMA_VERSIONS:
+            return False
+        if int(meta.get("schema_version", -1)) != want_schema:
             return False
     except (TypeError, ValueError):
         return False
@@ -208,6 +239,20 @@ def _check_sqlite_cache(config: dict) -> bool:
         for key, value in alias_contract.items()
     ):
         return False
+    prior_source = config.get("data", {}).get("prior_source_sqlite")
+    if prior_source:
+        source_path = Path(prior_source)
+        if not source_path.is_absolute():
+            source_path = PROJECT_ROOT / source_path
+        source_path = source_path.resolve()
+        if not source_path.is_file():
+            return False
+        if meta.get("prior_contract") != "frozen_external_sqlite_v1":
+            return False
+        if meta.get("prior_source_sqlite") != str(source_path):
+            return False
+        if meta.get("prior_source_sha256") != _sha256_file(source_path):
+            return False
 
     # JSON membership + mtime check — SQLite is stale if a file was
     # added/removed or any live JSON is newer.
@@ -311,6 +356,8 @@ def build_training_cmd(config: dict, feature_list: list) -> list:
         "outcome_dist": config.get("outcome_dist", {}),
         "data": {
             "version": config["data"].get("version", "v3"),
+            "cache_schema_version": config["data"].get(
+                "cache_schema_version", 4),
             "delivery_semantics": config["data"].get(
                 "delivery_semantics", LEGACY_DELIVERY_SEMANTICS),
             "source_dir": config["data"].get(
@@ -375,8 +422,13 @@ def build_eval_cmd(config: dict) -> list:
     n_sims = config.get("evaluation", {}).get("n_sims", 1000)
     parallel = config.get("evaluation", {}).get("parallel", False)
 
+    eval_script = (
+        "scripts/sim_eval/run_sim_eval_i8.py"
+        if version == "i8"
+        else "scripts/sim_eval/run_sim_eval.py"
+    )
     cmd = [
-        sys.executable, "scripts/sim_eval/run_sim_eval.py",
+        sys.executable, eval_script,
         "--model-type", model_type,
         "--model-version", version,
         "--test-dir", test_dir,
@@ -487,7 +539,14 @@ def main():
         f"models/player_stats_cache_{version}.sqlite",
         "--delivery-semantics",
         delivery_semantics,
+        "--schema-version",
+        str(int(data_cfg.get("cache_schema_version", 4))),
     ]
+    if data_cfg.get("prior_source_sqlite"):
+        cache_cmd.extend([
+            "--prior-source-sqlite",
+            str(data_cfg["prior_source_sqlite"]),
+        ])
     mat_cmd = [sys.executable, "scripts/materialize_features.py",
                "--config", args.config]
     train_cmd = build_training_cmd(config, feature_list)
