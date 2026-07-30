@@ -79,3 +79,28 @@ files”) and `685e863` (“stop tracking tmp scratch space”):
 The backup therefore preserves old hashes, but no wanted content that is
 missing from the rewritten history. Its 15-count is rewrite topology rather
 than evidence of an unmerged feature.
+
+### Deletion executed 2026-07-30 (user-approved)
+
+All seven audited branches were deleted, plus five night-run branches that
+became fully reachable from `main` after the 2026-07-30 merge
+(`auto-20260711/17/19/20`, `improvement-experiments`; verified
+`git log main..<branch> --oneline` = 0 for each). Remote copies on
+`origin` were deleted for the six that had them. Tip SHAs at deletion
+time, for recovery while reflog/objects persist (every branch except
+`backup-pre-rewrite` remains fully reachable from `main` regardless):
+
+| Branch | Tip |
+|---|---|
+| `fixes/sim_improvements` | `b7b3772` |
+| `feature/player-stats-cache` | `7744b61` |
+| `features/cricinfo-features` | `a6a64c6` |
+| `features/mlp-model` | `3e5015d` |
+| `features/llm-model` | `4a86b97` |
+| `features/transformer-model` | `40befa4` |
+| `backup-pre-rewrite` | `685e863` |
+| `auto-20260711` | `77f6cbd` |
+| `auto-20260717` | `46f26dc` |
+| `auto-20260719` | `e300623` |
+| `auto-20260720` | `3667a29` |
+| `improvement-experiments` | `9bbe99d` |

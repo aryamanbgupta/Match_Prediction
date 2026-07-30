@@ -1866,6 +1866,35 @@ Swap+M7-on-i7 is the designated production-successor config; promotion is
 a separate decision gated on an i7 golden-frame audit and the fresh-state
 serving cutover plan. `reports/i17_i7_swap_eval_20260730.md`.
 
+## I18 [P1] [PENDING] i7-identity golden frame + swap-i7 golden audit (I17 promotion gate)
+**Night-executable.** Build the golden (124-fixture) match frame under the
+I7 identity contract and score the fixed I17 successor candidate on it.
+This is a *gate readout for a human promotion decision* — golden is
+audit-only, the candidate is pre-specified, and NOTHING about the result
+feeds model selection or production. Steps:
+1. Materialize an i7-identity golden frame (state through 2026-06-17
+   fixtures; start from `scripts/build_i7_match_frame.py` and the I7/I15
+   contracts — `docs/I15_MATCH_IDENTITY_CONTRACT.md`,
+   `docs/OPERATIONS.md` § Operation 7). Frame must carry
+   `venue_identity.json` (venue_aliases_v1), `cricsheet_id`, and
+   `match_identity_version`; fail closed otherwise.
+2. Gate A (integrity): all 124 golden odds rows join by `cricsheet_id`;
+   `verify_forward_holdout` still reports zero overlap / unchanged
+   fingerprint; no write touches production caches, `data/golden/`
+   inputs, or `data/forward_holdout/`.
+3. Gate B (readout): score `models/auto/i17/swap_seed29` (candidate) and
+   `models/auto/i17/base_seed29` (control) — regenerate via the exact
+   commands in `reports/i17_i7_swap_eval_20260730.md` if absent
+   (deterministic, max |Δp|=0) — then blend→reslice vs
+   `data/golden/betting_odds_golden.json` at all/≥50k/≥100k with I3
+   blocks. Report LL/ROI vs slice-matched market. Verdict is DESCRIPTIVE
+   regardless of numbers (golden slices are ≤11 blocks): log the readout,
+   do not adopt, promote, or revert anything.
+Deliverables: `reports/auto/I18.md`, frame under `data/xgb_match_data_i7/`
+(golden split only; do not touch train/val/test), results.tsv row marked
+descriptive. Human follow-up (NOT night work): fresh-state serving
+cutover plan, then the promotion decision.
+
 The decision now includes a frame choice: (a) retrain the frozen-M7 line
 `xgb_match_v3_m7_production` with `--swap-augment` (direct adoption of the
 D12 result), or (b) fold `--swap-augment` into the I7-identity line

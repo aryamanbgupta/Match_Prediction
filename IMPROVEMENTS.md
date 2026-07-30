@@ -1196,8 +1196,8 @@ Remaining, in priority order:
 | 5 | Archive ~41 superseded `xgb_match_*` ablation model dirs + `data/xgb_match_data_v3_m*` parquets + stale tracker snapshots + `data/betting_test` (Aug 2025) — keep the 7 dirs CLAUDE.md names | safe | ~60 MB, models/ listing 59→~25 |
 | 6 | `reports/` prune: superseded `prop_calibration_detail*.json` (27 MB), non-clean `ipl_2026_dashboard.html`; archive `mlc/EDGE_BRIEF.md` (superseded per memory) | safe | ~27 MB |
 | 7 | `models/auto/` + `data/auto/` retention: delete FAILED-idea artifacts once their tracked report is committed (~8 MB/idea; LANDED artifacts stay until merged). Candidate post-night step in `night.sh` | policy | bounded growth |
-| 8 | Branch hygiene: delete dead `fixes/sim_improvements`, `feature/player-stats-cache`, `features/{cricinfo-features,mlp-model,llm-model,transformer-model}` (Oct 2025–Mar 2026); `backup-pre-rewrite` after confirming the May rewrite | decision | — |
-| 9 | Merge overdue: `main` is 6 weeks stale; `auto-20260711` ⊃ `improvement-experiments` ⊃ E-series + A-series | decision | — |
+| 8 | ~~Branch hygiene~~ **Done 2026-07-30**: all 7 audited branches deleted (local + origin) plus 5 fully-merged night branches; tip SHAs recorded in `reports/model_dir_dedup_audit.md` | decision | — |
+| 9 | ~~Merge overdue~~ **Done 2026-07-30**: `main` fast-forwarded through `auto-20260722` and pushed | decision | — |
 | 10 | ~~Move the root prediction playbook into `docs/`~~ **Done 2026-07-30**: now at `docs/predict_next_match.md` | safe | root tidiness |
 
 **Kept by explicit decision (2026-07-11)**: `models/llm_v1` (6.0 GB — may be
