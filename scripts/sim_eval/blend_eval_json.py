@@ -92,7 +92,14 @@ def _recompute_realized_pnl(edge: Dict[str, float],
 
 
 def _persist_bet_contract(record: dict, *, recompute: bool) -> dict:
-    """Persist explicit placement and fallback cluster metadata."""
+    """Persist explicit bet placement; never stamp a fallback cluster id.
+
+    A source row that already carries a real ``competition_cluster_id`` keeps
+    it via the copy. Stamping ``cluster_id_for_record`` here (with no lookup)
+    would write the team-pair fallback, which downstream reslice then treats
+    as authoritative — silently replacing the I3 event-time blocks with
+    near-per-match clusters and narrowing every ROI interval.
+    """
     out = dict(record)
     if recompute:
         out.pop("bet_placed", None)
@@ -100,7 +107,6 @@ def _persist_bet_contract(record: dict, *, recompute: bool) -> dict:
     bet_team = flat_bet_team(out, BET_EDGE_THRESHOLD)
     out["bet_placed"] = bet_team is not None
     out["bet_team"] = bet_team
-    out["competition_cluster_id"] = cluster_id_for_record(out)
     return out
 
 

@@ -638,7 +638,10 @@ def test_blend_passthrough_missing_direct_preserves_metrics_and_adds_contract():
             "a missing direct prediction must preserve source metrics"
     assert passthrough["bet_placed"] is False
     assert passthrough["bet_team"] is None
-    assert passthrough["competition_cluster_id"]
+    # 2026-07-30: blend must NOT stamp a fallback cluster id — a stamped
+    # team-pair fallback overrides reslice's event-time block lookup and
+    # silently degrades the I3 bootstrap (observed: 134 clusters vs 19).
+    assert "competition_cluster_id" not in passthrough
 
 
 def test_blend_recomputed_metrics_match_evaluator_formulas():
@@ -699,11 +702,11 @@ def test_blend_persists_recomputed_bet_contract():
     blended = out["matches"][0]
     assert blended["bet_placed"] is True
     assert blended["bet_team"] == "A"
-    assert blended["competition_cluster_id"]
+    assert "competition_cluster_id" not in blended
     passthrough = out["matches"][2]
     assert passthrough["bet_placed"] is False
     assert passthrough["bet_team"] is None
-    assert passthrough["competition_cluster_id"]
+    assert "competition_cluster_id" not in passthrough
 
 
 # --------------------------------------------------------------------------

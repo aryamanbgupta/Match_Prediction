@@ -68,7 +68,7 @@ from tracker_rehydration import (  # noqa: E402
     rehydrate_venue_tracker,
 )
 
-MODEL_DIR = REPO / "models" / "xgb_match_v3_m7_production"
+MODEL_DIR = REPO / "models" / "xgb_match_v3_m7_swap_production"
 TRACKER_SNAPSHOT = REPO / "data" / "tracker_snapshot_test_end.pkl"
 DEFAULT_STATE_DIR = REPO / "models"
 DEFAULT_TRACKER_SOURCE_DIRS = (REPO / "data" / "t20s_json",)

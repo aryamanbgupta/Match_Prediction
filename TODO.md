@@ -10,13 +10,12 @@
 > sealed and remains unscored.
 
 ## Open decisions (human)
-- [ ] **Adopt D12 swap augmentation in production?** Largest validated ROI
-  lever currently unadopted: paired 5-seed ≥$50k ΔLL −0.0092 / ΔROI +3.39pp
-  on the exact production config, better on 5/5 seeds for both metrics
-  (`research/reports/auto/D12.md`, LANDED 2026-07-17). Needs a frame choice
-  (frozen M7 line vs I7 identity line) plus golden confirmation before
-  `predict_fixture.py` switches. Tracked as IDEAS.md **I16**
-  (filed 2026-07-30 — the recommendation had been untracked for 13 days).
+- [x] **Adopt D12 swap augmentation in production?** DONE 2026-07-30:
+  archived D12 swap arm promoted as
+  `models/xgb_match_v3_m7_swap_production`; `predict_fixture.py` switched.
+  Iteration I3-block + golden confirmation both favorable (block ROI CIs
+  still straddle zero — no CI-clean edge claim). See IDEAS.md **I16** and
+  `reports/d12_swap_promotion_20260730.md`.
 
 ## Completed
 - ✅ Make the outcome categories: squish/ round down to 0,1,2,4,6,W

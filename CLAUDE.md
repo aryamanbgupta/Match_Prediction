@@ -8,31 +8,41 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
 
 1. **Match-level direct (winner-market predictor)** — XGBoost binary classifier
    on 49 match-level features (M1 baseline + 3 venue outcome-dist).
-   Trained on `team1_wins`. **Production variant of record (post M7,
-   2026-05-10): `models/xgb_match_v3_m7_production/`**. Same feature set as
-   the prior `xgb_match_v3_m2_venue_only_unfrozen`; the only change at M7
-   was the hyperparameter sweep result: lr 0.10 → 0.05, colsample 0.8 →
-   0.9 (the prior config was over-aggressive). `predict_fixture.py` uses
-   this model directly; raw probabilities (no Platt — Platt over-corrects
-   on this config and kills iteration ROI). Per-fixture unfrozen
-   rehydration semantics (chronological tracker walk through pre-match
-   date). Earlier baselines preserved for reference: `xgb_match_v2_clean`,
+   Trained on `team1_wins`. **Production variant of record (post D12
+   adoption, 2026-07-30): `models/xgb_match_v3_m7_swap_production/`** —
+   the M7 config plus train-time team-swap symmetry augmentation
+   (`--swap-augment`, D12 LANDED 2026-07-17; promoted after I3-block +
+   golden confirmation, see `reports/d12_swap_promotion_20260730.md`).
+   The artifact is the archived D12 swap arm promoted verbatim: its base
+   sibling reproduces the frozen M7 predictions at max |Δp| = 0, and new
+   training on the pre-I7 legacy frame is deliberately impossible, so the
+   promotion, like M7 serving, lives on the legacy identity contract.
+   Frozen `models/xgb_match_v3_m7_production/` is retained for rollback.
+   M7 config: lr 0.05, colsample 0.9 (from the M7 sweep; prior config was
+   over-aggressive). `predict_fixture.py` uses this model directly; raw
+   probabilities (no Platt — Platt over-corrects on this config and kills
+   iteration ROI). Per-fixture unfrozen rehydration semantics
+   (chronological tracker walk through pre-match date). Earlier baselines
+   preserved for reference: `xgb_match_v2_clean`,
    `xgb_match_v2_clean_unfrozen`, `xgb_match_v3_baseline` (M1 monotone),
    `xgb_match_v3_m2_venue_only`, `xgb_match_v3_m2_venue_only_unfrozen`.
    See `reports/m7_architecture_eval.md` for the sweep, M2 → M7
    improvement deltas, and the explanation of why M3–M6 feature work
    dropped.
 
-   **Honest headline (iteration Polymarket eval; I3-revised 2026-07-23)**:
-   raw LL **0.6299** vs market 0.6267 (essentially at market);
-   flat ROI **+21.90%**, but the tournament-block CI is
-   **[-10.79%, +50.18%]** across 19 competition blocks. ≥$100k:
-   LL 0.5929, ROI **+26.39%**, block CI **[-17.36%, +46.42%]** across
-   11 blocks. The earlier positive i.i.d. lower bounds, including the
-   close-match and single-month claims, are superseded by I3 and no longer
-   establish a production betting edge. M7 remains the direct probability
-   model of record; A7 remains the predeclared forward betting policy, with
-   economic performance unconfirmed. See
+   **Honest headline (iteration Polymarket eval; I3 blocks, updated
+   2026-07-30 for the swap model)**: ≥$50k raw LL **0.6215** (base M7
+   0.6299) vs slice-matched market 0.6482 — note the long-quoted 0.6267 is
+   the all-261 market LL, where the swap model scores 0.6178; flat ROI
+   **+24.53%** with tournament-block CI **[-1.98%, +46.37%]** across 19
+   competition blocks (base +21.90% [-10.48, +49.94]). ≥$100k: LL 0.5796,
+   ROI +26.60%, block CI [-17.21%, +45.42%] across 11 blocks. Golden audit
+   (descriptive, 5–6 blocks): beats matched market LL on both slices where
+   base does not. Adoption rests on D12's paired 5-seed evidence (ΔLL
+   −0.0092 and ΔROI +3.39pp, both better on 5/5 seeds), not on a CI-clean
+   ROI claim — block CIs still straddle zero everywhere, so no production
+   betting edge is established. A7 remains the predeclared forward betting
+   policy, with economic performance unconfirmed. See
    `reports/i3_eval_statistics_hardening.md`.
 
    **Frozen forward result (2026-07-23):** on the preregistered ≥$50k slice,

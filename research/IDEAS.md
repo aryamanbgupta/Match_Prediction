@@ -1819,7 +1819,21 @@ aliases fail closed. The audited I7 test parquets preserve all 798 Cricsheet
 IDs versus 788 legacy keys. See `docs/I15_MATCH_IDENTITY_CONTRACT.md` and
 `reports/i15_match_identity_checkpoint_20260730.md`.
 
-## I16 [DECISION PENDING — HUMAN] Adopt D12 swap augmentation in the production match model
+## I16 [DONE 2026-07-30 — ADOPTED] Adopt D12 swap augmentation in the production match model
+**Decided 2026-07-30 (human-approved, option a):** the archived D12 swap
+arm was promoted verbatim as `models/xgb_match_v3_m7_swap_production` and
+`predict_fixture.py` now defaults to it. Fresh retraining on the pre-I7
+legacy frame is deliberately impossible (I7 trainer contract), so
+promotion of the 2026-07-17 artifact — whose base sibling reproduces
+frozen M7 at max |Δp| = 0 — is the faithful adoption. Confirmation:
+I3-block iteration readout (≥$50k LL 0.6215 vs base 0.6299, ROI +24.53%
+[-1.98, +46.37] over 19 blocks) plus golden audit (LL 0.6576/0.7009 vs
+base 0.6680/0.7078; beats matched market LL on both slices where base
+does not; descriptive at 5–6 blocks). Block ROI CIs still straddle zero —
+no CI-clean betting-edge claim; A7 stays shadow-only. During
+confirmation, a blend cluster-stamping bug that degraded I3 blocks
+(134 vs 19) was found and fixed. See
+`reports/d12_swap_promotion_20260730.md`.
 The night loop validated team-swap symmetry augmentation on the exact
 production configuration (D7 on v2_clean, then D12 on the production
 48-feature frame; `research/reports/auto/D12.md`, LANDED 2026-07-17). The
