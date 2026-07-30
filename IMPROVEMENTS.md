@@ -1188,9 +1188,10 @@ Remaining, in priority order:
 
 | # | Item | Type | Effect |
 |---|---|---|---|
-| 1 | Delete `perf_runs/` scratch logs (`par_rss.log` 59 MB + profiles); keep the 5 tracked .py + README | safe | ~65 MB |
+| 1 | ~~Delete `perf_runs/` scratch logs~~ **Done 2026-07-30** (66 MB of logs/profiles removed; 5 tracked .py + README kept; measured results remain in docs/OPERATIONS.md) | safe | ~65 MB |
 | 2 | ~~`git rm --cached tmp/golden_inclusive/*`~~ **Done 2026-07-30** (commit `81d7e3d`; `git gc` + full-history purge still open — decision) | safe | `.git` 97→~40 MB |
-| 3 | Dead cron: crontab fires `run_scraper_cron.sh` daily 18:00 → `src/bet_scraper.py` no longer exists; fails every day. Remove entry + script, **or revive as the prop-odds capture daemon** (see prop-data roadmap) | decision | stops daily failures |
+| 3 | ~~Dead cron~~ **Done 2026-07-30** (`run_scraper_cron.sh` + `cron_log.log` removed; the crontab line itself needs a user terminal: `crontab -l \| grep -v run_scraper_cron.sh \| crontab -`). Revive-as-capture-daemon remains open on the prop-data roadmap | safe | stops daily failures |
+| 3b | **I9 FAILED artifacts deleted 2026-07-30** (~2.0 GB, user-approved): both i9/i9_baseline caches, ball parquets, ball models, match frames, 10 seed model dirs. Full regeneration recipe (8 commands) in `docs/I9_PROVISIONAL_ELO_EXPERIMENT.md`; decision record in `reports/i9_provisional_elo_checkpoint_20260730.md` + `reports/i9_development_gate_20260730.json` | done | ~2.0 GB |
 | 4 | Retire v7 sweep model dirs: `xgb_v3_phase6_k{10,100,300}`, `xgb_v3_v6_backup`, `xgb_v3_phase5_k30` if byte-identical to shipped `xgb_v3` | quick check | ~510–640 MB |
 | 5 | Archive ~41 superseded `xgb_match_*` ablation model dirs + `data/xgb_match_data_v3_m*` parquets + stale tracker snapshots + `data/betting_test` (Aug 2025) — keep the 7 dirs CLAUDE.md names | safe | ~60 MB, models/ listing 59→~25 |
 | 6 | `reports/` prune: superseded `prop_calibration_detail*.json` (27 MB), non-clean `ipl_2026_dashboard.html`; archive `mlc/EDGE_BRIEF.md` (superseded per memory) | safe | ~27 MB |

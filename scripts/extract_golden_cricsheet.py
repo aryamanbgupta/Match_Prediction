@@ -23,8 +23,24 @@ LOCAL_POOL = REPO_ROOT / "data" / "t20s_json"
 GOLDEN_POOL = REPO_ROOT / "data" / "golden" / "t20s_json"
 
 # User-confirmed scope: strictly post-test-set window, T20-format leagues only.
+# 2026-07-30 expansion (user-approved golden refresh): MLC + LPL added for
+# May-July coverage. ntb (Blast) stays OUT — it has its own golden pool
+# under data/golden_blast/ and must not be double-pooled here.
 CUTOFF_DATE = "2026-04-17"
-ZIPS = ["t20s_json.zip", "ipl_json.zip", "psl_json.zip", "sat_json.zip"]
+ZIPS = ["t20s_json.zip", "ipl_json.zip", "psl_json.zip", "sat_json.zip",
+        "mlc_json.zip", "lpl_json.zip"]
+
+# Pools whose matches must NEVER enter golden: the 137 consumed forward
+# EVALUATED fixtures (zero-overlap invariant; verify_forward_holdout checks
+# it) and the separately-managed Blast golden pool. The forward CONTEXT pool
+# is shared state, not consumed bets — golden already legitimately overlaps
+# it (155 files as of 2026-07-30) and may keep absorbing context-era
+# fixtures that were never part of the sealed evaluation.
+EXCLUDED_POOL_DIRS = [
+    REPO_ROOT / "data" / "forward_holdout" / "2026-06-01_2026-07-13"
+    / "polymarket_test",
+    REPO_ROOT / "data" / "golden_blast" / "t20s_json",
+]
 
 
 def main() -> int:
@@ -40,9 +56,14 @@ def main() -> int:
     GOLDEN_POOL.mkdir(parents=True, exist_ok=True)
     local_existing = {p.name for p in LOCAL_POOL.glob("*.json")}
     golden_existing = {p.name for p in GOLDEN_POOL.glob("*.json")}
+    excluded_names: set[str] = set()
+    for pool in EXCLUDED_POOL_DIRS:
+        if pool.is_dir():
+            excluded_names |= {p.name for p in pool.glob("*.json")}
 
     print(f"Local pool size:  {len(local_existing):,}")
     print(f"Golden pool size: {len(golden_existing):,}")
+    print(f"Excluded (forward-holdout/blast pools): {len(excluded_names):,}")
     print(f"Cutoff:           date >= {CUTOFF_DATE}, match_type=T20, gender=male")
     print()
 
@@ -64,10 +85,16 @@ def main() -> int:
 
         copied = skipped_local = skipped_already = skipped_format = 0
         skipped_gender = skipped_date = skipped_error = 0
+        skipped_excluded = 0
 
         with zipfile.ZipFile(zpath) as zf:
             json_names = [n for n in zf.namelist() if n.endswith(".json")]
             for name in json_names:
+                # Never absorb matches owned by the consumed forward holdout
+                # or the separate Blast golden pool.
+                if name in excluded_names:
+                    skipped_excluded += 1
+                    continue
                 # Skip if file already in our local production pool.
                 if name in local_existing:
                     skipped_local += 1
@@ -109,6 +136,7 @@ def main() -> int:
 
         per_zip_stats[zname] = {
             "copied": copied,
+            "skipped_excluded_pool": skipped_excluded,
             "skipped_in_local_pool": skipped_local,
             "skipped_already_in_golden": skipped_already,
             "skipped_non_t20": skipped_format,

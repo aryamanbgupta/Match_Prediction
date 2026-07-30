@@ -93,13 +93,80 @@ def _union_cricsheet_index() -> dict:
     return merged
 
 
+def _merge_staging_into_golden(staging: Path) -> None:
+    """Append staged new fixtures to the existing golden manifest.
+
+    Existing rows (and their file order) are preserved verbatim — the frozen
+    audit numbers depend on them. Duplicates are dropped by primary id, and
+    any staged fixture owned by the consumed forward holdout fails closed.
+    """
+    existing = json.loads(GOLDEN_OUT_ODDS.read_text())
+    staged = json.loads(
+        (staging / "betting_odds_golden_new.json").read_text()
+    )
+
+    def key(m: dict) -> str:
+        return str(m.get("cricsheet_id") or m["match_id"])
+
+    have = {key(m) for m in existing["matches"]}
+    # Only the 137 EVALUATED forward fixtures are consumed; the forward
+    # context pool is shared state and its fixtures are golden-eligible.
+    forward_owned: set[str] = set()
+    fwd_test = (
+        REPO_ROOT / "data" / "forward_holdout" / "2026-06-01_2026-07-13"
+        / "polymarket_test"
+    )
+    if fwd_test.is_dir():
+        forward_owned = {p.stem for p in fwd_test.glob("*.json")}
+
+    appended = 0
+    for m in staged["matches"]:
+        k = key(m)
+        if k in have:
+            continue
+        cricsheet_id = str(m.get("cricsheet_id") or "")
+        if cricsheet_id and cricsheet_id in forward_owned:
+            raise RuntimeError(
+                f"staged golden fixture {k} is owned by the consumed "
+                "forward holdout; golden must never absorb it"
+            )
+        existing["matches"].append(m)
+        have.add(k)
+        appended += 1
+
+    GOLDEN_OUT_ODDS.write_text(json.dumps(existing, indent=2))
+    copied = 0
+    for p in sorted((staging / "polymarket_test").glob("*.json")):
+        dest = GOLDEN_OUT_TEST_DIR / p.name
+        if not dest.exists():
+            shutil.copy2(p, dest)
+            copied += 1
+    print(f"\n  merged into {GOLDEN_OUT_ODDS.name}: +{appended} manifest "
+          f"rows, +{copied} polymarket_test files "
+          "(existing rows preserved verbatim)")
+
+
 def main() -> None:
+    global GOLDEN_POLYMARKET_PATH
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true",
                         help="Counts + sample, no writes.")
     parser.add_argument("--verify-mapping", action="store_true",
                         help="Print Polymarket→Cricsheet team-name diff in window, exit.")
+    parser.add_argument(
+        "--polymarket-path", type=Path, default=None,
+        help="Override the capture file (default: "
+             f"{GOLDEN_POLYMARKET_PATH.name}). Continuation captures "
+             "require --merge-into-existing.")
+    parser.add_argument(
+        "--merge-into-existing", action="store_true",
+        help="Append newly matched fixtures to the existing golden odds "
+             "manifest instead of overwriting it; existing rows are kept "
+             "verbatim and forward-holdout fixtures fail closed.")
     args = parser.parse_args()
+
+    if args.polymarket_path is not None:
+        GOLDEN_POLYMARKET_PATH = args.polymarket_path
 
     _patch_constants()
 
@@ -161,7 +228,16 @@ def main() -> None:
         print("\nDry run — no writes.")
         return
 
-    base.write_outputs(matched, unmatched)
+    if args.merge_into_existing:
+        staging = GOLDEN_DIR / "_staging_refresh"
+        (staging / "polymarket_test").mkdir(parents=True, exist_ok=True)
+        base.OUT_ODDS_PATH = staging / "betting_odds_golden_new.json"
+        base.OUT_TEST_DIR = staging / "polymarket_test"
+        base.OUT_UNMATCHED_PATH = staging / "build_unmatched.json"
+        base.write_outputs(matched, unmatched)
+        _merge_staging_into_golden(staging)
+    else:
+        base.write_outputs(matched, unmatched)
     print(f"\nGolden artifacts written under {GOLDEN_DIR}")
 
 
