@@ -1431,6 +1431,73 @@ qualifying observation is recorded under `shadow_bet_*`. This remains the
 contract until a future window supplies at least ten independent betting
 blocks and economically confirms the policy.
 
+### Operation 7: Predict a competition outside the T20 state pool (The Hundred)
+
+The Hundred is 100 balls with 5-ball overs and its franchises are not in the
+training corpus. The match-level model never touches a ball, so it can be
+pointed at those fixtures — see
+[reports/hundred_2026_adaptation.md](../reports/hundred_2026_adaptation.md) for
+the full evaluation. The headline: it picks the winner 63.5% of the time across
+159 historical Hundred matches (p = 0.0004) but its probabilities are pinned in
+a 0.37–0.62 band, so log loss barely beats a coinflip, it sits within ~3pp of
+the Polymarket line, and there is no edge to bet.
+
+Three pieces make it work:
+
+```bash
+# 1. Competition history as an auxiliary tracker pool. Results feed
+#    form/H2H/home; the pool is counted separately so the SQLite/tracker
+#    source-count check still guards the primary T20 pool.
+--tracker-aux-dir data/hundred/context_hnd_json
+--tracker-aux-dir data/hundred/season_2026_men
+
+# 2. Franchise renames folded into tracker history.
+--team-aliases data/hundred/team_aliases_2026.json
+
+# 3. A canonical-venue state cache (the I7 identity contract rejects the
+#    frozen M7 artifacts in canonical mode, so use the isolated I7 family).
+--venue-identity-mode i7
+--model-dir models/xgb_match_i7
+--state-dir data/hundred/state --state-version i7
+```
+
+Build the data and state with `scripts/build_hundred_matches.py` and the
+non-destructive cache refresh above; score completed fixtures with
+`scripts/backtest_hundred.py`; pull odds with
+`scripts/fetch_hundred_polymarket.py`. Every command is in the report's
+"Reproduce" section.
+
+**Lineup names must resolve.** More than two unresolved players in one XI now
+raises rather than warning — an unresolved player silently loses their career
+stats and ELO, which drags their whole side toward the default-rated baseline
+and produces a confident, wrong probability. Names may be the canonical display
+name, Cricsheet's initials form ("WG Jacks"), the full name, or the 8-char ID.
+
+### Operation 8: Reproduce the I9 provisional-ELO experiment
+
+I9 is a closed, failed experiment—not a live option. Its isolated control and
+candidate can be reproduced with:
+
+```bash
+uv run python scripts/run_experiment.py \
+  experiments/configs/xgb_i9_baseline.yaml
+uv run python scripts/run_experiment.py \
+  experiments/configs/xgb_i9_provisional_elo.yaml
+```
+
+The provisional contract is
+`provisional_linear_120_x4_v1`: independent batting/bowling exposure, 4× K
+at zero prior rated deliveries, linearly decaying to 1× at 120. Every SQLite,
+parquet, model, and live-state artifact declares its ELO update version;
+mixing fixed-K and provisional state fails closed.
+
+Do not point production commands at `models/xgb_i9`,
+`models/player_stats_cache_i9.sqlite`, or the `data/xgb_*_i9` directories.
+The validation primary interval crossed zero and the direct five-seed
+guardrail regressed. Full commands and metrics are in
+`docs/I9_PROVISIONAL_ELO_EXPERIMENT.md` and
+`reports/i9_provisional_elo_checkpoint_20260730.md`.
+
 ---
 
 ## Performance Benchmarks

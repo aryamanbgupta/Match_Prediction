@@ -13,6 +13,10 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import predict_fixture  # noqa: E402
+from elo_update import (  # noqa: E402
+    BASELINE_ELO_UPDATE_VERSION,
+    PROVISIONAL_ELO_UPDATE_VERSION,
+)
 from identity_maps import venue_alias_contract  # noqa: E402
 from predict_fixture import (  # noqa: E402
     VENUE_IDENTITY_I7,
@@ -75,6 +79,34 @@ def test_legacy_accepts_frozen_state_without_i7_metadata(tmp_path: Path):
 
     assert sqlite_state["venue_identity_mode"] == VENUE_IDENTITY_LEGACY
     assert tracker_state["venue_identity_mode"] == VENUE_IDENTITY_LEGACY
+    assert (
+        sqlite_state["elo_update_version"]
+        == BASELINE_ELO_UPDATE_VERSION
+    )
+    assert (
+        tracker_state["elo_update_version"]
+        == BASELINE_ELO_UPDATE_VERSION
+    )
+
+
+def test_i9_rejects_legacy_missing_state_provenance(tmp_path: Path):
+    sqlite_path = tmp_path / "player_stats_cache_v3.sqlite"
+    snapshot_path = tmp_path / "tracker.pkl"
+    _write_sqlite(sqlite_path, {"source_match_count": 10})
+    _write_snapshot(snapshot_path, {})
+
+    with pytest.raises(RuntimeError, match="ELO update mismatch"):
+        read_sqlite_state_metadata(
+            tmp_path,
+            identity_mode=VENUE_IDENTITY_LEGACY,
+            elo_update_version=PROVISIONAL_ELO_UPDATE_VERSION,
+        )
+    with pytest.raises(RuntimeError, match="ELO update mismatch"):
+        read_tracker_state_metadata(
+            snapshot_path,
+            identity_mode=VENUE_IDENTITY_LEGACY,
+            elo_update_version=PROVISIONAL_ELO_UPDATE_VERSION,
+        )
 
 
 def test_i7_rejects_state_without_current_identity_contract(tmp_path: Path):
@@ -138,6 +170,16 @@ def test_i7_model_loader_requires_identity_file(tmp_path: Path):
     _load_model_artifacts.cache_clear()
     with pytest.raises(RuntimeError, match="venue_identity.json is missing"):
         _load_model_artifacts(str(tmp_path), VENUE_IDENTITY_I7)
+
+
+def test_i9_model_loader_rejects_missing_elo_contract(tmp_path: Path):
+    _load_model_artifacts.cache_clear()
+    with pytest.raises(RuntimeError, match="ELO update mismatch"):
+        _load_model_artifacts(
+            str(tmp_path),
+            VENUE_IDENTITY_LEGACY,
+            PROVISIONAL_ELO_UPDATE_VERSION,
+        )
 
 
 def test_unknown_mode_fails_closed():
