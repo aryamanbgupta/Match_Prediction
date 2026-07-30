@@ -30,29 +30,42 @@ Win probabilities & score distributions → compared to Polymarket / bookmaker o
 
 ## Current State
 
+> **Lifecycle note (2026-07-30):** the frozen production model remains on the
+> pre-I7 schema-v4 artifact family. I7 canonical venue identity is mandatory
+> for all new work. I8 is an isolated schema-v5/132-feature candidate, not a
+> second production mode. The repository is moving toward one supported
+> current bundle rather than permanent `legacy`/`i7`/`i8` switches. See
+> [Repository consolidation and model lifecycle](docs/REPOSITORY_CONSOLIDATION.md).
+
 - **Data**: ~11,260 men's T20 match JSONs from Cricsheet (2005 → 2026-04) across
   14 leagues (IPL, BBL, PSL, SA20, ILT20, CPL, BPL, T20Is, …).
-- **Feature pipeline**: two stages.
+- **Frozen production feature pipeline**: two stages.
   - `build_stats_cache.py` — JSON → SQLite schema v4 (`models/player_stats_cache_v3.sqlite`, ~57 MB, mmap-read).
   - `materialize_features.py` — SQLite + JSON → four parquet splits
     (`data/xgb_data_v3/{train,validation,test,golden_test}.parquet`,
     2.2 M rows × 105 columns).
-- **Model**: XGBoost v6 — 114 features, including 42 empirical-Bayes-shrunk
+- **Forward identity**: the reviewed I7 exact venue map is a data invariant;
+  legacy spelling behavior exists only to replay frozen artifacts.
+- **Production model**: XGBoost v7 — 114 features, including 42
+  empirical-Bayes-shrunk
   outcome-distribution features (per batter / bowler / batter-vs-pace|spin /
   bowler-vs-LHB|RHB / venue). Other trainers (LSTM, MLP, Transformer) are kept
   for comparison; XGBoost is the production path.
+- **Candidate model**: I8 adds 18 hierarchical batter/bowler phase and
+  batter-bowler H2H probabilities under SQLite schema v5. It improved
+  ball-level test Brier but has not passed a new untouched match-level gate.
 - **Evaluation**: 261-match Polymarket test set (2025-07 → 2026-04) + legacy
   44-match T20 WC 2024 set. Metrics: log loss, Brier score, edge, flat /
   Kelly ROI, win rate.
 
-**Latest numbers** (v6 outcome-dist, 261 matches × 100 sims, April 2026):
+**Historical April 2026 benchmark** (v6 outcome-dist, 261 matches × 100 sims):
 log loss **0.7122**, Brier **0.2562**, flat ROI **−7.1 %**, fractional-Kelly
 ROI **+0.7 %**. Calibration vs the v4 baseline improved ~5–6 %; flat-betting
 regressed (sharper probabilities compress betting edges — a known
 calibration-vs-ROI tension). Market log loss on the same set is 0.6267.
-See [IMPROVEMENTS.md](IMPROVEMENTS.md) for per-experiment breakdowns and
-[TODO.md](TODO.md) for the `≥ $50 K` / `≥ $100 K` liquidity-sliced evaluation
-still outstanding.
+See [the I7 checkpoint](reports/i7_rebuild_checkpoint_20260725.md) and
+[the I8 checkpoint](reports/i8_phase_matchup_checkpoint_20260730.md) for the
+newer same-simulator paired results and liquidity slices.
 
 ---
 

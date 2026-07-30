@@ -116,3 +116,18 @@ delta intervals crossed zero. I8 is therefore retained but not promoted.
 No shrinkage or hyperparameter sweep may use these results. See
 `reports/i8_phase_matchup_checkpoint_20260730.md` for the complete paired
 results, upset sensitivity, runtime cost, and terminal gate.
+
+## Lifecycle and cleanup
+
+I8 is an experiment/artifact name, not a permanent public runtime mode. It
+stays isolated only until a new untouched terminal window resolves it:
+
+- promotion means the schema-v5/132-feature bundle replaces the current
+  bundle behind the single supported runner; or
+- rejection means its active runner hooks are removed while its config,
+  report, source commit, and rebuild instructions remain reproducible.
+
+Do not keep I7 and I8 as parallel long-lived serving options. Both already use
+the same mandatory canonical venue identity; their only model difference is
+the candidate feature/schema contract. The wider lifecycle and legacy
+retirement plan is in `docs/REPOSITORY_CONSOLIDATION.md`.

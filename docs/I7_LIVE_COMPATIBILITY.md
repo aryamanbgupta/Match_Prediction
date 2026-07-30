@@ -1,5 +1,11 @@
 # I7 live compatibility modes
 
+> **Lifecycle status:** transitional. These two modes protect frozen artifacts
+> during migration; they are not intended to become a permanent multi-mode
+> serving API. The consolidation target is one canonical main path plus a
+> temporary quarantined legacy replay command. See
+> `docs/REPOSITORY_CONSOLIDATION.md`.
+
 ## Purpose
 
 I7 fixes venue identity by joining reviewed aliases such as `Kennington Oval`
@@ -64,3 +70,17 @@ identity foundation for I8 and later experiments.
 
 The modes are not candidates in a model-selection sweep. `legacy` is a
 temporary serving bridge; I7 is the forward data contract.
+
+## Retirement plan
+
+No third venue-identity mode should be added. The next cleanup refactor should:
+
+1. make canonical I7 identity the only behavior of the primary live command;
+2. move frozen pre-I7 serving to a clearly named replay-only entry point;
+3. replace generation-specific checks with one generic model-bundle manifest;
+   and
+4. delete the replay entry point after a canonical bundle has an accepted
+   operational smoke test and tagged rollback release.
+
+Until that refactor is approved, keep the present modes fail-closed and do not
+extend legacy mode with new state, feature, or model capabilities.

@@ -2,10 +2,22 @@
 
 Comprehensive technical reference for CricML. This is the canonical doc for how
 the system is built, how data flows through it, and why each major decision was
-made. Reflects the Phase B parsing split (2026-04-22), the v6 outcome-
-distribution feature pass under schema v4 (2026-04-23), and the Phase 5
-(hierarchical shrinkage, 2026-04-25) + Phase 6 (k-sweep, k=30 won) work that
-together produced the active **v7** XGBoost model.
+made. The detailed baseline sections describe the frozen production v7
+XGBoost/schema-v4 pipeline. The current extension state is:
+
+| concern | operational state |
+|---|---|
+| production model | frozen pre-I7 v7 ball model and M7 direct model |
+| forward identity | I7 exact canonical venue identity, mandatory for new work |
+| deterministic state | I6 date + Cricsheet-ID ordering |
+| candidate ball model | I8, schema v5, 132 features, not promoted |
+| live compatibility | temporary legacy default plus opt-in I7, pending consolidation |
+
+I7 and I8 are not intended to remain parallel product modes. The target is one
+current model bundle, generic manifest validation, and a temporary isolated
+legacy replay path. See
+[REPOSITORY_CONSOLIDATION.md](REPOSITORY_CONSOLIDATION.md) for the lifecycle
+policy and completed-work summary.
 
 For day-to-day commands see [OPERATIONS.md](OPERATIONS.md). For adding new model
 types see [ADDING_NEW_MODELS.md](ADDING_NEW_MODELS.md).
@@ -79,8 +91,11 @@ free uncertainty. See §6 for the full rationale.
 - 6-class outcome space: `{0:dot, 1:one, 2:two, 3:four, 4:six, 5:wicket}`.
 - SQLite snapshot for date `D` reflects only matches with date `< D`
   (first-write-wins).
+- All new artifacts use the active I7 canonical venue identity contract.
+- Multi-directory walks use `(match_date, Cricsheet match ID)` ordering.
 - Schema-changing edits to the SQLite cache require bumping `SCHEMA_VERSION`
   in `stats_sqlite_backend.py`.
+- I8 requires schema v5; frozen production remains on schema v4.
 - `--parallel` on `run_sim_eval.py` has crashed the 16 GB test box; default
   is serial.
 
@@ -95,19 +110,19 @@ quick "scope sniff."
 
 | File | Lines | Role |
 |---|---:|---|
-| `scripts/build_stats_cache.py` | ~600 | Chronological JSON walk → SQLite schema v4. Writes delta-compressed snapshots, outcome counts (`c0..cw`), match-log rows, and global prior π. Idempotent via `_meta.source_json_mtime_max`. |
-| `scripts/materialize_features.py` | ~310 | Per-date batched parquet emission. Rehydrates `temp_*` trackers from SQLite once per date, replays same-day matches in versioned match-ID order, writes 4 splits + `.feature_hash` marker. |
+| `scripts/build_stats_cache.py` | ~600 | Chronological JSON walk → SQLite schema v4 or v5. Writes delta-compressed snapshots, outcome counts (`c0..cw`), match-log rows, and frozen-prior metadata. Schema v5 adds I8 player-phase and batter-bowler counts. |
+| `scripts/materialize_features.py` | ~310 | Per-date batched parquet emission. Rehydrates `temp_*` trackers from SQLite once per date, replays same-day matches in `(date, Cricsheet match ID)` order, writes 4 splits + `.feature_hash` marker. |
 | `scripts/parsing_v2.py` | ~1140 | Tracker primitives: `PlayerStatsTracker`, `PlayerEloTracker`, `VenueStatsTracker`, `InningsFeatureCalculator`, `parse_match_data_v2`, `deep_copy_stats`, `classify_match_k_factor`. The orchestrator was deleted in Phase B; only helpers remain. |
 | `scripts/tracker_rehydration.py` | ~350 | Seeds `temp_*` trackers from SQLite at a date boundary using the new private accessors on `_SQLiteBackend`. |
 | `scripts/loaders_common.py` | ~125 | `iter_matches_chronological`, `extract_match_metadata`, `DEFAULT_SPLITS`, `effective_splits`. Shared by parser + tests. |
-| `scripts/feature_registry.py` | ~225 | Central feature catalog. 16 groups, `V3_GROUPS` / `V5_GROUPS` / **`V6_GROUPS`** convenience exports, `resolve_feature_list`, `get_feature_hash`. |
+| `scripts/feature_registry.py` | ~225 | Central feature catalog and ordered feature contracts. I7 resolves to 114 features; isolated I8 adds exactly 18 phase/H2H probabilities for 132 total. |
 | `scripts/player_metadata.py` | ~290 | `PlayerMetadataProvider` — hand/arm/age/bowling-style lookups from `data/all_players_enriched.csv`. |
 
 ### 2.2 Stats cache backend
 
 | File | Lines | Role |
 |---|---:|---|
-| `scripts/stats_sqlite_backend.py` | ~945 | `_SQLiteBackend` — mmap reader. 11 tables (see §5.3). Ten public getters, raw-counter accessors used by `tracker_rehydration.py`, fork-safe via `_ensure_conn` PID check. `SCHEMA_VERSION = 4`. |
+| `scripts/stats_sqlite_backend.py` | ~945 | `_SQLiteBackend` — mmap reader with additive schema-v4/v5 compatibility. Schema-v5 getters expose I8 player-phase and H2H outcome counts; schema-v4 requests for those getters fail clearly. Fork-safe via `_ensure_conn` PID check. |
 | `scripts/stats_provider.py` | ~225 | `StatsProvider` — facade over the backend. `StatsProviderCache` — per-instance memo for the 5 lineup/venue-keyed methods (~1.2× sim speedup). `wrap_with_cache` helper. |
 
 ### 2.3 Training scripts
@@ -124,6 +139,7 @@ quick "scope sniff."
 | File | Lines | Role |
 |---|---:|---|
 | `scripts/sim_v1_2.py` | ~3660 | One file holds: data classes (`Outcome`, `Player`, `TeamLineup`, `MatchState`), rules engine (`T20Rules`, `BowlerSelector`), the abstract `PredictionModel` interface, all five concrete model wrappers (`XGBoostModelV2`, `LSTMModelV1`, `MLPModelV1`, `MLPModelV2`, `TransformerModelV1`, `LLMModelV1`), the simulation orchestrator (`SimulationEngine`), and result types (`BallResult`, `InningsResult`, `MatchResult`, `ResultAggregator`). The 5-way duplicated feature-assembly blocks are tracked debt — see [TODO.md](../TODO.md). |
+| `scripts/sim_i8.py` | — | Isolated I8 wrapper over the frozen simulator. Appends the exact 18 schema-v5 phase/H2H features and validates the feature, shrinkage, identity, and provider contracts. Candidate-only; not a permanent serving mode. |
 
 ### 2.5 Evaluation framework (`scripts/sim_eval/`)
 
@@ -132,6 +148,7 @@ quick "scope sniff."
 | `loaders.py` | ~310 | `TestMatchLoader` (JSON → `MatchState`), `BettingOddsLoader` (decimal odds → margin-free probabilities). |
 | `match_evaluator.py` | ~1010 | `MatchLevelEvaluator` — runs sims per match, computes log loss / Brier / edge / calibration / flat & Kelly P&L. Optional Platt + isotonic calibration via `--calibrate` / `--ball-calibrate`. |
 | `run_sim_eval.py` | ~22 K bytes | CLI entrypoint. `--model-type {xgboost,lstm,mlp,transformer}`, `--model-version`, `--n-sims`, `--max-matches`, `--mlx`, calibration flags, `--bowler-selector {empirical,random}` (default empirical). |
+| `run_sim_eval_i8.py` | — | Fail-closed I8 evaluation entry point. Requires schema v5 and the exact I8 model sidecars; never falls back to legacy state or a dummy model. |
 | `prop_backtest.py` | ~1100 | Prop-bet backtest harness (2026-05-12). Simulates each test match, aggregates ~25 prop families (top batter/bowler, innings/PP totals, team top-scorer, sixes/fours counts, first-wicket runs, bowler wickets/economy, tie), scores Brier-skill + MAE vs cricsheet actuals with bootstrap CIs. |
 | `eval_statistics.py` | ~280 | I3 match-winner statistics contract: explicit flat-bet decisions, Cricsheet event time blocks with team-pair fallback, and deterministic whole-block LL/ROI bootstrap intervals. |
 | `render_prop_per_match.py` / `compare_selector_eval.py` / `check_bowler_coverage.py` | — | Prop drilldown renderer (per-match markdown + index), empirical-vs-random selector A/B with gate verdicts, and bowler-coverage (G5) diagnostic. |
@@ -140,7 +157,7 @@ quick "scope sniff."
 
 | File | Role |
 |---|---|
-| `scripts/run_experiment.py` | YAML-driven pipeline runner. Smart cache: SQLite valid iff `_meta.schema_version == 4` ∧ `source_json_mtime_max ≥ max(JSON mtime)`; parquet valid iff `feature_hash` + `splits` + `gender_filter` match and parquet mtime ≥ SQLite mtime. Dispatches `build_stats_cache.py` / `materialize_features.py` independently. |
+| `scripts/run_experiment.py` | YAML-driven pipeline runner. Smart-cache acceptance validates the config's required SQLite schema, exact source membership/order metadata, feature hash, split contract, gender filter, and artifact freshness. Dispatches `build_stats_cache.py` / `materialize_features.py` independently. |
 | `scripts/experiment_tracker.py` | Per-experiment directory under `experiments/results/<name>_<ts>_<git>/` with `config.yaml`, `metadata.json`, `metrics.json`, `console_output.log`. |
 | `scripts/compare_experiments.py` | List / filter / show / side-by-side compare experiments. |
 | `experiments/configs/*.yaml` | Declarative experiment definitions. Active: `xgb_v3_baseline`, `xgb_v6_outcome_dist`, `lstm_v1_baseline`, `transformer_v1_baseline`. Others kept for reproducibility of past experiments. |

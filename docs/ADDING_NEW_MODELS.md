@@ -1,9 +1,15 @@
 # Adding a New Prediction Model
 
 How to plug a new model type into CricML's training, simulation, and
-evaluation pipelines. The system uses a plugin architecture: models implement
-the `PredictionModel` ABC defined in `scripts/sim_v1_2.py` and are registered
-in `run_sim_eval.py` and `run_experiment.py`.
+evaluation pipelines. Models implement the `PredictionModel` ABC defined in
+`scripts/sim_v1_2.py`.
+
+**Lifecycle rule:** an experiment should use isolated artifacts and a
+fail-closed candidate runner. Do not permanently register every experiment in
+the main runtime. Registration in the single current runner is a promotion
+step: the new bundle replaces the previous current bundle. Rejected
+experiments retain their config/report/source commit but lose active runtime
+hooks. See [REPOSITORY_CONSOLIDATION.md](REPOSITORY_CONSOLIDATION.md).
 
 For the higher-level architecture, see [ARCHITECTURE.md](ARCHITECTURE.md).
 For day-to-day commands, see [OPERATIONS.md](OPERATIONS.md).
@@ -205,7 +211,16 @@ Roughly 1.2× sim speedup. The wrapper is pickle-safe for
 
 ---
 
-## 4. Register in `run_sim_eval.py`
+## 4. Add an isolated evaluation entry point
+
+Before promotion, follow the I8 pattern: make a small candidate runner that
+validates the exact model, feature order, stats schema, identity contract, and
+sidecars, then delegates to the shared evaluation framework. It must fail
+closed and must not fall back to the demonstration model or frozen state.
+
+Only after promotion should the model replace the current branch in
+`run_sim_eval.py`. The following registration pattern describes that
+promotion step:
 
 `scripts/sim_eval/run_sim_eval.py`:
 
