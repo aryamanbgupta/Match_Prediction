@@ -1635,6 +1635,14 @@ checks, and isolated artifacts; do not attach I7 metadata to legacy models.
 The consumed forward holdout remained closed. See
 `reports/i7_rebuild_checkpoint_20260725.md`.
 
+**Live compatibility checkpoint (2026-07-30):** `predict_fixture.py` now
+requires an explicit venue-identity family. Its live default `legacy` mode
+preserves raw venue labels and permits the frozen pre-I7 model/cache/snapshot;
+opt-in `i7` canonicalizes the fixture and requires matching map provenance
+across all three artifacts. Declared modes cannot be mixed, and diagnostics
+record raw/effective venue. This is a serving bridge only: I7 remains mandatory
+for I8 and all new training. See `docs/I7_LIVE_COMPATIBILITY.md`.
+
 ## I8 [INTERACTIVE] Per-player phase dists + batter-vs-bowler cell (schema-v5 plumbing)
 The flagged highest-value untried ball features need new SQLite
 getters/tables (`stats_sqlite_backend.py` — forbidden to the loop). Do the
@@ -1724,6 +1732,16 @@ six/four rates, innings totals, and chase calibration. Prerequisites: I7 venue
 canonicalization, source/licensing audit, missing-value indicators, and an
 as-of join test. Gate on grouped-by-venue holdout performance so repeated
 matches at major grounds cannot hide regressions at sparse venues.
+
+**Temporal-venue hypothesis (2026-07-30):** canonical identity should remain
+stable, but the learned venue state need not be timeless. Renovations, square
+rotation, pitch preparation, rope placement, and climate regimes can make one
+ground play differently across eras. Do not represent that by retaining two
+names for the same venue. Instead, test recency-weighted or era-indexed venue
+outcome profiles/embeddings, with change points tied to dated physical-registry
+evidence where available. Compare against the static I7 identity on
+forward-chained and grouped-by-venue gates so temporal flexibility cannot
+become leakage or a high-volume-ground memorizer.
 
 **Three-run motivation (2026-07-24):** threes are rare overall
 (10,463/2,477,116 legal balls, 0.4224%) but differ sharply at high-volume

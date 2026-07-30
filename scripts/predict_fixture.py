@@ -29,6 +29,7 @@ import sys
 import time
 from collections.abc import Sequence
 from datetime import date, datetime
+from functools import lru_cache
 from pathlib import Path
 
 import joblib
@@ -69,6 +70,52 @@ A7_ELO_BOUNDARY = 5.0
 A7_CLOSE_MINIMUM_EDGE = 0.0
 A7_MISMATCH_MINIMUM_EDGE = 0.10
 A7_MINIMUM_VOLUME_USD = 50_000.0
+VENUE_IDENTITY_LEGACY = "legacy"
+VENUE_IDENTITY_I7 = "i7"
+VENUE_IDENTITY_MODES = (VENUE_IDENTITY_LEGACY, VENUE_IDENTITY_I7)
+DEFAULT_LIVE_VENUE_IDENTITY_MODE = VENUE_IDENTITY_LEGACY
+
+
+def resolve_venue_identity(
+    venue: str | None,
+    identity_mode: str = VENUE_IDENTITY_I7,
+) -> str:
+    """Resolve a raw venue label under an explicit serving contract.
+
+    ``legacy`` preserves the frozen v3 model/cache behavior. ``i7`` applies
+    the canonical alias map and is required for every newly trained model.
+    """
+    if identity_mode == VENUE_IDENTITY_LEGACY:
+        return str(venue or "").strip()
+    if identity_mode == VENUE_IDENTITY_I7:
+        return canonicalize_venue(venue)
+    raise ValueError(
+        f"unsupported venue identity mode {identity_mode!r}; "
+        f"choose one of {VENUE_IDENTITY_MODES}"
+    )
+
+
+def _validate_venue_identity_contract(
+    metadata: dict,
+    *,
+    identity_mode: str,
+    context: str,
+) -> None:
+    """Validate I7 artifacts while leaving legacy artifacts immutable."""
+    declared_mode = metadata.get("venue_identity_mode")
+    if declared_mode and declared_mode != identity_mode:
+        raise RuntimeError(
+            f"{context} declares venue identity mode {declared_mode!r}, but "
+            f"serving requested {identity_mode!r}; rebuild or select matching "
+            "artifacts"
+        )
+    if identity_mode == VENUE_IDENTITY_I7:
+        assert_venue_alias_contract(metadata, context=context)
+    elif identity_mode != VENUE_IDENTITY_LEGACY:
+        raise ValueError(
+            f"unsupported venue identity mode {identity_mode!r}; "
+            f"choose one of {VENUE_IDENTITY_MODES}"
+        )
 
 
 def _normalize_source_dirs(
@@ -90,6 +137,8 @@ def _normalize_source_dirs(
 def build_tracker_snapshot(
     source_dirs: Sequence[Path | str] | Path | str = DEFAULT_TRACKER_SOURCE_DIRS,
     snapshot_path: Path = TRACKER_SNAPSHOT,
+    *,
+    identity_mode: str = VENUE_IDENTITY_I7,
 ) -> dict:
     """Walk every match in the corpus and snapshot the three Phase A2
     trackers.
@@ -129,7 +178,7 @@ def build_tracker_snapshot(
             winner = outcome.get("eliminator")
         if not winner or winner not in teams:
             continue
-        venue = canonicalize_venue(info.get("venue"))
+        venue = resolve_venue_identity(info.get("venue"), identity_mode)
         t1, t2 = teams
         t1_won = winner == t1
         form.update(t1, match_date, t1_won)
@@ -138,6 +187,11 @@ def build_tracker_snapshot(
         home.update(t1, venue, match_date)
         home.update(t2, venue, match_date)
 
+    identity_metadata = (
+        venue_alias_contract()
+        if identity_mode == VENUE_IDENTITY_I7
+        else {}
+    )
     snapshot = {
         "as_of": latest.strftime("%Y-%m-%d") if latest else None,
         "form_records": dict(form.records),
@@ -147,7 +201,8 @@ def build_tracker_snapshot(
         "built_at": datetime.utcnow().isoformat() + "Z",
         "source_dirs": [str(p) for p in normalized_dirs],
         "same_day_order_version": SAME_DAY_ORDER_VERSION,
-        **venue_alias_contract(),
+        "venue_identity_mode": identity_mode,
+        **identity_metadata,
     }
     snapshot_path = Path(snapshot_path)
     snapshot_path.parent.mkdir(parents=True, exist_ok=True)
@@ -178,9 +233,14 @@ def _peek_snapshot_as_of(snapshot_path: Path = TRACKER_SNAPSHOT) -> str | None:
 def load_trackers(
     snapshot_path: Path = TRACKER_SNAPSHOT,
     source_dirs: Sequence[Path | str] | Path | str = DEFAULT_TRACKER_SOURCE_DIRS,
+    identity_mode: str = VENUE_IDENTITY_I7,
 ) -> tuple[TeamFormTracker, H2HTracker, HomeVenueTracker]:
     if not Path(snapshot_path).exists():
-        build_tracker_snapshot(source_dirs, snapshot_path)
+        build_tracker_snapshot(
+            source_dirs,
+            snapshot_path,
+            identity_mode=identity_mode,
+        )
     snap = _read_tracker_snapshot(snapshot_path)
 
     form = TeamFormTracker()
@@ -198,6 +258,7 @@ def load_trackers(
 def read_sqlite_state_metadata(
     state_dir: Path,
     version: str = "v3",
+    identity_mode: str = VENUE_IDENTITY_I7,
 ) -> dict:
     """Read live-state coverage without mutating or fully loading the cache."""
     sqlite_path = Path(state_dir) / f"player_stats_cache_{version}.sqlite"
@@ -213,13 +274,18 @@ def read_sqlite_state_metadata(
     if not as_of:
         raise RuntimeError(f"SQLite cache has no dated state: {sqlite_path}")
     source_count = meta.get("source_match_count")
-    assert_venue_alias_contract(meta, context="live SQLite stats cache")
+    _validate_venue_identity_contract(
+        meta,
+        identity_mode=identity_mode,
+        context="live SQLite stats cache",
+    )
     return {
         "path": str(sqlite_path.resolve()),
         "as_of": as_of,
         "source_match_count": int(source_count) if source_count else None,
         "build_timestamp": meta.get("build_timestamp"),
         "same_day_order_version": meta.get("same_day_order_version"),
+        "venue_identity_mode": identity_mode,
         **{
             key: meta.get(key)
             for key in venue_alias_contract()
@@ -227,7 +293,10 @@ def read_sqlite_state_metadata(
     }
 
 
-def read_tracker_state_metadata(snapshot_path: Path) -> dict:
+def read_tracker_state_metadata(
+    snapshot_path: Path,
+    identity_mode: str = VENUE_IDENTITY_I7,
+) -> dict:
     snapshot = _read_tracker_snapshot(snapshot_path)
     as_of = snapshot.get("as_of")
     if not as_of:
@@ -235,7 +304,11 @@ def read_tracker_state_metadata(snapshot_path: Path) -> dict:
             f"tracker snapshot has no as_of date: {snapshot_path}"
         )
     count = snapshot.get("n_matches_walked")
-    assert_venue_alias_contract(snapshot, context="live tracker snapshot")
+    _validate_venue_identity_contract(
+        snapshot,
+        identity_mode=identity_mode,
+        context="live tracker snapshot",
+    )
     return {
         "path": str(Path(snapshot_path).resolve()),
         "as_of": as_of,
@@ -243,6 +316,7 @@ def read_tracker_state_metadata(snapshot_path: Path) -> dict:
         "built_at": snapshot.get("built_at"),
         "source_dirs": snapshot.get("source_dirs"),
         "same_day_order_version": snapshot.get("same_day_order_version"),
+        "venue_identity_mode": identity_mode,
         **{
             key: snapshot.get(key)
             for key in venue_alias_contract()
@@ -351,14 +425,15 @@ def compute_features(fixture: dict,
                      metadata: PlayerMetadataProvider,
                      form: TeamFormTracker,
                      h2h: H2HTracker,
-                     home: HomeVenueTracker) -> dict:
+                     home: HomeVenueTracker,
+                     identity_mode: str = VENUE_IDENTITY_I7) -> dict:
     """Mirror materialize_match_features._build_match_record but compute
     team-level features directly from StatsProvider getters (no
     parse_match_data_v2 / no ball data required)."""
     date_str = fixture["date"]
     match_date = datetime.strptime(date_str, "%Y-%m-%d")
     team1, team2 = fixture["team1"], fixture["team2"]
-    venue = canonicalize_venue(fixture["venue"])
+    venue = resolve_venue_identity(fixture["venue"], identity_mode)
     event_name = fixture.get("competition_tier", "Indian Premier League")
     team_type = fixture.get("team_type", "club")
     # Compute the encoded tier (1..4) and is_international the same way
@@ -508,22 +583,44 @@ def compute_features(fixture: dict,
     return record
 
 
-def apply_encoders_and_predict(record: dict,
-                                model_dir: Path = MODEL_DIR) -> tuple[float, dict]:
-    identity_path = model_dir / "venue_identity.json"
-    if not identity_path.exists():
-        raise RuntimeError(
-            f"{identity_path} is missing; retrain the match model with the "
-            "active venue identity map"
+@lru_cache(maxsize=8)
+def _load_model_artifacts(model_dir_str: str, identity_mode: str) -> tuple:
+    """Load and validate one immutable match-model artifact family."""
+    model_dir = Path(model_dir_str)
+    if identity_mode == VENUE_IDENTITY_I7:
+        identity_path = model_dir / "venue_identity.json"
+        if not identity_path.exists():
+            raise RuntimeError(
+                f"{identity_path} is missing; retrain the match model with "
+                "the active venue identity map or explicitly select legacy "
+                "mode only for a frozen pre-I7 artifact"
+            )
+        _validate_venue_identity_contract(
+            json.loads(identity_path.read_text()),
+            identity_mode=identity_mode,
+            context="match model",
         )
-    assert_venue_alias_contract(
-        json.loads(identity_path.read_text()),
-        context="match model",
-    )
+    elif identity_mode != VENUE_IDENTITY_LEGACY:
+        raise ValueError(
+            f"unsupported venue identity mode {identity_mode!r}; "
+            f"choose one of {VENUE_IDENTITY_MODES}"
+        )
     model = joblib.load(model_dir / "model.pkl")
     encoders = joblib.load(model_dir / "encoders.pkl")
     with open(model_dir / "feature_columns.txt") as f:
         feat_cols = [line.strip() for line in f if line.strip()]
+    return model, encoders, feat_cols
+
+
+def apply_encoders_and_predict(
+    record: dict,
+    model_dir: Path = MODEL_DIR,
+    identity_mode: str = VENUE_IDENTITY_I7,
+) -> tuple[float, dict]:
+    model, encoders, feat_cols = _load_model_artifacts(
+        str(Path(model_dir)),
+        identity_mode,
+    )
 
     df = pd.DataFrame([record])
     encoder_warnings = []
@@ -696,6 +793,17 @@ def main() -> int:
     ap.add_argument("--model-dir", type=Path, default=MODEL_DIR,
                     help=f"Model artifact dir (default: {MODEL_DIR.name})")
     ap.add_argument(
+        "--venue-identity-mode",
+        choices=VENUE_IDENTITY_MODES,
+        default=DEFAULT_LIVE_VENUE_IDENTITY_MODE,
+        help=(
+            "Venue identity contract. 'legacy' preserves frozen pre-I7 "
+            "artifacts; 'i7' canonicalizes venue aliases and requires matching "
+            "identity metadata on the model, SQLite cache, and tracker "
+            f"snapshot (default: {DEFAULT_LIVE_VENUE_IDENTITY_MODE})"
+        ),
+    )
+    ap.add_argument(
         "--state-dir",
         type=Path,
         default=DEFAULT_STATE_DIR,
@@ -744,7 +852,11 @@ def main() -> int:
         args.tracker_source_dirs or DEFAULT_TRACKER_SOURCE_DIRS
     )
     if args.rebuild_snapshot:
-        build_tracker_snapshot(tracker_sources, args.tracker_snapshot)
+        build_tracker_snapshot(
+            tracker_sources,
+            args.tracker_snapshot,
+            identity_mode=args.venue_identity_mode,
+        )
     elif not args.tracker_snapshot.exists():
         if (args.tracker_snapshot != TRACKER_SNAPSHOT
                 and not args.tracker_source_dirs):
@@ -752,14 +864,24 @@ def main() -> int:
                 "a custom tracker snapshot does not exist; pass each matching "
                 "--tracker-source-dir and --rebuild-snapshot"
             )
-        build_tracker_snapshot(tracker_sources, args.tracker_snapshot)
+        build_tracker_snapshot(
+            tracker_sources,
+            args.tracker_snapshot,
+            identity_mode=args.venue_identity_mode,
+        )
 
     fixture = json.loads(args.fixture.read_text())
     print(f"Predicting: {fixture['date']}  "
           f"{fixture['team1']} vs {fixture['team2']}  @ {fixture['venue']}")
 
-    sqlite_state = read_sqlite_state_metadata(args.state_dir)
-    tracker_state = read_tracker_state_metadata(args.tracker_snapshot)
+    sqlite_state = read_sqlite_state_metadata(
+        args.state_dir,
+        identity_mode=args.venue_identity_mode,
+    )
+    tracker_state = read_tracker_state_metadata(
+        args.tracker_snapshot,
+        identity_mode=args.venue_identity_mode,
+    )
     state_freshness = assess_state_freshness(
         fixture["date"],
         sqlite_state,
@@ -787,25 +909,49 @@ def main() -> int:
     print("Loading providers + trackers...")
     provider = StatsProvider(str(args.state_dir), version="v3")
     metadata = PlayerMetadataProvider(str(REPO / "data" / "all_players_enriched.csv"))
-    form, h2h, home = load_trackers(args.tracker_snapshot, tracker_sources)
+    form, h2h, home = load_trackers(
+        args.tracker_snapshot,
+        tracker_sources,
+        identity_mode=args.venue_identity_mode,
+    )
 
     print("Computing features...")
-    record = compute_features(fixture, provider, metadata, form, h2h, home)
+    record = compute_features(
+        fixture,
+        provider,
+        metadata,
+        form,
+        h2h,
+        home,
+        identity_mode=args.venue_identity_mode,
+    )
 
     print("Applying model...")
     toss_known = bool(record.pop("_toss_known", True))
     toss_branch_probs = None
     if toss_known:
-        p_team1, debug = apply_encoders_and_predict(record, args.model_dir)
+        p_team1, debug = apply_encoders_and_predict(
+            record,
+            args.model_dir,
+            identity_mode=args.venue_identity_mode,
+        )
     else:
         # Unknown toss: predict both bat-first branches and average
         # (2026-07-16 review I1 — removes the fixed team1-chasing default,
         # which was a systematic train/serve skew on every pre-toss fixture).
         branch = dict(record)
         branch["team1_batting_first"] = 1
-        p_bat, debug = apply_encoders_and_predict(branch, args.model_dir)
+        p_bat, debug = apply_encoders_and_predict(
+            branch,
+            args.model_dir,
+            identity_mode=args.venue_identity_mode,
+        )
         branch["team1_batting_first"] = 0
-        p_chase, _ = apply_encoders_and_predict(branch, args.model_dir)
+        p_chase, _ = apply_encoders_and_predict(
+            branch,
+            args.model_dir,
+            identity_mode=args.venue_identity_mode,
+        )
         p_team1 = 0.5 * (p_bat + p_chase)
         toss_branch_probs = {"team1_bats_first": p_bat, "team1_chases": p_chase}
         print(f"  (toss unknown — averaged bat-first branches: "
@@ -835,6 +981,9 @@ def main() -> int:
         "bet": bet_info,
         "diagnostics": {
             "model": str(args.model_dir),
+            "venue_identity_mode": args.venue_identity_mode,
+            "fixture_venue_raw": fixture["venue"],
+            "fixture_venue_effective": record["venue"],
             "rehydrate_as_of": fixture["date"],
             "state_freshness": state_freshness,
             "sqlite_cache": sqlite_state["path"],

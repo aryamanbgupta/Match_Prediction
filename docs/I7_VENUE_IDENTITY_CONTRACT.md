@@ -106,14 +106,21 @@ Neither retrained model passed its promotion gate:
   rejection of promotion rather than proof of a stable regression.
 
 The identity implementation and isolated I7 artifacts remain available, but
-production v3/v7 and M7 artifacts are not relabeled or overwritten. The live
-path intentionally fails closed when legacy state or model artifacts lack the
-active identity provenance. Before restoring live use, choose and evaluate
-one explicit path:
+production v3/v7 and M7 artifacts are not relabeled or overwritten. Live
+serving now has two explicit modes:
 
-1. keep I7 opt-in until a later retrained model passes its gate; or
-2. add a separately versioned legacy-compatibility mode and test its inference
-   behavior, especially for fixtures arriving under an alias spelling.
+- `legacy` is the CLI default and is only for the frozen pre-I7 model, cache,
+  and tracker snapshot. It preserves the incoming venue spelling and permits
+  missing I7 provenance.
+- `i7` is opt-in for live serving and mandatory for all new model work. It
+  canonicalizes the fixture venue and requires the exact active map contract
+  on the model, cache, and tracker snapshot.
+
+An artifact that declares one mode cannot be served under the other. Tracker
+snapshots rebuilt in legacy mode omit I7 map provenance and retain raw venue
+labels; I7 snapshots carry the map contract. Prediction diagnostics record the
+selected mode plus raw and effective fixture venue. Operational commands and
+limitations are in `docs/I7_LIVE_COMPATIBILITY.md`.
 
 Copying the I7 metadata onto a legacy artifact is not a compatibility fix: it
 would falsely claim that fragmented venue histories were rebuilt.
