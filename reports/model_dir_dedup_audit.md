@@ -46,3 +46,36 @@ The shipped directory is a superset: its venue encoder, vector-scaling
 calibrator, and outcome-distribution sidecar are absent from the Phase 5
 directory. None of the five candidates contains a calibrator or venue encoder,
 so there is no conflicting candidate hash for those shipped-only artifacts.
+
+## Branch hygiene
+
+Tip dates are commit dates. The reachability count is the requested
+`git log main..<branch> --oneline | wc -l` result.
+
+| Branch | Tip date | Tip subject | Commits not reachable from `main` | Recommendation |
+|---|---|---|---:|---|
+| `fixes/sim_improvements` | 2025-10-09 | Fix critical metric calculation issues | 0 | **Delete** — fully reachable from `main` |
+| `feature/player-stats-cache` | 2025-10-15 | Add comprehensive documentation and update cache system references | 0 | **Delete** — fully reachable from `main` |
+| `features/cricinfo-features` | 2025-12-26 | added v1 lstm model | 0 | **Delete** — fully reachable from `main` |
+| `features/mlp-model` | 2025-12-31 | modified mlp | 0 | **Delete** — fully reachable from `main` |
+| `features/llm-model` | 2026-02-23 | added possible improvements | 0 | **Delete** — fully reachable from `main` |
+| `features/transformer-model` | 2026-03-20 | fixed eval bug and re-ran for results fo rall models | 0 | **Delete** — fully reachable from `main` |
+| `backup-pre-rewrite` | 2026-05-28 | chore: stop tracking tmp/ scratch space; gitignore it | 15 | **Delete** — May rewrite verified; see below |
+
+No branch was deleted.
+
+### Pre-rewrite backup verification
+
+`git cherry main backup-pre-rewrite` marks 13 of the 15 non-reachable commits
+as patch-equivalent on `main`. The two unmatched commits are `07e4443` (“misc
+files”) and `685e863` (“stop tracking tmp scratch space”):
+
+- all durable paths introduced by `07e4443` are present on `main`, including
+  the project overview, prop reports, parallel-run helper, and prop backtest;
+- the scratch profile and `tmp/golden_inclusive/` artifacts are absent from
+  `main`, as intended;
+- `tmp/` is ignored on `main`.
+
+The backup therefore preserves old hashes, but no wanted content that is
+missing from the rewritten history. Its 15-count is rewrite topology rather
+than evidence of an unmerged feature.
