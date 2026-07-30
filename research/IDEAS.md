@@ -1643,7 +1643,7 @@ across all three artifacts. Declared modes cannot be mixed, and diagnostics
 record raw/effective venue. This is a serving bridge only: I7 remains mandatory
 for I8 and all new training. See `docs/I7_LIVE_COMPATIBILITY.md`.
 
-## I8 [INTERACTIVE] Per-player phase dists + batter-vs-bowler cell (schema-v5 plumbing)
+## I8 [DONE 2026-07-30] Per-player phase dists + batter-vs-bowler cell
 The flagged highest-value untried ball features need new SQLite
 getters/tables (`stats_sqlite_backend.py` — forbidden to the loop). Do the
 schema-v5 plumbing interactively, then queue the training experiment as a
@@ -1657,6 +1657,17 @@ player's already-shrunk overall profile with `k_phase=30`; H2H shrinks with
 I7 venue identity and inclusive-total-run I7 delivery semantics remain fixed.
 Artifacts are isolated under the `i8` cache/data/model namespace and require
 schema v5. See `docs/I8_FEATURE_CONTRACT.md`.
+
+**Result:** schema-v5 storage/readers, 132-feature training, exact contract
+sidecars, and an isolated fail-closed simulator landed. Against I7, I8
+improved test ball LL 1.631620 → 1.628690 and Brier 0.781231 → 0.779532; the
+paired test Brier delta was confidence-clean, while LL narrowly was not. On
+the consumed 255-match diagnostic, LL improved 0.7042 → 0.6825 but flat ROI
+fell +0.46% → -1.49%; every competition-block delta interval crossed zero.
+Removing the largest 5% upset win leaves I7/I8 ROI at -7.02%/-8.98%. Keep I8
+as an isolated candidate, do not tune on consumed sets, and require a new
+post-2026-07-30 terminal window before promotion. See
+`reports/i8_phase_matchup_checkpoint_20260730.md`.
 
 ## I9 [INTERACTIVE] ELO cold-start / provisional K (`parsing_v2.py`)
 Debutants start at exactly 1500 with K as low as 1.0 (domestic); add a

@@ -99,3 +99,20 @@ No consumed forward fixture may be used to tune or promote I8. Because I8 was
 specified on 2026-07-30, final promotion requires a later untouched terminal
 window. Until then, even a positive diagnostic result remains an experiment,
 not a production replacement.
+
+## Implementation checkpoint
+
+I8 was implemented and evaluated on 2026-07-30. Schema-v5 storage, additive
+readers, pre-ball feature materialization, model sidecars, and the isolated
+fail-closed simulation runner are complete. The first frozen run preserved
+all 9,519 historical matches and produced 132-feature rows exactly paired
+with I7.
+
+I8 modestly improved validation/test ball log loss; the test multiclass
+Brier delta was the only confidence-clean result. On the consumed
+Polymarket diagnostic, full-slice match log loss improved from 0.7042 to
+0.6825, while flat ROI fell from +0.46% to -1.49%; all competition-block
+delta intervals crossed zero. I8 is therefore retained but not promoted.
+No shrinkage or hyperparameter sweep may use these results. See
+`reports/i8_phase_matchup_checkpoint_20260730.md` for the complete paired
+results, upset sensitivity, runtime cost, and terminal gate.
