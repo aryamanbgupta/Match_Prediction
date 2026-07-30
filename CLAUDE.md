@@ -155,9 +155,14 @@ Eval sets:
 - **Iteration set**: `data/polymarket_test/` + `betting_odds_polymarket.json`
   (261 matches, 2025-07-01 → 2026-04-16). Used during model selection; not
   strictly out-of-sample.
-- **Golden set** (2026-05-09): `data/golden/polymarket_test/` +
-  `data/golden/betting_odds_golden.json` (55 matches, 2026-04-17 → 2026-05-07).
-  Truly out-of-sample — never seen by training, validation, or selection.
+- **Golden set** (2026-05-09; extended 2026-07-30): `data/golden/polymarket_test/` +
+  `data/golden/betting_odds_golden.json` (**124** matches, 2026-04-17 →
+  2026-06-17; the original 55 rows are preserved verbatim and the 137
+  consumed forward fixtures are excluded). Truly out-of-sample — never
+  seen by training, validation, or selection. Extended-window audit
+  (WC-heavy, market-sharpest slice): swap beats base everywhere but both
+  trail the market on LL; see
+  `reports/golden_extension_eval_20260730.md`.
   Built by `extract_golden_cricsheet.py` (cricsheet from
   `/Users/aryamangupta/Projects/stat-generator/data/cricsheet/`) and
   `build_polymarket_odds_golden.py` (polymarket from
