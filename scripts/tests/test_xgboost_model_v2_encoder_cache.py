@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -49,6 +50,23 @@ def load_model():
         stats_provider=stats_provider,
         player_metadata=player_metadata,
     )
+
+
+def load_state():
+    matches = TestMatchLoader().load_matches('data/betting_test')
+    if not matches:
+        raise RuntimeError("no test matches loaded")
+    return matches[0][1]
+
+
+@pytest.fixture(scope="module")
+def model():
+    return load_model()
+
+
+@pytest.fixture(scope="module")
+def state():
+    return load_state()
 
 
 def test_roundtrip(model):
@@ -161,11 +179,11 @@ def main():
     test_unknown(model)
 
     print("\nLoading a real test match for extract_features / predict parity...")
-    matches = TestMatchLoader().load_matches('data/betting_test')
-    if not matches:
-        print("FAIL: no test matches loaded")
+    try:
+        state = load_state()
+    except RuntimeError as exc:
+        print(f"FAIL: {exc}")
         sys.exit(1)
-    _, state = matches[0]
     print(f"Using match state for {state.team1} vs {state.team2}")
 
     test_extract_features_parity(model, state)
