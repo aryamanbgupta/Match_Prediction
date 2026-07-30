@@ -1649,6 +1649,15 @@ getters/tables (`stats_sqlite_backend.py` — forbidden to the loop). Do the
 schema-v5 plumbing interactively, then queue the training experiment as a
 future D idea.
 
+**Contract frozen 2026-07-30:** I8 adds exactly 18 features to the 114-feature
+I7 recipe: current-phase batter and bowler six-class distributions plus the
+exact batter–bowler six-class distribution. Player-phase cells shrink to the
+player's already-shrunk overall profile with `k_phase=30`; H2H shrinks with
+`k_h2h=60` to the arithmetic mean of the batter/bowler profiles. The active
+I7 venue identity and inclusive-total-run I7 delivery semantics remain fixed.
+Artifacts are isolated under the `i8` cache/data/model namespace and require
+schema v5. See `docs/I8_FEATURE_CONTRACT.md`.
+
 ## I9 [INTERACTIVE] ELO cold-start / provisional K (`parsing_v2.py`)
 Debutants start at exactly 1500 with K as low as 1.0 (domestic); add a
 provisional high-K warm-up (or uncertainty-scaled K) so new signings don't

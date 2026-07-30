@@ -146,6 +146,23 @@ FEATURE_GROUPS: Dict[str, List[str]] = {
         'phase_p0', 'phase_p1', 'phase_p2',
         'phase_p4', 'phase_p6', 'phase_pw',
     ],
+
+    # I8 / schema v5: the current-phase player cells and the exact
+    # batter-bowler matchup. These are 6-class distributions, not raw
+    # sparse rates; their hierarchy and fixed shrinkage strengths are
+    # defined in docs/I8_FEATURE_CONTRACT.md.
+    'batter_phase_dist': [
+        'batter_phase_p0', 'batter_phase_p1', 'batter_phase_p2',
+        'batter_phase_p4', 'batter_phase_p6', 'batter_phase_pw',
+    ],
+    'bowler_phase_dist': [
+        'bowler_phase_p0', 'bowler_phase_p1', 'bowler_phase_p2',
+        'bowler_phase_p4', 'bowler_phase_p6', 'bowler_phase_pw',
+    ],
+    'h2h_outcome_dist': [
+        'h2h_p0', 'h2h_p1', 'h2h_p2',
+        'h2h_p4', 'h2h_p6', 'h2h_pw',
+    ],
 }
 
 
@@ -236,3 +253,11 @@ V6_GROUPS = V3_GROUPS + [
 # Convenience: v7 groups — V6 + Phase 3 phase prior (6 features dispatched
 # by ball-phase). Strictly additive over V6.
 V7_GROUPS = V6_GROUPS + ['phase_outcome_dist']
+
+# I8 is isolated from the optional global phase-prior experiment: it adds
+# exactly 18 candidate features to the canonical I7/V6 recipe.
+I8_GROUPS = V6_GROUPS + [
+    'batter_phase_dist',
+    'bowler_phase_dist',
+    'h2h_outcome_dist',
+]

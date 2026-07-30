@@ -1,0 +1,72 @@
+# I8 isolation recipe. It inherits the canonical I7 venue identity and
+# unchanged I7 ball-model recipe, then adds exactly 18 schema-v5 features.
+experiment:
+  name: "xgb_i8_phase_matchup"
+  description: "I7 ball recipe + hierarchical batter/bowler phase distributions and batter-bowler H2H distribution."
+  tags: ["xgboost", "i8", "schema_v5", "player_phase", "h2h_dist"]
+
+data:
+  version: "i8"
+  cache_schema_version: 5
+  source_dir: "data/t20s_json"
+  gender_filter: "male"
+  delivery_semantics: "inclusive_total_runs_v1"
+  test_dir: "data/polymarket_test"
+  odds_file: "betting_odds_polymarket.json"
+  splits:
+    train_end: "2024-12-31"
+    val_end: "2025-06-30"
+    test_end: "2026-04-16"
+    golden_start: "2026-04-17"
+
+features:
+  groups:
+    - basic
+    - player_stats
+    - h2h
+    - momentum
+    - pressure
+    - chase
+    - medium
+    - player_metadata
+    - matchup
+    - type_based
+    - team_strength
+    - batter_outcome_dist
+    - bowler_outcome_dist
+    - batter_vs_type_dist
+    - bowler_vs_hand_dist
+    - venue_outcome_dist
+    - batter_phase_dist
+    - bowler_phase_dist
+    - h2h_outcome_dist
+  exclude: []
+  include_extra: []
+
+outcome_dist:
+  k_player: 30.0
+  k_venue: 200.0
+  k_phase: 30.0
+  k_h2h: 60.0
+
+model:
+  type: "xgboost"
+  hyperparameters:
+    n_estimators: 444
+    max_depth: 10
+    learning_rate: 0.24036372383981375
+    subsample: 0.8776663421127178
+    colsample_bytree: 0.7424085095268674
+    reg_alpha: 0.8503122682099661
+    reg_lambda: 0.18186045420525845
+  tune: false
+
+evaluation:
+  n_sims: 100
+  parallel: false
+  bootstrap_resamples: 10000
+
+pipeline:
+  skip_parsing: false
+  skip_training: false
+  skip_evaluation: true
