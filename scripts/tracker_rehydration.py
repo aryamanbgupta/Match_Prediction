@@ -41,6 +41,11 @@ from typing import Iterable
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from parsing_v2 import PlayerEloTracker, PlayerStatsTracker, VenueStatsTracker
+from elo_update import (  # noqa: E402
+    PROVISIONAL_ELO_UPDATE_VERSION,
+    assert_elo_update_version,
+    resolve_elo_update_version,
+)
 from stats_sqlite_backend import (
     I8_SCHEMA_VERSION,
     _Q_BATTING_VS_TYPE,
@@ -336,12 +341,22 @@ def rehydrate_elo_tracker(
     provider,
     as_of_date,
     player_ids: Iterable[str],
+    elo_update_version: str | None = None,
 ) -> PlayerEloTracker:
-    """Seed a PlayerEloTracker with batting/bowling ELO for each pid."""
+    """Seed a version-matched ELO tracker, including I9 role exposure."""
     backend = _backend(provider)
     as_of = _norm_date(as_of_date)
+    metadata = backend.get_meta()
+    resolved_version = resolve_elo_update_version(metadata)
+    if elo_update_version is not None:
+        assert_elo_update_version(
+            metadata,
+            expected=elo_update_version,
+            context="SQLite ELO state",
+        )
+        resolved_version = elo_update_version
 
-    tracker = PlayerEloTracker()
+    tracker = PlayerEloTracker(resolved_version)
     for pid in player_ids:
         bat = backend.get_batting_elo(pid, as_of)
         bowl = backend.get_bowling_elo(pid, as_of)
@@ -351,6 +366,17 @@ def rehydrate_elo_tracker(
             tracker.batting_elo[pid] = bat
         if bowl != PlayerEloTracker.DEFAULT_ELO:
             tracker.bowling_elo[pid] = bowl
+        if resolved_version == PROVISIONAL_ELO_UPDATE_VERSION:
+            raw_batting = backend._get_raw_batting(pid, as_of)
+            raw_bowling = backend._get_raw_bowling(pid, as_of)
+            if raw_batting is not None:
+                tracker.batting_exposure[pid] = int(
+                    raw_batting["balls"]
+                )
+            if raw_bowling is not None:
+                tracker.bowling_exposure[pid] = int(
+                    raw_bowling["balls_bowled"]
+                )
     return tracker
 
 

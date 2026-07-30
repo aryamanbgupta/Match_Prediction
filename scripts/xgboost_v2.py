@@ -10,6 +10,10 @@ import argparse
 import json as _json
 
 from identity_maps import assert_venue_alias_contract, venue_alias_contract
+from elo_update import (
+    BASELINE_ELO_UPDATE_VERSION,
+    assert_elo_update_version,
+)
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Train XGBoost v3 model')
@@ -54,6 +58,15 @@ with feature_hash_path.open() as _f:
     feature_hash_metadata = _json.load(_f)
 assert_venue_alias_contract(
     feature_hash_metadata,
+    context="ball training parquet",
+)
+expected_elo_update_version = _config.get('data', {}).get(
+    'elo_update_version',
+    BASELINE_ELO_UPDATE_VERSION,
+)
+assert_elo_update_version(
+    feature_hash_metadata,
+    expected=expected_elo_update_version,
     context="ball training parquet",
 )
 expected_cache_schema = int(
@@ -405,6 +418,34 @@ print(f"Validation Log Loss: {val_logloss:.4f}")
 print(f"Test Accuracy: {test_accuracy:.4f}")
 print(f"Test Log Loss: {test_logloss:.4f}")
 
+# Preserve validation predictions and the pre-ball exposure slice metadata
+# needed by I9's precommitted, paired development gate. These columns are
+# evidence artifacts only; neither exposure count enters the model matrix.
+if {
+    'innings_id',
+    'ball_idx',
+    'batter_elo_exposure',
+    'bowler_elo_exposure',
+}.issubset(val_df.columns):
+    validation_predictions = pd.DataFrame({
+        'split_row': np.arange(len(val_df), dtype=np.int64),
+        'innings_id': val_df['innings_id'].astype(str).to_numpy(),
+        'ball_idx': val_df['ball_idx'].to_numpy(),
+        'batter_elo_exposure': (
+            val_df['batter_elo_exposure'].astype(np.int64).to_numpy()
+        ),
+        'bowler_elo_exposure': (
+            val_df['bowler_elo_exposure'].astype(np.int64).to_numpy()
+        ),
+        'target': y_val.astype(np.int64).to_numpy(),
+    })
+    for class_index in range(y_val_proba.shape[1]):
+        validation_predictions[f'prob_class_{class_index}'] = (
+            y_val_proba[:, class_index]
+        )
+else:
+    validation_predictions = None
+
 # Classification report with correct target names after remapping
 # reverse_mapping: {0: 0 (dot), 1: 1, 2: 2, 3: 4, 4: 6, 5: wicket}
 print("\nClassification Report (Test):")
@@ -455,6 +496,16 @@ joblib.dump(final_model, model_path)
 joblib.dump(le_batter, batter_encoder_path)
 joblib.dump(le_bowler, bowler_encoder_path)
 joblib.dump(le_venue, venue_encoder_path)
+
+if validation_predictions is not None:
+    validation_predictions_path = (
+        model_dir / f'validation_predictions_{artifact_suffix}.parquet'
+    )
+    validation_predictions.to_parquet(
+        validation_predictions_path,
+        index=False,
+    )
+    print(f"  Saved {validation_predictions_path.name}")
 
 # Save matchup encoder if it was created
 if 'le_matchup' in dir():
@@ -536,6 +587,7 @@ training_contract = {
         _config.get('data', {}).get('cache_schema_version', 4)
     ),
     'delivery_semantics': delivery_semantics,
+    'elo_update_version': expected_elo_update_version,
     'extras_contract': extras_contract,
     'ball_calibrator': (
         f'vector_scaling_calibrator_{artifact_suffix}.pkl'

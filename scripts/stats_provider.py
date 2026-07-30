@@ -33,7 +33,8 @@ class StatsProvider:
     def __init__(self, cache_dir: str = 'models', max_cached_chunks: int = 5,
                  version: str = 'v3',
                  require_order_contract: bool = False,
-                 required_schema_version: Optional[int] = None):
+                 required_schema_version: Optional[int] = None,
+                 required_elo_update_version: Optional[str] = None):
         # `max_cached_chunks` is retained as a no-op kwarg for callers
         # that still pass it; the chunked backend it once configured is
         # gone.
@@ -54,11 +55,16 @@ class StatsProvider:
             version,
             require_order_contract=require_order_contract,
             required_schema_version=required_schema_version,
+            required_elo_update_version=required_elo_update_version,
         )
         self.dates = list(self._backend._date_strs)
         self.backend_name = 'sqlite'
         self.version = version
         self.cache_dir = cache_root
+        from elo_update import resolve_elo_update_version
+        self.elo_update_version = resolve_elo_update_version(
+            self._backend.get_meta()
+        )
 
     # --- backend selection ----------------------------------------------
 
@@ -69,6 +75,7 @@ class StatsProvider:
         version,
         require_order_contract=False,
         required_schema_version=None,
+        required_elo_update_version=None,
     ):
         from loaders_common import SAME_DAY_ORDER_VERSION
         from stats_sqlite_backend import (
@@ -79,6 +86,13 @@ class StatsProvider:
         backend = _SQLiteBackend(str(sqlite_path))
         backend._ensure_conn()
         meta = backend.get_meta()
+        if required_elo_update_version is not None:
+            from elo_update import assert_elo_update_version
+            assert_elo_update_version(
+                meta,
+                expected=required_elo_update_version,
+                context=f"SQLite cache {sqlite_path}",
+            )
 
         file_schema = int(meta.get('schema_version', -1))
         if file_schema not in SUPPORTED_SCHEMA_VERSIONS:

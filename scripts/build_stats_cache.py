@@ -46,6 +46,12 @@ from loaders_common import (
     iter_matches_chronological_multi,
 )
 from identity_maps import venue_alias_contract
+from elo_update import (
+    BASELINE_ELO_UPDATE_VERSION,
+    ELO_UPDATE_VERSIONS,
+    PROVISIONAL_ELO_UPDATE_VERSION,
+    resolve_elo_update_version,
+)
 from parsing_v2 import (
     DELIVERY_SEMANTICS,
     I5_DELIVERY_SEMANTICS,
@@ -327,6 +333,7 @@ def sqlite_up_to_date(
     source_dirs: Path | Iterable[Path],
     delivery_semantics: str = LEGACY_DELIVERY_SEMANTICS,
     schema_version: int = SCHEMA_VERSION,
+    elo_update_version: str = BASELINE_ELO_UPDATE_VERSION,
 ) -> bool:
     """Return True if the existing SQLite is current vs the JSON corpus.
 
@@ -356,6 +363,12 @@ def sqlite_up_to_date(
     cached_semantics = meta.get(
         "delivery_semantics", LEGACY_DELIVERY_SEMANTICS)
     if cached_semantics != delivery_semantics:
+        return False
+    try:
+        cached_elo_update = resolve_elo_update_version(meta)
+    except ValueError:
+        return False
+    if cached_elo_update != elo_update_version:
         return False
     if any(
         str(meta.get(key, "")) != str(value)
@@ -389,6 +402,7 @@ def build(
     metadata_csv: Path = None,
     delivery_semantics: str = LEGACY_DELIVERY_SEMANTICS,
     schema_version: int = SCHEMA_VERSION,
+    elo_update_version: str = BASELINE_ELO_UPDATE_VERSION,
 ) -> None:
     if delivery_semantics not in DELIVERY_SEMANTICS:
         raise ValueError(
@@ -398,6 +412,10 @@ def build(
             f"unsupported schema version {schema_version}; "
             f"expected one of {SUPPORTED_SCHEMA_VERSIONS}"
         )
+    if elo_update_version not in ELO_UPDATE_VERSIONS:
+        raise ValueError(
+            f"unsupported ELO update version {elo_update_version!r}"
+        )
     normalized_dirs = _normalize_source_dirs(source_dirs)
     t_start = time.time()
     print(f"building {out_path} from {normalized_dirs} (gender={gender})",
@@ -406,7 +424,7 @@ def build(
     stats = PlayerStatsTracker(
         enable_i8=schema_version == I8_SCHEMA_VERSION)
     venue = VenueStatsTracker()
-    elo = PlayerEloTracker()
+    elo = PlayerEloTracker(elo_update_version)
     metadata_path = metadata_csv or (
         normalized_dirs[0].parent / "all_players_enriched.csv"
     )
@@ -923,6 +941,7 @@ def build(
         ('build_timestamp', datetime.utcnow().isoformat() + 'Z'),
         ('same_day_order_version', SAME_DAY_ORDER_VERSION),
         ('delivery_semantics', delivery_semantics),
+        ('elo_update_version', elo_update_version),
         ('source_dirs_json', _source_paths_json(normalized_dirs)),
         ('source_json_mtime_max', f"{source_json_mtime_max:.6f}"),
         ('source_json_file_count', str(len(source_files))),
@@ -1036,6 +1055,16 @@ def main() -> int:
             "legacy remains the safe default for deployed-model rebuilds."
         ),
     )
+    ap.add_argument(
+        "--elo-update-version",
+        choices=ELO_UPDATE_VERSIONS,
+        default=BASELINE_ELO_UPDATE_VERSION,
+        help=(
+            "Versioned player-ELO update contract. I9 uses "
+            f"{PROVISIONAL_ELO_UPDATE_VERSION}; baseline remains the "
+            "deployed default."
+        ),
+    )
     args = ap.parse_args()
 
     gender = args.gender_filter or None
@@ -1056,16 +1085,26 @@ def main() -> int:
             "schema v5 cannot overwrite the deployed v3 cache; pass "
             "--out models/player_stats_cache_i8.sqlite"
         )
+    if (
+        args.elo_update_version == PROVISIONAL_ELO_UPDATE_VERSION
+        and args.out == Path("models/player_stats_cache_v3.sqlite")
+    ):
+        ap.error(
+            "I9 provisional ELO cannot overwrite the deployed v3 cache; "
+            "pass --out models/player_stats_cache_i9.sqlite"
+        )
 
     if not args.force_rebuild and sqlite_up_to_date(
         args.out,
         source_dirs,
         delivery_semantics=args.delivery_semantics,
         schema_version=args.schema_version,
+        elo_update_version=args.elo_update_version,
     ):
         print(f"{args.out} is current (schema_version={args.schema_version}, "
               f"same_day_order={SAME_DAY_ORDER_VERSION}, "
               f"delivery_semantics={args.delivery_semantics}, "
+              f"elo_update_version={args.elo_update_version}, "
               "source membership/mtime covered). Skipping rebuild. "
               "Use --force-rebuild to override.")
         return 0
@@ -1073,7 +1112,8 @@ def main() -> int:
     build(source_dirs, args.out, gender=gender,
           metadata_csv=args.metadata_csv,
           delivery_semantics=args.delivery_semantics,
-          schema_version=args.schema_version)
+          schema_version=args.schema_version,
+          elo_update_version=args.elo_update_version)
     if args.prior_source_sqlite:
         provenance = freeze_priors_from_sqlite(
             args.out,

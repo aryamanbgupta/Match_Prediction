@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -14,7 +15,10 @@ from parsing_v2 import (  # noqa: E402
     PlayerEloTracker,
     PlayerStatsTracker,
     VenueStatsTracker,
+    parse_match_data_v2,
 )
+from elo_update import PROVISIONAL_ELO_UPDATE_VERSION  # noqa: E402
+from loaders_common import extract_match_metadata  # noqa: E402
 from sim_eval import same_day_stats as module  # noqa: E402
 from sim_eval.same_day_stats import SameDayReplayStatsProvider  # noqa: E402
 from stats_provider import wrap_with_cache  # noqa: E402
@@ -232,6 +236,63 @@ def test_same_day_order_and_date_guards(monkeypatch):
         provider.begin_date("2026-01-01", [match])
     with pytest.raises(ValueError, match="not 2026-01-02"):
         provider.get_batting_stats("a1", "2026-01-02")
+
+
+def test_i9_same_day_replay_matches_one_chronological_pass(monkeypatch):
+    monkeypatch.setattr(
+        module,
+        "rehydrate_stats_tracker",
+        lambda provider, date, players: PlayerStatsTracker(),
+    )
+    monkeypatch.setattr(
+        module,
+        "rehydrate_elo_tracker",
+        lambda provider, date, players: PlayerEloTracker(
+            PROVISIONAL_ELO_UPDATE_VERSION
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "rehydrate_venue_tracker",
+        lambda provider, date, venues: VenueStatsTracker(),
+    )
+    provider = SameDayReplayStatsProvider(
+        _FakeBaseProvider(),
+        _Metadata(),
+    )
+    matches = [_match(), _match(a_runs=2, b_runs=0)]
+    provider.begin_date("2026-01-01", matches)
+    for match_id, match in zip(("001", "002"), matches):
+        provider.begin_match(
+            match_id,
+            match,
+            prediction_required=False,
+        )
+        provider.advance_match(match_id, match)
+
+    reference_stats = PlayerStatsTracker()
+    reference_elo = PlayerEloTracker(PROVISIONAL_ELO_UPDATE_VERSION)
+    reference_venue = VenueStatsTracker()
+    for match_id, match in zip(("001", "002"), matches):
+        metadata = extract_match_metadata(match)
+        _, _, venue, details, chase_won = parse_match_data_v2(
+            json.dumps(match),
+            reference_stats,
+            reference_venue,
+            _Metadata(),
+            elo_tracker=reference_elo,
+            match_k_factor=metadata["k_factor"],
+            match_ref=match_id,
+        )
+        for detail in details:
+            reference_venue.update_venue_stats_detailed(venue, detail)
+        if chase_won is not None:
+            reference_venue.update_venue_match_result(venue, chase_won)
+
+    assert provider._elo.batting_elo == reference_elo.batting_elo
+    assert provider._elo.bowling_elo == reference_elo.bowling_elo
+    assert provider._elo.batting_exposure == reference_elo.batting_exposure
+    assert provider._elo.bowling_exposure == reference_elo.bowling_exposure
 
 
 def test_model_cache_wrapper_is_idempotent(monkeypatch):

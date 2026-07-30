@@ -20,6 +20,11 @@ from player_metadata import (
     encode_is_pace,
     encode_bowling_type
 )
+from elo_update import (
+    BASELINE_ELO_UPDATE_VERSION,
+    provider_elo_update_version,
+    resolve_elo_update_version,
+)
 from stats_provider import wrap_with_cache
 
 
@@ -878,6 +883,7 @@ class XGBoostModelV2(PredictionModel):
         _model_path = _P(model_path)
         _artifact_suffix = _model_path.stem.removeprefix('xgboost_model_')
         self.delivery_semantics = 'inclusive_total_runs_v1'
+        self.elo_update_version = BASELINE_ELO_UPDATE_VERSION
         self.extras_process = None
         _training_contract_path = (
             _model_path.parent
@@ -889,6 +895,26 @@ class XGBoostModelV2(PredictionModel):
                 _training_contract = _contract_json.load(_contract_handle)
             self.delivery_semantics = _training_contract.get(
                 'delivery_semantics', self.delivery_semantics)
+            self.elo_update_version = resolve_elo_update_version(
+                _training_contract
+            )
+        provider_elo_version = provider_elo_update_version(stats_provider)
+        if (
+            provider_elo_version is not None
+            and provider_elo_version != self.elo_update_version
+        ):
+            raise RuntimeError(
+                "ball model/SQLite ELO update mismatch: "
+                f"model={self.elo_update_version!r}, "
+                f"state={provider_elo_version!r}"
+            )
+        if (
+            provider_elo_version is None
+            and self.elo_update_version != BASELINE_ELO_UPDATE_VERSION
+        ):
+            raise RuntimeError(
+                "provisional-ELO ball model requires versioned stats state"
+            )
         if self.delivery_semantics == 'legal_off_bat_v1':
             from i5_extras import EmpiricalExtrasProcess
             _extras_path = (

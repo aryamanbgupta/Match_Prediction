@@ -55,6 +55,12 @@ from identity_maps import (
     assert_venue_alias_contract,
     venue_alias_contract,
 )
+from elo_update import (
+    BASELINE_ELO_UPDATE_VERSION,
+    ELO_UPDATE_VERSIONS,
+    PROVISIONAL_ELO_UPDATE_VERSION,
+    assert_elo_update_version,
+)
 from parsing_v2 import (
     DELIVERY_SEMANTICS,
     I5_DELIVERY_SEMANTICS,
@@ -135,6 +141,7 @@ def materialize(
     k_h2h: float = 60.0,
     cache_schema_version: int = 4,
     delivery_semantics: str = LEGACY_DELIVERY_SEMANTICS,
+    elo_update_version: str = BASELINE_ELO_UPDATE_VERSION,
 ) -> Tuple[int, dict]:
     """Walk the corpus per-date; for each date, rehydrate temp trackers
     from SQLite and replay same-day matches in deterministic match-ID order.
@@ -146,6 +153,7 @@ def materialize(
         version=version,
         require_order_contract=True,
         required_schema_version=cache_schema_version,
+        required_elo_update_version=elo_update_version,
     )
     if provider.backend_name != "sqlite":
         raise RuntimeError(
@@ -170,6 +178,11 @@ def materialize(
             "SQLite/parser delivery-semantics mismatch: "
             f"cache={cache_semantics!r}, requested={delivery_semantics!r}"
         )
+    assert_elo_update_version(
+        cache_meta,
+        expected=elo_update_version,
+        context="SQLite stats cache",
+    )
     prior = provider._backend._prior
     # Phase 3: per-phase priors loaded from SQLite _meta. On pre-Phase-3
     # caches, _phase_priors collapses to {phase: π} for every phase, so
@@ -194,7 +207,12 @@ def materialize(
             union_venues.add(venue)
 
         temp_stats = rehydrate_stats_tracker(provider, match_date, union_pids)
-        temp_elo = rehydrate_elo_tracker(provider, match_date, union_pids)
+        temp_elo = rehydrate_elo_tracker(
+            provider,
+            match_date,
+            union_pids,
+            elo_update_version=elo_update_version,
+        )
         temp_venue = rehydrate_venue_tracker(
             provider, match_date, union_venues)
 
@@ -288,6 +306,15 @@ def main() -> int:
             "data.delivery_semantics from config when omitted."
         ),
     )
+    ap.add_argument(
+        "--elo-update-version",
+        choices=ELO_UPDATE_VERSIONS,
+        default=None,
+        help=(
+            "Versioned player-ELO update contract. Reads "
+            "data.elo_update_version from config when omitted."
+        ),
+    )
     args = ap.parse_args()
 
     config = load_config(args.config)
@@ -296,6 +323,13 @@ def main() -> int:
     delivery_semantics = (
         args.delivery_semantics
         or data_cfg.get("delivery_semantics", LEGACY_DELIVERY_SEMANTICS)
+    )
+    elo_update_version = (
+        args.elo_update_version
+        or data_cfg.get(
+            "elo_update_version",
+            BASELINE_ELO_UPDATE_VERSION,
+        )
     )
     gender = (
         args.gender_filter
@@ -311,6 +345,14 @@ def main() -> int:
         ap.error(
             "I5 semantics require an isolated data.version (for example "
             "'i5') so deployed v2/v3 parquet is not overwritten"
+        )
+    if (
+        elo_update_version == PROVISIONAL_ELO_UPDATE_VERSION
+        and not version.startswith("i9")
+    ):
+        ap.error(
+            "I9 provisional ELO requires an isolated data.version beginning "
+            "with 'i9'"
         )
     # Phase 6: outcome-dist k overrides from YAML.
     od_cfg = config.get("outcome_dist", {}) if config else {}
@@ -357,6 +399,7 @@ def main() -> int:
             # composition, but the cache key must reflect intent.
             "gender_filter": gender if gender is not None else "all",
             "delivery_semantics": delivery_semantics,
+            "elo_update_version": elo_update_version,
             **venue_alias_contract(),
         }
     except ImportError:
@@ -389,6 +432,7 @@ def main() -> int:
         k_h2h=k_h2h,
         cache_schema_version=cache_schema_version,
         delivery_semantics=delivery_semantics,
+        elo_update_version=elo_update_version,
     )
     dt = time.time() - t0
 

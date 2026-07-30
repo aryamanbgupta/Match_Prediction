@@ -1,0 +1,70 @@
+# Isolated fixed-K control for the I9 provisional-ELO experiment.
+#
+# This is intentionally identical to xgb_i9_provisional_elo.yaml except for
+# the ELO update contract and artifact version.
+experiment:
+  name: "xgb_i9_baseline"
+  description: "I7 ball recipe rebuilt as the isolated fixed-K I9 control."
+  tags: ["xgboost", "i9", "baseline", "isolated_rebuild"]
+
+data:
+  version: "i9_baseline"
+  cache_schema_version: 4
+  source_dir: "data/t20s_json"
+  gender_filter: "male"
+  delivery_semantics: "inclusive_total_runs_v1"
+  elo_update_version: "fixed_competition_k_v1"
+  test_dir: "data/polymarket_test"
+  odds_file: "betting_odds_polymarket.json"
+  splits:
+    train_end: "2024-12-31"
+    val_end: "2025-06-30"
+    test_end: "2026-04-16"
+    golden_start: "2026-04-17"
+
+features:
+  groups:
+    - basic
+    - player_stats
+    - h2h
+    - momentum
+    - pressure
+    - chase
+    - medium
+    - player_metadata
+    - matchup
+    - type_based
+    - team_strength
+    - batter_outcome_dist
+    - bowler_outcome_dist
+    - batter_vs_type_dist
+    - bowler_vs_hand_dist
+    - venue_outcome_dist
+  exclude: []
+  include_extra: []
+
+outcome_dist:
+  k_player: 30.0
+  k_venue: 200.0
+
+model:
+  type: "xgboost"
+  hyperparameters:
+    n_estimators: 444
+    max_depth: 10
+    learning_rate: 0.24036372383981375
+    subsample: 0.8776663421127178
+    colsample_bytree: 0.7424085095268674
+    reg_alpha: 0.8503122682099661
+    reg_lambda: 0.18186045420525845
+  tune: false
+
+evaluation:
+  n_sims: 100
+  parallel: false
+  bootstrap_resamples: 10000
+
+pipeline:
+  skip_parsing: false
+  skip_training: false
+  skip_evaluation: true

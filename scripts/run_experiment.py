@@ -29,6 +29,11 @@ from parsing_v2 import (
     I5_DELIVERY_SEMANTICS,
     LEGACY_DELIVERY_SEMANTICS,
 )
+from elo_update import (
+    BASELINE_ELO_UPDATE_VERSION,
+    PROVISIONAL_ELO_UPDATE_VERSION,
+    resolve_elo_update_version,
+)
 
 
 def _sha256_file(path: Path) -> str:
@@ -124,6 +129,16 @@ def _check_parquet_cache(config: dict, feature_list: list) -> bool:
     cached_semantics = cached.get(
         "delivery_semantics", LEGACY_DELIVERY_SEMANTICS)
     if cached_semantics != want_semantics:
+        return False
+    want_elo_update = config.get("data", {}).get(
+        "elo_update_version",
+        BASELINE_ELO_UPDATE_VERSION,
+    )
+    try:
+        cached_elo_update = resolve_elo_update_version(cached)
+    except ValueError:
+        return False
+    if cached_elo_update != want_elo_update:
         return False
     try:
         from identity_maps import venue_alias_contract
@@ -228,6 +243,16 @@ def _check_sqlite_cache(config: dict) -> bool:
     cached_semantics = meta.get(
         "delivery_semantics", LEGACY_DELIVERY_SEMANTICS)
     if cached_semantics != want_semantics:
+        return False
+    want_elo_update = config.get("data", {}).get(
+        "elo_update_version",
+        BASELINE_ELO_UPDATE_VERSION,
+    )
+    try:
+        cached_elo_update = resolve_elo_update_version(meta)
+    except ValueError:
+        return False
+    if cached_elo_update != want_elo_update:
         return False
     try:
         from identity_maps import venue_alias_contract
@@ -360,6 +385,8 @@ def build_training_cmd(config: dict, feature_list: list) -> list:
                 "cache_schema_version", 4),
             "delivery_semantics": config["data"].get(
                 "delivery_semantics", LEGACY_DELIVERY_SEMANTICS),
+            "elo_update_version": config["data"].get(
+                "elo_update_version", BASELINE_ELO_UPDATE_VERSION),
             "source_dir": config["data"].get(
                 "source_dir", "data/t20s_json"),
             "gender_filter": config["data"].get(
@@ -498,6 +525,18 @@ def main():
             "I5 delivery semantics require an isolated data.version "
             "(for example 'i5')"
         )
+    elo_update_version = data_cfg.get(
+        "elo_update_version",
+        BASELINE_ELO_UPDATE_VERSION,
+    )
+    if (
+        elo_update_version == PROVISIONAL_ELO_UPDATE_VERSION
+        and not str(version).startswith("i9")
+    ):
+        raise ValueError(
+            "I9 provisional ELO requires an isolated data.version beginning "
+            "with 'i9'"
+        )
 
     # Resolve features
     feature_list = resolve_feature_list(
@@ -541,6 +580,8 @@ def main():
         delivery_semantics,
         "--schema-version",
         str(int(data_cfg.get("cache_schema_version", 4))),
+        "--elo-update-version",
+        elo_update_version,
     ]
     if data_cfg.get("prior_source_sqlite"):
         cache_cmd.extend([

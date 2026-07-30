@@ -17,6 +17,11 @@ from player_metadata import (
     encode_is_pace,
     encode_bowling_type
 )
+from elo_update import (
+    BASELINE_ELO_UPDATE_VERSION,
+    ELO_UPDATE_VERSIONS,
+    PROVISIONAL_ELO_UPDATE_VERSION,
+)
 
 ICC_FULL_MEMBERS = {
     'India', 'Australia', 'England', 'South Africa', 'New Zealand',
@@ -112,10 +117,25 @@ class PlayerEloTracker:
     """
     DEFAULT_ELO = 1500.0
     DEFAULT_K_FACTOR = 4.0
+    PROVISIONAL_DELIVERIES = 120
+    PROVISIONAL_INITIAL_MULTIPLIER = 4.0
 
-    def __init__(self):
+    def __init__(
+        self,
+        elo_update_version: str = BASELINE_ELO_UPDATE_VERSION,
+    ):
+        if elo_update_version not in ELO_UPDATE_VERSIONS:
+            raise ValueError(
+                f"unsupported ELO update version {elo_update_version!r}"
+            )
+        self.elo_update_version = elo_update_version
         self.batting_elo = {}   # player_id -> float
         self.bowling_elo = {}   # player_id -> float
+        # I9 keeps role exposure independent. These maps are populated only
+        # by the provisional update contract; baseline ELO numerics and
+        # serialized snapshot shape therefore remain unchanged.
+        self.batting_exposure = {}
+        self.bowling_exposure = {}
 
     def get_batting_elo(self, player_id):
         return self.batting_elo.get(player_id, self.DEFAULT_ELO)
@@ -123,9 +143,43 @@ class PlayerEloTracker:
     def get_bowling_elo(self, player_id):
         return self.bowling_elo.get(player_id, self.DEFAULT_ELO)
 
+    @classmethod
+    def provisional_multiplier(cls, exposure: int) -> float:
+        n = max(0, int(exposure))
+        remaining = max(
+            0.0,
+            1.0 - n / float(cls.PROVISIONAL_DELIVERIES),
+        )
+        return 1.0 + (
+            cls.PROVISIONAL_INITIAL_MULTIPLIER - 1.0
+        ) * remaining
+
+    def effective_k_factor(
+        self,
+        base_k: float,
+        exposure: int,
+    ) -> float:
+        if self.elo_update_version == BASELINE_ELO_UPDATE_VERSION:
+            return float(base_k)
+        return float(base_k) * self.provisional_multiplier(exposure)
+
+    def get_batting_exposure(self, player_id) -> int:
+        return int(self.batting_exposure.get(player_id, 0))
+
+    def get_bowling_exposure(self, player_id) -> int:
+        return int(self.bowling_exposure.get(player_id, 0))
+
     def update(self, batter_id, bowler_id, runs, is_wicket, k_factor=None):
         """Update ELO after a ball."""
         k = k_factor if k_factor is not None else self.DEFAULT_K_FACTOR
+        batting_k = self.effective_k_factor(
+            k,
+            self.get_batting_exposure(batter_id),
+        )
+        bowling_k = self.effective_k_factor(
+            k,
+            self.get_bowling_exposure(bowler_id),
+        )
         bat_elo = self.get_batting_elo(batter_id)
         bowl_elo = self.get_bowling_elo(bowler_id)
 
@@ -141,8 +195,22 @@ class PlayerEloTracker:
             actual_batter = min(0.4 + runs * 0.1, 1.0)
 
         # ELO update
-        self.batting_elo[batter_id] = bat_elo + k * (actual_batter - expected_batter)
-        self.bowling_elo[bowler_id] = bowl_elo + k * ((1 - actual_batter) - (1 - expected_batter))
+        self.batting_elo[batter_id] = (
+            bat_elo
+            + batting_k * (actual_batter - expected_batter)
+        )
+        self.bowling_elo[bowler_id] = (
+            bowl_elo
+            + bowling_k
+            * ((1 - actual_batter) - (1 - expected_batter))
+        )
+        if self.elo_update_version == PROVISIONAL_ELO_UPDATE_VERSION:
+            self.batting_exposure[batter_id] = (
+                self.get_batting_exposure(batter_id) + 1
+            )
+            self.bowling_exposure[bowler_id] = (
+                self.get_bowling_exposure(bowler_id) + 1
+            )
 
     def get_team_batting_elo(self, player_ids):
         """Sum of batting ELOs for a list of player IDs."""
@@ -961,6 +1029,17 @@ def deep_copy_stats(tracker, venue_tracker=None, elo_tracker=None):
     if elo_tracker is not None:
         snapshot['batting_elo'] = dict(elo_tracker.batting_elo)
         snapshot['bowling_elo'] = dict(elo_tracker.bowling_elo)
+        if (
+            elo_tracker.elo_update_version
+            == PROVISIONAL_ELO_UPDATE_VERSION
+        ):
+            snapshot['elo_update_version'] = elo_tracker.elo_update_version
+            snapshot['batting_elo_exposure'] = dict(
+                elo_tracker.batting_exposure
+            )
+            snapshot['bowling_elo_exposure'] = dict(
+                elo_tracker.bowling_exposure
+            )
 
     return snapshot
 
@@ -1627,6 +1706,19 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None,
                     # Team strength features (ELO + aggregated stats)
                     'striker_elo': elo_tracker.get_batting_elo(state['batter_id']) if elo_tracker else PlayerEloTracker.DEFAULT_ELO,
                     'bowler_elo_rating': elo_tracker.get_bowling_elo(state['bowler_id']) if elo_tracker else PlayerEloTracker.DEFAULT_ELO,
+                    # Evaluation-only metadata, deliberately excluded from
+                    # the feature registry. These are pre-ball career rated
+                    # delivery counts and therefore define the same frozen
+                    # I9 provisional/established slices for baseline and
+                    # candidate materializations.
+                    'batter_elo_exposure': int(
+                        player_stats_tracker
+                        .batting_stats[state['batter_id']]['balls']
+                    ),
+                    'bowler_elo_exposure': int(
+                        player_stats_tracker
+                        .bowling_stats[state['bowler_id']]['balls_bowled']
+                    ),
                     'batting_team_elo': batting_team_elo,
                     'bowling_team_elo': bowling_team_elo,
                     'elo_diff': elo_diff,
