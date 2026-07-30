@@ -58,6 +58,8 @@ from typing import Dict, Optional
 
 
 SCHEMA_VERSION = 4
+I8_SCHEMA_VERSION = 5
+SUPPORTED_SCHEMA_VERSIONS = (SCHEMA_VERSION, I8_SCHEMA_VERSION)
 
 
 SCHEMA_SQL = """
@@ -226,6 +228,44 @@ CREATE TABLE IF NOT EXISTS _meta (
 );
 """
 
+# I8 is an additive isolated schema. The deployed/default builder remains on
+# schema v4; an I8 build runs this extension after SCHEMA_SQL on a fresh file.
+SCHEMA_V5_EXTENSION_SQL = """
+ALTER TABLE h2h ADD COLUMN c0 INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE h2h ADD COLUMN c1 INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE h2h ADD COLUMN c2 INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE h2h ADD COLUMN c4 INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE h2h ADD COLUMN c6 INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE h2h ADD COLUMN cw INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS batting_phase (
+    player_id INTEGER NOT NULL,
+    phase INTEGER NOT NULL,  -- 0=powerplay, 1=middle, 2=death
+    date_id INTEGER NOT NULL,
+    c0 INTEGER NOT NULL DEFAULT 0,
+    c1 INTEGER NOT NULL DEFAULT 0,
+    c2 INTEGER NOT NULL DEFAULT 0,
+    c4 INTEGER NOT NULL DEFAULT 0,
+    c6 INTEGER NOT NULL DEFAULT 0,
+    cw INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (player_id, phase, date_id)
+) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS bowling_phase (
+    player_id INTEGER NOT NULL,
+    phase INTEGER NOT NULL,  -- 0=powerplay, 1=middle, 2=death
+    date_id INTEGER NOT NULL,
+    c0 INTEGER NOT NULL DEFAULT 0,
+    c1 INTEGER NOT NULL DEFAULT 0,
+    c2 INTEGER NOT NULL DEFAULT 0,
+    c4 INTEGER NOT NULL DEFAULT 0,
+    c6 INTEGER NOT NULL DEFAULT 0,
+    cw INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (player_id, phase, date_id)
+) WITHOUT ROWID;
+"""
+SCHEMA_SQL_V5 = SCHEMA_SQL + SCHEMA_V5_EXTENSION_SQL
+
 
 # Putting the composite-PK column for the branch discriminator (bowl_type,
 # bat_hand) immediately after player_id in the PK order lets
@@ -251,6 +291,21 @@ ORDER BY date_id DESC LIMIT 1
 _Q_H2H = """
 SELECT runs, balls, dismissals FROM h2h
 WHERE batter_id = ? AND bowler_id = ? AND date_id <= ?
+ORDER BY date_id DESC LIMIT 1
+"""
+_Q_H2H_V5 = """
+SELECT runs, balls, dismissals, c0, c1, c2, c4, c6, cw FROM h2h
+WHERE batter_id = ? AND bowler_id = ? AND date_id <= ?
+ORDER BY date_id DESC LIMIT 1
+"""
+_Q_BATTING_PHASE = """
+SELECT c0, c1, c2, c4, c6, cw FROM batting_phase
+WHERE player_id = ? AND phase = ? AND date_id <= ?
+ORDER BY date_id DESC LIMIT 1
+"""
+_Q_BOWLING_PHASE = """
+SELECT c0, c1, c2, c4, c6, cw FROM bowling_phase
+WHERE player_id = ? AND phase = ? AND date_id <= ?
 ORDER BY date_id DESC LIMIT 1
 """
 _Q_BATTING_VS_TYPE = """
@@ -319,6 +374,11 @@ QUERY_PLAN_CASES = [
     ("batting_match_log",   _Q_BATTING_LOG_RECENT,  (1, 1, 5)),
     ("bowling_match_log",   _Q_BOWLING_LOG_RECENT,  (1, 1, 5)),
 ]
+QUERY_PLAN_CASES_V5 = QUERY_PLAN_CASES + [
+    ("h2h_v5",              _Q_H2H_V5,              (1, 1, 1)),
+    ("batting_phase",       _Q_BATTING_PHASE,       (1, 0, 1)),
+    ("bowling_phase",       _Q_BOWLING_PHASE,       (1, 0, 1)),
+]
 
 
 class _SQLiteBackend:
@@ -332,6 +392,7 @@ class _SQLiteBackend:
         self._player_id_map: Optional[Dict[str, int]] = None
         self._venue_id_map: Optional[Dict[str, int]] = None
         self._date_strs: Optional[list] = None  # sorted; index = date_id
+        self.schema_version: Optional[int] = None
         # Schema v4: global empirical outcome prior (p0, p1, p2, p4, p6, pw),
         # loaded from _meta at first connection. Used for empirical-Bayes
         # shrinkage in get_*_outcome_dist getters.
@@ -407,6 +468,10 @@ class _SQLiteBackend:
             for row in conn.execute("SELECT date FROM dates ORDER BY id ASC")
         ]
         meta = dict(conn.execute("SELECT key, value FROM _meta"))
+        try:
+            self.schema_version = int(meta.get("schema_version", -1))
+        except (TypeError, ValueError):
+            self.schema_version = -1
         # Fall back to a flat uniform prior if the DB predates v4; keeps
         # the backend usable in migration windows. Real rebuilds always
         # write the six prior_p* rows from build_stats_cache.
@@ -767,10 +832,23 @@ class _SQLiteBackend:
         did = self._resolve_date_id(as_of_date)
         if did < 0:
             return None
-        row = conn.execute(_Q_H2H, (bat, bowl, did)).fetchone()
+        query = (
+            _Q_H2H_V5
+            if self.schema_version == I8_SCHEMA_VERSION
+            else _Q_H2H
+        )
+        row = conn.execute(query, (bat, bowl, did)).fetchone()
         if row is None:
             return None
-        return {'runs': row[0], 'balls': row[1], 'dismissals': row[2]}
+        result = {
+            'runs': row[0], 'balls': row[1], 'dismissals': row[2],
+        }
+        if self.schema_version == I8_SCHEMA_VERSION:
+            result.update({
+                'c0': row[3], 'c1': row[4], 'c2': row[5],
+                'c4': row[6], 'c6': row[7], 'cw': row[8],
+            })
+        return result
 
     # --- schema v4 outcome-distribution getters -------------------------
     # Empirical Bayes shrinkage toward the global corpus prior π:
@@ -844,6 +922,56 @@ class _SQLiteBackend:
             return (0, 0, 0, 0, 0, 0)
         # row indices 14..19 are c0..cw after the venue row widening.
         return (row[14], row[15], row[16], row[17], row[18], row[19])
+
+    def _require_i8_schema(self, getter: str) -> None:
+        self._ensure_conn()
+        if self.schema_version != I8_SCHEMA_VERSION:
+            raise RuntimeError(
+                f"{getter} requires SQLite schema {I8_SCHEMA_VERSION}; "
+                f"{self.db_path} has schema {self.schema_version}. Use the "
+                "isolated I8 cache, not a schema-v4 production cache."
+            )
+
+    @staticmethod
+    def _phase_code(balls_bowled: int) -> int:
+        if balls_bowled < 36:
+            return 0
+        if balls_bowled < 96:
+            return 1
+        return 2
+
+    def _player_phase_counts(
+        self,
+        table: str,
+        player_id,
+        as_of_date,
+        balls_bowled: int,
+    ) -> tuple:
+        self._require_i8_schema(f"get_{table}_outcome_dist")
+        conn = self._ensure_conn()
+        pid = self._player_id_map.get(str(player_id))
+        if pid is None:
+            return (0, 0, 0, 0, 0, 0)
+        did = self._resolve_date_id(as_of_date)
+        if did < 0:
+            return (0, 0, 0, 0, 0, 0)
+        query = (
+            _Q_BATTING_PHASE
+            if table == "batter_phase"
+            else _Q_BOWLING_PHASE
+        )
+        row = conn.execute(
+            query,
+            (pid, self._phase_code(int(balls_bowled)), did),
+        ).fetchone()
+        return tuple(row) if row is not None else (0, 0, 0, 0, 0, 0)
+
+    def _h2h_counts(self, batter_id, bowler_id, as_of_date) -> tuple:
+        self._require_i8_schema("get_h2h_outcome_dist")
+        raw = self._get_raw_h2h(batter_id, bowler_id, as_of_date)
+        if raw is None:
+            return (0, 0, 0, 0, 0, 0)
+        return tuple(raw[key] for key in ('c0', 'c1', 'c2', 'c4', 'c6', 'cw'))
 
     def get_batter_outcome_dist(
         self, player_id, as_of_date, k: float = 30.0,
@@ -947,6 +1075,98 @@ class _SQLiteBackend:
         return {
             'phase_p0': p[0], 'phase_p1': p[1], 'phase_p2': p[2],
             'phase_p4': p[3], 'phase_p6': p[4], 'phase_pw': p[5],
+        }
+
+    # --- schema v5 I8 hierarchical distributions ----------------------
+
+    def get_batter_phase_outcome_dist(
+        self,
+        player_id,
+        as_of_date,
+        balls_bowled: int,
+        k_player: float = 30.0,
+        k_phase: float = 30.0,
+    ) -> Dict[str, float]:
+        parent = self._shrink(
+            self._batting_counts(player_id, as_of_date),
+            self._prior,
+            k_player,
+        )
+        p = self._shrink(
+            self._player_phase_counts(
+                "batter_phase",
+                player_id,
+                as_of_date,
+                balls_bowled,
+            ),
+            parent,
+            k_phase,
+        )
+        return {
+            'batter_phase_p0': p[0], 'batter_phase_p1': p[1],
+            'batter_phase_p2': p[2], 'batter_phase_p4': p[3],
+            'batter_phase_p6': p[4], 'batter_phase_pw': p[5],
+        }
+
+    def get_bowler_phase_outcome_dist(
+        self,
+        player_id,
+        as_of_date,
+        balls_bowled: int,
+        k_player: float = 30.0,
+        k_phase: float = 30.0,
+    ) -> Dict[str, float]:
+        parent = self._shrink(
+            self._bowling_counts(player_id, as_of_date),
+            self._prior,
+            k_player,
+        )
+        p = self._shrink(
+            self._player_phase_counts(
+                "bowler_phase",
+                player_id,
+                as_of_date,
+                balls_bowled,
+            ),
+            parent,
+            k_phase,
+        )
+        return {
+            'bowler_phase_p0': p[0], 'bowler_phase_p1': p[1],
+            'bowler_phase_p2': p[2], 'bowler_phase_p4': p[3],
+            'bowler_phase_p6': p[4], 'bowler_phase_pw': p[5],
+        }
+
+    def get_h2h_outcome_dist(
+        self,
+        batter_id,
+        bowler_id,
+        as_of_date,
+        k_player: float = 30.0,
+        k_h2h: float = 60.0,
+    ) -> Dict[str, float]:
+        batter_parent = self._shrink(
+            self._batting_counts(batter_id, as_of_date),
+            self._prior,
+            k_player,
+        )
+        bowler_parent = self._shrink(
+            self._bowling_counts(bowler_id, as_of_date),
+            self._prior,
+            k_player,
+        )
+        parent = tuple(
+            (bat + bowl) / 2.0
+            for bat, bowl in zip(batter_parent, bowler_parent)
+        )
+        p = self._shrink(
+            self._h2h_counts(batter_id, bowler_id, as_of_date),
+            parent,
+            k_h2h,
+        )
+        return {
+            'h2h_p0': p[0], 'h2h_p1': p[1], 'h2h_p2': p[2],
+            'h2h_p4': p[3], 'h2h_p6': p[4], 'h2h_pw': p[5],
         }
 
     # --- schema v3 match-log getters ------------------------------------

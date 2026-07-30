@@ -15,7 +15,7 @@ Usage:
 
 from pathlib import Path
 from datetime import datetime
-from typing import Dict
+from typing import Dict, Optional
 
 
 class StatsProvider:
@@ -32,7 +32,8 @@ class StatsProvider:
 
     def __init__(self, cache_dir: str = 'models', max_cached_chunks: int = 5,
                  version: str = 'v3',
-                 require_order_contract: bool = False):
+                 require_order_contract: bool = False,
+                 required_schema_version: Optional[int] = None):
         # `max_cached_chunks` is retained as a no-op kwarg for callers
         # that still pass it; the chunked backend it once configured is
         # gone.
@@ -52,6 +53,7 @@ class StatsProvider:
             cache_root,
             version,
             require_order_contract=require_order_contract,
+            required_schema_version=required_schema_version,
         )
         self.dates = list(self._backend._date_strs)
         self.backend_name = 'sqlite'
@@ -66,21 +68,35 @@ class StatsProvider:
         cache_root,
         version,
         require_order_contract=False,
+        required_schema_version=None,
     ):
         from loaders_common import SAME_DAY_ORDER_VERSION
-        from stats_sqlite_backend import _SQLiteBackend, SCHEMA_VERSION
+        from stats_sqlite_backend import (
+            _SQLiteBackend,
+            SUPPORTED_SCHEMA_VERSIONS,
+        )
 
         backend = _SQLiteBackend(str(sqlite_path))
         backend._ensure_conn()
         meta = backend.get_meta()
 
         file_schema = int(meta.get('schema_version', -1))
-        if file_schema != SCHEMA_VERSION:
+        if file_schema not in SUPPORTED_SCHEMA_VERSIONS:
             raise RuntimeError(
                 f"SQLite schema mismatch: {sqlite_path} has "
                 f"schema_version={file_schema}, code expects "
-                f"{SCHEMA_VERSION}. Delete the file and rebuild with "
+                f"one of {SUPPORTED_SCHEMA_VERSIONS}. Delete the file and "
+                "rebuild with "
                 f"`uv run python scripts/build_stats_cache.py`."
+            )
+        if (
+            required_schema_version is not None
+            and file_schema != int(required_schema_version)
+        ):
+            raise RuntimeError(
+                f"SQLite schema mismatch: {sqlite_path} has "
+                f"schema_version={file_schema}, this caller requires "
+                f"{required_schema_version}."
             )
 
         cache_order = meta.get('same_day_order_version')
@@ -194,6 +210,9 @@ class StatsProviderCache:
         self._batter_vs_type_outcome_dist: Dict = {}
         self._bowler_vs_hand_outcome_dist: Dict = {}
         self._venue_outcome_dist: Dict = {}
+        self._batter_phase_outcome_dist: Dict = {}
+        self._bowler_phase_outcome_dist: Dict = {}
+        self._h2h_outcome_dist: Dict = {}
 
     def __getattr__(self, name):
         # __getattr__ runs only when normal lookup misses. During pickle
@@ -386,6 +405,78 @@ class StatsProviderCache:
             self._venue_outcome_dist[key] = cached
         return cached
 
+    def get_batter_phase_outcome_dist(
+        self,
+        player_id,
+        as_of_date,
+        balls_bowled: int,
+        k_player: float = 30.0,
+        k_phase: float = 30.0,
+    ) -> Dict[str, float]:
+        key = (
+            player_id, self._norm_date(as_of_date), int(balls_bowled),
+            k_player, k_phase,
+        )
+        cached = self._batter_phase_outcome_dist.get(key)
+        if cached is None:
+            cached = self._provider.get_batter_phase_outcome_dist(
+                player_id,
+                as_of_date,
+                balls_bowled,
+                k_player=k_player,
+                k_phase=k_phase,
+            )
+            self._batter_phase_outcome_dist[key] = cached
+        return cached
+
+    def get_bowler_phase_outcome_dist(
+        self,
+        player_id,
+        as_of_date,
+        balls_bowled: int,
+        k_player: float = 30.0,
+        k_phase: float = 30.0,
+    ) -> Dict[str, float]:
+        key = (
+            player_id, self._norm_date(as_of_date), int(balls_bowled),
+            k_player, k_phase,
+        )
+        cached = self._bowler_phase_outcome_dist.get(key)
+        if cached is None:
+            cached = self._provider.get_bowler_phase_outcome_dist(
+                player_id,
+                as_of_date,
+                balls_bowled,
+                k_player=k_player,
+                k_phase=k_phase,
+            )
+            self._bowler_phase_outcome_dist[key] = cached
+        return cached
+
+    def get_h2h_outcome_dist(
+        self,
+        batter_id,
+        bowler_id,
+        as_of_date,
+        k_player: float = 30.0,
+        k_h2h: float = 60.0,
+    ) -> Dict[str, float]:
+        key = (
+            batter_id, bowler_id, self._norm_date(as_of_date),
+            k_player, k_h2h,
+        )
+        cached = self._h2h_outcome_dist.get(key)
+        if cached is None:
+            cached = self._provider.get_h2h_outcome_dist(
+                batter_id,
+                bowler_id,
+                as_of_date,
+                k_player=k_player,
+                k_h2h=k_h2h,
+            )
+            self._h2h_outcome_dist[key] = cached
+        return cached
+
     def clear_memo(self) -> None:
         # Tier 1
         self._team_batting_elo.clear()
@@ -406,6 +497,9 @@ class StatsProviderCache:
         self._batter_vs_type_outcome_dist.clear()
         self._bowler_vs_hand_outcome_dist.clear()
         self._venue_outcome_dist.clear()
+        self._batter_phase_outcome_dist.clear()
+        self._bowler_phase_outcome_dist.clear()
+        self._h2h_outcome_dist.clear()
 
 
 def wrap_with_cache(provider):
