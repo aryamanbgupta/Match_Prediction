@@ -42,8 +42,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from parsing_v2 import PlayerEloTracker, PlayerStatsTracker, VenueStatsTracker
 from stats_sqlite_backend import (
+    I8_SCHEMA_VERSION,
     _Q_BATTING_VS_TYPE,
+    _Q_BATTING_PHASE,
     _Q_BOWLING_VS_HAND,
+    _Q_BOWLING_PHASE,
     _Q_VENUE,
 )
 
@@ -76,6 +79,27 @@ def _get_raw_bowling_vs_hand(backend, player_id, bat_hand: int, as_of_date):
     if did < 0:
         return None
     return conn.execute(_Q_BOWLING_VS_HAND, (pid, bat_hand, did)).fetchone()
+
+
+def _get_raw_player_phase(
+    backend,
+    player_id,
+    phase_code: int,
+    as_of_date,
+    *,
+    batting: bool,
+):
+    if backend.schema_version != I8_SCHEMA_VERSION:
+        return None
+    conn = backend._ensure_conn()
+    pid = backend._player_id_map.get(str(player_id))
+    if pid is None:
+        return None
+    did = backend._resolve_date_id(as_of_date)
+    if did < 0:
+        return None
+    query = _Q_BATTING_PHASE if batting else _Q_BOWLING_PHASE
+    return conn.execute(query, (pid, phase_code, did)).fetchone()
 
 
 def _get_raw_venue(backend, venue: str, as_of_date):
@@ -147,7 +171,8 @@ def rehydrate_stats_tracker(
     backend = _backend(provider)
     as_of = _norm_date(as_of_date)
 
-    tracker = PlayerStatsTracker()
+    tracker = PlayerStatsTracker(
+        enable_i8=backend.schema_version == I8_SCHEMA_VERSION)
     pids = list(player_ids)
 
     for pid in pids:
@@ -247,6 +272,43 @@ def rehydrate_stats_tracker(
                 }
             tracker.bowling_vs_hand[pid] = entry
 
+        if tracker.enable_i8:
+            for phase, phase_code in (
+                ("powerplay", 0),
+                ("middle", 1),
+                ("death", 2),
+            ):
+                bat_phase = _get_raw_player_phase(
+                    backend,
+                    pid,
+                    phase_code,
+                    as_of,
+                    batting=True,
+                )
+                if bat_phase is not None:
+                    tracker.batting_phase[pid][phase] = {
+                        key: int(value)
+                        for key, value in zip(
+                            ("c0", "c1", "c2", "c4", "c6", "cw"),
+                            bat_phase,
+                        )
+                    }
+                bowl_phase = _get_raw_player_phase(
+                    backend,
+                    pid,
+                    phase_code,
+                    as_of,
+                    batting=False,
+                )
+                if bowl_phase is not None:
+                    tracker.bowling_phase[pid][phase] = {
+                        key: int(value)
+                        for key, value in zip(
+                            ("c0", "c1", "c2", "c4", "c6", "cw"),
+                            bowl_phase,
+                        )
+                    }
+
     # h2h: cross-product of all pids in both directions. Most pairs have
     # no history and return None; the defaultdict auto-returns zeros for
     # unseeded keys, matching the monolith's behavior.
@@ -261,6 +323,11 @@ def rehydrate_stats_tracker(
                     "balls": int(raw["balls"]),
                     "dismissals": int(raw["dismissals"]),
                 }
+                if tracker.enable_i8:
+                    tracker.h2h_stats[(bat, bowl)].update({
+                        key: int(raw[key])
+                        for key in ("c0", "c1", "c2", "c4", "c6", "cw")
+                    })
 
     return tracker
 

@@ -254,13 +254,32 @@ def _empty_bowling_counts():
             'c0': 0, 'c1': 0, 'c2': 0, 'c4': 0, 'c6': 0, 'cw': 0}
 
 
+def _empty_outcome_counts():
+    return {'c0': 0, 'c1': 0, 'c2': 0, 'c4': 0, 'c6': 0, 'cw': 0}
+
+
+def _empty_h2h_counts():
+    return {
+        'runs': 0, 'balls': 0, 'dismissals': 0,
+        **_empty_outcome_counts(),
+    }
+
+
+def _empty_phase_counts():
+    return {
+        phase: _empty_outcome_counts()
+        for phase in ('powerplay', 'middle', 'death')
+    }
+
+
 class PlayerStatsTracker:
     """
     DESIGN DECISION: Separate class for player stats to maintain state across matches.
     REASONING: Encapsulation - keeps complex state management isolated from parsing logic.
     This makes it easy to add new stats without cluttering the main parsing code.
     """
-    def __init__(self):
+    def __init__(self, enable_i8: bool = False):
+        self.enable_i8 = bool(enable_i8)
         # Career stats - accumulate over time. Schema v4: each row also
         # carries c0/c1/c2/c4/c6/cw outcome counts so the model can read
         # empirical P(0,1,2,4,6,W | context) directly (no reconstruction
@@ -285,7 +304,20 @@ class PlayerStatsTracker:
         # Head-to-head records
         # DESIGN DECISION: Use tuple (batter, bowler) as key for h2h
         # REASONING: Direct lookup, memory efficient, naturally handles bidirectional relationships
-        self.h2h_stats = defaultdict(lambda: {'runs': 0, 'balls': 0, 'dismissals': 0})
+        self.h2h_stats = defaultdict(
+            _empty_h2h_counts
+            if self.enable_i8
+            else lambda: {'runs': 0, 'balls': 0, 'dismissals': 0}
+        )
+
+        # I8 / schema v5. Kept disabled for v4 trackers so frozen parsing,
+        # cache builds, and simulations pay no extra sparse-cell memory cost.
+        self.batting_phase = (
+            defaultdict(_empty_phase_counts) if self.enable_i8 else None
+        )
+        self.bowling_phase = (
+            defaultdict(_empty_phase_counts) if self.enable_i8 else None
+        )
 
         # Recent form tracking (last 5 matches)
         # DESIGN DECISION: Track last 5 match performances
@@ -439,7 +471,7 @@ class PlayerStatsTracker:
     def update_stats(self, batter_id, bowler_id, runs, is_wicket,
                      batter_hand=None, is_pace=None, *, bowler_runs=None,
                      is_legal=True, dismissed_batter_id=None,
-                     is_bowler_wicket=None):
+                     is_bowler_wicket=None, phase=None):
         """
         Update all statistics after a delivery.
 
@@ -460,6 +492,8 @@ class PlayerStatsTracker:
                 wicket calls.
             is_bowler_wicket: Whether the dismissal is credited to the
                 bowler. Defaults to ``is_wicket`` for legacy calls.
+            phase: I8 pre-ball phase name. Required for legal deliveries when
+                this tracker was constructed with ``enable_i8=True``.
         """
         if bowler_runs is None:
             bowler_runs = runs
@@ -467,6 +501,14 @@ class PlayerStatsTracker:
             is_bowler_wicket = is_wicket
         if is_wicket and dismissed_batter_id is None:
             dismissed_batter_id = batter_id
+        if (
+            self.enable_i8
+            and is_legal
+            and phase not in ('powerplay', 'middle', 'death')
+        ):
+            raise ValueError(
+                f"I8 tracker requires a valid pre-ball phase; got {phase!r}"
+            )
         ck = _outcome_bucket_key(runs, is_wicket) if is_legal else None
 
         # Update batting stats
@@ -487,12 +529,19 @@ class PlayerStatsTracker:
         if is_bowler_wicket:
             bw['wickets'] += 1
 
-        # Update h2h (no outcome counts — sparse 2D cell, stays scalar-only)
-        self.h2h_stats[(batter_id, bowler_id)]['runs'] += runs
+        # Update scalar H2H state and, under I8, its normalized outcome cell.
+        h2h = self.h2h_stats[(batter_id, bowler_id)]
+        h2h['runs'] += runs
         if is_legal:
-            self.h2h_stats[(batter_id, bowler_id)]['balls'] += 1
+            h2h['balls'] += 1
+            if self.enable_i8:
+                h2h[ck] += 1
         if is_bowler_wicket:
-            self.h2h_stats[(batter_id, bowler_id)]['dismissals'] += 1
+            h2h['dismissals'] += 1
+
+        if self.enable_i8 and is_legal:
+            self.batting_phase[batter_id][phase][ck] += 1
+            self.bowling_phase[bowler_id][phase][ck] += 1
 
         # NEW: Update type-based batting stats (batter vs pace/spin)
         if is_pace is not None:
@@ -602,6 +651,80 @@ class PlayerStatsTracker:
             'bowler_p0_vs_rhb': pr[0], 'bowler_p1_vs_rhb': pr[1],
             'bowler_p2_vs_rhb': pr[2], 'bowler_p4_vs_rhb': pr[3],
             'bowler_p6_vs_rhb': pr[4], 'bowler_pw_vs_rhb': pr[5],
+        }
+
+    def _require_i8(self):
+        if not self.enable_i8:
+            raise RuntimeError(
+                "I8 outcome distributions require PlayerStatsTracker("
+                "enable_i8=True)"
+            )
+
+    def get_batter_phase_outcome_dist(
+        self,
+        batter_id,
+        prior,
+        balls_bowled,
+        k_player=30.0,
+        k_phase=30.0,
+    ):
+        self._require_i8()
+        phase = _classify_phase_pre_ball(int(balls_bowled))
+        parent = _shrink_counts(
+            self._batting_counts_vec(batter_id), prior, k_player)
+        cell = self.batting_phase[batter_id][phase]
+        counts = tuple(cell[key] for key in _OUTCOME_COUNT_KEYS)
+        p = _shrink_counts(counts, parent, k_phase)
+        return {
+            'batter_phase_p0': p[0], 'batter_phase_p1': p[1],
+            'batter_phase_p2': p[2], 'batter_phase_p4': p[3],
+            'batter_phase_p6': p[4], 'batter_phase_pw': p[5],
+        }
+
+    def get_bowler_phase_outcome_dist(
+        self,
+        bowler_id,
+        prior,
+        balls_bowled,
+        k_player=30.0,
+        k_phase=30.0,
+    ):
+        self._require_i8()
+        phase = _classify_phase_pre_ball(int(balls_bowled))
+        parent = _shrink_counts(
+            self._bowling_counts_vec(bowler_id), prior, k_player)
+        cell = self.bowling_phase[bowler_id][phase]
+        counts = tuple(cell[key] for key in _OUTCOME_COUNT_KEYS)
+        p = _shrink_counts(counts, parent, k_phase)
+        return {
+            'bowler_phase_p0': p[0], 'bowler_phase_p1': p[1],
+            'bowler_phase_p2': p[2], 'bowler_phase_p4': p[3],
+            'bowler_phase_p6': p[4], 'bowler_phase_pw': p[5],
+        }
+
+    def get_h2h_outcome_dist(
+        self,
+        batter_id,
+        bowler_id,
+        prior,
+        k_player=30.0,
+        k_h2h=60.0,
+    ):
+        self._require_i8()
+        batter_parent = _shrink_counts(
+            self._batting_counts_vec(batter_id), prior, k_player)
+        bowler_parent = _shrink_counts(
+            self._bowling_counts_vec(bowler_id), prior, k_player)
+        parent = tuple(
+            (bat + bowl) / 2.0
+            for bat, bowl in zip(batter_parent, bowler_parent)
+        )
+        cell = self.h2h_stats[(batter_id, bowler_id)]
+        counts = tuple(cell[key] for key in _OUTCOME_COUNT_KEYS)
+        p = _shrink_counts(counts, parent, k_h2h)
+        return {
+            'h2h_p0': p[0], 'h2h_p1': p[1], 'h2h_p2': p[2],
+            'h2h_p4': p[3], 'h2h_p6': p[4], 'h2h_pw': p[5],
         }
 
 
@@ -805,6 +928,21 @@ def deep_copy_stats(tracker, venue_tracker=None, elo_tracker=None):
             for player_id, stats in tracker.bowling_vs_hand.items()
         },
     }
+    if tracker.enable_i8:
+        snapshot['batting_phase'] = {
+            player_id: {
+                phase: dict(counts)
+                for phase, counts in by_phase.items()
+            }
+            for player_id, by_phase in tracker.batting_phase.items()
+        }
+        snapshot['bowling_phase'] = {
+            player_id: {
+                phase: dict(counts)
+                for phase, counts in by_phase.items()
+            }
+            for player_id, by_phase in tracker.bowling_phase.items()
+        }
 
     # Include venue stats if tracker provided
     if venue_tracker is not None:
@@ -1484,6 +1622,8 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None,
                             if state['dismissed_batter_ids'] else None
                         ),
                         is_bowler_wicket=state['is_bowler_wicket'],
+                        phase=_classify_phase_pre_ball(
+                            state['balls_bowled']),
                     )
                 else:
                     player_stats_tracker.update_stats(
@@ -1495,6 +1635,8 @@ def parse_match_data_v2(json_data, player_stats_tracker, venue_tracker=None,
                             batter_hand if batter_hand != 'unknown' else None
                         ),
                         is_pace=is_pace,
+                        phase=_classify_phase_pre_ball(
+                            state['balls_bowled']),
                     )
 
                 # ELO describes the legal batter-vs-bowler outcome channel.

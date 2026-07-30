@@ -57,7 +57,13 @@ from parsing_v2 import (
     parse_match_data_v2,
 )
 from player_metadata import PlayerMetadataProvider
-from stats_sqlite_backend import SCHEMA_SQL, SCHEMA_VERSION
+from stats_sqlite_backend import (
+    I8_SCHEMA_VERSION,
+    SCHEMA_SQL,
+    SCHEMA_SQL_V5,
+    SCHEMA_VERSION,
+    SUPPORTED_SCHEMA_VERSIONS,
+)
 
 
 BATCH_SIZE = 20_000
@@ -103,7 +109,11 @@ def _has_nonzero_match_stats(stats: dict, fields: tuple[str, ...]) -> bool:
     return any(int(stats.get(field, 0)) != 0 for field in fields)
 
 
-def _verify_outcome_count_conservation(conn, sample_n: int = 500) -> None:
+def _verify_outcome_count_conservation(
+    conn,
+    sample_n: int = 500,
+    schema_version: int = SCHEMA_VERSION,
+) -> None:
     """Schema v4 guard: Σ(c0..cw) must equal the `balls` column on every
     batting / bowling / batting_vs_type / bowling_vs_hand row, and equal
     `total_balls` on every venue row. A schema migration or a future
@@ -113,14 +123,20 @@ def _verify_outcome_count_conservation(conn, sample_n: int = 500) -> None:
     import random
 
     print("  verifying outcome-count conservation...", flush=True)
-    specs = (
+    specs = [
         # (table, balls_col, has_many_rows_bool)
         ("batting", "balls", True),
         ("bowling", "balls_bowled", True),
         ("batting_vs_type", "balls", True),
         ("bowling_vs_hand", "balls_bowled", True),
         ("venue", "total_balls", True),
-    )
+    ]
+    if schema_version == I8_SCHEMA_VERSION:
+        specs.extend([
+            ("h2h", "balls", True),
+            ("batting_phase", "(c0+c1+c2+c4+c6+cw)", True),
+            ("bowling_phase", "(c0+c1+c2+c4+c6+cw)", True),
+        ])
     for table, balls_col, _ in specs:
         rows = conn.execute(
             f"SELECT {balls_col}, c0, c1, c2, c4, c6, cw "
@@ -271,14 +287,18 @@ def freeze_priors_from_sqlite(
     missing = [key for key in PRIOR_META_KEYS if key not in source_meta]
     if missing:
         raise RuntimeError(f"prior source is missing _meta keys: {missing}")
-    if int(source_meta.get("schema_version", -1)) != SCHEMA_VERSION:
+    if int(source_meta.get("schema_version", -1)) not in (
+        SUPPORTED_SCHEMA_VERSIONS
+    ):
         raise RuntimeError("prior source SQLite schema mismatch")
 
     source_hash = _sha256_file(source)
     target_conn = sqlite3.connect(target)
     try:
         target_meta = dict(target_conn.execute("SELECT key, value FROM _meta"))
-        if int(target_meta.get("schema_version", -1)) != SCHEMA_VERSION:
+        if int(target_meta.get("schema_version", -1)) not in (
+            SUPPORTED_SCHEMA_VERSIONS
+        ):
             raise RuntimeError("target SQLite schema mismatch")
         rows = [(key, source_meta[key]) for key in PRIOR_META_KEYS]
         rows.extend(
@@ -306,6 +326,7 @@ def sqlite_up_to_date(
     out_path: Path,
     source_dirs: Path | Iterable[Path],
     delivery_semantics: str = LEGACY_DELIVERY_SEMANTICS,
+    schema_version: int = SCHEMA_VERSION,
 ) -> bool:
     """Return True if the existing SQLite is current vs the JSON corpus.
 
@@ -327,7 +348,7 @@ def sqlite_up_to_date(
         file_schema = int(meta.get("schema_version", -1))
     except (TypeError, ValueError):
         return False
-    if file_schema != SCHEMA_VERSION:
+    if file_schema != schema_version:
         return False
     if meta.get("same_day_order_version") != SAME_DAY_ORDER_VERSION:
         return False
@@ -367,16 +388,23 @@ def build(
     gender: str = "male",
     metadata_csv: Path = None,
     delivery_semantics: str = LEGACY_DELIVERY_SEMANTICS,
+    schema_version: int = SCHEMA_VERSION,
 ) -> None:
     if delivery_semantics not in DELIVERY_SEMANTICS:
         raise ValueError(
             f"unsupported delivery semantics {delivery_semantics!r}")
+    if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
+        raise ValueError(
+            f"unsupported schema version {schema_version}; "
+            f"expected one of {SUPPORTED_SCHEMA_VERSIONS}"
+        )
     normalized_dirs = _normalize_source_dirs(source_dirs)
     t_start = time.time()
     print(f"building {out_path} from {normalized_dirs} (gender={gender})",
           flush=True)
 
-    stats = PlayerStatsTracker()
+    stats = PlayerStatsTracker(
+        enable_i8=schema_version == I8_SCHEMA_VERSION)
     venue = VenueStatsTracker()
     elo = PlayerEloTracker()
     metadata_path = metadata_csv or (
@@ -396,7 +424,11 @@ def build(
         PRAGMA temp_store = MEMORY;
         PRAGMA cache_size = -200000;
     """)
-    conn.executescript(SCHEMA_SQL)
+    conn.executescript(
+        SCHEMA_SQL_V5
+        if schema_version == I8_SCHEMA_VERSION
+        else SCHEMA_SQL
+    )
 
     # Interned int ids; lookup tables written at the end so row ids match.
     player_ids: Dict[str, int] = {}
@@ -407,6 +439,8 @@ def build(
     prev_batting: Dict[int, Tuple[int, int, int, int, int, int]] = {}
     prev_bowling: Dict[int, Tuple[int, int, int, int, int, int]] = {}
     prev_h2h: Dict[Tuple[int, int], Tuple[int, int, int]] = {}
+    prev_batting_phase: Dict[Tuple[int, int], Tuple[int, ...]] = {}
+    prev_bowling_phase: Dict[Tuple[int, int], Tuple[int, ...]] = {}
     prev_bat_vs_type: Dict[Tuple[int, int], Tuple[int, int, int]] = {}
     prev_bowl_vs_hand: Dict[Tuple[int, int], Tuple[int, int, int]] = {}
     prev_venue: Dict[int, Tuple] = {}
@@ -417,6 +451,8 @@ def build(
     batting_rows: List[Tuple] = []
     bowling_rows: List[Tuple] = []
     h2h_rows: List[Tuple] = []
+    batting_phase_rows: List[Tuple] = []
+    bowling_phase_rows: List[Tuple] = []
     bat_vs_type_rows: List[Tuple] = []
     bowl_vs_hand_rows: List[Tuple] = []
     venue_rows: List[Tuple] = []
@@ -439,11 +475,30 @@ def build(
                 bowling_rows)
             bowling_rows.clear()
         if h2h_rows:
-            conn.executemany(
-                "INSERT INTO h2h (batter_id, bowler_id, date_id, "
-                "runs, balls, dismissals) VALUES (?, ?, ?, ?, ?, ?)",
-                h2h_rows)
+            if schema_version == I8_SCHEMA_VERSION:
+                conn.executemany(
+                    "INSERT INTO h2h (batter_id, bowler_id, date_id, "
+                    "runs, balls, dismissals, c0, c1, c2, c4, c6, cw) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    h2h_rows)
+            else:
+                conn.executemany(
+                    "INSERT INTO h2h (batter_id, bowler_id, date_id, "
+                    "runs, balls, dismissals) VALUES (?, ?, ?, ?, ?, ?)",
+                    h2h_rows)
             h2h_rows.clear()
+        if batting_phase_rows:
+            conn.executemany(
+                "INSERT INTO batting_phase VALUES "
+                "(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                batting_phase_rows)
+            batting_phase_rows.clear()
+        if bowling_phase_rows:
+            conn.executemany(
+                "INSERT INTO bowling_phase VALUES "
+                "(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                bowling_phase_rows)
+            bowling_phase_rows.clear()
         if bat_vs_type_rows:
             conn.executemany(
                 "INSERT INTO batting_vs_type VALUES "
@@ -520,11 +575,56 @@ def build(
         for (bat_str, bowl_str), st in snap.get('h2h', {}).items():
             bat = _intern(player_ids, bat_str)
             bowl = _intern(player_ids, bowl_str)
-            cur = (int(st['runs']), int(st['balls']), int(st['dismissals']))
+            cur = (
+                int(st['runs']), int(st['balls']), int(st['dismissals']),
+            )
+            if schema_version == I8_SCHEMA_VERSION:
+                cur += tuple(
+                    int(st.get(key, 0))
+                    for key in ('c0', 'c1', 'c2', 'c4', 'c6', 'cw')
+                )
             key = (bat, bowl)
             if prev_h2h.get(key) != cur:
                 h2h_rows.append((bat, bowl, date_id) + cur)
                 prev_h2h[key] = cur
+
+        if schema_version == I8_SCHEMA_VERSION:
+            phase_codes = {'powerplay': 0, 'middle': 1, 'death': 2}
+            for pid_str, by_phase in snap.get(
+                'batting_phase', {}
+            ).items():
+                pid = _intern(player_ids, pid_str)
+                for phase, phase_code in phase_codes.items():
+                    st = by_phase.get(phase)
+                    if st is None:
+                        continue
+                    cur = tuple(
+                        int(st.get(key, 0))
+                        for key in ('c0', 'c1', 'c2', 'c4', 'c6', 'cw')
+                    )
+                    key = (pid, phase_code)
+                    if prev_batting_phase.get(key) != cur:
+                        batting_phase_rows.append(
+                            (pid, phase_code, date_id) + cur)
+                        prev_batting_phase[key] = cur
+
+            for pid_str, by_phase in snap.get(
+                'bowling_phase', {}
+            ).items():
+                pid = _intern(player_ids, pid_str)
+                for phase, phase_code in phase_codes.items():
+                    st = by_phase.get(phase)
+                    if st is None:
+                        continue
+                    cur = tuple(
+                        int(st.get(key, 0))
+                        for key in ('c0', 'c1', 'c2', 'c4', 'c6', 'cw')
+                    )
+                    key = (pid, phase_code)
+                    if prev_bowling_phase.get(key) != cur:
+                        bowling_phase_rows.append(
+                            (pid, phase_code, date_id) + cur)
+                        prev_bowling_phase[key] = cur
 
         for pid_str, by_type in snap.get('batting_vs_type', {}).items():
             pid = _intern(player_ids, pid_str)
@@ -713,6 +813,7 @@ def build(
         # --- buffer flushing + progress -------------------------------
         total_buffered = (
             len(batting_rows) + len(bowling_rows) + len(h2h_rows)
+            + len(batting_phase_rows) + len(bowling_phase_rows)
             + len(bat_vs_type_rows) + len(bowl_vs_hand_rows)
             + len(venue_rows) + len(batting_elo_rows) + len(bowling_elo_rows)
             + len(batting_log_rows) + len(bowling_log_rows)
@@ -818,7 +919,7 @@ def build(
               flush=True)
 
     meta_rows = [
-        ('schema_version', str(SCHEMA_VERSION)),
+        ('schema_version', str(schema_version)),
         ('build_timestamp', datetime.utcnow().isoformat() + 'Z'),
         ('same_day_order_version', SAME_DAY_ORDER_VERSION),
         ('delivery_semantics', delivery_semantics),
@@ -830,7 +931,7 @@ def build(
         ('num_players', str(len(player_ids))),
         ('num_venues', str(len(venue_ids))),
         ('num_dates', str(len(date_ids))),
-        ('features', 'v4'),
+        ('features', f'v{schema_version}'),
         ('prior_p0', f"{prior[0]:.10f}"),
         ('prior_p1', f"{prior[1]:.10f}"),
         ('prior_p2', f"{prior[2]:.10f}"),
@@ -863,7 +964,11 @@ def build(
     # stale recent-form on the sim hot path. Sample-check before close.
     _verify_log_denormalized_consistency(conn, sample_n=500)
     # Schema v4: outcome-count conservation guard (Σ cX == balls).
-    _verify_outcome_count_conservation(conn, sample_n=500)
+    _verify_outcome_count_conservation(
+        conn,
+        sample_n=500,
+        schema_version=schema_version,
+    )
 
     conn.close()
 
@@ -909,6 +1014,16 @@ def main() -> int:
     ap.add_argument("--force-rebuild", action="store_true",
                     help="Ignore mtime-based staleness check and rebuild "
                     "even if the existing SQLite appears current.")
+    ap.add_argument(
+        "--schema-version",
+        type=int,
+        choices=SUPPORTED_SCHEMA_VERSIONS,
+        default=SCHEMA_VERSION,
+        help=(
+            "SQLite schema to build. Version 4 remains the deployed default; "
+            "version 5 is isolated for I8."
+        ),
+    )
     ap.add_argument("--metadata-csv", type=Path, default=None,
                     help="Override path to all_players_enriched.csv. "
                     "Defaults to <source-dir>/../all_players_enriched.csv")
@@ -933,13 +1048,22 @@ def main() -> int:
             "isolated --out such as "
             "models/i5/player_stats_cache_i5.sqlite"
         )
+    if (
+        args.schema_version == I8_SCHEMA_VERSION
+        and args.out == Path("models/player_stats_cache_v3.sqlite")
+    ):
+        ap.error(
+            "schema v5 cannot overwrite the deployed v3 cache; pass "
+            "--out models/player_stats_cache_i8.sqlite"
+        )
 
     if not args.force_rebuild and sqlite_up_to_date(
         args.out,
         source_dirs,
         delivery_semantics=args.delivery_semantics,
+        schema_version=args.schema_version,
     ):
-        print(f"{args.out} is current (schema_version={SCHEMA_VERSION}, "
+        print(f"{args.out} is current (schema_version={args.schema_version}, "
               f"same_day_order={SAME_DAY_ORDER_VERSION}, "
               f"delivery_semantics={args.delivery_semantics}, "
               "source membership/mtime covered). Skipping rebuild. "
@@ -948,7 +1072,8 @@ def main() -> int:
 
     build(source_dirs, args.out, gender=gender,
           metadata_csv=args.metadata_csv,
-          delivery_semantics=args.delivery_semantics)
+          delivery_semantics=args.delivery_semantics,
+          schema_version=args.schema_version)
     if args.prior_source_sqlite:
         provenance = freeze_priors_from_sqlite(
             args.out,
