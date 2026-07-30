@@ -580,7 +580,14 @@ table `research/reports/auto/B4_pricing.md`; numbers
 shown weak in the tail → B9 appended (usage-share baseline re-test). Kept
 `74856a6`+`b387cbb`. See `research/reports/auto/B4.md`.
 
-## B5 [P2] [RUNNING 2026-07-23T04:55Z] In-play over/under quote prototype (analytics-engine seed)
+## B5 [P2] [STALE-RUNNING — SUPERVISED RELAY NEEDED (flagged 2026-07-30)] In-play over/under quote prototype (analytics-engine seed)
+**Status note (2026-07-30 review):** claimed `d97d4ab` + implemented
+`26a7fd9` on 2026-07-23, but the eval died at session limits (night.log
+iters 26–31) and no verdict/tsv row/report exists. The harness
+`scripts/auto/b5_inplay_quotes.py` has since been modified by the I15
+match-identity work, so a relay must re-verify the pre-committed gate
+against the current code, or revert and record CRASH. Do not treat as
+RUNNING; do not silently re-run without acknowledging the harness drift.
 **Hypothesis:** `models/inplay_winprob_v1` (P(win|state)) + the calibrated sim
 (score distributions from any mid-innings state) can produce live over/under
 quotes for remaining-innings runs. Feasibility prototype: quote quality
@@ -1517,7 +1524,7 @@ confirmation failed; M7 probability confirmation passed (LL 0.6823 vs market
 `reports/i3_eval_statistics_hardening.md` and
 `reports/forward_evaluation_2026-06-01_2026-07-13.md`.
 
-## I4 [INTERACTIVE] Odds-build integrity (`build_polymarket_odds.py` + eval odds)
+## I4 [DEFERRED — LEGACY REBASELINE ONLY] Odds-build integrity (`build_polymarket_odds.py` + eval odds)
 True pre-match check (price_timestamp < scheduled start; 259/261 stamps are
 same-day as the match); log residual top_p>0.92 entries (9 remain, max
 0.9995); remove the outcome-conditioned dedup tiebreak (criterion #2 uses
@@ -1533,8 +1540,9 @@ full provenance. The outcome-blind forward builder sealed 137 new matches
 frozen protocol; the locked report is
 `reports/forward_evaluation_2026-06-01_2026-07-13.md`. This completes the
 guardrails for future data but does **not** rehabilitate or re-baseline the
-legacy 261-match odds, so I4 remains interactive if historical headline
-metrics are ever regenerated.
+legacy 261-match odds. The remaining work is therefore not on the current
+forward path: it is a deliberate legacy rebaseline only if historical
+headline metrics are ever regenerated. Do not mix it into new model work.
 
 ## I5 [DONE 2026-07-24 — NOT PROMOTED] Extras/threes label rework (`parsing_v2.py`, full ball retrain)
 Implemented as the isolated `legal_off_bat_v1` / `i5` stack without modifying
@@ -1669,10 +1677,31 @@ as an isolated candidate, do not tune on consumed sets, and require a new
 post-2026-07-30 terminal window before promotion. See
 `reports/i8_phase_matchup_checkpoint_20260730.md`.
 
-## I9 [INTERACTIVE] ELO cold-start / provisional K (`parsing_v2.py`)
+## I9 [FAILED 2026-07-30] ELO cold-start / provisional K (`parsing_v2.py`)
 Debutants start at exactly 1500 with K as low as 1.0 (domestic); add a
 provisional high-K warm-up (or uncertainty-scaled K) so new signings don't
 sit at the mean for a season. Full cache rebuild + retrain.
+
+**Precommitted design (2026-07-30):** use independent batting/bowling rated-
+delivery counts and
+`K_role = K_base * (1 + 3 * max(0, 1 - n_role/120))`. The multiplier is 4×
+at debut and reaches the existing K exactly at 120 prior role deliveries.
+Do not sweep the multiplier or threshold in the first run. Build against the
+I7 identity stack with I8 features disabled, version every state/artifact,
+gate first on validation provisional-event LL with global/established-player
+guards, and require a new untouched forward window for promotion. See
+`docs/I9_PROVISIONAL_ELO_EXPERIMENT.md`.
+
+**Result:** implementation, isolated caches/parquets/models, exposure
+rehydration, same-day replay, and fail-closed provenance all completed. The
+fixed-K control exactly reproduced I7 ball LL (validation 1.6376, test
+1.6316). The candidate improved overall validation LL to 1.6358 and the
+30,241-ball provisional slice by 0.00110, but the paired match-block interval
+was [-0.00759,+0.00541], so the primary gate did not clear. Overall LL/Brier
+and established-player guardrails all passed. The five-seed direct model was
+worse at every seed; mean validation LL regressed 0.65276 → 0.65513
+(+0.00237). I9 is rejected without parameter retuning; serving artifacts are
+unchanged. See `reports/i9_provisional_elo_checkpoint_20260730.md`.
 
 ## I10 [DONE 2026-07-24] Live-fixture operational hardening (`predict_fixture.py`)
 Live prediction now inspects SQLite/tracker coverage before provider/model
@@ -1770,7 +1799,7 @@ raw batter threes for future physical-venue modeling. It is not a reason to add
 a three-run simulator sub-draw before the geometry exists: doing so now adds
 complexity and runtime without a demonstrated downstream gain.
 
-## I15 [INTERACTIVE] Stable match identity for same-day doubleheaders
+## I15 [DONE 2026-07-30] Stable match identity for same-day doubleheaders
 The synthetic `{date}_{team1}_{team2}_{venue}` key is not unique. The I7 test
 parquet has 798 rows but only 788 keys across ten same-day same-team/same-venue
 doubleheaders; prediction JSON serialization is silently last-write-wins.
@@ -1781,3 +1810,33 @@ synthetic key only as display/join metadata, and make odds manifests carry the
 Cricsheet ID resolved during construction. Fail closed on any remaining
 one-to-many join. Do this before expanding evaluation to markets that can
 contain same-day doubleheaders.
+
+**Done:** future materialization, odds, prediction, simulation/evaluation, and
+forward-holdout artifacts now use Cricsheet file stem as primary `match_id`;
+the synthetic value is explicit `display_match_id`. Frozen artifacts remain
+readable through a legacy alias path, while duplicate primaries and ambiguous
+aliases fail closed. The audited I7 test parquets preserve all 798 Cricsheet
+IDs versus 788 legacy keys. See `docs/I15_MATCH_IDENTITY_CONTRACT.md` and
+`reports/i15_match_identity_checkpoint_20260730.md`.
+
+## I16 [DECISION PENDING — HUMAN] Adopt D12 swap augmentation in the production match model
+The night loop validated team-swap symmetry augmentation on the exact
+production configuration (D7 on v2_clean, then D12 on the production
+48-feature frame; `research/reports/auto/D12.md`, LANDED 2026-07-17). The
+D12 control byte-reproduces `models/xgb_match_v3_m7_production/`
+test predictions (782/782, max |Δp| = 0); the swap arm improves the paired
+5-seed ≥$50k mean by ΔLL −0.0092 (better 5/5 seeds, floor 0.007) and ΔROI
++3.39pp (up 5/5, floor 2.3), halves the ROI seed-std, and is consistent at
+≥$100k (ΔLL −0.0123). The loop's recommendation — retrain production with
+`--swap-augment`, otherwise identical config — was explicitly left as a
+human decision and sat untracked from 2026-07-17 until this entry
+(2026-07-30 review).
+
+The decision now includes a frame choice: (a) retrain the frozen-M7 line
+`xgb_match_v3_m7_production` with `--swap-augment` (direct adoption of the
+D12 result), or (b) fold `--swap-augment` into the I7-identity line
+(`models/xgb_match_i7`) and let the I8-style post-2026-07-30 terminal
+window arbitrate promotion. Either path requires golden-eval confirmation
+on the production-launch checklist before `predict_fixture.py` switches,
+and must not touch the consumed forward set. D12's frozen-vs-unfrozen
+frame observation (report caveat 3) folds into the same decision.

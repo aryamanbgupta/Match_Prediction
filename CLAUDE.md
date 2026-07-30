@@ -55,6 +55,21 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
    like a live bookmaker) without leaning on an empirical artifact. See
    `reports/no_leakage_diagnostic_clean.md`.
 
+   **The Hundred (2026-07-27)**: the match model runs on 100-ball fixtures
+   via `--tracker-aux-dir` / `--team-aliases` / `--state-version`
+   (`docs/OPERATIONS.md` § "Operation 7"). It picks the winner 63.5% of the
+   time over 159 historical Hundred matches (p = 0.0004 i.i.d.; both figures
+   qualified by the alias-fold and season-correlation caveats in the
+   report's "Known limitations" — season-block sign test p ≈ 0.03) but its
+   probabilities compress into 0.37–0.62 (mean |p−0.5| 0.034 vs 0.105 on a
+   401-match T20 control), so LL 0.6829 vs coinflip 0.6931, and it lands
+   within ~3pp of the Polymarket line on every 2026 fixture. **Directional
+   lean only — no edge, no betting.** The Hundred path deliberately uses
+   `models/xgb_match_i7` with `--venue-identity-mode i7` and a matching
+   canonical-venue cache. Frozen `xgb_match_v3_m7_production` remains
+   available only through the temporary legacy replay contract; do not extend
+   that mode with Hundred state. See `reports/hundred_2026_adaptation.md`.
+
 2. **Ball-level sim** — XGBoost v7, 114 features (V3 + 42 outcome-dist),
    hierarchical shrinkage on the 4 vs-type/vs-hand cells (Phase 5
    2026-04-25); k_player=30, k_venue=200 (Phase 6 sweep). Config:
@@ -341,8 +356,9 @@ Match_Prediction/
 ├── experiments/results/  # per-run artifacts (auto-generated)
 ├── eval_out/             # ALL eval run outputs (eval_out/<tag>/); gitignored, regenerable.
 │                         #   Never write eval output anywhere else. Retired → archive/eval_results/
+├── program.md            # research-loop constitution (repo root, NOT research/)
 ├── research/             # autonomous overnight loop: IDEAS.md queue, results.tsv verdict log,
-│                         #   night.sh runner, reports/auto/<id>.md. Constitution: program.md
+│                         #   night_v3.sh runner (v1/v2 superseded), reports/auto/<id>.md
 ├── docs/                 # ARCHITECTURE / OPERATIONS / ADDING_NEW_MODELS / archive
 └── archive/              # local-only; gitignored. Old logs / eval JSONs / superseded scripts
 ```

@@ -1189,7 +1189,7 @@ Remaining, in priority order:
 | # | Item | Type | Effect |
 |---|---|---|---|
 | 1 | Delete `perf_runs/` scratch logs (`par_rss.log` 59 MB + profiles); keep the 5 tracked .py + README | safe | ~65 MB |
-| 2 | `git rm --cached tmp/golden_inclusive/player_stats_cache_v3.sqlite` (55 MB, scratch tracked by mistake) + `all_players_enriched.csv`, then `git gc --prune=now` (1,782 loose objects, garbage `tmp_obj`) | safe (index only; full-history purge would need another filter-repo pass — decision) | `.git` 97→~40 MB |
+| 2 | ~~`git rm --cached tmp/golden_inclusive/*`~~ **Done 2026-07-30** (commit `81d7e3d`; `git gc` + full-history purge still open — decision) | safe | `.git` 97→~40 MB |
 | 3 | Dead cron: crontab fires `run_scraper_cron.sh` daily 18:00 → `src/bet_scraper.py` no longer exists; fails every day. Remove entry + script, **or revive as the prop-odds capture daemon** (see prop-data roadmap) | decision | stops daily failures |
 | 4 | Retire v7 sweep model dirs: `xgb_v3_phase6_k{10,100,300}`, `xgb_v3_v6_backup`, `xgb_v3_phase5_k30` if byte-identical to shipped `xgb_v3` | quick check | ~510–640 MB |
 | 5 | Archive ~41 superseded `xgb_match_*` ablation model dirs + `data/xgb_match_data_v3_m*` parquets + stale tracker snapshots + `data/betting_test` (Aug 2025) — keep the 7 dirs CLAUDE.md names | safe | ~60 MB, models/ listing 59→~25 |
@@ -1201,6 +1201,61 @@ Remaining, in priority order:
 
 **Kept by explicit decision (2026-07-11)**: `models/llm_v1` (6.0 GB — may be
 used later), `cricWAR/` (1.2 GB — separate project, stays for now).
+
+## B/D-series night loop + I-series interactive work (2026-07-12 → 2026-07-30, branch `auto-20260722`)
+
+Backfilled 2026-07-30 — the 19 days after the A-series were previously
+logged only in `research/results.tsv` (authoritative per-idea verdict log,
+with per-idea reports in `research/reports/auto/`). Summary of record:
+
+**Statistics hardening + forward evaluation (interactive).** I3 replaced
+every match-winner ROI interval with the `tournament_time_block_v1`
+contract (10k seed-42 whole-event resamples); all historical i.i.d.
+CI-clean claims are superseded — M7 ≥$50k is +21.90% [-10.79, +50.18].
+The sealed 137-match forward holdout was scored once and consumed:
+M7 probability confirmation passed (LL 0.6823 vs market 0.7445 on the
+preregistered ≥$50k slice), economic confirmation failed (A7 +96.72% but
+[-3.29, +623.85] over five blocks). A7 lives on as a shadow-only live
+policy; live prediction got state-freshness and lineup fail-closed guards
+(I10).
+
+**Night loop verdicts (D/B-series; see results.tsv rows for full gates).**
+Landed: D1 (sim run-rate scale fix, ~6.24× OOD skew; re-baseline),
+D7/D12 (team-swap symmetry augmentation — D12 on the exact production
+config: ΔLL −0.0092 / ΔROI +3.39pp, 5/5 seeds both; **adoption is an open
+human decision, tracked as IDEAS I16 + TODO since 2026-07-30**), D10
+(eval-math characterization tests; two xfail tripwires on the known I3
+sentinel bug), D15 (full attribution unit: extras semantics + card
+snapshot + run-out channel; canonical sim baseline is now
+`models/auto/d15/detail_d15_s43_n261.json`), B4/B9 (top_bowler pricing:
+career-baseline margin is real but the stronger usage-share baseline
+CI-clean beats the calibrated sim — E5's "first binary family with skill"
+falsified; prop bar revised as I13), B3 (val-fit per-family sim/baseline
+shrinkage blend beats both parents on batter-runs and team-sixes MAE).
+Tabled: D8 (recency decay: LL better, ROI unmoved), D2/D14 (attribution
+fixes individually entangled; superseded by D15), D3 (true extras rates
+double-count with folded labels; re-apply only with I5 label rework).
+Failed: D9 (team-results ELO — 6th match-feature direction dead), D11
+(inference-time symmetrization), D13 (swap+decay combo; decay lever
+closed). B5 is stale-RUNNING (claimed+implemented 2026-07-23, eval died
+at session limits; supervised relay needed — see IDEAS entry).
+
+**Model-line experiments (interactive, none promoted).** I5 legal/off-bat
+label stack: isolated `i5` pipeline, calibrated ball LL worse than v3,
+prop gate fails — not promoted. I7 venue-identity stack: mandatory
+identity contract for all new artifacts, but the I7 model did not beat
+frozen production — closed without promotion; legacy live mode exists
+only to serve frozen artifacts. I8 phase/matchup features (schema v5,
++18 features): small ball-level gain (only test Brier CI-clean), worse
+flat ROI on the consumed diagnostic — unpromoted candidate awaiting a
+post-2026-07-30 terminal window. I15 match identity: Cricsheet-stem
+primary keys everywhere forward, synthetic ids demoted to display,
+doubleheader aliases fail closed (post-review fixes closed the odds-join
+and golden-path holes the same day). The Hundred adaptation (2026-07-27):
+model transfers mechanically, picks 63.5% directionally but compresses to
+0.37–0.62 — **no edge, no betting** (headline subject to the alias-fold
+caveat in the report). Runner evolved to v3 (orchestrator/executor split,
+anti-fabrication spot-checks, clean-tree guard).
 
 ## What NOT To Do
 
