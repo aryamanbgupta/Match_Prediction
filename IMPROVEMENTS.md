@@ -1198,7 +1198,7 @@ Remaining, in priority order:
 | 7 | `models/auto/` + `data/auto/` retention: delete FAILED-idea artifacts once their tracked report is committed (~8 MB/idea; LANDED artifacts stay until merged). Candidate post-night step in `night.sh` | policy | bounded growth |
 | 8 | Branch hygiene: delete dead `fixes/sim_improvements`, `feature/player-stats-cache`, `features/{cricinfo-features,mlp-model,llm-model,transformer-model}` (Oct 2025–Mar 2026); `backup-pre-rewrite` after confirming the May rewrite | decision | — |
 | 9 | Merge overdue: `main` is 6 weeks stale; `auto-20260711` ⊃ `improvement-experiments` ⊃ E-series + A-series | decision | — |
-| 10 | Move `predict_next_match.md` → `docs/` (nothing references the root path) | safe | root tidiness |
+| 10 | ~~Move the root prediction playbook into `docs/`~~ **Done 2026-07-30**: now at `docs/predict_next_match.md` | safe | root tidiness |
 
 **Kept by explicit decision (2026-07-11)**: `models/llm_v1` (6.0 GB — may be
 used later), `cricWAR/` (1.2 GB — separate project, stays for now).
