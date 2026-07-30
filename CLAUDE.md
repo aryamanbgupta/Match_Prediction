@@ -80,6 +80,15 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
    available only through the temporary legacy replay contract; do not extend
    that mode with Hundred state. See `reports/hundred_2026_adaptation.md`.
 
+   **Successor line (I17, 2026-07-30):** swap + M7 config trained on the
+   I7 identity frame (`data/xgb_match_data_i7`) is the designated
+   production-successor configuration — D12 swap transfer confirmed on
+   5/5 paired seeds (mean ≥$50k ΔLL −0.0144, floor 0.007); beats the
+   slice-matched market LL on 5/5 seeds where base does on 4/5. Promotion
+   is a separate decision gated on an i7 golden-frame audit and the
+   fresh-state serving cutover plan. See `docs/I17_I7_SWAP_SUCCESSOR.md`
+   and `reports/i17_i7_swap_eval_20260730.md`.
+
 2. **Ball-level sim** — XGBoost v7, 114 features (V3 + 42 outcome-dist),
    hierarchical shrinkage on the 4 vs-type/vs-hand cells (Phase 5
    2026-04-25); k_player=30, k_venue=200 (Phase 6 sweep). Config:

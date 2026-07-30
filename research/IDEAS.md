@@ -1846,6 +1846,26 @@ test predictions (782/782, max |Δp| = 0); the swap arm improves the paired
 human decision and sat untracked from 2026-07-17 until this entry
 (2026-07-30 review).
 
+## I17 [DONE 2026-07-30 — ADOPT-CANDIDATE] Swap augmentation on the I7 identity frame
+**Interactive, precommitted** (`docs/I17_I7_SWAP_SUCCESSOR.md` frozen
+before any swap-arm training). Motivation: the legacy production line's
+state cache ends 2026-04-16 and cannot be regenerated; only the I7 stack
+has a fresh-state build path, and D12 swap was validated on the legacy
+frame only. Paired A1 seeds {7,13,29,42,101}, M7 config + `--monotone` on
+`data/xgb_match_data_i7`, base vs `--swap-augment`; eval via the
+cricsheet-id-stamped iteration envelope (new
+`scripts/patch_envelope_cricsheet_ids.py`; 261/261 joined, determinism
+gate max |Δp| = 0 vs archived `models/xgb_match_i7`). **Transfer
+confirmed: swap better LL on 5/5 seeds at every slice; ≥$50k mean ΔLL
+−0.0144 (floor 0.007, legacy-frame effect was −0.0092), ΔROI +5.18pp.**
+Swap-i7 beats the slice-matched market LL (0.6482) on 5/5 seeds; trails
+legacy production by ~0.005–0.009 LL (inside the precommitted 0.02
+threshold; legacy was selected on this set). Seed-29 I3 readout: ROI
++20.54% [−5.56, +43.47], 19 blocks — straddles zero, no edge claim.
+Swap+M7-on-i7 is the designated production-successor config; promotion is
+a separate decision gated on an i7 golden-frame audit and the fresh-state
+serving cutover plan. `reports/i17_i7_swap_eval_20260730.md`.
+
 The decision now includes a frame choice: (a) retrain the frozen-M7 line
 `xgb_match_v3_m7_production` with `--swap-augment` (direct adoption of the
 D12 result), or (b) fold `--swap-augment` into the I7-identity line
