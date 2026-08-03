@@ -1,0 +1,49 @@
+=== D16 artifact checks ===
+date: Fri Jul 31 23:57:51 UTC 2026
+
+--- HARD CHECK: control vs noweights sidecars must be byte-identical ---
+batter_encoder_i7.pkl            control=a63af729f48492f701d1df5755493b01 noweights=a63af729f48492f701d1df5755493b01  IDENTICAL
+bowler_encoder_i7.pkl            control=96e76ad9bde782bc9a5df111f1b713fa noweights=96e76ad9bde782bc9a5df111f1b713fa  IDENTICAL
+venue_encoder_i7.pkl             control=bcbb6e3fb60e08df50d752ea282c0009 noweights=bcbb6e3fb60e08df50d752ea282c0009  IDENTICAL
+matchup_encoder_i7.pkl           control=264c11f6d8903347433017e8124a2ec1 noweights=264c11f6d8903347433017e8124a2ec1  IDENTICAL
+feature_columns_i7.txt           control=3fd6629c6cf5be70873b92ab2e619119 noweights=3fd6629c6cf5be70873b92ab2e619119  IDENTICAL
+outcome_dist_config_i7.json      control=bec7d99140b4ae5e98977e18ca6ab670 noweights=bec7d99140b4ae5e98977e18ca6ab670  IDENTICAL
+HARD CHECK RESULT: PASS
+
+--- Determinism control (informational): control arm vs archived models/xgb_i7 ---
+xgboost_model_i7.pkl             control=32b81888407dcd5cd652eb72b4ad7725 xgb_i7=32b81888407dcd5cd652eb72b4ad7725  MATCH
+batter_encoder_i7.pkl            control=a63af729f48492f701d1df5755493b01 xgb_i7=a63af729f48492f701d1df5755493b01  MATCH
+bowler_encoder_i7.pkl            control=96e76ad9bde782bc9a5df111f1b713fa xgb_i7=96e76ad9bde782bc9a5df111f1b713fa  MATCH
+venue_encoder_i7.pkl             control=bcbb6e3fb60e08df50d752ea282c0009 xgb_i7=bcbb6e3fb60e08df50d752ea282c0009  MATCH
+matchup_encoder_i7.pkl           control=264c11f6d8903347433017e8124a2ec1 xgb_i7=264c11f6d8903347433017e8124a2ec1  MATCH
+feature_columns_i7.txt           control=3fd6629c6cf5be70873b92ab2e619119 xgb_i7=3fd6629c6cf5be70873b92ab2e619119  MATCH
+outcome_dist_config_i7.json      control=bec7d99140b4ae5e98977e18ca6ab670 xgb_i7=91b0b145cb4a0d1dc2361bb42f0b7af0  DIFFER
+
+--- training contracts ---
+control:   {  "data_version": "i7",  "cache_schema_version": 4,  "delivery_semantics": "inclusive_total_runs_v1",  "elo_update_version": "fixed_competition_k_v1",  "extras_contract": null,  "ball_calibrator": null,  "train_rows": 1876971,  "validation_rows": 124292,  "test_rows": 186667,  "classes": [    0,    1,    2,    4,    6,    "wicket"  ],  "venue_identity": {    "venue_alias_version": "venue_aliases_v1",    "venue_alias_sha256": "853b32b0ce3098dd8c0f33ba1437846f5505d50d9a425fbd37bff9c9f76745d8",    "venue_alias_active_count": 94  }}
+noweights: {  "data_version": "i7",  "cache_schema_version": 4,  "delivery_semantics": "inclusive_total_runs_v1",  "elo_update_version": "fixed_competition_k_v1",  "extras_contract": null,  "ball_calibrator": null,  "train_rows": 1876971,  "validation_rows": 124292,  "test_rows": 186667,  "classes": [    0,    1,    2,    4,    6,    "wicket"  ],  "venue_identity": {    "venue_alias_version": "venue_aliases_v1",    "venue_alias_sha256": "853b32b0ce3098dd8c0f33ba1437846f5505d50d9a425fbd37bff9c9f76745d8",    "venue_alias_active_count": 94  }}
+xgb_i7:    {  "data_version": "i7",  "delivery_semantics": "inclusive_total_runs_v1",  "extras_contract": null,  "ball_calibrator": null,  "train_rows": 1876971,  "validation_rows": 124292,  "test_rows": 186667,  "classes": [    0,    1,    2,    4,    6,    "wicket"  ],  "venue_identity": {    "venue_alias_version": "venue_aliases_v1",    "venue_alias_sha256": "853b32b0ce3098dd8c0f33ba1437846f5505d50d9a425fbd37bff9c9f76745d8",    "venue_alias_active_count": 94  }}
+
+--- outcome_dist_config_i7.json content (the one DIFFER above) ---
+control/noweights: {"k_player":30.0,"k_venue":200.0,"k_phase":30.0,"k_h2h":60.0}
+archived xgb_i7:   {"k_player":30.0,"k_venue":200.0}
+(archived file predates the k_phase/k_h2h keys added to the sidecar writer;
+ k_player=30.0 / k_venue=200.0 agree, which is what the sim wrappers read)
+
+--- arm model md5s ---
+MD5 (models/auto/d16/control/xgboost_model_i7.pkl) = 32b81888407dcd5cd652eb72b4ad7725
+MD5 (models/auto/d16/noweights/xgboost_model_i7.pkl) = 7ee1e1809917f45be7e726b3ea4a8a6c
+
+--- protected artifacts, interim re-check (must equal md5_protected_before.txt) ---
+MD5 (models/xgb_i7/xgboost_model_i7.pkl) = 32b81888407dcd5cd652eb72b4ad7725
+MD5 (models/xgb_v3/xgboost_model_v3.pkl) = d448822e9bcd8cb93c126f8558b8ab46
+
+--- effective tree count (early stopping differs by arm, expected) ---
+control  last verbose row: [443]	validation_0-mlogloss:0.93923	validation_1-mlogloss:1.63759
+control  final val LL: Final validation log loss: 1.6376
+control  final test LL: Final test log loss: 1.6316
+noweights last verbose row: [123]	validation_0-mlogloss:1.14821	validation_1-mlogloss:1.44766
+noweights final val LL: Final validation log loss: 1.4334
+noweights final test LL: Final test log loss: 1.4253
+control best_iteration= 443 n_estimators= 444 n_trees_in_booster= 444
+noweights best_iteration= 24 n_estimators= 444 n_trees_in_booster= 125

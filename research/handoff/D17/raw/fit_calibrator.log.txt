@@ -1,0 +1,27 @@
+training contract: delivery_semantics='inclusive_total_runs_v1'  data_version='i7'  venue_identity='venue_aliases_v1'
+validation parquet: data/xgb_data_i7/cricket_data_i7_validation.parquet  rows=124,292  features=114
+encoding path: explicit training-time encoders from models/auto/d16/noweights (batter/bowler/matchup/venue)
+  venue encoder ACTIVE (373 venues); distinct venue codes in val: 101
+  cross-check _apply_encoders_to_df[batter_encoded]: identical
+  cross-check _apply_encoders_to_df[bowler_encoded]: identical
+  cross-check _apply_encoders_to_df[venue_encoded]: identical
+  cross-check _apply_encoders_to_df[matchup_type_encoded]: identical
+
+validation balls: 124,292
+raw log loss:        1.433437
+calibrated log loss: 1.433238
+actual marginals:    [0.297284 0.40367  0.071598 0.11259  0.059143 0.055716]
+raw marginals:       [0.294303 0.401781 0.074153 0.112108 0.058167 0.059488]
+calibrated marginal: [0.297284 0.40367  0.071598 0.11259  0.059143 0.055716]
+weights (fitted 6-vector): [0.17029491 0.16923329 0.16252808 0.16918399 0.17117034 0.15758939]
+
+fit residuals (calibrated marginal - actual val frequency):
+| class   |     actual |        raw |  calibrated |       resid |
+| dot     |   0.297284 |   0.294303 |    0.297284 |   -2.81e-11 |
+| one     |   0.403670 |   0.401781 |    0.403670 |   +1.39e-11 |
+| two     |   0.071598 |   0.074153 |    0.071598 |   +3.66e-12 |
+| four    |   0.112590 |   0.112108 |    0.112590 |   +1.24e-12 |
+| six     |   0.059143 |   0.058167 |    0.059143 |   +6.39e-12 |
+| wicket  |   0.055716 |   0.059488 |    0.055716 |   +2.91e-12 |
+max |residual| = 2.810e-11
+saved: models/auto/d17/vector_scaling_calibrator_d17.pkl

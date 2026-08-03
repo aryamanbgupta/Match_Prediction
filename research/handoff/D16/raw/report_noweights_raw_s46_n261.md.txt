@@ -1,0 +1,93 @@
+# xgboost_model_i7 — prop calibration backtest
+
+Matches: 261 | Sims/match: 100 | Test set: `data/polymarket_test` | Model: `models/auto/d16/noweights/xgboost_model_i7.pkl`
+
+## Binary props
+
+| family | n | base rate | sim Brier [95% CI] | base Brier | sim log loss | skill |
+|---|---:|---:|---:|---:|---:|---:|
+| top_batter | 5835 | 0.089 | 0.0756 [0.0706, 0.0810] | 0.0810 | 0.2576 | +0.067 |
+| top_bowler | 5835 | 0.088 | 0.0776 [0.0723, 0.0831] | 0.0806 | 0.2812 | +0.037 |
+| batter_50plus | 4254 | 0.090 | 0.0786 [0.0717, 0.0856] | 0.0821 | 0.2814 | +0.043 |
+| batter_6plus_six | 4254 | 0.398 | 0.2195 [0.2157, 0.2237] | 0.2397 | 0.6255 | +0.084 |
+| innings_runs_ou_160_5 | 522 | 0.481 | 0.2381 [0.2231, 0.2533] | 0.2496 | 0.6699 | +0.046 |
+| innings_runs_ou_170_5 | 522 | 0.375 | 0.2297 [0.2096, 0.2505] | 0.2345 | 0.6660 | +0.020 |
+| innings_runs_ou_180_5 | 522 | 0.278 | 0.1984 [0.1749, 0.2213] | 0.2006 | 0.6200 | +0.011 |
+| batter_fours_1plus | 4254 | 0.582 | 0.2183 [0.2139, 0.2231] | 0.2433 | 0.6279 | +0.103 |
+| batter_fours_2plus | 4254 | 0.361 | 0.2011 [0.1963, 0.2055] | 0.2306 | 0.5811 | +0.128 |
+| batter_fours_3plus | 4254 | 0.225 | 0.1554 [0.1494, 0.1617] | 0.1744 | 0.4712 | +0.109 |
+| bowler_wkts_1plus | 3107 | 0.620 | 0.2437 [0.2384, 0.2491] | 0.2357 | 0.6816 | -0.034 |
+| bowler_wkts_2plus | 3107 | 0.285 | 0.2103 [0.2013, 0.2191] | 0.2037 | 0.6447 | -0.032 |
+| bowler_wkts_3plus | 3107 | 0.103 | 0.0946 [0.0853, 0.1035] | 0.0921 | 0.4380 | -0.027 |
+| team_highest_individual_ou_29_5 | 522 | 0.910 | 0.0757 [0.0576, 0.0959] | 0.0819 | 0.2858 | +0.076 |
+| team_highest_individual_ou_34_5 | 522 | 0.833 | 0.1293 [0.1102, 0.1509] | 0.1389 | 0.4265 | +0.069 |
+| team_highest_individual_ou_39_5 | 522 | 0.759 | 0.1737 [0.1558, 0.1927] | 0.1831 | 0.5326 | +0.052 |
+| pp_total_ou_45_5 | 522 | 0.603 | 0.2367 [0.2254, 0.2474] | 0.2393 | 0.6663 | +0.011 |
+| pp_total_ou_50_5 | 522 | 0.433 | 0.2355 [0.2205, 0.2505] | 0.2455 | 0.6632 | +0.041 |
+| pp_total_ou_55_5 | 522 | 0.295 | 0.2005 [0.1806, 0.2240] | 0.2080 | 0.5913 | +0.036 |
+| match_total_sixes_ou_15_5 | 261 | 0.314 | 0.1980 [0.1724, 0.2297] | 0.2155 | 0.5816 | +0.081 |
+| match_total_sixes_ou_20_5 | 261 | 0.115 | 0.1006 [0.0698, 0.1343] | 0.1017 | 0.3566 | +0.012 |
+| first_wicket_runs_ou_30_5 | 522 | 0.370 | 0.2395 [0.2212, 0.2578] | 0.2330 | 0.6747 | -0.028 |
+| bowler_economy_ou_8_5 | 3107 | 0.461 | 0.2501 [0.2443, 0.2556] | 0.2485 | 0.7021 | -0.006 |
+| bowler_economy_ou_10_5 | 3107 | 0.252 | 0.1912 [0.1809, 0.2008] | 0.1887 | 0.5848 | -0.014 |
+| p_tie | 261 | 0.000 | 0.0003 [0.0002, 0.0003] | 0.0000 | 0.0119 | – |
+| highest_over_runs_ou_18_5 | 261 | 0.621 | 0.2445 [0.2300, 0.2596] | 0.2354 | 0.6830 | -0.039 |
+| highest_over_runs_ou_24_5 | 261 | 0.107 | 0.0971 [0.0679, 0.1280] | 0.0958 | 0.3506 | -0.014 |
+
+Notes:
+- Sim Brier < base Brier ⇒ sim has signal beyond the base rate (prop-level edge over a flat predictor).
+- Base Brier is `var(y)` -- the score from always predicting the marginal hit rate.
+- Skill = `1 − Brier/base_Brier`. Positive ⇒ sim beats base rate.
+- Bootstrap CIs: 1000 resamples at the row level (n.b. not paired by match — match-level pairing would tighten CIs further).
+
+### Reliability — top_batter
+
+| bin | n | mean p | actual hit rate |
+|---|---:|---:|---:|
+| (0.0, 0.1] | 3522 | 0.031 | 0.033 |
+| (0.1, 0.2] | 1665 | 0.155 | 0.163 |
+| (0.2, 0.3] | 631 | 0.236 | 0.204 |
+| (0.3, 0.4] | 17 | 0.320 | 0.176 |
+
+### Reliability — top_bowler
+
+| bin | n | mean p | actual hit rate |
+|---|---:|---:|---:|
+| (0.0, 0.1] | 3463 | 0.038 | 0.043 |
+| (0.1, 0.2] | 1992 | 0.152 | 0.154 |
+| (0.2, 0.3] | 375 | 0.229 | 0.160 |
+| (0.3, 0.4] | 5 | 0.318 | 0.000 |
+
+### Reliability — batter_50plus
+
+| bin | n | mean p | actual hit rate |
+|---|---:|---:|---:|
+| (0.0, 0.1] | 2628 | 0.034 | 0.049 |
+| (0.1, 0.2] | 1450 | 0.145 | 0.152 |
+| (0.2, 0.3] | 176 | 0.226 | 0.199 |
+
+### Reliability — batter_6plus_six
+
+| bin | n | mean p | actual hit rate |
+|---|---:|---:|---:|
+| (0.0, 0.1] | 115 | 0.062 | 0.026 |
+| (0.1, 0.2] | 281 | 0.153 | 0.114 |
+| (0.2, 0.3] | 457 | 0.257 | 0.243 |
+| (0.3, 0.4] | 1014 | 0.360 | 0.337 |
+| (0.4, 0.5] | 1515 | 0.453 | 0.481 |
+| (0.5, 0.6] | 784 | 0.543 | 0.538 |
+| (0.6, 0.7] | 86 | 0.628 | 0.640 |
+| (0.7, 0.8] | 2 | 0.715 | 1.000 |
+
+## Continuous props
+
+| family | n | MAE [95% CI] | mean bias (sim − actual) | P10–P90 coverage |
+|---|---:|---:|---:|---:|
+| batter_runs_mae | 4254 | 13.89 [13.48, 14.30] | -0.28 | 82.51% |
+| team_total_fours_mae | 522 | 3.50 [3.27, 3.74] | -0.38 | 76.05% |
+| team_total_sixes_mae | 522 | 2.65 [2.45, 2.85] | -0.39 | 76.44% |
+| team_first_over_mae | 522 | 3.38 [3.16, 3.64] | -0.52 | 77.20% |
+| highest_individual_mae | 261 | 16.20 [14.66, 17.76] | -2.67 | 73.56% |
+| batter_fours_mae | 4254 | 1.36 [1.32, 1.40] | -0.08 | 91.37% |
+
+Note: P10–P90 ideal coverage is 80%. Lower ⇒ sim under-disperses (over-confident); higher ⇒ over-disperses.

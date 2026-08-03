@@ -1,0 +1,65 @@
+== Part 1: d15_unit_check.py on HEAD ==
+  [PASS] d15 unit check 30 PASS / 0 FAIL, exit=0
+
+models/bowler_phase_usage.json md5 BEFORE: ea0c73d3ddb48f499b6273f9a397b0e3
+
+== Loading real lineups from data/polymarket_test ==
+  522 team lineups from 261 matches
+
+== Part 2: legacy parity (default usage path) ==
+  [PASS] default payload leaves _b10 None
+  [PASS] default payload has no b10_asof_usage key
+  [PASS] weight vectors float-exact vs independent recomputation (40 lineups x 8 configs)  (max |delta| = 0.000e+00)
+  [PASS] live select_bowler == HEAD sampling on 320 same-seed draws  (mismatches = 0)
+
+== Part 3: exp_balls parity vs b9_usage_baseline.AsOfUsage ==
+  [PASS] sidecar k_usage == b9_usage_baseline.K_USAGE  (5.0 vs 5.0)
+  [PASS] prior_balls parity on 1420 (name,date) pairs  (max |delta| = 0.000e+00)
+  [PASS] exp_balls parity on 1420 (name,date) pairs  (max |delta| = 0.000e+00)
+  [PASS] n=0 rows return prior_balls exactly (20 such pairs)
+
+== Part 4: full-XI share mechanism table (261 lineups, no sim) ==
+B10 usage-aligned bowler selector ACTIVE (k_u=5.0)
+  as-of corpus: /Users/aryamangupta/CricML/Match_Prediction/models/auto/b10/usage_corpus.pkl (7433 players); min_eligible=5, min_share=0.01
+  [PASS] sidecar payload activates _b10
+
+  group sizes (player-lineup rows): true_debutant=58, veteran_never_bowler=1059, known_bowler=4282, other_unknown=436
+
+  phase   group                      rows  mean share OLD  mean share NEW    ratio
+  pp      true_debutant                58          1.113%          8.733%     7.85
+  pp      veteran_never_bowler       1059          0.269%          0.496%     1.84
+  pp      known_bowler               4282         12.023%         11.385%     0.95
+  pp      other_unknown               436          0.845%          5.548%     6.57
+  mid     true_debutant                58          1.150%          8.733%     7.59
+  mid     veteran_never_bowler       1059          0.272%          0.496%     1.82
+  mid     known_bowler               4282         12.016%         11.385%     0.95
+  mid     other_unknown               436          0.900%          5.548%     6.17
+  death   true_debutant                58          1.220%          8.733%     7.16
+  death   veteran_never_bowler       1059          0.266%          0.496%     1.87
+  death   known_bowler               4282         12.015%         11.385%     0.95
+  death   other_unknown               436          0.919%          5.548%     6.03
+  blend   true_debutant                58          1.153%          8.733%     7.57
+  blend   veteran_never_bowler       1059          0.270%          0.496%     1.83
+  blend   known_bowler               4282         12.018%         11.385%     0.95
+  blend   other_unknown               436          0.887%          5.548%     6.25
+
+  relaxation triggers during the table pass: 0
+  [PASS] true debutants get a LARGER share under B10 (plan: tiny -> ~9%)  (1.153% -> 8.733%)
+  [PASS] known bowlers keep ~their share (only renormalization)  (12.018% -> 11.385%)
+  [PASS] unknown players' normalized share == as-of expected-balls share  (max |delta| = 0.000e+00)
+
+  [INFO / MECHANISM FINDING — not a pass/fail condition]
+  veteran never-bowlers (>=20 appearances, 0 career balls): 0.270% -> 0.496% (ratio 1.83)
+  The plan expected this group to FALL toward ~0. It RISES: B9's
+  exp_balls formula shrinks a 0-ball veteran to k_u*prior/(k_u+n) balls,
+  which at k_u=5 and n~20-60 is still ~1-2 balls (~0.5-1.8% of an
+  innings) — well above the legacy alpha share (~0.27%). The B9
+  usage baseline itself prices that group at p_usage 1.30% vs
+  p_sim 1.29% (B9 report table), i.e. it never fixed defect (b)
+  either; the CI-clean flip came from defect (a) + the head. B10
+  as specified therefore attacks (a) and MOVES (b) THE WRONG WAY.
+
+== Part 5: production prior untouched ==
+  [PASS] models/bowler_phase_usage.json md5 unchanged  (ea0c73d3ddb48f499b6273f9a397b0e3 == ea0c73d3ddb48f499b6273f9a397b0e3)
+
+B10 UNIT CHECK PASSED: all assertions hold.

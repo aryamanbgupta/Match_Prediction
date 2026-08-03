@@ -21,6 +21,14 @@ parser.add_argument('--tune', action='store_true', help='Run Optuna hyperparamet
 parser.add_argument('--n-trials', type=int, default=50, help='Number of Optuna trials (default: 50)')
 parser.add_argument('--config-json', type=str, default=None,
                     help='JSON config from experiment runner (overrides feature list and hyperparameters)')
+parser.add_argument('--model-dir', type=str, default=None,
+                    help='Override the output model directory (default: '
+                         'models/xgb_<data_version>). Artifact suffix is '
+                         'unchanged, so files are still named *_<version>.pkl.')
+parser.add_argument('--no-class-weights', action='store_true',
+                    help='D6: fit with uniform sample weights instead of the '
+                         "'balanced' class weights (opt-in; default behavior "
+                         'is unchanged).')
 args = parser.parse_args()
 
 _config = _json.loads(args.config_json) if args.config_json else {}
@@ -31,7 +39,10 @@ data_dir = Path(
     'data/xgb_data' if data_version == 'v2'
     else f'data/xgb_data_{data_version}'
 )
-model_dir = Path('models') / f'xgb_{data_version}'
+model_dir = (
+    Path(args.model_dir) if args.model_dir
+    else Path('models') / f'xgb_{data_version}'
+)
 artifact_suffix = data_version
 
 # Best hyperparameters from previous Optuna run (v2, trial 42)
@@ -290,6 +301,10 @@ class_weights = compute_class_weight(
 )
 weight_dict = dict(zip(np.unique(y_train), class_weights))
 print("Class weights:", {k: f"{v:.2f}" for k, v in weight_dict.items()})
+if args.no_class_weights:
+    print("[D6] class weights DISABLED (uniform sample weights)")
+else:
+    print("Class weights ACTIVE (balanced sample weights passed to fit)")
 
 # Optuna hyperparameter tuning (only if --tune flag is set)
 if args.tune:
@@ -320,13 +335,19 @@ if args.tune:
         # Create and train model with suggested parameters
         model = XGBClassifier(**params)
 
-        # Calculate sample weights (same as your original code)
-        sample_weights = np.array([weight_dict[y] for y in y_train])
+        # Calculate sample weights (same as your original code).
+        # D6: --no-class-weights omits the sample_weight kwarg entirely.
+        if args.no_class_weights:
+            _weight_kwargs = {}
+        else:
+            _weight_kwargs = {
+                'sample_weight': np.array([weight_dict[y] for y in y_train])
+            }
 
         # Fit model with early stopping on validation set
         model.fit(
             X_train, y_train,
-            sample_weight=sample_weights,
+            **_weight_kwargs,
             eval_set=[(X_val, y_val)],
             verbose=0  # Silent training for cleaner output
         )
@@ -392,11 +413,18 @@ best_params.update({
 })
 
 final_model = XGBClassifier(**best_params)
-sample_weights = np.array([weight_dict[y] for y in y_train])
+# D6: --no-class-weights omits the sample_weight kwarg entirely so the
+# booster estimates P(outcome|state) directly instead of the balanced tilt.
+if args.no_class_weights:
+    final_weight_kwargs = {}
+else:
+    final_weight_kwargs = {
+        'sample_weight': np.array([weight_dict[y] for y in y_train])
+    }
 
 final_model.fit(
     X_train, y_train,
-    sample_weight=sample_weights,
+    **final_weight_kwargs,
     eval_set=[(X_train, y_train), (X_val, y_val)],
     verbose=50
 )

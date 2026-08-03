@@ -1,0 +1,187 @@
+B18 gate analysis — empirical extras graft on the promoted i7 stack
+
+================================================================================================
+PRIMARY — quote layer, SAME-SEED (s49) twins
+================================================================================================
+  RAW twin (production stack, no sidecar):
+  /Users/aryamangupta/CricML/Match_Prediction/models/auto/b18/quotes_raw_s49_n261.json
+    config: model=models/xgb_i7_noweights_production/xgboost_model_i7.pkl stats_version=i7 ball_calibrator=None n_sims=100 seed=49
+    usage_json=models/bowler_phase_usage.json quote_center=sim_p50 elapsed=916.0s
+    rows: 756 from 253 matches (8 matches skipped)
+  B18 twin (same booster + extras_graft_v1 sidecar):
+  /Users/aryamangupta/CricML/Match_Prediction/models/auto/b18/quotes_b18_s49_n261.json
+    config: model=models/auto/b18/xgboost_model_i7.pkl stats_version=i7 ball_calibrator=None n_sims=100 seed=49
+    usage_json=models/bowler_phase_usage.json quote_center=sim_p50 elapsed=959.6s
+    rows: 756 from 253 matches (8 matches skipped)
+  same-seed check: seed 49 on both twins — OK
+  row/match parity: raw 756/253  b18 756/253  OK
+
+=== ARM: RAW twin (no sidecar), uncorrected ===
+checkpoint  6 (n=253):  applied shift +0.0000 scale 1.00
+  MAE  corr(P50)  20.709  naive  25.897  dMAE  -5.188 [-7.807, -2.685]  CORRECTED BETTER
+  P10-P90 coverage corr  0.787 [0.735, 0.834]  target [0.7, 0.9]  IN BAND
+  context: bias corr P50 -4.872  bias raw P50 -4.872  band width corr 59.0  raw 59.0  actual sd 29.9
+checkpoint 10 (n=253):  applied shift +0.0000 scale 1.00
+  MAE  corr(P50)  16.573  naive  20.000  dMAE  -3.427 [-4.988, -1.962]  CORRECTED BETTER
+  P10-P90 coverage corr  0.802 [0.755, 0.850]  target [0.7, 0.9]  IN BAND
+  context: bias corr P50 -3.134  bias raw P50 -3.134  band width corr 51.9  raw 51.9  actual sd 25.3
+checkpoint 15 (n=250):  applied shift +0.0000 scale 1.00
+  MAE  corr(P50)  11.976  naive  13.575  dMAE  -1.599 [-2.535, -0.670]  CORRECTED BETTER
+  P10-P90 coverage corr  0.696 [0.640, 0.752]  target [0.7, 0.9]  OUT OF BAND
+  context: bias corr P50 -1.976  bias raw P50 -1.976  band width corr 30.8  raw 30.8  actual sd 16.9
+
+pooled paired dMAE (corrected - naive, 756 rows, cluster-boot by match): -3.412 [-4.866, -2.070]
+
+=== ARM: B18 twin (graft), uncorrected ===
+checkpoint  6 (n=253):  applied shift +0.0000 scale 1.00
+  MAE  corr(P50)  20.144  naive  25.897  dMAE  -5.753 [-8.496, -3.192]  CORRECTED BETTER
+  P10-P90 coverage corr  0.802 [0.755, 0.854]  target [0.7, 0.9]  IN BAND
+  context: bias corr P50 -0.121  bias raw P50 -0.121  band width corr 61.1  raw 61.1  actual sd 29.9
+checkpoint 10 (n=253):  applied shift +0.0000 scale 1.00
+  MAE  corr(P50)  16.243  naive  20.000  dMAE  -3.757 [-5.461, -2.077]  CORRECTED BETTER
+  P10-P90 coverage corr  0.779 [0.727, 0.834]  target [0.7, 0.9]  IN BAND
+  context: bias corr P50 +0.093  bias raw P50 +0.093  band width corr 46.5  raw 46.5  actual sd 25.3
+checkpoint 15 (n=250):  applied shift +0.0000 scale 1.00
+  MAE  corr(P50)  12.014  naive  13.575  dMAE  -1.561 [-2.580, -0.597]  CORRECTED BETTER
+  P10-P90 coverage corr  0.708 [0.648, 0.768]  target [0.7, 0.9]  IN BAND
+  context: bias corr P50 -1.054  bias raw P50 -1.054  band width corr 31.0  raw 31.0  actual sd 16.9
+
+pooled paired dMAE (corrected - naive, 756 rows, cluster-boot by match): -3.699 [-5.233, -2.262]
+
+=== ARM: B18 twin (graft) + B15 scales ===
+checkpoint  6 (n=253):  applied shift +0.0000 scale 1.19
+  MAE  corr(P50)  20.144  naive  25.897  dMAE  -5.753 [-8.496, -3.192]  CORRECTED BETTER
+  MAE  raw (P50)  20.144  naive  25.897  dMAE  -5.753 [-8.496, -3.192]   (uncorrected context)
+  P10-P90 coverage corr  0.866 [0.822, 0.909]  target [0.7, 0.9]  IN BAND
+  P10-P90 coverage raw   0.802 [0.755, 0.854]   (uncorrected context)
+  context: bias corr P50 -0.121  bias raw P50 -0.121  band width corr 72.8  raw 61.1  actual sd 29.9
+checkpoint 10 (n=253):  applied shift +0.0000 scale 1.09
+  MAE  corr(P50)  16.243  naive  20.000  dMAE  -3.757 [-5.461, -2.077]  CORRECTED BETTER
+  MAE  raw (P50)  16.243  naive  20.000  dMAE  -3.757 [-5.461, -2.077]   (uncorrected context)
+  P10-P90 coverage corr  0.810 [0.767, 0.862]  target [0.7, 0.9]  IN BAND
+  P10-P90 coverage raw   0.779 [0.727, 0.834]   (uncorrected context)
+  context: bias corr P50 +0.093  bias raw P50 +0.093  band width corr 50.7  raw 46.5  actual sd 25.3
+checkpoint 15 (n=250):  applied shift +0.0000 scale 1.26
+  MAE  corr(P50)  12.014  naive  13.575  dMAE  -1.561 [-2.580, -0.597]  CORRECTED BETTER
+  MAE  raw (P50)  12.014  naive  13.575  dMAE  -1.561 [-2.580, -0.597]   (uncorrected context)
+  P10-P90 coverage corr  0.788 [0.736, 0.840]  target [0.7, 0.9]  IN BAND
+  P10-P90 coverage raw   0.708 [0.648, 0.768]   (uncorrected context)
+  context: bias corr P50 -1.054  bias raw P50 -1.054  band width corr 39.1  raw 31.0  actual sd 16.9
+
+pooled paired dMAE (corrected - naive, 756 rows, cluster-boot by match): -3.699 [-5.233, -2.262]
+pooled paired dMAE (RAW - naive, uncorrected context): -3.699 [-5.233, -2.262]
+
+=== P-A: |P50 bias| shrinks at ALL THREE checkpoints (point test, same-seed twins) ===
+  cp 6: bias raw  -4.872  b18  -0.121   |raw|  4.872 -> |b18|  0.121   shrink  +4.751   SHRANK
+  cp10: bias raw  -3.134  b18  +0.093   |raw|  3.134 -> |b18|  0.093   shrink  +3.042   SHRANK
+  cp15: bias raw  -1.976  b18  -1.054   |raw|  1.976 -> |b18|  1.054   shrink  +0.922   SHRANK
+  P-A: MET
+
+=== P-B: pooled paired dMAE (B18 P50 - naive), cluster-boot by match, 2000 reps seed 29, CI hi < 0 ===
+  cp 6 (n=253): b18 MAE  20.144  naive  25.897  dMAE  -5.753 [-8.496, -3.192]
+  cp10 (n=253): b18 MAE  16.243  naive  20.000  dMAE  -3.757 [-5.461, -2.077]
+  cp15 (n=250): b18 MAE  12.014  naive  13.575  dMAE  -1.561 [-2.580, -0.597]
+  pooled paired dMAE (756 rows): -3.699 [-5.233, -2.262]
+  P-B: MET
+  (context — RAW twin pooled dMAE: -3.412 [-4.866, -2.070])
+
+  PRIMARY (P-A AND P-B): MET   [P-A=True P-B=True]
+
+================================================================================================
+G-3 — B15-scaled coverage on the B18 arm in [0.7, 0.9] at ALL THREE cps
+================================================================================================
+  cp 6: scale 1.19  coverage 0.866 [0.822, 0.909]  IN BAND   (raw context 0.802)
+  cp10: scale 1.09  coverage 0.810 [0.767, 0.862]  IN BAND   (raw context 0.779)
+  cp15: scale 1.26  coverage 0.788 [0.736, 0.840]  IN BAND   (raw context 0.708)
+  B18+B15 coverage: 0.866/0.810/0.788   RAW-twin context: 0.787/0.802/0.696
+  G-3: MET
+
+================================================================================================
+G-1 / G-2 — recipe-B paired vs the canonical D16 baseline
+================================================================================================
+  baseline (d16_raw): 261 matches (detail_noweights_raw_s46_n261.json)
+  b18      (b18_graft): 261 matches (detail_b18_s46_n261.json)
+  pairing: cluster bootstrap by match, n_boot=2000, seed=29; delta = b18_graft - d16_raw (positive = B18 worse)
+
+G-1 — no CI-clean regression on any of: innings_runs_ou_160_5, innings_runs_ou_170_5, innings_runs_ou_180_5, pp_total_ou_45_5, pp_total_ou_50_5, pp_total_ou_55_5
+family                                 n  drop     d16_raw   b18_graft     delta   95% CI (b18_graft-d16_raw)   flag
+innings_runs_ou_160_5                522     0      0.2381      0.2227   -0.0154   [-0.0278,-0.0035]  DOWN(better)
+  (positional cross-check)           522                                 -0.0154   [-0.0278,-0.0035]  DOWN(better)
+innings_runs_ou_170_5                522     0      0.2297      0.2183   -0.0115   [-0.0223,-0.0012]  DOWN(better)
+  (positional cross-check)           522                                 -0.0115   [-0.0223,-0.0012]  DOWN(better)
+innings_runs_ou_180_5                522     0      0.1984      0.1831   -0.0153   [-0.0246,-0.0064]  DOWN(better)
+  (positional cross-check)           522                                 -0.0153   [-0.0246,-0.0064]  DOWN(better)
+pp_total_ou_45_5                     522     0      0.2367      0.2241   -0.0126   [-0.0213,-0.0040]  DOWN(better)
+  (positional cross-check)           522                                 -0.0126   [-0.0213,-0.0040]  DOWN(better)
+pp_total_ou_50_5                     522     0      0.2355      0.2249   -0.0106   [-0.0196,-0.0012]  DOWN(better)
+  (positional cross-check)           522                                 -0.0106   [-0.0196,-0.0012]  DOWN(better)
+pp_total_ou_55_5                     522     0      0.2005      0.1958   -0.0047   [-0.0121,+0.0027]  ~noise
+  (positional cross-check)           522                                 -0.0047   [-0.0121,+0.0027]  ~noise
+  innings_runs_ou_160_5        ok
+  innings_runs_ou_170_5        ok
+  innings_runs_ou_180_5        ok
+  pp_total_ou_45_5             ok
+  pp_total_ou_50_5             ok
+  pp_total_ou_55_5             ok
+  G-1: MET
+
+G-2 — batter_runs_mae must NOT regress CI-clean (CI lo <= 0)
+family                                 n  drop     d16_raw   b18_graft     delta   95% CI (b18_graft-d16_raw)   flag
+batter_runs_mae                     4254     0     13.8864     13.9552   +0.0688   [-0.0145,+0.1453]  ~noise
+  (positional cross-check)          2913                                 +0.1174   [+0.0279,+0.2083]  UP(worse)
+  G-2: MET
+
+  GUARDS (G-1 AND G-2 AND G-3): MET   [G-1=True G-2=True G-3=True]
+
+================================================================================================
+CONTEXT — full family scan (cannot flip the gate)
+================================================================================================
+  33 families scanned
+
+family                                 n  drop     d16_raw   b18_graft     delta   95% CI (b18_graft-d16_raw)   flag
+batter_50plus                       4254     0      0.0786      0.0779   -0.0007   [-0.0015,+0.0000]  ~noise
+batter_6plus_six                    4254     0      0.2195      0.2188   -0.0007   [-0.0027,+0.0013]  ~noise
+batter_fours_1plus                  4254     0      0.2183      0.2180   -0.0003   [-0.0026,+0.0019]  ~noise
+batter_fours_2plus                  4254     0      0.2011      0.2004   -0.0007   [-0.0028,+0.0014]  ~noise
+batter_fours_3plus                  4254     0      0.1554      0.1553   -0.0001   [-0.0017,+0.0014]  ~noise
+batter_fours_mae                    4254     0      1.3585      1.3666   +0.0080   [-0.0005,+0.0163]  ~noise
+batter_runs_mae                     4254     0     13.8864     13.9552   +0.0688   [-0.0145,+0.1453]  ~noise
+bowler_economy_ou_10_5              3107     0      0.1912      0.1911   -0.0001   [-0.0024,+0.0020]  ~noise
+bowler_economy_ou_8_5               3107     0      0.2501      0.2467   -0.0034   [-0.0061,-0.0007]  DOWN(better)
+bowler_wkts_1plus                   3107     0      0.2437      0.2452   +0.0015   [-0.0007,+0.0038]  ~noise
+bowler_wkts_2plus                   3107     0      0.2103      0.2101   -0.0002   [-0.0020,+0.0016]  ~noise
+bowler_wkts_3plus                   3107     0      0.0946      0.0941   -0.0005   [-0.0012,+0.0003]  ~noise
+first_wicket_runs_ou_30_5            522     0      0.2395      0.2322   -0.0073   [-0.0171,+0.0021]  ~noise
+highest_individual_mae               261     0     16.1951     16.1637   -0.0315   [-0.3608,+0.2821]  ~noise
+highest_over_runs_ou_18_5            261     0      0.2445      0.2282   -0.0163   [-0.0258,-0.0065]  DOWN(better)
+highest_over_runs_ou_24_5            261     0      0.0971      0.0963   -0.0008   [-0.0034,+0.0015]  ~noise
+innings_runs_ou_160_5                522     0      0.2381      0.2227   -0.0154   [-0.0278,-0.0035]  DOWN(better)
+innings_runs_ou_170_5                522     0      0.2297      0.2183   -0.0115   [-0.0223,-0.0012]  DOWN(better)
+innings_runs_ou_180_5                522     0      0.1984      0.1831   -0.0153   [-0.0246,-0.0064]  DOWN(better)
+match_total_sixes_ou_15_5            261     0      0.1980      0.1976   -0.0004   [-0.0061,+0.0057]  ~noise
+match_total_sixes_ou_20_5            261     0      0.1006      0.0996   -0.0010   [-0.0037,+0.0017]  ~noise
+p_tie                                261     0      0.0003      0.0003   +0.0001   [-0.0000,+0.0001]  ~noise
+pp_total_ou_45_5                     522     0      0.2367      0.2241   -0.0126   [-0.0213,-0.0040]  DOWN(better)
+pp_total_ou_50_5                     522     0      0.2355      0.2249   -0.0106   [-0.0196,-0.0012]  DOWN(better)
+pp_total_ou_55_5                     522     0      0.2005      0.1958   -0.0047   [-0.0121,+0.0027]  ~noise
+team_first_over_mae                  522     0      3.3785      3.3846   +0.0061   [-0.0371,+0.0480]  ~noise
+team_highest_individual_ou_29_5      522     0      0.0757      0.0757   -0.0000   [-0.0018,+0.0019]  ~noise
+team_highest_individual_ou_34_5      522     0      0.1293      0.1280   -0.0012   [-0.0044,+0.0020]  ~noise
+team_highest_individual_ou_39_5      522     0      0.1737      0.1707   -0.0030   [-0.0073,+0.0011]  ~noise
+team_total_fours_mae                 522     0      3.4987      3.5036   +0.0050   [-0.0372,+0.0465]  ~noise
+team_total_sixes_mae                 522     0      2.6457      2.6403   -0.0054   [-0.0334,+0.0216]  ~noise
+top_batter                          5835     0      0.0756      0.0751   -0.0005   [-0.0014,+0.0002]  ~noise
+top_bowler                          5827     8      0.0772      0.0769   -0.0003   [-0.0009,+0.0004]  ~noise
+
+  CI-excludes-0 families: 7 (7 favorable, 0 regressions)
+    highest_over_runs_ou_18_5            -0.0163  [-0.0258,-0.0065]  DOWN(better)
+    innings_runs_ou_160_5                -0.0154  [-0.0278,-0.0035]  DOWN(better)
+    innings_runs_ou_180_5                -0.0153  [-0.0246,-0.0064]  DOWN(better)
+    pp_total_ou_45_5                     -0.0126  [-0.0213,-0.0040]  DOWN(better)
+    innings_runs_ou_170_5                -0.0115  [-0.0223,-0.0012]  DOWN(better)
+    pp_total_ou_50_5                     -0.0106  [-0.0196,-0.0012]  DOWN(better)
+    bowler_economy_ou_8_5                -0.0034  [-0.0061,-0.0007]  DOWN(better)
+
+================================================================================================
+PRIMARY: MET (P-A=True, P-B=True) | GUARDS: MET (G-1=True, G-2=True, G-3=True)
+verdict mapping (orchestrator applies it, not this script): BOTH -> LANDED, exactly one -> TABLED, neither -> FAILED

@@ -858,14 +858,26 @@ def main():
                     help="Number of matches to score, or 'all' for full test set.")
     ap.add_argument("--n-sims", type=int, default=100)
     ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--model-path", default="models/xgb_v3/xgboost_model_v3.pkl")
-    ap.add_argument("--batter-encoder", default="models/xgb_v3/batter_encoder_v3.pkl")
-    ap.add_argument("--bowler-encoder", default="models/xgb_v3/bowler_encoder_v3.pkl")
-    ap.add_argument("--feature-columns", default="models/xgb_v3/feature_columns_v3.txt")
+    # Defaults = the promoted production ball stack (2026-08-02): D16
+    # no-weights RAW on the i7 identity frame, no calibrator (D17).
+    # Legacy v3 replay needs every path passed explicitly plus
+    # --stats-version v3 and the vector calibrator (see CLAUDE.md).
+    ap.add_argument(
+        "--model-path",
+        default="models/xgb_i7_noweights_production/xgboost_model_i7.pkl")
+    ap.add_argument(
+        "--batter-encoder",
+        default="models/xgb_i7_noweights_production/batter_encoder_i7.pkl")
+    ap.add_argument(
+        "--bowler-encoder",
+        default="models/xgb_i7_noweights_production/bowler_encoder_i7.pkl")
+    ap.add_argument(
+        "--feature-columns",
+        default="models/xgb_i7_noweights_production/feature_columns_i7.txt")
     ap.add_argument(
         "--stats-version",
-        default="v3",
-        help="StatsProvider artifact version (for example v3 or i5).",
+        default="i7",
+        help="StatsProvider artifact version (for example i7, v3 or i5).",
     )
     ap.add_argument("--bowler-selector", choices=["empirical", "random"],
                     default="empirical",
@@ -878,11 +890,24 @@ def main():
     ap.add_argument("--ball-calibrator", choices=["none", "vector"],
                     default="none",
                     help="'vector' = val-fit VectorScalingCalibrator that "
-                         "undoes the balanced-class-weight tilt in the "
-                         "booster's raw probabilities (E5, 2026-06-09).")
-    ap.add_argument("--ball-calibrator-path",
-                    default="models/xgb_v3/vector_scaling_calibrator_v1.pkl")
+                         "undoes the balanced-class-weight tilt in a "
+                         "LEGACY booster's raw probabilities (E5). The "
+                         "promoted i7 no-weights stack must run raw (D17) "
+                         "— vector is for legacy replay only.")
+    ap.add_argument("--ball-calibrator-path", default=None,
+                    help="Required when --ball-calibrator vector: no "
+                         "default, so a stack/calibrator mismatch fails "
+                         "closed. Legacy v3 replay uses "
+                         "models/xgb_v3/vector_scaling_calibrator_v1.pkl.")
     args = ap.parse_args()
+
+    if args.ball_calibrator == "vector" and not args.ball_calibrator_path:
+        raise SystemExit(
+            "--ball-calibrator vector requires an explicit "
+            "--ball-calibrator-path (calibrators are stack-specific; the "
+            "promoted i7 no-weights stack runs raw per D17 — for legacy v3 "
+            "replay pass models/xgb_v3/vector_scaling_calibrator_v1.pkl)"
+        )
 
     np.random.seed(args.seed)
 

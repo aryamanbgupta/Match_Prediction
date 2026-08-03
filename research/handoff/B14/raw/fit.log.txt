@@ -1,0 +1,11 @@
+B14 quote-calibrator fit on models/auto/b14/quotes_val_s47_n545.json
+  config: n_sims=100 seed=47 quote_center=sim_p50 usage_json=models/auto/b12/bowler_phase_usage_pre_b12.json elapsed=3215.2s
+  rows: 1532 from 512 matches (33 matches skipped)
+
+ cp     n    shift  scale  cov_raw  cov_corr  mae_raw  mae_corr
+---------------------------------------------------------------
+  6   512  -1.4482   1.19   0.7344    0.7988  20.2490   20.1953
+ 10   512  -1.7812   1.09   0.7754    0.8027  16.0430   16.0785
+ 15   508  -2.9715   1.26   0.7106    0.7992  11.1604   11.0864
+
+Wrote models/auto/b14/quote_calibrator.json

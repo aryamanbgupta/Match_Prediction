@@ -1,0 +1,95 @@
+blind: 261 matches | b10: 261 matches  (seed 44)
+
+================================================================================================
+GATE 1 (PRIMARY) — bowler_wkts_1plus paired Brier (b10 - blind) must be CI-clean negative
+================================================================================================
+family                                 n  drop       blind         b10     delta   95% CI (b10-blind)   flag
+bowler_wkts_1plus                   3106     0      0.2578      0.2532   -0.0046   [-0.0071,-0.0021]  DOWN(better)
+  (positional cross-check)          2549                                 -0.0020   [-0.0060,+0.0020]  ~noise
+
+  GATE 1: MET
+
+================================================================================================
+GATE 2 — guards: no CI-clean regression on top_bowler, bowler_wkts_2plus, batter_runs_mae, team_first_over_mae
+================================================================================================
+family                                 n  drop       blind         b10     delta   95% CI (b10-blind)   flag
+top_bowler                          5831     4      0.0773      0.0771   -0.0002   [-0.0008,+0.0005]  ~noise
+  (positional cross-check)          5831                                 -0.0002   [-0.0008,+0.0005]  ~noise
+bowler_wkts_2plus                   3106     0      0.2154      0.2145   -0.0009   [-0.0024,+0.0007]  ~noise
+  (positional cross-check)          2625                                 -0.0001   [-0.0023,+0.0020]  ~noise
+batter_runs_mae                     4253     1     14.3905     14.4030   +0.0125   [-0.0427,+0.0683]  ~noise
+  (positional cross-check)          3748                                 +0.0130   [-0.0461,+0.0686]  ~noise
+team_first_over_mae                  522     0      3.4103      3.4225   +0.0122   [-0.0006,+0.0246]  ~noise
+  (positional cross-check)           522                                 +0.0122   [-0.0006,+0.0246]  ~noise
+  top_bowler                   ok
+  bowler_wkts_2plus            ok
+  batter_runs_mae              ok
+  team_first_over_mae          ok
+  GATE 2: MET
+
+================================================================================================
+CONTEXT — G5 bowler coverage, both arms (NOT a B12 gate; B10 used a >= 0.9 floor)
+================================================================================================
+  G5 coverage [blind]: 3095/3108 = 0.9958
+  G5 coverage [b10]: 3105/3108 = 0.9990
+
+================================================================================================
+CONTEXT — full family scan (cannot flip the verdict)
+================================================================================================
+family                                 n  drop       blind         b10     delta   95% CI (b10-blind)   flag
+batter_50plus                       4253     1      0.0800      0.0802   +0.0003   [-0.0003,+0.0008]  ~noise
+batter_6plus_six                    4253     1      0.2246      0.2231   -0.0015   [-0.0031,+0.0002]  ~noise
+batter_fours_1plus                  4253     1      0.2202      0.2190   -0.0011   [-0.0025,+0.0004]  ~noise
+batter_fours_2plus                  4253     1      0.2036      0.2035   -0.0001   [-0.0013,+0.0011]  ~noise
+batter_fours_3plus                  4253     1      0.1591      0.1590   -0.0001   [-0.0009,+0.0009]  ~noise
+batter_fours_mae                    4253     1      1.3992      1.3987   -0.0005   [-0.0054,+0.0046]  ~noise
+batter_runs_mae                     4253     1     14.3905     14.4030   +0.0125   [-0.0427,+0.0683]  ~noise
+bowler_economy_ou_10_5              3106     0      0.1930      0.1929   -0.0001   [-0.0021,+0.0019]  ~noise
+bowler_economy_ou_8_5               3106     0      0.2534      0.2548   +0.0014   [-0.0010,+0.0039]  ~noise
+bowler_wkts_1plus                   3106     0      0.2578      0.2532   -0.0046   [-0.0071,-0.0021]  DOWN(better)
+bowler_wkts_2plus                   3106     0      0.2154      0.2145   -0.0009   [-0.0024,+0.0007]  ~noise
+bowler_wkts_3plus                   3106     0      0.0941      0.0939   -0.0002   [-0.0008,+0.0004]  ~noise
+first_wicket_runs_ou_30_5            522     0      0.2375      0.2352   -0.0022   [-0.0044,+0.0000]  ~noise
+highest_individual_mae               261     0     16.7634     16.8186   +0.0552   [-0.1509,+0.2515]  ~noise
+highest_over_runs_ou_18_5            261     0      0.2336      0.2352   +0.0017   [-0.0037,+0.0071]  ~noise
+highest_over_runs_ou_24_5            261     0      0.0975      0.0961   -0.0014   [-0.0030,-0.0000]  DOWN(better)
+innings_runs_ou_160_5                522     0      0.2513      0.2509   -0.0005   [-0.0043,+0.0032]  ~noise
+innings_runs_ou_170_5                522     0      0.2410      0.2426   +0.0016   [-0.0024,+0.0056]  ~noise
+innings_runs_ou_180_5                522     0      0.1986      0.1981   -0.0005   [-0.0037,+0.0027]  ~noise
+match_total_sixes_ou_15_5            261     0      0.2229      0.2262   +0.0034   [-0.0017,+0.0084]  ~noise
+match_total_sixes_ou_20_5            261     0      0.1170      0.1181   +0.0011   [-0.0018,+0.0041]  ~noise
+p_tie                                261     0      0.0002      0.0003   +0.0000   [-0.0000,+0.0001]  ~noise
+pp_total_ou_45_5                     522     0      0.2479      0.2490   +0.0011   [-0.0016,+0.0036]  ~noise
+pp_total_ou_50_5                     522     0      0.2541      0.2526   -0.0015   [-0.0047,+0.0017]  ~noise
+pp_total_ou_55_5                     522     0      0.2183      0.2180   -0.0003   [-0.0030,+0.0024]  ~noise
+team_first_over_mae                  522     0      3.4103      3.4225   +0.0122   [-0.0006,+0.0246]  ~noise
+team_highest_individual_ou_29_5      522     0      0.0793      0.0788   -0.0005   [-0.0017,+0.0005]  ~noise
+team_highest_individual_ou_34_5      522     0      0.1315      0.1317   +0.0002   [-0.0021,+0.0026]  ~noise
+team_highest_individual_ou_39_5      522     0      0.1749      0.1778   +0.0028   [-0.0002,+0.0059]  ~noise
+team_total_fours_mae                 522     0      3.6854      3.6755   -0.0100   [-0.0380,+0.0160]  ~noise
+team_total_sixes_mae                 522     0      2.9868      2.9961   +0.0093   [-0.0149,+0.0348]  ~noise
+top_batter                          5835     0      0.0759      0.0760   +0.0001   [-0.0005,+0.0007]  ~noise
+top_bowler                          5831     4      0.0773      0.0771   -0.0002   [-0.0008,+0.0005]  ~noise
+
+  CI-excludes-0 families (either direction):
+    bowler_wkts_1plus                    -0.0046  [-0.0071,-0.0021]  DOWN(better)
+    highest_over_runs_ou_24_5            -0.0014  [-0.0030,-0.0000]  DOWN(better)
+
+================================================================================================
+CONTEXT — B9 sim-vs-usage top_bowler margin (seed-43 reference: +0.0028 blind -> +0.0026 b10)
+================================================================================================
+  [blind] rows=5835  Brier_sim=0.0776  Brier_usage=0.0747  sim-usage=+0.0029 CI [+0.0018,+0.0041]  UP(worse)
+  [blind] head-only (both p>=2%) rows=3545  sim-usage=+0.0035 CI [+0.0018,+0.0053]  UP(worse)
+  [b10] rows=5835  Brier_sim=0.0773  Brier_usage=0.0747  sim-usage=+0.0027 CI [+0.0015,+0.0039]  UP(worse)
+  [b10] head-only (both p>=2%) rows=3711  sim-usage=+0.0034 CI [+0.0016,+0.0051]  UP(worse)
+  (B9 headline on the D15 detail was +0.0038 [+0.0026,+0.0051]; head-only +0.0049 [+0.0032,+0.0067])
+
+================================================================================================
+CONTEXT — B10 relaxation triggers (from the Arm-B run log)
+================================================================================================
+  'B10 relaxation triggered' lines: 8
+  'B10 ... ACTIVE' startup lines:   1
+
+================================================================================================
+GATE 1: MET | GATE 2: MET
+Pre-committed verdict MAPPING (orchestrator decides): LANDED

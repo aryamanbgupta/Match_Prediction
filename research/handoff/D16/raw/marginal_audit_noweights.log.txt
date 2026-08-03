@@ -1,0 +1,67 @@
+model dir: models/auto/d16/noweights
+test parquet: /Users/aryamangupta/CricML/Match_Prediction/data/xgb_data_i7/cricket_data_i7_test.parquet
+test balls scored: 186,667  features: 114
+  encoding with the audited arm's own encoders ...
+
+--- noweights raw / venue_on (PRIMARY)  (n = 186,667 balls) ---
+| class   |      pred |    actual |     delta |
+|---------|-----------|-----------|-----------|
+| dot     |   0.31099 |   0.31267 |  -0.00168 |
+| one     |   0.39424 |   0.39715 |  -0.00291 |
+| two     |   0.07431 |   0.07567 |  -0.00136 |
+| four    |   0.10579 |   0.10579 |  -0.00000 |
+| six     |   0.05476 |   0.05200 |  +0.00276 |
+| wicket  |   0.05991 |   0.05672 |  +0.00319 |
+  runs/ball   pred 1.2946  actual 1.2837  delta +0.0109  (tol 0.05) -> ok
+  P(wicket)   pred 0.05991  actual 0.05672  delta +0.00319  (tol 0.005) -> ok
+  test multiclass LL 1.4253
+  ARM VERDICT: PASS
+
+--- noweights raw / venue_zero  (n = 186,667 balls) ---
+| class   |      pred |    actual |     delta |
+|---------|-----------|-----------|-----------|
+| dot     |   0.30896 |   0.31267 |  -0.00371 |
+| one     |   0.39575 |   0.39715 |  -0.00140 |
+| two     |   0.07383 |   0.07567 |  -0.00184 |
+| four    |   0.10555 |   0.10579 |  -0.00024 |
+| six     |   0.05527 |   0.05200 |  +0.00327 |
+| wicket  |   0.06064 |   0.05672 |  +0.00392 |
+  runs/ball   pred 1.2973  actual 1.2837  delta +0.0136  (tol 0.05) -> ok
+  P(wicket)   pred 0.06064  actual 0.05672  delta +0.00392  (tol 0.005) -> ok
+  test multiclass LL 1.4260
+  ARM VERDICT: PASS
+
+========================================================================
+CONTEXT — archived /Users/aryamangupta/CricML/Match_Prediction/models/xgb_i7 (balanced weights, same i7 frame), raw; scored with ITS OWN encoders
+========================================================================
+
+--- xgb_i7 raw / venue_on  (n = 186,667 balls) ---
+| class   |      pred |    actual |     delta |
+|---------|-----------|-----------|-----------|
+| dot     |   0.23936 |   0.31267 |  -0.07332 |
+| one     |   0.24691 |   0.39715 |  -0.15024 |
+| two     |   0.12334 |   0.07567 |  +0.04767 |
+| four    |   0.15459 |   0.10579 |  +0.04880 |
+| six     |   0.10184 |   0.05200 |  +0.04984 |
+| wicket  |   0.13396 |   0.05672 |  +0.07724 |
+  runs/ball   pred 1.7230  actual 1.2837  delta +0.4394  (tol 0.05) -> FAIL
+  P(wicket)   pred 0.13396  actual 0.05672  delta +0.07724  (tol 0.005) -> FAIL
+  test multiclass LL 1.6316
+  ARM VERDICT: FAIL
+
+--- xgb_i7 raw / venue_zero  (n = 186,667 balls) ---
+| class   |      pred |    actual |     delta |
+|---------|-----------|-----------|-----------|
+| dot     |   0.25210 |   0.31267 |  -0.06057 |
+| one     |   0.27586 |   0.39715 |  -0.12128 |
+| two     |   0.10834 |   0.07567 |  +0.03267 |
+| four    |   0.14868 |   0.10579 |  +0.04288 |
+| six     |   0.09468 |   0.05200 |  +0.04268 |
+| wicket  |   0.12033 |   0.05672 |  +0.06362 |
+  runs/ball   pred 1.6554  actual 1.2837  delta +0.3717  (tol 0.05) -> FAIL
+  P(wicket)   pred 0.12033  actual 0.05672  delta +0.06362  (tol 0.005) -> FAIL
+  test multiclass LL 1.6072
+  ARM VERDICT: FAIL
+
+wrote models/auto/d16/noweights/marginal_audit.json
+GATE 1(a) marginal audit (primary = venue_on): PASS

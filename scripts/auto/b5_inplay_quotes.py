@@ -33,10 +33,20 @@ per-sim via T20Rules.select_next_bowler on the state copy — exactly the
 engine's own over-boundary flow (simulate_ball selects the next bowler
 after an over-final ball; state.update() alone does not).
 
-Run:
+Run (legacy v3 stack — the defaults, unchanged since B5):
   uv run python scripts/auto/b5_inplay_quotes.py \
       --test-dir data/polymarket_test --n-sims 100 --seed 43 \
       --out models/auto/b5/quotes_s43_n261.json
+
+B16 added opt-in stack args (defaults still the legacy v3 stack, so the
+B5/B14/B15 quote runs stay reproducible). Promoted i7 no-weights stack,
+served RAW per D17:
+  uv run python scripts/auto/b5_inplay_quotes.py ... \
+      --model-path models/xgb_i7_noweights_production/xgboost_model_i7.pkl \
+      --batter-encoder models/xgb_i7_noweights_production/batter_encoder_i7.pkl \
+      --bowler-encoder models/xgb_i7_noweights_production/bowler_encoder_i7.pkl \
+      --feature-columns models/xgb_i7_noweights_production/feature_columns_i7.txt \
+      --stats-version i7 --ball-calibrator none
 """
 import argparse
 import json
@@ -268,7 +278,41 @@ def main():
     ap.add_argument("--n-sims", type=int, default=100)
     ap.add_argument("--seed", type=int, default=43)
     ap.add_argument("--out", default="models/auto/b5/quotes_s43_n261.json")
+    ap.add_argument("--usage-json", default="models/bowler_phase_usage.json",
+                    help="bowler phase-usage prior for EmpiricalBowlerSelector "
+                         "(default = production path, i.e. current behavior)")
+    # B16: opt-in ball-stack selection. DEFAULTS ARE THE LEGACY v3 STACK so a
+    # no-args invocation stays byte-behavior-identical to the B5/B14/B15 runs
+    # (their frozen quotes must remain reproducible). The promoted i7
+    # no-weights stack is selected explicitly by passing every path plus
+    # --stats-version i7 --ball-calibrator none (D17: it runs RAW).
+    ap.add_argument("--model-path",
+                    default="models/xgb_v3/xgboost_model_v3.pkl")
+    ap.add_argument("--batter-encoder",
+                    default="models/xgb_v3/batter_encoder_v3.pkl")
+    ap.add_argument("--bowler-encoder",
+                    default="models/xgb_v3/bowler_encoder_v3.pkl")
+    ap.add_argument("--feature-columns",
+                    default="models/xgb_v3/feature_columns_v3.txt")
+    ap.add_argument("--stats-version", default="v3",
+                    help="StatsProvider artifact version (v3, i7, i5, ...).")
+    ap.add_argument("--ball-calibrator", choices=["none", "vector"],
+                    default="vector",
+                    help="'vector' = val-fit VectorScalingCalibrator that "
+                         "undoes the balanced-class-weight tilt in a LEGACY "
+                         "booster's raw probabilities (E5). The promoted i7 "
+                         "no-weights stack must run raw (D17) — pass none.")
+    ap.add_argument("--ball-calibrator-path",
+                    default="models/xgb_v3/vector_scaling_calibrator_v1.pkl",
+                    help="Calibrator pickle used when --ball-calibrator "
+                         "vector (default = the legacy v3 calibrator, i.e. "
+                         "current behavior).")
     args = ap.parse_args()
+
+    if args.ball_calibrator == "vector" and not args.ball_calibrator_path:
+        raise SystemExit(
+            "--ball-calibrator vector requires an explicit "
+            "--ball-calibrator-path (calibrators are stack-specific)")
 
     from sim_eval.loaders import TestMatchLoader  # noqa: E402
     from stats_provider import StatsProvider  # noqa: E402
@@ -276,22 +320,25 @@ def main():
     import joblib
 
     print("Loading stats provider + player metadata + model ...")
-    stats_provider = StatsProvider("models", version="v3")
+    stats_provider = StatsProvider("models", version=args.stats_version)
     player_metadata = PlayerMetadataProvider("data/all_players_enriched.csv")
-    ball_calibrator = joblib.load(
-        "models/xgb_v3/vector_scaling_calibrator_v1.pkl")
-    print("Ball calibrator: vector scaling "
-          "(models/xgb_v3/vector_scaling_calibrator_v1.pkl)")
+    ball_calibrator = None
+    if args.ball_calibrator == "vector":
+        ball_calibrator = joblib.load(args.ball_calibrator_path)
+        print(f"Ball calibrator: vector scaling ({args.ball_calibrator_path})")
+    else:
+        print("Ball calibrator: NONE (raw probabilities)")
+    print(f"Model: {args.model_path}  (stats version {args.stats_version})")
     model = XGBoostModelV2(
-        model_path="models/xgb_v3/xgboost_model_v3.pkl",
-        batter_encoder_path="models/xgb_v3/batter_encoder_v3.pkl",
-        bowler_encoder_path="models/xgb_v3/bowler_encoder_v3.pkl",
-        feature_columns_path="models/xgb_v3/feature_columns_v3.txt",
+        model_path=args.model_path,
+        batter_encoder_path=args.batter_encoder,
+        bowler_encoder_path=args.bowler_encoder,
+        feature_columns_path=args.feature_columns,
         stats_provider=stats_provider,
         player_metadata=player_metadata,
         ball_calibrator=ball_calibrator,
     )
-    rules = T20Rules(EmpiricalBowlerSelector())
+    rules = T20Rules(EmpiricalBowlerSelector(usage_path=args.usage_json))
     engine = SimulationEngine(model, rules)
     loader = TestMatchLoader()
 
@@ -359,9 +406,12 @@ def main():
             "n_sims": args.n_sims,
             "seed": args.seed,
             "checkpoints": list(CHECKPOINTS),
-            "model": "models/xgb_v3/xgboost_model_v3.pkl",
-            "ball_calibrator": "models/xgb_v3/vector_scaling_calibrator_v1.pkl",
+            "model": args.model_path,
+            "stats_version": args.stats_version,
+            "ball_calibrator": (args.ball_calibrator_path
+                                if args.ball_calibrator == "vector" else None),
             "bowler_selector": "empirical",
+            "usage_json": args.usage_json,
             "quote_center": "sim_p50",
             "elapsed_s": elapsed,
         },

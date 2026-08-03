@@ -1,0 +1,32 @@
+models/bowler_phase_usage.json md5 BEFORE: 2e650423f0c949631fca1f15dd1c8a56
+corpus: /Users/aryamangupta/CricML/Match_Prediction/models/b10_usage_corpus.pkl (md5 42b313b138fefdd293c280a9d4be2e2b) — 7433 players, 208753 appearance rows
+
+event set (n>=1, prior balls==0, date < 2025-07-01): 49485 events, 1005 bowled (2.031%)
+k_damp (MLE on geomspace(0.01, 1000.0, 2001)): 0.153993  (logL -4070.266)
+mu_active = mean(balls | bowled) = 12.163184  (n=1005)
+  grid neighbours: k=0.153109 logL=-4070.268 | k=0.154882 logL=-4070.294
+
+  n bin         events   bowled   empirical P    fitted P
+  1               2862      334       11.670%     13.344%
+  2               2272      167        7.350%      7.149%
+  3-5             5007      229        4.574%      3.947%
+  6-10            5631      123        2.184%      1.987%
+  11-20           7220       86        1.191%      1.046%
+  21-50          10742       45        0.419%      0.491%
+  51+            15751       21        0.133%      0.160%
+
+  B9 global prior_balls @ 2025-07-01: 10.486322; @ 2026-04-17: 10.477071  (k_usage=5.0)
+
+       n    damped exp_balls     undamped B9     ratio   damped share   undamped share
+       1            1.623096        8.730892    0.1859        1.3526%          7.2757%
+       5            0.363416        5.238535    0.0694        0.3028%          4.3654%
+      20            0.092936        2.095414    0.0444        0.0774%          1.7462%
+     100            0.018702        0.498908    0.0375        0.0156%          0.4158%
+     285            0.006569        0.180639    0.0364        0.0055%          0.1505%
+
+sidecar prior -> /Users/aryamangupta/CricML/Match_Prediction/models/auto/b13/bowler_phase_usage_b13.json (md5 9b59fe086d03ac0c685beb702c1bec0d)
+  b10_asof_usage = {"corpus_path": "models/b10_usage_corpus.pkl", "k_usage": 5.0, "min_eligible": 5, "min_share": 0.01, "b13_never_bowler_damping": {"k_damp": 0.1539926526059492, "mu_active": 12.16318407960199}}
+fit numbers -> /Users/aryamangupta/CricML/Match_Prediction/models/auto/b13/damping_fit.json
+
+models/bowler_phase_usage.json md5 AFTER:  2e650423f0c949631fca1f15dd1c8a56
+OK: production prior unchanged.

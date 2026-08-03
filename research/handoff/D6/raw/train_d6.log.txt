@@ -1,0 +1,9 @@
+[D6] train start 2026-07-31T20:18:19Z
+Loading split datasets (v3)...
+Traceback (most recent call last):
+  File "/Users/aryamangupta/CricML/Match_Prediction/scripts/xgboost_v2.py", line 70, in <module>
+    assert_venue_alias_contract(
+  File "/Users/aryamangupta/CricML/Match_Prediction/scripts/identity_maps.py", line 159, in assert_venue_alias_contract
+    raise RuntimeError(
+RuntimeError: ball training parquet venue-alias contract mismatch: {'venue_alias_version': (None, 'venue_aliases_v1'), 'venue_alias_sha256': (None, '853b32b0ce3098dd8c0f33ba1437846f5505d50d9a425fbd37bff9c9f76745d8'), 'venue_alias_active_count': (None, 94)}. Rebuild the artifact from the active identity map.
+[D6] train exit rc=1 2026-07-31T20:18:20Z

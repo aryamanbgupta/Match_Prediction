@@ -1,0 +1,49 @@
+D17 PRE-RUN EXPECTATION CHECK
+Written BEFORE the sim eval was launched (plan item 2, REQUIRED).
+Source: research/handoff/D17/raw/fit_calibrator.log
+
+Fitted 6-vector (VectorScalingCalibrator._v), order [dot, one, two, four, six, wicket]:
+  [0.17029491, 0.16923329, 0.16252808, 0.16918399, 0.17117034, 0.15758939]
+  sum(v) = 0.9999999999999999
+
+NOTE ON THE SCALE (recorded, not improvised around):
+`calibration.VectorScalingCalibrator.fit` ends every iteration with
+`v = v / v.sum()` (scripts/calibration.py:440), so the fitted vector is
+normalised to sum to 1 and the IDENTITY (no-op) vector is 1/6 = 0.1666667
+per element, NOT 1. The plan's literal "max |v-1|" is therefore degenerate
+under this parameterisation — it is ~0.83+ for every possible vector,
+including the exact identity. Both readings are recorded; both give the
+same expectation-check outcome, so nothing hinges on the choice.
+
+  (a) literal, as the plan words it:   max |v - 1|   = 0.8424106112460958
+  (b) identity-relative (the quantity comparable to the A8/A12/B7 ~0.05
+      washout threshold):              max |6v - 1|  = 0.05446366747657527
+
+Per-class identity-relative deviation (6v - 1):
+  dot     6v = 1.021769   dev = +0.021769
+  one     6v = 1.015400   dev = +0.015400
+  two     6v = 0.975168   dev = -0.024832
+  four    6v = 1.015104   dev = +0.015104
+  six     6v = 1.027022   dev = +0.027022
+  wicket  6v = 0.945536   dev = -0.054464   <-- max divergence
+
+VERDICT OF THE CHECK: live test
+  (a) 0.8424 >= 0.05 -> live test
+  (b) 0.0545 >= 0.05 -> live test
+Both readings clear the threshold, so the eval runs as a live test. It is a
+MARGINAL live test on the meaningful scale (b): only the wicket class exceeds
+0.05, and it clears by 0.0045. The other five classes are all below the
+washout threshold. A null result is still fully in play and remains
+decision-grade per the idea text.
+
+CONTEXT — the same script's D16 CONTROL (balanced-weights) fit for scale:
+  6v = [1.6145, 1.950837, 0.655079, 0.759885, 0.572557, 0.447141]
+  max |6v - 1| = 0.950837072326487
+i.e. the control arm needed a ~2x/0.45x correction; the no-weights arm needs
+at most 5.4%. That gap IS the D16 structural result restated in calibrator
+parameters, and it is why D17 is expected to be a small effect either way.
+
+Validation-fit numbers (verbatim from fit_calibrator.log, 124,292 balls):
+  raw log loss:        1.433437
+  calibrated log loss: 1.433238   (improvement 0.000199)
+  max |residual| (calibrated marginal - actual val frequency) = 2.810e-11

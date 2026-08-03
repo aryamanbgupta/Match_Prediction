@@ -1,0 +1,32 @@
+== Part 1: default-path inertness vs pre-B18 engine (ea4acdb) ==
+  pre-B18 module: /var/folders/75/tfm3h1ts54dg1jw3gcgxr4dr0000gn/T/b18_unit_n01ss35x/sim_v1_2_pre_b18.py
+  [PASS] 1a. predict_next_ball float-EXACT on 8 prob vectors (no sidecar)  (bit-identical on every key)
+Run-out dismissal channel ACTIVE (p_runout=0.0751, nonstriker_share=0.4685)
+Run-out dismissal channel ACTIVE (p_runout=0.0751, nonstriker_share=0.4685)
+  [PASS] 1b. 400 same-seed simulate_ball draws identical (outcome, runs)  (6 wide/no-ball events in the sequence)
+  [PASS] 1b. RNG state after the draws identical (ZERO extra draws consumed)
+
+== Part 2: d15_unit_check.py unchanged (D2+D14+run-out, 30 assertions) ==
+  [PASS] 2. d15_unit_check.py passes  (UNIT CHECK PASSED: all assertions hold.)
+
+== Part 3: sidecar contract (SYNTHETIC fixture, NOT the B18 fit) ==
+  B18 empirical extras graft ACTIVE (p_wide=0.040000, p_no_ball=0.006000, mean_runs w=1.2200/nb=1.1500)
+  [PASS] 3a. wide mass == p_wide exactly
+  [PASS] 3a. no_ball mass == p_no_ball exactly
+  [PASS] 3a. sums to 1  (total=1.000000000000000)
+  [PASS] 3a. 6-class relative marginals preserved
+  [PASS] 3a. 6-class block mass == 1 - p_extras
+  [PASS] 3a. non-unit block: extras mass still exact + marginals kept
+  [PASS] 3a. degenerate block: uniform spread, sums to 1
+  [PASS] 3a. LIVE XGBoostModelV2 path: extras mass exact
+  [PASS] 3a. LIVE path: relative marginals preserved
+  [PASS] 3a. LIVE path: sums to 1
+  [PASS] 3b. simulated wide rate == sidecar p_wide (3 sigma)  (0.039953 vs 0.040000 (tol 0.001073))
+  [PASS] 3b. simulated no-ball rate == sidecar p_no_ball (3 sigma)  (0.006180 vs 0.006000 (tol 0.000423))
+  [PASS] 3b. sampled wide event-run mean == sidecar mean (3 sigma)  (1.2228 vs 1.2200 (tol 0.0221, n=11986))
+  [PASS] 3b. sampled wide runs stay inside the sidecar support  (observed [1, 2, 5])
+  [PASS] 3b. sampled no-ball event-run mean == sidecar mean (3 sigma)  (1.1359 vs 1.1500 (tol 0.0249, n=1854))
+  [PASS] 3b. sampled no-ball runs stay inside the sidecar support  (observed [1, 2])
+  [PASS] 3c. graft draws reproducible under a fixed seed
+
+ALL PASS

@@ -1,0 +1,121 @@
+B17 TASK 1 — in-play continuation P50 bias decomposition
+(diagnostic only; no engine change, no sim run)
+
+==============================================================================
+STACK i7   file /Users/aryamangupta/CricML/Match_Prediction/models/auto/b16/quotes_i7_s48_n261.json
+==============================================================================
+config: {"ball_calibrator": null, "bowler_selector": "empirical", "checkpoints": [6, 10, 15], "elapsed_s": 898.7548689842224, "model": "models/xgb_i7_noweights_production/xgboost_model_i7.pkl", "n_sims": 100, "quote_center": "sim_p50", "seed": 48, "stats_version": "i7", "test_dir": "data/polymarket_test", "usage_json": "models/bowler_phase_usage.json"}
+rows: 756   matches: 253   skips: 8
+
+--- 1. per-checkpoint mean P50 bias (sim_p50 - actual_remaining) ---
+|  cp |    n |  mean bias |       sd |   logged |   |diff| | repro |
+|-----|------|------------|----------|----------|----------|-------|
+|   6 |  253 |    -4.7806 |   26.484 |   -4.781 |  0.00037 |    OK |
+|  10 |  253 |    -3.0257 |   20.791 |   -3.026 |  0.00031 |    OK |
+|  15 |  250 |    -1.9460 |   14.958 |   -1.946 |  0.00000 |    OK |
+REPRODUCTION (tol 0.001): PASS
+
+--- 2. bias normalised by remaining overs / remaining legal balls ---
+|  cp | rem overs | rem legal |       bias |   per over | per legal ball |
+|-----|-----------|-----------|------------|------------|----------------|
+|   6 |        14 |        84 |    -4.7806 |   -0.34147 |      -0.056912 |
+|  10 |        10 |        60 |    -3.0257 |   -0.30257 |      -0.050428 |
+|  15 |         5 |        30 |    -1.9460 |   -0.38920 |      -0.064867 |
+
+--- 3. paired segment rates (runs/over of bias accrued in the segment) ---
+|  segment | n paired | mean seg bias |   per over | per legal ball |
+|----------|----------|---------------|------------|----------------|
+|    6->10 |      253 |       -1.7549 |   -0.43874 |      -0.073123 |
+|   10->15 |      250 |       -1.4560 |   -0.29120 |      -0.048533 |
+|   15->20 |      250 |       -1.9460 |   -0.38920 |      -0.064867 |
+
+--- 4a. bias by wickets-fallen-at-checkpoint band ---
+|  cp |  band |    n |  mean bias |   per over | mean runs@cp |
+|-----|-------|------|------------|------------|--------------|
+|   6 |   0-2 |  204 |    -5.4167 |   -0.38690 |        50.98 |
+|   6 |   3-5 |   49 |    -2.1327 |   -0.15233 |        38.16 |
+|   6 |    6+ |    0 |       +nan |       +nan |          nan |
+|  10 |   0-2 |  124 |    -6.3669 |   -0.63669 |        86.85 |
+|  10 |   3-5 |  122 |    -0.0041 |   -0.00041 |        71.81 |
+|  10 |    6+ |    7 |    +3.5000 |   +0.35000 |        61.43 |
+|  15 |   0-2 |   29 |    -0.5172 |   -0.10345 |       138.93 |
+|  15 |   3-5 |  174 |    -2.4109 |   -0.48218 |       124.76 |
+|  15 |    6+ |   47 |    -1.1064 |   -0.22128 |        95.51 |
+
+--- 4b. bias by score-at-checkpoint tercile (terciles within checkpoint) ---
+|  cp | tercile |   runs@cp range |    n |  mean bias |   per over |
+|-----|---------|-----------------|------|------------|------------|
+|   6 |      T1 |            9-43 |   90 |    +0.6111 |   +0.04365 |
+|   6 |      T2 |           44-53 |   81 |    -4.2716 |   -0.30511 |
+|   6 |      T3 |          54-105 |   82 |   -11.2012 |   -0.80009 |
+|  10 |      T1 |           24-71 |   87 |    +3.2126 |   +0.32126 |
+|  10 |      T2 |           72-86 |   86 |    -6.3256 |   -0.63256 |
+|  10 |      T3 |          87-132 |   80 |    -6.2625 |   -0.62625 |
+|  15 |      T1 |          48-110 |   85 |    -0.1059 |   -0.02118 |
+|  15 |      T2 |         111-129 |   83 |    -1.5181 |   -0.30361 |
+|  15 |      T3 |         130-188 |   82 |    -4.2866 |   -0.85732 |
+
+==============================================================================
+STACK legacy   file /Users/aryamangupta/CricML/Match_Prediction/models/auto/b15/quotes_s45_n261.json
+==============================================================================
+config: {"ball_calibrator": "models/xgb_v3/vector_scaling_calibrator_v1.pkl", "bowler_selector": "empirical", "checkpoints": [6, 10, 15], "elapsed_s": 1487.2287542819977, "model": "models/xgb_v3/xgboost_model_v3.pkl", "n_sims": 100, "quote_center": "sim_p50", "seed": 45, "test_dir": "data/polymarket_test", "usage_json": "models/auto/b12/bowler_phase_usage_pre_b12.json"}
+rows: 756   matches: 253   skips: 8
+
+--- 1. per-checkpoint mean P50 bias (sim_p50 - actual_remaining) ---
+|  cp |    n |  mean bias |       sd |   logged |   |diff| | repro |
+|-----|------|------------|----------|----------|----------|-------|
+|   6 |  253 |    +4.2589 |   26.933 |   +4.259 |  0.00011 |    OK |
+|  10 |  253 |    +2.7767 |   21.270 |   +2.777 |  0.00032 |    OK |
+|  15 |  250 |    +0.4100 |   15.585 |   +0.410 |  0.00000 |    OK |
+REPRODUCTION (tol 0.001): PASS
+
+--- 2. bias normalised by remaining overs / remaining legal balls ---
+|  cp | rem overs | rem legal |       bias |   per over | per legal ball |
+|-----|-----------|-----------|------------|------------|----------------|
+|   6 |        14 |        84 |    +4.2589 |   +0.30421 |      +0.050701 |
+|  10 |        10 |        60 |    +2.7767 |   +0.27767 |      +0.046278 |
+|  15 |         5 |        30 |    +0.4100 |   +0.08200 |      +0.013667 |
+
+--- 3. paired segment rates (runs/over of bias accrued in the segment) ---
+|  segment | n paired | mean seg bias |   per over | per legal ball |
+|----------|----------|---------------|------------|----------------|
+|    6->10 |      253 |       +1.4822 |   +0.37055 |      +0.061759 |
+|   10->15 |      250 |       +2.0140 |   +0.40280 |      +0.067133 |
+|   15->20 |      250 |       +0.4100 |   +0.08200 |      +0.013667 |
+
+--- 4a. bias by wickets-fallen-at-checkpoint band ---
+|  cp |  band |    n |  mean bias |   per over | mean runs@cp |
+|-----|-------|------|------------|------------|--------------|
+|   6 |   0-2 |  204 |    +4.9534 |   +0.35382 |        50.98 |
+|   6 |   3-5 |   49 |    +1.3673 |   +0.09767 |        38.16 |
+|   6 |    6+ |    0 |       +nan |       +nan |          nan |
+|  10 |   0-2 |  124 |    +1.2258 |   +0.12258 |        86.85 |
+|  10 |   3-5 |  122 |    +4.4590 |   +0.44590 |        71.81 |
+|  10 |    6+ |    7 |    +0.9286 |   +0.09286 |        61.43 |
+|  15 |   0-2 |   29 |    +2.4310 |   +0.48621 |       138.93 |
+|  15 |   3-5 |  174 |    +0.4138 |   +0.08276 |       124.76 |
+|  15 |    6+ |   47 |    -0.8511 |   -0.17021 |        95.51 |
+
+--- 4b. bias by score-at-checkpoint tercile (terciles within checkpoint) ---
+|  cp | tercile |   runs@cp range |    n |  mean bias |   per over |
+|-----|---------|-----------------|------|------------|------------|
+|   6 |      T1 |            9-43 |   90 |    +8.2889 |   +0.59206 |
+|   6 |      T2 |           44-53 |   81 |    +5.2222 |   +0.37302 |
+|   6 |      T3 |          54-105 |   82 |    -1.1159 |   -0.07970 |
+|  10 |      T1 |           24-71 |   87 |    +7.7126 |   +0.77126 |
+|  10 |      T2 |           72-86 |   86 |    +0.1977 |   +0.01977 |
+|  10 |      T3 |          87-132 |   80 |    +0.1812 |   +0.01812 |
+|  15 |      T1 |          48-110 |   85 |    +2.5529 |   +0.51059 |
+|  15 |      T2 |         111-129 |   83 |    +0.7771 |   +0.15542 |
+|  15 |      T3 |         130-188 |   82 |    -2.1829 |   -0.43659 |
+
+==============================================================================
+PAIRED CONTRAST  i7 - legacy  (same match_id/checkpoint rows)
+==============================================================================
+common rows: 756  (i7 756, legacy 756)
+|  cp |    n |   i7 bias | legacy bias |     delta | delta/over | delta/legal ball |
+|-----|------|-----------|-------------|-----------|------------|------------------|
+|   6 |  253 |   -4.7806 |     +4.2589 |   -9.0395 |   -0.64568 |        -0.107613 |
+|  10 |  253 |   -3.0257 |     +2.7767 |   -5.8024 |   -0.58024 |        -0.096706 |
+|  15 |  250 |   -1.9460 |     +0.4100 |   -2.3560 |   -0.47120 |        -0.078533 |
+

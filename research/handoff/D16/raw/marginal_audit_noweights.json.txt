@@ -1,0 +1,224 @@
+{
+  "model_dir": "models/auto/d16/noweights",
+  "test_parquet": "/Users/aryamangupta/CricML/Match_Prediction/data/xgb_data_i7/cricket_data_i7_test.parquet",
+  "n_balls": 186667,
+  "calibrator": null,
+  "tolerance": {
+    "abs_delta_wicket": 0.005,
+    "abs_delta_runs_per_ball": 0.05
+  },
+  "primary_arm": "venue_on",
+  "arms": {
+    "venue_on": {
+      "label": "noweights raw / venue_on (PRIMARY)",
+      "n_balls": 186667,
+      "per_class": [
+        {
+          "class": "dot",
+          "pred": 0.3109939694404602,
+          "actual": 0.31267444165278274,
+          "delta": -0.0016804722123225369
+        },
+        {
+          "class": "one",
+          "pred": 0.3942386507987976,
+          "actual": 0.397145719382644,
+          "delta": -0.002907068583846373
+        },
+        {
+          "class": "two",
+          "pred": 0.074312224984169,
+          "actual": 0.0756695077330219,
+          "delta": -0.0013572827488528977
+        },
+        {
+          "class": "four",
+          "pred": 0.10578864067792892,
+          "actual": 0.10579266822737816,
+          "delta": -4.027549449239776e-06
+        },
+        {
+          "class": "six",
+          "pred": 0.05476219207048416,
+          "actual": 0.0520016928541199,
+          "delta": 0.0027604992163642594
+        },
+        {
+          "class": "wicket",
+          "pred": 0.05990676209330559,
+          "actual": 0.0567159701500533,
+          "delta": 0.003190791943252287
+        }
+      ],
+      "pred_wicket": 0.05990676209330559,
+      "actual_wicket": 0.0567159701500533,
+      "delta_wicket": 0.003190791943252287,
+      "pred_runs_per_ball": 1.2945912585879487,
+      "actual_runs_per_ball": 1.2836655648829198,
+      "delta_runs_per_ball": 0.010925693705028827,
+      "test_multiclass_logloss": 1.4252763986587524,
+      "abs_delta_wicket_le_tol": true,
+      "abs_delta_runs_le_tol": true,
+      "pass": true
+    },
+    "venue_zero": {
+      "label": "noweights raw / venue_zero",
+      "n_balls": 186667,
+      "per_class": [
+        {
+          "class": "dot",
+          "pred": 0.308962345123291,
+          "actual": 0.31267444165278274,
+          "delta": -0.0037120965294917263
+        },
+        {
+          "class": "one",
+          "pred": 0.3957464098930359,
+          "actual": 0.397145719382644,
+          "delta": -0.0013993094896080915
+        },
+        {
+          "class": "two",
+          "pred": 0.07383324950933456,
+          "actual": 0.0756695077330219,
+          "delta": -0.0018362582236873398
+        },
+        {
+          "class": "four",
+          "pred": 0.10554980486631393,
+          "actual": 0.10579266822737816,
+          "delta": -0.00024286336106423
+        },
+        {
+          "class": "six",
+          "pred": 0.055272992700338364,
+          "actual": 0.0520016928541199,
+          "delta": 0.0032712998462184617
+        },
+        {
+          "class": "wicket",
+          "pred": 0.060635052621364594,
+          "actual": 0.0567159701500533,
+          "delta": 0.003919082471311293
+        }
+      ],
+      "pred_wicket": 0.060635052621364594,
+      "actual_wicket": 0.0567159701500533,
+      "delta_wicket": 0.003919082471311293,
+      "pred_runs_per_ball": 1.2972504459488687,
+      "actual_runs_per_ball": 1.2836655648829198,
+      "delta_runs_per_ball": 0.013584881065948906,
+      "test_multiclass_logloss": 1.425950050354004,
+      "abs_delta_wicket_le_tol": true,
+      "abs_delta_runs_le_tol": true,
+      "pass": true
+    }
+  },
+  "reference": {
+    "prod_raw_venue_on": {
+      "label": "xgb_i7 raw / venue_on",
+      "n_balls": 186667,
+      "per_class": [
+        {
+          "class": "dot",
+          "pred": 0.23935644328594208,
+          "actual": 0.31267444165278274,
+          "delta": -0.07331799836684066
+        },
+        {
+          "class": "one",
+          "pred": 0.2469068169593811,
+          "actual": 0.397145719382644,
+          "delta": -0.15023890242326288
+        },
+        {
+          "class": "two",
+          "pred": 0.12334277480840683,
+          "actual": 0.0756695077330219,
+          "delta": 0.047673267075384926
+        },
+        {
+          "class": "four",
+          "pred": 0.15459321439266205,
+          "actual": 0.10579266822737816,
+          "delta": 0.048800546165283884
+        },
+        {
+          "class": "six",
+          "pred": 0.10184290260076523,
+          "actual": 0.0520016928541199,
+          "delta": 0.049841209746645326
+        },
+        {
+          "class": "wicket",
+          "pred": 0.1339593231678009,
+          "actual": 0.0567159701500533,
+          "delta": 0.0772433530177476
+        }
+      ],
+      "pred_wicket": 0.1339593231678009,
+      "actual_wicket": 0.0567159701500533,
+      "delta_wicket": 0.0772433530177476,
+      "pred_runs_per_ball": 1.723025464132595,
+      "actual_runs_per_ball": 1.2836655648829198,
+      "delta_runs_per_ball": 0.4393598992496752,
+      "test_multiclass_logloss": 1.6316204071044922,
+      "abs_delta_wicket_le_tol": false,
+      "abs_delta_runs_le_tol": false,
+      "pass": false
+    },
+    "prod_raw_venue_zero": {
+      "label": "xgb_i7 raw / venue_zero",
+      "n_balls": 186667,
+      "per_class": [
+        {
+          "class": "dot",
+          "pred": 0.2521032392978668,
+          "actual": 0.31267444165278274,
+          "delta": -0.06057120235491592
+        },
+        {
+          "class": "one",
+          "pred": 0.2758633494377136,
+          "actual": 0.397145719382644,
+          "delta": -0.12128236994493036
+        },
+        {
+          "class": "two",
+          "pred": 0.10833945125341415,
+          "actual": 0.0756695077330219,
+          "delta": 0.03266994352039225
+        },
+        {
+          "class": "four",
+          "pred": 0.14867661893367767,
+          "actual": 0.10579266822737816,
+          "delta": 0.04288395070629951
+        },
+        {
+          "class": "six",
+          "pred": 0.09468413144350052,
+          "actual": 0.0520016928541199,
+          "delta": 0.04268243858938062
+        },
+        {
+          "class": "wicket",
+          "pred": 0.12033231556415558,
+          "actual": 0.0567159701500533,
+          "delta": 0.06361634541410227
+        }
+      ],
+      "pred_wicket": 0.12033231556415558,
+      "actual_wicket": 0.0567159701500533,
+      "delta_wicket": 0.06361634541410227,
+      "pred_runs_per_ball": 1.6553580960436303,
+      "actual_runs_per_ball": 1.2836655648829198,
+      "delta_runs_per_ball": 0.37169253116071044,
+      "test_multiclass_logloss": 1.6072273254394531,
+      "abs_delta_wicket_le_tol": false,
+      "abs_delta_runs_le_tol": false,
+      "pass": false
+    }
+  },
+  "pass": true
+}

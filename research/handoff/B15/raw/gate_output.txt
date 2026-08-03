@@ -1,0 +1,67 @@
+B15 gate analysis — scale-only vs B14-full quote calibrator
+  calibrator: models/auto/b14/quote_calibrator.json (fit on models/auto/b14/quotes_val_s47_n545.json, val target coverage 0.8)
+  calibrator assertion: PASS — all 6 val-fit values match B14 exactly (NO refit anywhere in this script)
+  TEST quotes: models/auto/b15/quotes_s45_n261.json
+  config: n_sims=100 seed=45 quote_center=sim_p50 usage_json=models/auto/b12/bowler_phase_usage_pre_b12.json elapsed=1487.2s
+  rows: 756 from 253 matches (8 matches skipped)
+  val-fit correction: cp6: shift -1.4482 scale 1.19  cp10: shift -1.7812 scale 1.09  cp15: shift -2.9715 scale 1.26
+  bootstrap: 2000 reps, seed 29, cluster by match
+
+=== ARM: scale-only (shift := 0) ===
+checkpoint  6 (n=253):  applied shift +0.0000 scale 1.19
+  MAE  corr(P50)  20.773  naive  25.897  dMAE  -5.125 [-8.053, -2.176]  CORRECTED BETTER
+  MAE  raw (P50)  20.773  naive  25.897  dMAE  -5.125 [-8.053, -2.176]   (uncorrected context)
+  P10-P90 coverage corr  0.818 [0.771, 0.866]  target [0.7, 0.9]  IN BAND
+  P10-P90 coverage raw   0.755 [0.704, 0.810]   (uncorrected context)
+  context: bias corr P50 +4.259  bias raw P50 +4.259  band width corr 69.4  raw 58.3  actual sd 29.9
+checkpoint 10 (n=253):  applied shift +0.0000 scale 1.09
+  MAE  corr(P50)  16.990  naive  20.000  dMAE  -3.010 [-4.955, -1.009]  CORRECTED BETTER
+  MAE  raw (P50)  16.990  naive  20.000  dMAE  -3.010 [-4.955, -1.009]   (uncorrected context)
+  P10-P90 coverage corr  0.834 [0.787, 0.881]  target [0.7, 0.9]  IN BAND
+  P10-P90 coverage raw   0.791 [0.739, 0.842]   (uncorrected context)
+  context: bias corr P50 +2.777  bias raw P50 +2.777  band width corr 52.5  raw 48.2  actual sd 25.3
+checkpoint 15 (n=250):  applied shift +0.0000 scale 1.26
+  MAE  corr(P50)  12.338  naive  13.575  dMAE  -1.237 [-2.581, +0.016]  CORRECTED BETTER
+  MAE  raw (P50)  12.338  naive  13.575  dMAE  -1.237 [-2.581, +0.016]   (uncorrected context)
+  P10-P90 coverage corr  0.768 [0.716, 0.824]  target [0.7, 0.9]  IN BAND
+  P10-P90 coverage raw   0.660 [0.604, 0.720]   (uncorrected context)
+  context: bias corr P50 +0.410  bias raw P50 +0.410  band width corr 37.1  raw 29.4  actual sd 16.9
+
+pooled paired dMAE (corrected - naive, 756 rows, cluster-boot by match): -3.131 [-4.909, -1.356]
+pooled paired dMAE (RAW - naive, uncorrected context): -3.131 [-4.909, -1.356]
+
+=== ARM: B14-full (val-fit shift + scale) ===
+checkpoint  6 (n=253):  applied shift -1.4482 scale 1.19
+  MAE  corr(P50)  21.032  naive  25.897  dMAE  -4.865 [-7.872, -1.916]  CORRECTED BETTER
+  P10-P90 coverage corr  0.810 [0.763, 0.858]  target [0.7, 0.9]  IN BAND
+  context: bias corr P50 +5.707  bias raw P50 +4.259  band width corr 69.4  raw 58.3  actual sd 29.9
+checkpoint 10 (n=253):  applied shift -1.7812 scale 1.09
+  MAE  corr(P50)  17.328  naive  20.000  dMAE  -2.672 [-4.758, -0.518]  CORRECTED BETTER
+  P10-P90 coverage corr  0.802 [0.755, 0.854]  target [0.7, 0.9]  IN BAND
+  context: bias corr P50 +4.558  bias raw P50 +2.777  band width corr 52.5  raw 48.2  actual sd 25.3
+checkpoint 15 (n=250):  applied shift -2.9715 scale 1.26
+  MAE  corr(P50)  12.617  naive  13.575  dMAE  -0.957 [-2.531, +0.471]  CORRECTED BETTER
+  P10-P90 coverage corr  0.748 [0.696, 0.800]  target [0.7, 0.9]  IN BAND
+  context: bias corr P50 +3.381  bias raw P50 +0.410  band width corr 37.1  raw 29.4  actual sd 16.9
+
+pooled paired dMAE (corrected - naive, 756 rows, cluster-boot by match): -2.839 [-4.677, -0.943]
+
+=== DIAGNOSTIC: per-checkpoint bias (no gate weight) ===
+ cp  val shift (fit)  this-quotes raw bias   B5 frozen raw bias
+---------------------------------------------------------------
+  6          -1.4482                +4.259               +4.670
+ 10          -1.7812                +2.777               +3.204
+ 15          -2.9715                +0.410               +0.514
+(val shift = mean(sim_p50 - actual) on val; raw bias = same quantity on these quotes.
+ Same sign => the shift term helps; opposite sign => it hurts.)
+
+=== SECONDARY (recommendation only, no gate weight) ===
+  pooled dMAE scale-only -3.131 [-4.909, -1.356]
+  pooled dMAE B14-full   -2.839 [-4.677, -0.943]
+  scale-only - B14-full = -0.292  (more negative dMAE is better => scale-only better on point estimate)
+
+=== PRE-COMMITTED B15 GATE (scale-only arm) ===
+PRIMARY-A (corrected coverage in [0.7, 0.9] at all 3 cps): MET (per-cp coverage [0.818, 0.834, 0.768], in-band [True, True, True])
+PRIMARY-B (corrected MAE beats naive at all 3 cps + pooled cluster-boot CI hi < 0): MET (per-cp [True, True, True], pooled hi -1.356)
+
+(verdict mapping is applied by the orchestrator, not here)

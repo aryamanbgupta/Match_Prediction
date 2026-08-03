@@ -1,0 +1,14 @@
+compile OK
+blind matches: 261
+  pp_total_ou_45_5                   paired_rows(self)=522
+  pp_total_ou_50_5                   paired_rows(self)=522
+  pp_total_ou_55_5                   paired_rows(self)=522
+  first_wicket_runs_ou_30_5          paired_rows(self)=522
+  highest_over_runs_ou_18_5          paired_rows(self)=261
+  highest_over_runs_ou_24_5          paired_rows(self)=261
+  bowler_wkts_1plus                  paired_rows(self)=3107
+  top_bowler                         paired_rows(self)=5835
+  team_first_over_mae                present_in_detail=True
+  batter_runs_mae                    present_in_detail=True
+  team_total_fours_mae               present_in_detail=True
+  team_total_sixes_mae               present_in_detail=True

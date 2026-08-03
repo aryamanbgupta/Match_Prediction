@@ -1,0 +1,105 @@
+blind: 261 matches | b13: 261 matches  (seed 46)
+
+================================================================================================
+GATE 1a (PRIMARY) — top_bowler paired Brier (b13 - blind) must be CI-clean negative
+================================================================================================
+family                                 n  drop       blind         b13     delta   95% CI (b13-blind)   flag
+top_bowler                          5831     4      0.0774      0.0775   +0.0001   [-0.0004,+0.0005]  ~noise
+  (positional cross-check)          5831                                 +0.0001   [-0.0004,+0.0005]  ~noise
+
+  GATE 1a: NOT MET
+
+================================================================================================
+GATE 1b — recomputed B9 sim-usage top_bowler margin must SHRINK (margin_b13 < margin_blind)
+================================================================================================
+  [blind] rows=5835  Brier_sim=0.077639  Brier_usage=0.074665  sim-usage=+0.002973 CI [+0.0021,+0.0038]  UP(worse)
+  [blind] head-only (both p>=2%) rows=3897  sim-usage=+0.003704 CI [+0.0025,+0.0049]  UP(worse)
+  [b13] rows=5835  Brier_sim=0.077704  Brier_usage=0.074666  sim-usage=+0.003038 CI [+0.0022,+0.0039]  UP(worse)
+  [b13] head-only (both p>=2%) rows=3761  sim-usage=+0.004016 CI [+0.0027,+0.0053]  UP(worse)
+
+  margin_blind = +0.002973  (Brier_sim 0.077639 - Brier_usage 0.074665)
+  margin_b13   = +0.003038  (Brier_sim 0.077704 - Brier_usage 0.074666)
+  change       = +0.000065
+
+  GATE 1b: NOT MET (point comparison, pre-committed)
+  (B9 headline on the D15 legacy detail was +0.0038 [+0.0026,+0.0051]; B12 blind->b10 on the legacy stack moved +0.0028 -> +0.0026)
+
+  GATE 1 (1a AND 1b): NOT MET
+
+================================================================================================
+GATE 2 — guards: no CI-clean regression on bowler_wkts_1plus, bowler_wkts_2plus, batter_runs_mae, team_first_over_mae
+================================================================================================
+family                                 n  drop       blind         b13     delta   95% CI (b13-blind)   flag
+bowler_wkts_1plus                   3107     0      0.2437      0.2431   -0.0006   [-0.0022,+0.0011]  ~noise
+  (positional cross-check)          2615                                 -0.0010   [-0.0034,+0.0013]  ~noise
+bowler_wkts_2plus                   3107     0      0.2103      0.2094   -0.0008   [-0.0019,+0.0002]  ~noise
+  (positional cross-check)          2691                                 -0.0013   [-0.0029,+0.0003]  ~noise
+batter_runs_mae                     4254     0     13.8864     13.8609   -0.0255   [-0.0564,+0.0067]  ~noise
+  (positional cross-check)          3861                                 -0.0292   [-0.0633,+0.0049]  ~noise
+team_first_over_mae                  522     0      3.3785      3.3868   +0.0084   [-0.0014,+0.0179]  ~noise
+  (positional cross-check)           522                                 +0.0084   [-0.0014,+0.0179]  ~noise
+  bowler_wkts_1plus            ok
+  bowler_wkts_2plus            ok
+  batter_runs_mae              ok
+  team_first_over_mae          ok
+  GATE 2: MET
+
+================================================================================================
+CONTEXT — G5 bowler coverage, both arms (NOT a B13 gate; B10 used a >= 0.9 floor)
+================================================================================================
+  G5 coverage [blind]: 3106/3108 = 0.9994
+  G5 coverage [b13]: 3103/3108 = 0.9984
+
+================================================================================================
+CONTEXT — full family scan (cannot flip the verdict)
+================================================================================================
+family                                 n  drop       blind         b13     delta   95% CI (b13-blind)   flag
+batter_50plus                       4254     0      0.0786      0.0784   -0.0002   [-0.0005,+0.0002]  ~noise
+batter_6plus_six                    4254     0      0.2195      0.2182   -0.0013   [-0.0023,-0.0003]  DOWN(better)
+batter_fours_1plus                  4254     0      0.2183      0.2190   +0.0007   [-0.0004,+0.0018]  ~noise
+batter_fours_2plus                  4254     0      0.2011      0.2009   -0.0002   [-0.0011,+0.0006]  ~noise
+batter_fours_3plus                  4254     0      0.1554      0.1554   +0.0000   [-0.0007,+0.0007]  ~noise
+batter_fours_mae                    4254     0      1.3585      1.3587   +0.0001   [-0.0033,+0.0035]  ~noise
+batter_runs_mae                     4254     0     13.8864     13.8609   -0.0255   [-0.0564,+0.0067]  ~noise
+bowler_economy_ou_10_5              3107     0      0.1912      0.1925   +0.0013   [-0.0001,+0.0027]  ~noise
+bowler_economy_ou_8_5               3107     0      0.2501      0.2492   -0.0008   [-0.0024,+0.0009]  ~noise
+bowler_wkts_1plus                   3107     0      0.2437      0.2431   -0.0006   [-0.0022,+0.0011]  ~noise
+bowler_wkts_2plus                   3107     0      0.2103      0.2094   -0.0008   [-0.0019,+0.0002]  ~noise
+bowler_wkts_3plus                   3107     0      0.0946      0.0944   -0.0002   [-0.0007,+0.0002]  ~noise
+first_wicket_runs_ou_30_5            522     0      0.2395      0.2392   -0.0003   [-0.0015,+0.0009]  ~noise
+highest_individual_mae               261     0     16.1951     16.2967   +0.1016   [-0.0192,+0.2226]  ~noise
+highest_over_runs_ou_18_5            261     0      0.2445      0.2433   -0.0012   [-0.0048,+0.0027]  ~noise
+highest_over_runs_ou_24_5            261     0      0.0971      0.0969   -0.0002   [-0.0013,+0.0009]  ~noise
+innings_runs_ou_160_5                522     0      0.2381      0.2378   -0.0003   [-0.0026,+0.0022]  ~noise
+innings_runs_ou_170_5                522     0      0.2297      0.2312   +0.0015   [-0.0004,+0.0034]  ~noise
+innings_runs_ou_180_5                522     0      0.1984      0.1993   +0.0009   [-0.0006,+0.0024]  ~noise
+match_total_sixes_ou_15_5            261     0      0.1980      0.1984   +0.0005   [-0.0027,+0.0037]  ~noise
+match_total_sixes_ou_20_5            261     0      0.1006      0.1006   +0.0000   [-0.0012,+0.0013]  ~noise
+p_tie                                261     0      0.0003      0.0003   +0.0000   [-0.0000,+0.0001]  ~noise
+pp_total_ou_45_5                     522     0      0.2367      0.2374   +0.0007   [-0.0007,+0.0022]  ~noise
+pp_total_ou_50_5                     522     0      0.2355      0.2351   -0.0005   [-0.0020,+0.0011]  ~noise
+pp_total_ou_55_5                     522     0      0.2005      0.2016   +0.0011   [-0.0003,+0.0025]  ~noise
+team_first_over_mae                  522     0      3.3785      3.3868   +0.0084   [-0.0014,+0.0179]  ~noise
+team_highest_individual_ou_29_5      522     0      0.0757      0.0757   +0.0000   [-0.0012,+0.0015]  ~noise
+team_highest_individual_ou_34_5      522     0      0.1293      0.1308   +0.0015   [-0.0000,+0.0031]  ~noise
+team_highest_individual_ou_39_5      522     0      0.1737      0.1756   +0.0020   [-0.0001,+0.0040]  ~noise
+team_total_fours_mae                 522     0      3.4987      3.4918   -0.0069   [-0.0222,+0.0082]  ~noise
+team_total_sixes_mae                 522     0      2.6457      2.6452   -0.0005   [-0.0127,+0.0118]  ~noise
+top_batter                          5835     0      0.0756      0.0756   +0.0000   [-0.0004,+0.0004]  ~noise
+top_bowler                          5831     4      0.0774      0.0775   +0.0001   [-0.0004,+0.0005]  ~noise
+
+  families scanned: 33
+  CI-excludes-0 families: 1 (1 better, 0 worse)
+    batter_6plus_six                     -0.0013  [-0.0023,-0.0003]  DOWN(better)
+
+================================================================================================
+CONTEXT — B10 relaxation triggers / B13 banner (from the b13 log)
+================================================================================================
+  'B10 relaxation triggered' lines:  32
+  'B10 ... ACTIVE' startup lines:     1
+  'B13 never-bowler damping ACTIVE':  1
+  'Ball calibrator' lines (must be 0): 0
+
+================================================================================================
+GATE 1a: NOT MET | GATE 1b: NOT MET | GATE 1: NOT MET | GATE 2: MET
+Pre-committed verdict MAPPING (orchestrator decides): TABLED

@@ -1,0 +1,18 @@
+Loading stats provider + player metadata + model ...
+WARNING: SQLite same-day ordering mismatch: models/player_stats_cache_v3.sqlite has None, code expects 'date_then_match_id_lexicographic_v1'. Rebuild the cache before deterministic materialization.
+StatsProvider: using SQLite backend player_stats_cache_v3.sqlite (56.8 MB)
+Loading player metadata from data/all_players_enriched.csv...
+  Loaded 11,256 players
+  Batting: 8178 right, 1814 left, 1264 unknown
+  Bowling: 6256 right, 1381 left, 3619 unknown
+Ball calibrator: vector scaling (models/xgb_v3/vector_scaling_calibrator_v1.pkl)
+Loaded XGBoost v2 model with 114 features with real player stats with player metadata; venue encoder ACTIVE (467 venues)
+Run-out dismissal channel ACTIVE (p_runout=0.0751, nonstriker_share=0.4685)
+B5 in-play quotes: 5 matches x 100 sims x checkpoints [6, 10, 15], seed 47
+  [1/5] 1439899                                                 cps=[6, 10, 15] (5.9s)
+  [2/5] 1439900                                                 cps=[6, 10, 15] (5.8s)
+  [3/5] 1439901                                                 cps=[6, 10, 15] (5.8s)
+  [4/5] 1439902                                                 cps=[6, 10, 15] (5.8s)
+  [5/5] 1439903                                                 cps=[6, 10, 15] (5.9s)
+
+Done in 29.2s — 15 quote rows from 5 matches (0 matches skipped) -> models/auto/b14/quotes_val_smoke.json

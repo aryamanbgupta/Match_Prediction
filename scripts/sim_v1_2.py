@@ -7,7 +7,10 @@ import numpy as np
 from abc import ABC, abstractmethod
 import random
 import json
+import pickle
+from bisect import bisect_left
 from multiprocessing import Pool, cpu_count
+from pathlib import Path
 import time
 from datetime import datetime
 import pandas as pd
@@ -101,6 +104,123 @@ class Outcome(Enum):
 # (retired hurt 0.13%, ...) stay bowler-credited to match the eval convention.
 RUNOUT_P = 0.075077
 RUNOUT_NONSTRIKER_SHARE = 0.468470
+
+
+# B18 (2026-08-03): OPT-IN empirical extras graft, activated only by an
+# `extras_graft_v1.json` sidecar sitting next to an XGBoostModelV2 artifact
+# (same auto-detect pattern as the venue encoder). Sidecar ABSENT -> the
+# historical flat 1% wide + 1% no-ball graft with a 1-run credit, byte
+# identical, consuming ZERO additional RNG draws. Sidecar PRESENT ->
+#   (a) rates: the calibrated 6-class block is scaled by (1 - p_extras) so
+#       its RELATIVE marginals are preserved exactly, and wide / no-ball
+#       mass is set exactly (D3's composition, recovered);
+#   (b) event-run crediting: a drawn wide / no-ball credits an INTEGER
+#       sampled from the sidecar's empirical per-event extras-run law,
+#       instead of the flat 1 run. Batter / bowler / strike-rotation
+#       attribution is unchanged from the legacy flat path.
+# Motivation: B17's teacher-forced run-mass audit attributed 92.7% of the
+# promoted i7 stack's in-play P50 under-prediction to carried run mass, of
+# which -0.039559 runs/legal ball is the flat graft under-carrying explicit
+# extras (0.0200 grafted vs 0.059559 actual).
+_GRAFT_MODEL_CLASSES = ('dot', 'one', 'two', 'four', 'six', 'wicket')
+
+EXTRAS_GRAFT_SIDECAR = 'extras_graft_v1.json'
+
+
+class ExtrasGraftConfig:
+    """Empirical per-delivery wide/no-ball rates + per-event run laws.
+
+    Built by scripts/auto/b18_fit_extras_graft.py. Immutable once loaded.
+    `draw_event_runs` consumes exactly ONE draw from the engine's seeded
+    `random` stream (the same stream that draws the ball outcome), so
+    `--seed` reproducibility holds.
+    """
+
+    VERSION = 'extras_graft_v1'
+
+    def __init__(self, payload: Dict, source: Optional[str] = None):
+        version = payload.get('version')
+        if version != self.VERSION:
+            raise ValueError(
+                f"extras graft sidecar version {version!r} != {self.VERSION!r}")
+        self.version = version
+        self.source = source
+        self.p_wide = float(payload['p_wide'])
+        self.p_no_ball = float(payload['p_no_ball'])
+        if not (0.0 < self.p_wide < 1.0) or not (0.0 < self.p_no_ball < 1.0):
+            raise ValueError("extras graft rates must lie in (0, 1)")
+        if self.p_wide + self.p_no_ball >= 1.0:
+            raise ValueError("extras graft rates must sum to < 1")
+        self.wide_support, self.wide_cum, self.wide_mean = self._law(
+            payload['wide_runs'], 'wide_runs')
+        self.no_ball_support, self.no_ball_cum, self.no_ball_mean = self._law(
+            payload['no_ball_runs'], 'no_ball_runs')
+
+    @staticmethod
+    def _law(spec: Dict, label: str):
+        support = [int(v) for v in spec['support']]
+        probs = [float(v) for v in spec['probs']]
+        if len(support) != len(probs) or not support:
+            raise ValueError(f"{label}: support/probs length mismatch")
+        if min(probs) < 0.0:
+            raise ValueError(f"{label}: negative probability")
+        total = sum(probs)
+        if abs(total - 1.0) > 1e-9:
+            raise ValueError(f"{label}: probs sum to {total!r}, not 1")
+        cum, running = [], 0.0
+        for p in probs:
+            running += p
+            cum.append(running)
+        cum[-1] = 1.0
+        mean = float(sum(s * p for s, p in zip(support, probs)))
+        declared = spec.get('mean')
+        if declared is not None and abs(float(declared) - mean) > 1e-9:
+            raise ValueError(
+                f"{label}: declared mean {declared!r} != recomputed {mean!r}")
+        return support, cum, mean
+
+    def draw_event_runs(self, outcome: 'Outcome') -> int:
+        """Integer runs credited to one wide / no-ball event (1 RNG draw)."""
+        if outcome == Outcome.WIDE:
+            return random.choices(self.wide_support,
+                                  cum_weights=self.wide_cum)[0]
+        return random.choices(self.no_ball_support,
+                              cum_weights=self.no_ball_cum)[0]
+
+    def banner(self) -> str:
+        return (f"B18 empirical extras graft ACTIVE "
+                f"(p_wide={self.p_wide:.6f}, p_no_ball={self.p_no_ball:.6f}, "
+                f"mean_runs w={self.wide_mean:.4f}/nb={self.no_ball_mean:.4f})")
+
+    @classmethod
+    def from_path(cls, path) -> 'ExtrasGraftConfig':
+        import json as _json
+        with open(path) as fh:
+            return cls(_json.load(fh), source=str(path))
+
+
+def graft_extras(outcome_probs: Dict[str, float],
+                 cfg: 'ExtrasGraftConfig') -> Dict[str, float]:
+    """Marginal-preserving extras composition (D3's composition, B18 rates).
+
+    Scales the 6-class model block by (1 - p_extras) so the calibrated
+    RELATIVE marginals are preserved exactly; the legacy pattern set flat
+    0.01 masses and renormalized. Mutates and returns `outcome_probs`;
+    the result sums to exactly 1.
+    """
+    block = sum(outcome_probs[k] for k in _GRAFT_MODEL_CLASSES)
+    p_extras = cfg.p_wide + cfg.p_no_ball
+    if block > 0.0:
+        scale = (1.0 - p_extras) / block
+        for k in _GRAFT_MODEL_CLASSES:
+            outcome_probs[k] *= scale
+    else:  # degenerate model output: spread the non-extras mass uniformly
+        for k in _GRAFT_MODEL_CLASSES:
+            outcome_probs[k] = (1.0 - p_extras) / len(_GRAFT_MODEL_CLASSES)
+    outcome_probs['wide'] = cfg.p_wide
+    outcome_probs['no_ball'] = cfg.p_no_ball
+    return outcome_probs
+
 
 @dataclass
 class Player:
@@ -492,6 +612,70 @@ class RandomBowlerSelector(BowlerSelector):
 # load + the cumulative-by-year dicts.
 _BOWLER_USAGE_CACHE: Dict[str, Dict] = {}
 
+# B10: module-level cache for the as-of usage corpus (keyed by resolved path)
+# so repeated selector constructions share one unpickle.
+_B10_CORPUS_CACHE: Dict[str, Any] = {}
+
+# B10: nominal deliveries per team innings — converts B9's expected-deliveries
+# per XI appearance into a share of the innings.
+_B10_INNINGS_BALLS = 120.0
+
+
+class _B10AsOfExpBalls:
+    """As-of expected deliveries per XI appearance (B9's usage model).
+
+    Replicates `scripts/auto/b9_usage_baseline.AsOfUsage`'s `global_stats`
+    prior and `player_sums` + expected-balls formula EXACTLY:
+
+        prior_balls = (total corpus balls strictly before D)
+                      / (number of appearance ROWS strictly before D)
+        exp_balls   = (k_u * prior_balls + sum_balls) / (k_u + n)  if n
+                      else prior_balls
+
+    Corpus rows are keyed by cricsheet NAME (not player_id) and sorted by
+    ISO date string, so "strictly before" is `bisect_left` on the date.
+    Cold-start (no rows before D) falls back to B9's 120/11.
+    """
+
+    def __init__(self, corpus: Dict, k_usage: float):
+        self.player = corpus["player"]
+        rows = sorted(r for v in self.player.values() for r in v)
+        self._dates = [r[0] for r in rows]
+        self._cum_balls = np.cumsum([r[1] for r in rows])
+        self.k_usage = float(k_usage)
+        self._prior_cache: Dict[str, float] = {}
+        self._exp_cache: Dict[Tuple[str, str], float] = {}
+
+    def prior_balls(self, date: str) -> float:
+        cached = self._prior_cache.get(date)
+        if cached is not None:
+            return cached
+        i = bisect_left(self._dates, date)
+        if i == 0:
+            out = 120.0 / 11.0          # B9 cold-start fallback
+        else:
+            out = float(self._cum_balls[i - 1]) / i
+        self._prior_cache[date] = out
+        return out
+
+    def player_sums(self, name: str, date: str) -> Tuple[int, float]:
+        rows = self.player.get(name, [])
+        i = bisect_left(rows, (date,))
+        sel = rows[:i]
+        return len(sel), sum(r[1] for r in sel)
+
+    def exp_balls(self, name: str, date: str) -> float:
+        key = (name, date)
+        cached = self._exp_cache.get(key)
+        if cached is not None:
+            return cached
+        prior_balls = self.prior_balls(date)
+        n, b = self.player_sums(name, date)
+        out = ((self.k_usage * prior_balls + b) / (self.k_usage + n)
+               if n else prior_balls)
+        self._exp_cache[key] = out
+        return out
+
 
 class EmpiricalBowlerSelector(BowlerSelector):
     """Phase-aware bowler sampler using historical usage from cricsheet.
@@ -518,6 +702,42 @@ class EmpiricalBowlerSelector(BowlerSelector):
         self.usage_path = usage_path
         self.k = k
         self._cumulative_cache: Dict[int, Dict[str, Dict[str, int]]] = {}
+        # B10 (opt-in): activated only when the usage payload carries a
+        # `b10_asof_usage` key. With the production prior this stays None and
+        # every code path below is identical to the pre-B10 selector.
+        self._b10: Optional['_B10AsOfExpBalls'] = None
+        self._b10_cfg: Optional[Dict] = None
+        self._b10_ready: bool = False
+        self._b10_weight_cache: Dict[Tuple, List[float]] = {}
+        self._b10_relax_cache: Dict[Tuple, bool] = {}
+        self.b10_relaxation_triggers: int = 0
+
+    def _ensure_b10(self) -> None:
+        """Lazily resolve the B10 as-of accessor (no-op after first call)."""
+        if self._b10_ready:
+            return
+        self._b10_ready = True
+        payload = self._load()
+        cfg = payload.get("b10_asof_usage")
+        if not cfg:
+            return
+        raw = str(cfg["corpus_path"])
+        p = Path(raw)
+        if not p.exists():
+            p = Path(__file__).resolve().parents[1] / raw
+        key = str(p.resolve())
+        corpus = _B10_CORPUS_CACHE.get(key)
+        if corpus is None:
+            with open(p, "rb") as f:
+                corpus = pickle.load(f)
+            _B10_CORPUS_CACHE[key] = corpus
+        self._b10_cfg = cfg
+        self._b10 = _B10AsOfExpBalls(corpus, cfg["k_usage"])
+        print(f"B10 usage-aligned bowler selector ACTIVE "
+              f"(k_u={cfg['k_usage']})")
+        print(f"  as-of corpus: {key} ({len(corpus['player'])} players); "
+              f"min_eligible={cfg['min_eligible']}, "
+              f"min_share={cfg['min_share']}")
 
     def _load(self) -> Dict:
         cached = _BOWLER_USAGE_CACHE.get(self.usage_path)
@@ -563,6 +783,87 @@ class EmpiricalBowlerSelector(BowlerSelector):
         return {"pp": glob["pp_share"], "mid": glob["mid_share"],
                 "death": glob["death_share"]}
 
+    def _b10_share_weights(
+        self,
+        players: List['Player'],
+        indices: List[int],
+        as_of: Dict[str, Dict[str, int]],
+        phase: str,
+        alpha: float,
+        date: str,
+        force_legacy: bool = False,
+    ) -> List[float]:
+        """B10 weights over `indices` (positionally aligned with `indices`).
+
+        Players PRESENT in the phase-usage prior keep their legacy weight
+        (`phase_balls + alpha`) untouched. Players ABSENT from it (usage is
+        None — the single branch B9 quantified) get a weight matched to their
+        as-of expected share of the innings:
+
+            s_i = exp_balls(name, date) / 120
+            w_i = s_i * W_known / max(1 - S_unknown, 0.05)
+
+        with W_known the sum of the known players' legacy weights and
+        S_unknown the summed unknown shares. `force_legacy` restores the flat
+        alpha floor (the >=5-eligible relaxation).
+        """
+        legacy: List[float] = []
+        is_unknown: List[bool] = []
+        shares: List[float] = []
+        for idx in indices:
+            player = players[idx]
+            usage = as_of.get(player.player_id)
+            legacy.append(float(usage[phase] if usage else 0) + alpha)
+            if usage is None:
+                is_unknown.append(True)
+                shares.append(self._b10.exp_balls(player.name, date)
+                              / _B10_INNINGS_BALLS)
+            else:
+                is_unknown.append(False)
+                shares.append(0.0)
+
+        if force_legacy or not any(is_unknown):
+            return legacy
+
+        w_known = sum(w for w, u in zip(legacy, is_unknown) if not u)
+        s_unknown = sum(s for s, u in zip(shares, is_unknown) if u)
+        scale = (w_known / max(1.0 - s_unknown, 0.05)) if w_known > 0.0 else 1.0
+        weights = [
+            (shares[i] * scale) if is_unknown[i] else legacy[i]
+            for i in range(len(indices))
+        ]
+        return [w if w > 1e-9 else 1e-9 for w in weights]
+
+    def _b10_is_relaxed(
+        self,
+        state: MatchState,
+        as_of: Dict[str, Dict[str, int]],
+        phase: str,
+        alpha: float,
+        date: str,
+        lineup_ids: Tuple[str, ...],
+    ) -> bool:
+        """>=5-eligible relaxation, decided once per (date, lineup, phase)."""
+        key = (date, phase, lineup_ids)
+        cached = self._b10_relax_cache.get(key)
+        if cached is not None:
+            return cached
+        players = state.bowling_lineup.players
+        w = self._b10_share_weights(players, list(range(len(players))),
+                                    as_of, phase, alpha, date)
+        total = sum(w)
+        cfg = self._b10_cfg
+        n_elig = sum(1 for x in w
+                     if total > 0 and (x / total) > cfg["min_share"])
+        relaxed = n_elig < cfg["min_eligible"]
+        if relaxed:
+            self.b10_relaxation_triggers += 1
+            print(f"B10 relaxation triggered for "
+                  f"{state.bowling_lineup.team_name} "
+                  f"(date={date}, phase={phase}, eligible={n_elig})")
+        self._b10_relax_cache[key] = relaxed
+        return relaxed
+
     def select_bowler(self, state: MatchState, available: List[int]) -> int:
         if state.balls < 36:
             phase = "pp"
@@ -571,19 +872,35 @@ class EmpiricalBowlerSelector(BowlerSelector):
         else:
             phase = "death"
 
+        self._ensure_b10()
+
         match_year = state.match_date.year if state.match_date else 9999
         as_of = self._as_of(match_year)
         league = self._league_share(match_year)
         alpha = self.k * league[phase]
 
-        weights: List[float] = []
-        for idx in available:
-            player = state.bowling_lineup.players[idx]
-            usage = as_of.get(player.player_id)
-            phase_balls = usage[phase] if usage else 0
-            # Weight = phase_balls + alpha. Unknown bowlers get alpha
-            # (≈ k * league_share for this phase).
-            weights.append(float(phase_balls) + alpha)
+        players = state.bowling_lineup.players
+        if self._b10 is not None and state.match_date is not None:
+            date = state.match_date.date().isoformat()
+            ckey = (date, phase, tuple(players[i].player_id for i in available))
+            weights = self._b10_weight_cache.get(ckey)
+            if weights is None:
+                relaxed = self._b10_is_relaxed(
+                    state, as_of, phase, alpha, date,
+                    tuple(p.player_id for p in players))
+                weights = self._b10_share_weights(
+                    players, available, as_of, phase, alpha, date,
+                    force_legacy=relaxed)
+                self._b10_weight_cache[ckey] = weights
+        else:
+            weights = []
+            for idx in available:
+                player = players[idx]
+                usage = as_of.get(player.player_id)
+                phase_balls = usage[phase] if usage else 0
+                # Weight = phase_balls + alpha. Unknown bowlers get alpha
+                # (≈ k * league_share for this phase).
+                weights.append(float(phase_balls) + alpha)
 
         total = sum(weights)
         if total <= 0:
@@ -846,8 +1163,21 @@ class T20Rules:
         # the outcome draw. Empirical as-of rates; see the module constants.
         dismissal = self._sample_dismissal(outcome)
 
+        # B18: with an active extras-graft sidecar, a drawn WIDE / NO_BALL
+        # credits an INTEGER sampled from the empirical per-event
+        # extras-run law (same seeded `random` stream as the outcome draw;
+        # exactly one extra draw per extras event). No sidecar -> team_runs
+        # stays None, process_ball's legacy 1-run credit applies, and ZERO
+        # additional draws are consumed. Batter / bowler / strike-rotation
+        # attribution is unchanged from the legacy flat path either way.
+        team_runs = None
+        _graft = getattr(model, 'extras_graft', None)
+        if _graft is not None and outcome in (Outcome.WIDE, Outcome.NO_BALL):
+            team_runs = _graft.draw_event_runs(outcome)
+
         # Process the ball
-        runs = self.process_ball(state, outcome, dismissal=dismissal)
+        runs = self.process_ball(state, outcome, dismissal=dismissal,
+                                 team_runs=team_runs)
         
         # Select new bowler if over just ended (and not end of innings)
         if state.balls % 6 == 0 and state.balls > 0 and not state.is_innings_over():
@@ -956,6 +1286,17 @@ class XGBoostModelV2(PredictionModel):
             except Exception as _e:
                 print(f"  Warning: Could not load venue encoder from {venue_encoder_path}: {_e}")
 
+        # B18: opt-in empirical extras graft — auto-detect an
+        # `extras_graft_v1.json` sidecar next to the model artifact (same
+        # pattern as the venue encoder above). Absent -> flat 1%+1% graft
+        # with a 1-run credit, byte-identical to pre-B18 and consuming zero
+        # extra RNG draws. A malformed sidecar raises: silently falling back
+        # to the flat graft would make an eval arm unlabelable.
+        self.extras_graft = None
+        _eg_path = _model_path.parent / EXTRAS_GRAFT_SIDECAR
+        if _eg_path.exists():
+            self.extras_graft = ExtrasGraftConfig.from_path(_eg_path)
+
         # Encoder lookup caches: replaces sklearn LabelEncoder.transform per ball
         # (the 37% hot spot profiled on 2026-04-18). Verified bit-exact against
         # transform() over all classes_ in scripts/scratch/verify_encoder_cache.py.
@@ -1030,6 +1371,9 @@ class XGBoostModelV2(PredictionModel):
         venue_mode = (f"venue encoder ACTIVE ({len(self.venue_encoder.classes_)} venues)"
                       if self.venue_encoder is not None else "venue encoder absent (venue_encoded=0)")
         print(f"Loaded XGBoost v2 model with {len(self.feature_columns)} features {stats_mode} {metadata_mode}; {venue_mode}")
+        if self.extras_graft is not None:
+            print(self.extras_graft.banner())
+            print(f"  sidecar: {self.extras_graft.source}")
 
     def extract_features(self, state: MatchState) -> np.ndarray:
         """Extract comprehensive feature set matching v2 training.
@@ -1434,7 +1778,16 @@ class XGBoostModelV2(PredictionModel):
         # I5 composes empirical extras in T20Rules after the calibrated
         # legal/off-bat draw. Legacy models retain their historical flat
         # graft so deployed behavior is unchanged.
-        if self.delivery_semantics != 'legal_off_bat_v1':
+        _graft = getattr(self, 'extras_graft', None)
+        if self.delivery_semantics == 'legal_off_bat_v1':
+            pass
+        elif _graft is not None:
+            # B18: empirical rates, marginal-preserving composition. Runs
+            # AFTER any ball calibrator (there is none on the i7 stack —
+            # D17 closed that chain) and preserves the 6-class RELATIVE
+            # marginals exactly, so the extras mass is exact.
+            return graft_extras(outcome_probs, _graft)
+        else:
             outcome_probs['wide'] = 0.01
             outcome_probs['no_ball'] = 0.01
 

@@ -1,0 +1,173 @@
+B17 TASK 2 — teacher-forced run-mass audit, both serving stacks
+(diagnostic only; no engine change, no sim run)
+
+graft: wide 0.01 + no_ball 0.01 pre-normalisation -> effective 0.009804 each per delivery; 0.0200 runs per legal ball
+composition: M = R_model + 0.02   (renewal identity, derived in the module docstring from sim_v1_2.py)
+
+------------------------------------------------------------------------------
+D16 marginal_audit.json (sidecar) — cross-check reference
+------------------------------------------------------------------------------
+  split scored there: /Users/aryamangupta/CricML/Match_Prediction/data/xgb_data_i7/cricket_data_i7_test.parquet
+  n_balls 186,667   (NOTE: that is the TEST split; B17 scores VALIDATION — the two are different populations, so exact agreement is NOT expected)
+    dot     pred 0.310994  actual 0.312674  delta -0.001680
+    one     pred 0.394239  actual 0.397146  delta -0.002907
+    two     pred 0.074312  actual 0.075670  delta -0.001357
+    four    pred 0.105789  actual 0.105793  delta -0.000004
+    six     pred 0.054762  actual 0.052002  delta +0.002760
+    wicket  pred 0.059907  actual 0.056716  delta +0.003191
+    pred_runs_per_ball 1.294591  actual 1.283666  delta +0.010926
+
+==============================================================================
+STACK i7  (promoted D16 no-weights, served RAW (D17))
+==============================================================================
+  model dir : /Users/aryamangupta/CricML/Match_Prediction/models/xgb_i7_noweights_production
+  parquet   : /Users/aryamangupta/CricML/Match_Prediction/data/xgb_data_i7/cricket_data_i7_validation.parquet
+  calibrator: None
+  rows 124,292  features 114
+  matches 545  innings 1088  dates 2024-12-31 .. 2025-06-29
+    batter_encoded: 6932 classes, 0 rows unseen -> -1
+    bowler_encoded: 5179 classes, 0 rows unseen -> -1
+    matchup_type_encoded: 27 classes, 0 rows unseen -> -1
+    venue_encoded: 373 classes, 0 rows unseen -> -1
+  -> RAW probabilities (no calibrator)
+
+==============================================================================
+STACK legacy  (legacy v7 booster + val-fit vector scaling (pre-graft))
+==============================================================================
+  model dir : /Users/aryamangupta/CricML/Match_Prediction/models/xgb_v3
+  parquet   : /Users/aryamangupta/CricML/Match_Prediction/data/xgb_data_v3/cricket_data_v3_validation.parquet
+  calibrator: /Users/aryamangupta/CricML/Match_Prediction/models/xgb_v3/vector_scaling_calibrator_v1.pkl
+  rows 124,292  features 114
+  matches 545  innings 1088  dates 2024-12-31 .. 2025-06-29
+    batter_encoded: 6932 classes, 0 rows unseen -> -1
+    bowler_encoded: 5179 classes, 0 rows unseen -> -1
+    matchup_type_encoded: 27 classes, 0 rows unseen -> -1
+    venue_encoded: 467 classes, 0 rows unseen -> -1
+  calibrator vector v = [0.25212557945174213, 0.29830778409134184, 0.13114621084561545, 0.12646386551687488, 0.10910598559428279, 0.08285057450014266]
+  -> calibrated probabilities used for the serving arm (calibrator runs BEFORE the graft in the engine)
+
+==============================================================================
+STEP 1 — frame agreement and ROW SEMANTICS (row =? delivery =? legal ball)
+==============================================================================
+  i7 matches 545   legacy matches 545   intersection 545   i7-only 0   legacy-only 0
+  i7 rows 124,292   legacy rows 124,292
+  window i7 2024-12-31..2025-06-29   legacy 2024-12-31..2025-06-29
+
+  --- i7: per-match row counts vs cricsheet (first 10 matches) ---
+  |   match_id |  pq rows | cs deliv | pq legal | cs legal | rows==deliv | legal match |
+  |    1439899 |      203 |      203 |      197 |      197 |        True |        True |
+  |    1439900 |      243 |      243 |      236 |      236 |        True |        True |
+  |    1439901 |      251 |      251 |      240 |      240 |        True |        True |
+  |    1439902 |      246 |      246 |      238 |      238 |        True |        True |
+  |    1439903 |      188 |      188 |      183 |      183 |        True |        True |
+  |    1443073 |      217 |      217 |      207 |      207 |        True |        True |
+  |    1443074 |      239 |      239 |      237 |      237 |        True |        True |
+  |    1443075 |      240 |      240 |      229 |      229 |        True |        True |
+  |    1443076 |      229 |      229 |      223 |      223 |        True |        True |
+  |    1443078 |      252 |      252 |      240 |      240 |        True |        True |
+  sample: rows==cricsheet deliveries on 10/10; parquet legal==cricsheet legal on 10/10
+
+  --- legacy: per-match row counts vs cricsheet (first 10 matches) ---
+  |   match_id |  pq rows | cs deliv | pq legal | cs legal | rows==deliv | legal match |
+  |    1439899 |      203 |      203 |      197 |      197 |        True |        True |
+  |    1439900 |      243 |      243 |      236 |      236 |        True |        True |
+  |    1439901 |      251 |      251 |      240 |      240 |        True |        True |
+  |    1439902 |      246 |      246 |      238 |      238 |        True |        True |
+  |    1439903 |      188 |      188 |      183 |      183 |        True |        True |
+  |    1443073 |      217 |      217 |      207 |      207 |        True |        True |
+  |    1443074 |      239 |      239 |      237 |      237 |        True |        True |
+  |    1443075 |      240 |      240 |      229 |      229 |        True |        True |
+  |    1443076 |      229 |      229 |      223 |      223 |        True |        True |
+  |    1443078 |      252 |      252 |      240 |      240 |        True |        True |
+  sample: rows==cricsheet deliveries on 10/10; parquet legal==cricsheet legal on 10/10
+
+  --- full cricsheet aggregate over the 545 scored matches ---
+  cricsheet: 124,292 deliveries, 119,058 legal, 169,099 runs
+  cricsheet A (all runs / legal balls) = 1.420308
+  cricsheet channels per legal ball: off-bat 1.342505  wides 0.047405  no-balls 0.004930  byes 0.006862  leg-byes 0.018604  penalty 0.000000
+  cricsheet p_wide 0.037702 (D3 anchor 0.037702)   p_no_ball 0.004409 (D3 anchor 0.004409)
+  parquet  : 124,292 deliveries, 119,058 legal, 169,099 runs   A = 1.420308
+  parquet-vs-cricsheet delta: deliveries +0  legal +0  runs +0  A +0.000000
+  ROW SEMANTICS VERDICT: parquet rows are ALL DELIVERIES (wides and no-balls included as rows, labels folding their runs); legal balls = rows with is_wide==0 and is_noball==0.
+
+==============================================================================
+STEP 2 — per-class marginals (venue_on serving arm, all delivery rows)
+==============================================================================
+| class  |   i7 pred | legacy pred |    actual |      d i7 |  d legacy |
+|--------|-----------|-------------|-----------|-----------|-----------|
+| dot    |   0.29430 |     0.28611 |   0.29728 |  -0.00298 |  -0.01118 |
+| one    |   0.40178 |     0.38184 |   0.40367 |  -0.00189 |  -0.02183 |
+| two    |   0.07415 |     0.08745 |   0.07160 |  +0.00256 |  +0.01585 |
+| four   |   0.11211 |     0.11488 |   0.11259 |  -0.00048 |  +0.00229 |
+| six    |   0.05817 |     0.06687 |   0.05914 |  -0.00098 |  +0.00773 |
+| wicket |   0.05949 |     0.06286 |   0.05572 |  +0.00377 |  +0.00714 |
+
+  per-phase R_model (expected 6-class runs per delivery, strict values):
+  | phase       |  n deliv |        i7 |    legacy |  i7-legacy |
+  | pp_0_5      |   40,595 |   1.29540 |   1.37612 |   -0.08072 |
+  | mid_6_14    |   57,507 |   1.29568 |   1.36926 |   -0.07358 |
+  | death_15_19 |   26,190 |   1.54215 |   1.58743 |   -0.04528 |
+
+  venue_zero context arm R_model (all rows): i7 1.349357  legacy 1.352082
+
+==============================================================================
+STEP 3-5 — composed run mass M, actual A, gap g, channel decomposition
+==============================================================================
+  scored population: 124,292 deliveries, 119,058 legal, 5,234 non-legal; deliveries per legal ball 1.043962 (engine assumes 1.02)
+  actual identity check A - (L_legal + residual + extras) = 0.000e+00
+  A                          = 1.420308
+    L_legal   (6-class label mass on legal balls) = 1.355449
+    residual  (threes/fives folded down, label rounding) = 0.005300
+    extras_act(runs on non-legal deliveries) = 0.059559   vs graft 0.0200
+  parquet actual channel detail (runs per legal ball): batter_runs 1.342505  wide_runs 0.047405  noball_runs 0.004930  bye_runs 0.006862  legbye_runs 0.018604  penalty_runs 0.000000  sum_check_per_legal_ball 1.420308
+  class-2 legal balls: n 8,459  mean actual runs 2.049060 vs strict 2.0 (fold shortfall +0.049060 per class-2 ball)
+  class-4 legal balls: n 13,749  mean actual runs 4.001527 vs strict 4.0 (fold shortfall +0.001527 per class-4 ball)
+
+  --- composition, R_model measured on all_rows (primary = all_rows: the sim calls predict_next_ball once per DELIVERY) ---
+  | stack   |   R_model |         M |         A |   g = M-A |   C_class |  C_extras |    C_fold |
+  |---------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|
+  | i7      |  1.347522 |  1.367522 |  1.420308 | -0.052785 | -0.007926 | -0.039559 | -0.005300 |
+  | legacy  |  1.417474 |  1.437474 |  1.420308 | +0.017166 | +0.062025 | -0.039559 | -0.005300 |
+  paired: g_i7 - g_legacy = -0.069951   (== R_model_i7 - R_model_legacy = -0.069951; C_extras and C_fold are model-independent and cancel, residual 0.000e+00)
+
+  --- composition, R_model measured on legal_rows_only (primary = all_rows: the sim calls predict_next_ball once per DELIVERY) ---
+  | stack   |   R_model |         M |         A |   g = M-A |   C_class |  C_extras |    C_fold |
+  |---------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|
+  | i7      |  1.345577 |  1.365577 |  1.420308 | -0.054731 | -0.009872 | -0.039559 | -0.005300 |
+  | legacy  |  1.416086 |  1.436086 |  1.420308 | +0.015779 | +0.060638 | -0.039559 | -0.005300 |
+  paired: g_i7 - g_legacy = -0.070510   (== R_model_i7 - R_model_legacy = -0.070510; C_extras and C_fold are model-independent and cancel, residual 0.000e+00)
+
+  --- per-phase g (venue_on, all_rows) ---
+  | phase       |  n legal |     i7 M |  legacy M |        A |      g i7 |  g legacy |
+  | pp_0_5      |   38,688 |  1.31540 |   1.39612 |  1.39240 |  -0.07700 |  +0.00372 |
+  | mid_6_14    |   55,552 |  1.31568 |   1.38926 |  1.34413 |  -0.02845 |  +0.04514 |
+  | death_15_19 |   24,818 |  1.56215 |   1.60743 |  1.63434 |  -0.07219 |  -0.02691 |
+
+==============================================================================
+STEP 6 — PRE-COMMITTED ATTRIBUTION CONDITIONS (arithmetic only; NO VERDICT — orchestrator decides)
+==============================================================================
+  observed cp6 quote bias per legal ball: i7 -4.781/84 = -0.056917   legacy +4.259/84 = +0.050702   sign-flip delta = -0.107619
+
+  CONDITION (a): g_i7 <= -0.0285
+      g_i7            = -0.052785
+      threshold       = -0.028500
+      margin (g - th) = -0.024285
+      (a) MET: True
+
+  CONDITION (b): g_i7 - g_legacy <= -0.0538
+      g_i7            = -0.052785
+      g_legacy        = +0.017166
+      g_i7 - g_legacy = -0.069951
+      threshold       = -0.053800
+      margin          = -0.016151
+      (b) MET: True
+
+  BOTH (a) AND (b) MET: True
+  (executor states the arithmetic only; the verdict mapping is the orchestrator's)
+
+  sensitivity — same conditions with R_model on legal rows only:
+      g_i7 = -0.054731  -> (a) MET: True
+      g_i7 - g_legacy = -0.070510  -> (b) MET: True
+  sensitivity — A taken from cricsheet instead of the parquet:
+      i7: M 1.367522 - cricsheet A 1.420308 = g -0.052785
+      legacy: M 1.437474 - cricsheet A 1.420308 = g +0.017166

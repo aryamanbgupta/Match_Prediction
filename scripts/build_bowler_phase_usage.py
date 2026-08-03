@@ -11,6 +11,20 @@ Output: a single JSON keyed by cricsheet_id with per-year counts. The
 selector consumes this as-of-fixture-date by summing all year buckets
 strictly before the match year.
 
+I20 (2026-08-01): the payload also carries the `b10_asof_usage` key that
+activates the B12-shipped usage-aligned selector branch in
+`sim_v1_2.EmpiricalBowlerSelector`. This builder predated B10, so a rerun
+used to regenerate the payload WITHOUT the key and silently revert the
+shipped selector (the only tell was a missing
+`B10 usage-aligned bowler selector ACTIVE` banner in run logs). The key is
+now stamped by default and the builder FAILS CLOSED if the corpus sidecar
+(`models/b10_usage_corpus.pkl`) is missing; pass `--no-b10-key` to build a
+legacy keyless payload deliberately. Corpus rebuild path:
+`uv run python scripts/auto/b9_usage_baseline.py --rebuild-corpus`, then
+copy `models/auto/b9/usage_corpus.pkl` -> `models/b10_usage_corpus.pkl`.
+`k_usage` is imported from `scripts/auto/b9_usage_baseline.K_USAGE`
+(B10 convention: never hardcoded).
+
 Usage:
     uv run python scripts/build_bowler_phase_usage.py \
         --source-dir data/t20s_json \
@@ -31,6 +45,23 @@ from loaders_common import iter_matches_chronological  # noqa: E402
 
 
 PHASES = ("pp", "mid", "death")
+
+# B10 selector-branch config (values shipped by B12; see
+# scripts/auto/b10_build_usage_sidecar.py for the original derivation).
+B10_MIN_ELIGIBLE = 5
+B10_MIN_SHARE = 0.01
+
+
+def _load_b9_k_usage() -> float:
+    """Import K_USAGE from the B9 script so the stamped value can't drift."""
+    import importlib.util
+
+    path = Path(__file__).resolve().parent / "auto" / "b9_usage_baseline.py"
+    spec = importlib.util.spec_from_file_location("b9_usage_baseline", path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["b9_usage_baseline"] = mod
+    spec.loader.exec_module(mod)
+    return float(mod.K_USAGE)
 
 
 def _phase_from_over(over_idx: int) -> str:
@@ -175,6 +206,13 @@ def main():
     ap.add_argument("--gender", default="male",
                     help="Gender filter (default 'male'; pass 'none' to disable).")
     ap.add_argument("--out", default="models/bowler_phase_usage.json")
+    ap.add_argument("--b10-corpus", default="models/b10_usage_corpus.pkl",
+                    help="As-of usage corpus the b10_asof_usage key points at "
+                         "(shipped by B12).")
+    ap.add_argument("--no-b10-key", action="store_true",
+                    help="Deliberately build a legacy keyless payload "
+                         "(pre-B12 behavior; the shipped usage-aligned "
+                         "selector branch will NOT activate).")
     args = ap.parse_args()
 
     gender = None if args.gender == "none" else args.gender
@@ -226,6 +264,29 @@ def main():
         payload["n_matches"] += extra["n_matches"]
         payload["n_deliveries"] += extra["n_deliveries"]
         payload["n_unresolved_names"] += extra["n_unresolved_names"]
+
+    if args.no_b10_key:
+        print("\nWARNING: --no-b10-key set — payload will NOT activate the "
+              "B12-shipped usage-aligned selector branch.")
+    else:
+        corpus = Path(args.b10_corpus)
+        if not corpus.exists():
+            raise SystemExit(
+                f"missing {corpus}: refusing to write a payload that would "
+                "silently revert the B12-shipped selector (I20). Rebuild the "
+                "corpus (scripts/auto/b9_usage_baseline.py --rebuild-corpus, "
+                "then copy models/auto/b9/usage_corpus.pkl -> "
+                f"{corpus}) or pass --no-b10-key to build a legacy keyless "
+                "payload deliberately."
+            )
+        payload["b10_asof_usage"] = {
+            "corpus_path": str(corpus),
+            "k_usage": _load_b9_k_usage(),
+            "min_eligible": B10_MIN_ELIGIBLE,
+            "min_share": B10_MIN_SHARE,
+        }
+        print(f"\nb10_asof_usage stamped: "
+              f"{json.dumps(payload['b10_asof_usage'])}")
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)

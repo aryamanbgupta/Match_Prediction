@@ -1,0 +1,234 @@
+Loading split datasets (i7)...
+Train: 1876971 balls
+Validation: 124292 balls
+Test: 186667 balls
+Data preprocessing complete
+Encoding categorical variables...
+  Processing batter IDs...
+  Processing bowler IDs...
+  Found 6932 unique batters, 5179 unique bowlers
+  Processing venues...
+  Encoding training data...
+  Encoding validation data...
+  Encoding test data...
+  Processing matchup types...
+  Found 27 unique matchup types
+Encoding complete!
+[config-json] Using 114 features from experiment config
+Using 114 features:
+   1. inning_idx
+   2. score
+   3. wickets
+   4. balls_bowled
+   5. run_rate
+   6. wickets_ratio
+   7. balls_ratio
+   8. wickets_in_hand
+   9. balls_remaining
+  10. is_powerplay
+  11. is_middle_overs
+  12. is_death_overs
+  13. balls_in_over
+  14. venue_encoded
+  15. is_toss_winner
+  16. is_batting_first
+  17. batter_encoded
+  18. bowler_encoded
+  19. batsman_avg
+  20. batsman_sr
+  21. bowler_avg
+  22. bowler_econ
+  23. batsman_recent_avg
+  24. batsman_recent_sr
+  25. bowler_recent_avg
+  26. bowler_recent_econ
+  27. batter_balls_faced
+  28. batter_runs_scored
+  29. bowler_balls_in_innings
+  30. bowler_overs_in_innings
+  31. h2h_avg
+  32. h2h_sr
+  33. last_5_balls_runs
+  34. last_10_balls_runs
+  35. last_30_balls_runs
+  36. balls_since_boundary
+  37. last_10_dots
+  38. partnership_runs
+  39. dot_percentage_recent
+  40. boundary_percentage_recent
+  41. pressure_cooker_index
+  42. chase_target
+  43. run_rate_required
+  44. lead_gap
+  45. venue_avg_score
+  46. non_striker_sr
+  47. batter_hand
+  48. bowler_arm
+  49. is_pace
+  50. bowling_type
+  51. batter_age
+  52. bowler_age
+  53. spin_matchup_advantage
+  54. same_arm_matchup
+  55. matchup_type_encoded
+  56. batter_avg_vs_pace
+  57. batter_sr_vs_pace
+  58. batter_avg_vs_spin
+  59. batter_sr_vs_spin
+  60. bowler_avg_vs_lhb
+  61. bowler_econ_vs_lhb
+  62. bowler_avg_vs_rhb
+  63. bowler_econ_vs_rhb
+  64. striker_elo
+  65. bowler_elo_rating
+  66. batting_team_elo
+  67. bowling_team_elo
+  68. elo_diff
+  69. team_batting_avg
+  70. team_batting_sr
+  71. team_bowling_avg
+  72. team_bowling_econ
+  73. batter_p0
+  74. batter_p1
+  75. batter_p2
+  76. batter_p4
+  77. batter_p6
+  78. batter_pw
+  79. bowler_p0
+  80. bowler_p1
+  81. bowler_p2
+  82. bowler_p4
+  83. bowler_p6
+  84. bowler_pw
+  85. batter_p0_vs_pace
+  86. batter_p1_vs_pace
+  87. batter_p2_vs_pace
+  88. batter_p4_vs_pace
+  89. batter_p6_vs_pace
+  90. batter_pw_vs_pace
+  91. batter_p0_vs_spin
+  92. batter_p1_vs_spin
+  93. batter_p2_vs_spin
+  94. batter_p4_vs_spin
+  95. batter_p6_vs_spin
+  96. batter_pw_vs_spin
+  97. bowler_p0_vs_lhb
+  98. bowler_p1_vs_lhb
+  99. bowler_p2_vs_lhb
+  100. bowler_p4_vs_lhb
+  101. bowler_p6_vs_lhb
+  102. bowler_pw_vs_lhb
+  103. bowler_p0_vs_rhb
+  104. bowler_p1_vs_rhb
+  105. bowler_p2_vs_rhb
+  106. bowler_p4_vs_rhb
+  107. bowler_p6_vs_rhb
+  108. bowler_pw_vs_rhb
+  109. venue_p0
+  110. venue_p1
+  111. venue_p2
+  112. venue_p4
+  113. venue_p6
+  114. venue_pw
+Cleaning invalid target values...
+Before cleaning: [0, 1, 2, 4, 6, 7]
+  train: 1876971 -> 1876971 balls (0 removed)
+  val: 124292 -> 124292 balls (0 removed)
+  test: 186667 -> 186667 balls (0 removed)
+Remapping target classes to be consecutive...
+Class mapping: {0: 0, 1: 1, 2: 2, 4: 3, 6: 4, 7: 5}
+  train target range: 0 to 5
+  val target range: 0 to 5
+  test target range: 0 to 5
+
+Remapped target distribution (train):
+target
+0    569851
+1    775616
+2    142812
+3    202123
+4     85143
+5    101426
+Name: count, dtype: int64
+
+Data shapes:
+  Train: X=(1876971, 114), y=(1876971,)
+  Val:   X=(124292, 114), y=(124292,)
+  Test:  X=(186667, 114), y=(186667,)
+
+Target distribution (train):
+target
+0    569851
+1    775616
+2    142812
+3    202123
+4     85143
+5    101426
+Name: count, dtype: int64
+Calculating class weights for imbalanced data...
+Class weights: {0: '0.55', 1: '0.40', 2: '2.19', 3: '1.55', 4: '3.67', 5: '3.08'}
+[D6] class weights DISABLED (uniform sample weights)
+
+--- USING SAVED HYPERPARAMETERS (use --tune to re-optimize) ---
+Best hyperparameters (from v2 Optuna, trial 42):
+  n_estimators: 444
+  max_depth: 10
+  learning_rate: 0.24036372383981375
+  subsample: 0.8776663421127178
+  colsample_bytree: 0.7424085095268674
+  reg_alpha: 0.8503122682099661
+  reg_lambda: 0.18186045420525845
+
+--- TRAINING FINAL MODEL WITH BEST PARAMETERS ---
+[0]	validation_0-mlogloss:1.67441	validation_1-mlogloss:1.68504
+[50]	validation_0-mlogloss:1.27132	validation_1-mlogloss:1.43689
+[100]	validation_0-mlogloss:1.18549	validation_1-mlogloss:1.44413
+[123]	validation_0-mlogloss:1.14821	validation_1-mlogloss:1.44766
+
+--- FINAL MODEL RESULTS ---
+Validation Accuracy: 0.4419
+Validation Log Loss: 1.4334
+Test Accuracy: 0.4391
+Test Log Loss: 1.4253
+
+Classification Report (Test):
+              precision    recall  f1-score   support
+
+      0_runs       0.44      0.47      0.45     58366
+      1_runs       0.44      0.74      0.55     74134
+      2_runs       0.25      0.00      0.00     14125
+      4_runs       0.24      0.00      0.00     19748
+      6_runs       0.12      0.00      0.00      9707
+      wicket       0.23      0.00      0.01     10587
+
+    accuracy                           0.44    186667
+   macro avg       0.29      0.20      0.17    186667
+weighted avg       0.38      0.44      0.36    186667
+
+
+Top 15 Feature Importances:
+  is_death_overs           : 0.1211
+  is_middle_overs          : 0.0378
+  score                    : 0.0348
+  is_powerplay             : 0.0333
+  is_pace                  : 0.0285
+  balls_bowled             : 0.0270
+  balls_remaining          : 0.0224
+  balls_ratio              : 0.0170
+  batter_runs_scored       : 0.0156
+  batter_balls_faced       : 0.0151
+  bowling_type             : 0.0113
+  wickets                  : 0.0108
+  inning_idx               : 0.0103
+  batter_p6                : 0.0099
+  wickets_ratio            : 0.0089
+  Saved feature_importance.json
+
+Saving model (i7)...
+  Saved matchup_encoder_i7.pkl
+  Saved outcome_dist_config_i7.json (k_player=30.0, k_venue=200.0, k_phase=30.0, k_h2h=60.0)
+  Saved training_contract_i7.json
+Training complete!
+Model saved as: models/auto/d16/noweights/xgboost_model_i7.pkl
+Final validation log loss: 1.4334
+Final test log loss: 1.4253

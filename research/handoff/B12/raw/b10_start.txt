@@ -1,0 +1,16 @@
+Ball calibrator: vector scaling (models/xgb_v3/vector_scaling_calibrator_v1.pkl)
+Loading stats provider + player metadata + model ...
+WARNING: SQLite same-day ordering mismatch: models/player_stats_cache_v3.sqlite has None, code expects 'date_then_match_id_lexicographic_v1'. Rebuild the cache before deterministic materialization.
+StatsProvider: using SQLite backend player_stats_cache_v3.sqlite (56.8 MB)
+Loading player metadata from data/all_players_enriched.csv...
+  Loaded 11,256 players
+  Batting: 8178 right, 1814 left, 1264 unknown
+  Bowling: 6256 right, 1381 left, 3619 unknown
+Loaded XGBoost v2 model with 114 features with real player stats with player metadata; venue encoder ACTIVE (467 venues)
+Bowler selector: empirical
+Run-out dismissal channel ACTIVE (p_runout=0.0751, nonstriker_share=0.4685)
+Running prop backtest on 261 matches × 100 sims
+B10 usage-aligned bowler selector ACTIVE (k_u=5.0)
+  as-of corpus: /Users/aryamangupta/CricML/Match_Prediction/models/auto/b10/usage_corpus.pkl (7433 players); min_eligible=5, min_share=0.01
+  [1/261] 1477609                                                       sim_runs={'West Indies': 165.41, 'South Africa': 148.65}  actual_runs={'West Indies': 173, 'South Africa': 176}  (8.4s)
+  [2/261] 1477610                                                       sim_runs={'West Indies': 193.75, 'South Africa': 179.8}  actual_runs={'West Indies': 221, 'South Africa': 225}  (8.1s)

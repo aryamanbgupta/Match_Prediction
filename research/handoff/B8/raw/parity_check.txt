@@ -1,0 +1,4 @@
+=== git diff 91be8d7..HEAD -- scripts/sim_v1_2.py scripts/calibration.py ===
+--- diff bytes:        0
+=== git diff --stat 91be8d7..HEAD ===
+(empty stat above = parity OK)

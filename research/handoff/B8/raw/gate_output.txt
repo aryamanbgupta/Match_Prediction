@@ -1,0 +1,69 @@
+blind (bare v1, venue-ON s43): 261 matches | hybrid (B8, venue-ON s43): 261 matches
+
+====================================================================================
+GATE 1a — improvement: team_first_over_mae dMAE < 0 with CI excluding 0
+====================================================================================
+team_first_over_mae                 522  MAE_blind=3.411  MAE_hybrid=3.415  dMAE=+0.004  [-0.014,+0.024]  ~noise
+
+====================================================================================
+GATE 1b — no-regress: NO CI-excludes-0 INCREASE on pooled tail,
+          bowler_wkts_1plus, batter_runs_mae
+====================================================================================
+tail-pool lines:
+family                                n Brier_blindBrier_hybrid    dBrier   95% CI (hybrid-blind)   flag
+pp_total_ou_45_5                    522      0.2479      0.2493   +0.0014   [-0.0009,+0.0035]  ~noise
+pp_total_ou_50_5                    522      0.2543      0.2555   +0.0012   [-0.0009,+0.0034]  ~noise
+pp_total_ou_55_5                    522      0.2190      0.2198   +0.0008   [-0.0012,+0.0028]  ~noise
+first_wicket_runs_ou_30_5           522      0.2370      0.2368   -0.0002   [-0.0021,+0.0016]  ~noise
+highest_over_runs_ou_18_5           261      0.2339      0.2337   -0.0001   [-0.0039,+0.0037]  ~noise
+highest_over_runs_ou_24_5           261      0.0976      0.0968   -0.0008   [-0.0021,+0.0005]  ~noise
+
+  >>> pooled tail dBrier over 6 lines (2610 obs) = +0.0005  95% CI [-0.0005, +0.0017]  ->  NOISE (CI straddles 0)
+
+bowler_wkts_1plus:
+family                                n Brier_blindBrier_hybrid    dBrier   95% CI (hybrid-blind)   flag
+bowler_wkts_1plus                  2959      0.2572      0.2567   -0.0005   [-0.0026,+0.0015]  ~noise
+
+batter_runs_mae:
+batter_runs_mae                    4169  MAE_blind=14.444  MAE_hybrid=14.444  dMAE=+0.000  [-0.036,+0.038]  ~noise
+
+====================================================================================
+GATE 2 — guards (must NOT regress: no CI-excludes-0 increase)
+====================================================================================
+family                                n Brier_blindBrier_hybrid    dBrier   95% CI (hybrid-blind)   flag
+top_bowler                         5831      0.0773      0.0774   +0.0001   [-0.0002,+0.0005]  ~noise
+team_total_fours_mae                522  MAE_blind=3.688  MAE_hybrid=3.681  dMAE=-0.007  [-0.026,+0.011]  ~noise
+team_total_sixes_mae                522  MAE_blind=2.993  MAE_hybrid=3.000  dMAE=+0.007  [-0.010,+0.024]  ~noise
+
+====================================================================================
+CONTEXT (reported for completeness; cannot flip the verdict)
+====================================================================================
+family                                n Brier_blindBrier_hybrid    dBrier   95% CI (hybrid-blind)   flag
+bowler_wkts_2plus                  2975      0.2089      0.2097   +0.0008   [-0.0004,+0.0021]  ~noise
+bowler_wkts_3plus                  3045      0.0868      0.0866   -0.0002   [-0.0007,+0.0002]  ~noise
+batter_50plus                      4246      0.0795      0.0794   -0.0001   [-0.0005,+0.0003]  ~noise
+batter_6plus_six                   4222      0.2242      0.2250   +0.0008   [-0.0002,+0.0018]  ~noise
+batter_fours_1plus                 4222      0.2199      0.2207   +0.0008   [-0.0004,+0.0021]  ~noise
+batter_fours_2plus                 4226      0.2035      0.2036   +0.0001   [-0.0009,+0.0010]  ~noise
+batter_fours_3plus                 4230      0.1584      0.1583   -0.0001   [-0.0009,+0.0007]  ~noise
+team_highest_individual_ou_29_5     522      0.0793      0.0793   +0.0000   [-0.0008,+0.0009]  ~noise
+team_highest_individual_ou_34_5     522      0.1316      0.1312   -0.0003   [-0.0018,+0.0012]  ~noise
+team_highest_individual_ou_39_5     522      0.1751      0.1736   -0.0015   [-0.0034,+0.0005]  ~noise
+innings_runs_ou_160_5               522      0.2511      0.2498   -0.0013   [-0.0038,+0.0012]  ~noise
+innings_runs_ou_170_5               522      0.2414      0.2415   +0.0001   [-0.0025,+0.0028]  ~noise
+innings_runs_ou_180_5               522      0.1993      0.1991   -0.0001   [-0.0023,+0.0021]  ~noise
+match_total_sixes_ou_15_5           261      0.2239      0.2245   +0.0005   [-0.0030,+0.0040]  ~noise
+match_total_sixes_ou_20_5           261      0.1173      0.1173   -0.0000   [-0.0023,+0.0023]  ~noise
+bowler_economy_ou_8_5              2981      0.2534      0.2541   +0.0007   [-0.0013,+0.0027]  ~noise
+bowler_economy_ou_10_5             3007      0.1887      0.1880   -0.0007   [-0.0021,+0.0006]  ~noise
+top_batter                         5835      0.0759      0.0762   +0.0002   [-0.0001,+0.0007]  ~noise
+p_tie                               261      0.0002      0.0002   +0.0000   [-0.0000,+0.0000]  ~noise
+highest_individual_mae              261  MAE_blind=16.791  MAE_hybrid=16.710  dMAE=-0.081  [-0.234,+0.056]  ~noise
+batter_fours_mae                   4206  MAE_blind=1.398  MAE_hybrid=1.397  dMAE=-0.001  [-0.005,+0.003]  ~noise
+
+====================================================================================
+GATE 1a (team_first_over_mae CI-clean improvement): NOT MET
+GATE 1b (no CI-clean regression on the 3 no-regress families): MET  [pooled tail worse: no; bowler_wkts_1plus worse: no; batter_runs_mae worse: no]
+GATE 1 = 1a AND 1b: NOT MET
+GATE 2 (guards): HELD
+VERDICT per pre-committed mapping: TABLED

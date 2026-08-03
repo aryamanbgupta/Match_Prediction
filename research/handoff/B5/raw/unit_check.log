@@ -1,0 +1,15 @@
+Part 1: replay parity PASS on 253/261 matches (8 out of scope)
+  skip reason x8: innings 1 curtailed
+Part 2: crease-pair match 756/756 (100.0%)
+Part 3: live-path smoke (first in-scope match, cp=6, 3 sims x2)
+WARNING: SQLite same-day ordering mismatch: models/player_stats_cache_v3.sqlite has None, code expects 'date_then_match_id_lexicographic_v1'. Rebuild the cache before deterministic materialization.
+StatsProvider: using SQLite backend player_stats_cache_v3.sqlite (56.8 MB)
+Loading player metadata from data/all_players_enriched.csv...
+  Loaded 11,256 players
+  Batting: 8178 right, 1814 left, 1264 unknown
+  Bowling: 6256 right, 1381 left, 3619 unknown
+Loaded XGBoost v2 model with 114 features with real player stats with player metadata; venue encoder ACTIVE (467 venues)
+Run-out dismissal channel ACTIVE (p_runout=0.0751, nonstriker_share=0.4685)
+  1477609: remaining draws [110.0, 122.0, 120.0] (repeat [110.0, 122.0, 120.0])
+
+B5 unit check: ALL PASS

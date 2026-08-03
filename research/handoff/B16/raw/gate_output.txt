@@ -1,0 +1,64 @@
+B16 gate analysis — quote-layer coverage on the promoted i7 stack
+  quotes: models/auto/b16/quotes_i7_s48_n261.json
+  config: model=models/xgb_i7_noweights_production/xgboost_model_i7.pkl stats_version=i7 ball_calibrator=None
+          n_sims=100 seed=48 quote_center=sim_p50 usage_json=models/bowler_phase_usage.json elapsed=898.8s
+  rows: 756 from 253 matches (8 matches skipped)
+  B15 calibrator: models/auto/b15/quote_calibrator_scale_only.json — assertion PASS (scales 1.19/1.09/1.26, shifts 0; NO refit in this script)
+  bootstrap: 2000 reps, seed 29, cluster by match
+
+=== ARM: 1. RAW (no quote calibrator) ===
+checkpoint  6 (n=253):  applied shift +0.0000 scale 1.00
+  MAE  corr(P50)  20.678  naive  25.897  dMAE  -5.219 [-7.803, -2.723]  CORRECTED BETTER
+  P10-P90 coverage corr  0.787 [0.735, 0.834]  target [0.7, 0.9]  IN BAND
+  context: bias corr P50 -4.781  bias raw P50 -4.781  band width corr 58.4  raw 58.4  actual sd 29.9
+checkpoint 10 (n=253):  applied shift +0.0000 scale 1.00
+  MAE  corr(P50)  16.579  naive  20.000  dMAE  -3.421 [-4.986, -1.942]  CORRECTED BETTER
+  P10-P90 coverage corr  0.798 [0.751, 0.846]  target [0.7, 0.9]  IN BAND
+  context: bias corr P50 -3.026  bias raw P50 -3.026  band width corr 51.7  raw 51.7  actual sd 25.3
+checkpoint 15 (n=250):  applied shift +0.0000 scale 1.00
+  MAE  corr(P50)  11.986  naive  13.575  dMAE  -1.589 [-2.525, -0.658]  CORRECTED BETTER
+  P10-P90 coverage corr  0.684 [0.624, 0.740]  target [0.7, 0.9]  OUT OF BAND
+  context: bias corr P50 -1.946  bias raw P50 -1.946  band width corr 30.6  raw 30.6  actual sd 16.9
+
+pooled paired dMAE (corrected - naive, 756 rows, cluster-boot by match): -3.417 [-4.878, -2.066]
+
+=== ARM: 2. B15 scales (1.19/1.09/1.26, shift 0) ===
+checkpoint  6 (n=253):  applied shift +0.0000 scale 1.19
+  MAE  corr(P50)  20.678  naive  25.897  dMAE  -5.219 [-7.803, -2.723]  CORRECTED BETTER
+  MAE  raw (P50)  20.678  naive  25.897  dMAE  -5.219 [-7.803, -2.723]   (uncorrected context)
+  P10-P90 coverage corr  0.822 [0.775, 0.866]  target [0.7, 0.9]  IN BAND
+  P10-P90 coverage raw   0.787 [0.735, 0.834]   (uncorrected context)
+  context: bias corr P50 -4.781  bias raw P50 -4.781  band width corr 69.6  raw 58.4  actual sd 29.9
+checkpoint 10 (n=253):  applied shift +0.0000 scale 1.09
+  MAE  corr(P50)  16.579  naive  20.000  dMAE  -3.421 [-4.986, -1.942]  CORRECTED BETTER
+  MAE  raw (P50)  16.579  naive  20.000  dMAE  -3.421 [-4.986, -1.942]   (uncorrected context)
+  P10-P90 coverage corr  0.838 [0.791, 0.881]  target [0.7, 0.9]  IN BAND
+  P10-P90 coverage raw   0.798 [0.751, 0.846]   (uncorrected context)
+  context: bias corr P50 -3.026  bias raw P50 -3.026  band width corr 56.3  raw 51.7  actual sd 25.3
+checkpoint 15 (n=250):  applied shift +0.0000 scale 1.26
+  MAE  corr(P50)  11.986  naive  13.575  dMAE  -1.589 [-2.525, -0.658]  CORRECTED BETTER
+  MAE  raw (P50)  11.986  naive  13.575  dMAE  -1.589 [-2.525, -0.658]   (uncorrected context)
+  P10-P90 coverage corr  0.792 [0.740, 0.840]  target [0.7, 0.9]  IN BAND
+  P10-P90 coverage raw   0.684 [0.624, 0.740]   (uncorrected context)
+  context: bias corr P50 -1.946  bias raw P50 -1.946  band width corr 38.5  raw 30.6  actual sd 16.9
+
+pooled paired dMAE (corrected - naive, 756 rows, cluster-boot by match): -3.417 [-4.878, -2.066]
+pooled paired dMAE (RAW - naive, uncorrected context): -3.417 [-4.878, -2.066]
+
+=== GATE 1: raw sim P50 vs naive (skill retained on i7) ===
+  cp 6 (n=253): raw MAE  20.678  naive  25.897  dMAE  -5.219 [-7.803, -2.723]
+  cp10 (n=253): raw MAE  16.579  naive  20.000  dMAE  -3.421 [-4.986, -1.942]
+  cp15 (n=250): raw MAE  11.986  naive  13.575  dMAE  -1.589 [-2.525, -0.658]
+  pooled paired dMAE (raw - naive, 756 rows): -3.417 [-4.878, -2.066]
+  GATE 1 (CI hi < 0): MET
+
+=== GATE 2: inclusive P10-P90 coverage in [0.7, 0.9] at ALL THREE cps ===
+    RAW: coverage 0.787/0.798/0.684  in-band [True, True, False]  -> FAILS
+    B15: coverage 0.822/0.838/0.792  in-band [True, True, True]  -> IN BAND (all 3)
+  pre-committed preference order: RAW > B15
+  GATE 2: MET — certified arm = B15 (2. B15 scales (1.19/1.09/1.26, shift 0))
+
+=== PRE-COMMITTED B16 GATE PAIR ===
+GATE 1 (pooled raw dMAE CI hi < 0): MET (pooled -3.417 hi -2.066)
+GATE 2 (an arm in band at all 3 cps): MET (arm B15, coverage 0.822/0.838/0.792)
+verdict mapping (orchestrator applies it, not this script): BOTH -> LANDED, exactly one -> TABLED, neither -> FAILED

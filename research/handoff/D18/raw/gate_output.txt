@@ -1,0 +1,97 @@
+baseline (d16_noweights_raw): 261 matches (detail_noweights_raw_s46_n261.json)
+d18      (d18_winner_raw): 261 matches (detail_lr0025_raw_s46_n261.json)
+pairing: cluster bootstrap by match, n_boot=2000, seed=29; delta = d18_winner_raw - d16_noweights_raw (negative = d18 better)
+
+================================================================================================
+GATE 1(i) — POOLED TAIL dBrier over the row-pool pp_total_ou_45_5, pp_total_ou_50_5, pp_total_ou_55_5, bowler_wkts_1plus must be CI-clean negative
+================================================================================================
+pooled tail                         4673     0      0.2372      0.2366   -0.0005   [-0.0021,+0.0011]  ~noise
+  (context, equal weight per family: -0.0010)
+
+  per-family breakdown (context; the pool is the gate):
+family                                 n  dropd16_noweights_rawd18_winner_raw     delta   95% CI (d18_winner_raw-d16_noweights_raw)   flag
+pp_total_ou_45_5                     522     0      0.2367      0.2360   -0.0007   [-0.0045,+0.0033]  ~noise
+  (positional cross-check)           522                                 -0.0007   [-0.0045,+0.0033]  ~noise
+pp_total_ou_50_5                     522     0      0.2355      0.2330   -0.0025   [-0.0063,+0.0012]  ~noise
+  (positional cross-check)           522                                 -0.0025   [-0.0063,+0.0012]  ~noise
+pp_total_ou_55_5                     522     0      0.2005      0.1999   -0.0006   [-0.0040,+0.0028]  ~noise
+  (positional cross-check)           522                                 -0.0006   [-0.0040,+0.0028]  ~noise
+bowler_wkts_1plus                   3107     0      0.2437      0.2435   -0.0001   [-0.0021,+0.0019]  ~noise
+  (positional cross-check)          2479                                 +0.0013   [-0.0019,+0.0044]  ~noise
+
+  GATE 1(i): FAIL
+
+================================================================================================
+GATE 1(ii) — batter_runs_mae must NOT regress CI-clean (CI lo <= 0)
+================================================================================================
+family                                 n  dropd16_noweights_rawd18_winner_raw     delta   95% CI (d18_winner_raw-d16_noweights_raw)   flag
+batter_runs_mae                     4254     0     13.8864     13.8490   -0.0374   [-0.1000,+0.0268]  ~noise
+  (positional cross-check)          3472                                 -0.0195   [-0.0978,+0.0580]  ~noise
+  GATE 1(ii): PASS
+
+  GATE 1 (i AND ii): NOT MET   [i=False ii=True]
+
+================================================================================================
+GATE 2 — guards: no CI-clean regression on top_bowler, team_first_over_mae
+================================================================================================
+family                                 n  dropd16_noweights_rawd18_winner_raw     delta   95% CI (d18_winner_raw-d16_noweights_raw)   flag
+top_bowler                          5829     6      0.0773      0.0771   -0.0003   [-0.0008,+0.0003]  ~noise
+  (positional cross-check)          5829                                 -0.0003   [-0.0008,+0.0003]  ~noise
+team_first_over_mae                  522     0      3.3785      3.3628   -0.0157   [-0.0522,+0.0181]  ~noise
+  (positional cross-check)           522                                 -0.0157   [-0.0522,+0.0181]  ~noise
+  top_bowler                   ok
+  team_first_over_mae          ok
+  GATE 2: MET
+
+================================================================================================
+CONTEXT — full family scan (cannot flip the verdict)
+================================================================================================
+family                                 n  dropd16_noweights_rawd18_winner_raw     delta   95% CI (d18_winner_raw-d16_noweights_raw)   flag
+batter_50plus                       4254     0      0.0786      0.0782   -0.0003   [-0.0011,+0.0004]  ~noise
+batter_6plus_six                    4254     0      0.2195      0.2185   -0.0010   [-0.0030,+0.0009]  ~noise
+batter_fours_1plus                  4254     0      0.2183      0.2157   -0.0027   [-0.0044,-0.0010]  DOWN(better)
+batter_fours_2plus                  4254     0      0.2011      0.1993   -0.0018   [-0.0034,-0.0002]  DOWN(better)
+batter_fours_3plus                  4254     0      0.1554      0.1549   -0.0005   [-0.0018,+0.0008]  ~noise
+batter_fours_mae                    4254     0      1.3585      1.3573   -0.0012   [-0.0073,+0.0046]  ~noise
+batter_runs_mae                     4254     0     13.8864     13.8490   -0.0374   [-0.1000,+0.0268]  ~noise
+bowler_economy_ou_10_5              3107     0      0.1912      0.1916   +0.0004   [-0.0013,+0.0020]  ~noise
+bowler_economy_ou_8_5               3107     0      0.2501      0.2498   -0.0003   [-0.0025,+0.0019]  ~noise
+bowler_wkts_1plus                   3107     0      0.2437      0.2435   -0.0001   [-0.0021,+0.0019]  ~noise
+bowler_wkts_2plus                   3107     0      0.2103      0.2104   +0.0001   [-0.0014,+0.0015]  ~noise
+bowler_wkts_3plus                   3107     0      0.0946      0.0942   -0.0004   [-0.0010,+0.0003]  ~noise
+first_wicket_runs_ou_30_5            522     0      0.2395      0.2380   -0.0014   [-0.0047,+0.0020]  ~noise
+highest_individual_mae               261     0     16.1951     16.1121   -0.0830   [-0.3104,+0.1411]  ~noise
+highest_over_runs_ou_18_5            261     0      0.2445      0.2433   -0.0012   [-0.0090,+0.0067]  ~noise
+highest_over_runs_ou_24_5            261     0      0.0971      0.0975   +0.0005   [-0.0014,+0.0024]  ~noise
+innings_runs_ou_160_5                522     0      0.2381      0.2333   -0.0048   [-0.0094,-0.0002]  DOWN(better)
+innings_runs_ou_170_5                522     0      0.2297      0.2307   +0.0010   [-0.0039,+0.0058]  ~noise
+innings_runs_ou_180_5                522     0      0.1984      0.1959   -0.0025   [-0.0063,+0.0011]  ~noise
+match_total_sixes_ou_15_5            261     0      0.1980      0.1989   +0.0009   [-0.0053,+0.0073]  ~noise
+match_total_sixes_ou_20_5            261     0      0.1006      0.1001   -0.0004   [-0.0029,+0.0019]  ~noise
+p_tie                                261     0      0.0003      0.0003   +0.0000   [-0.0000,+0.0001]  ~noise
+pp_total_ou_45_5                     522     0      0.2367      0.2360   -0.0007   [-0.0045,+0.0033]  ~noise
+pp_total_ou_50_5                     522     0      0.2355      0.2330   -0.0025   [-0.0063,+0.0012]  ~noise
+pp_total_ou_55_5                     522     0      0.2005      0.1999   -0.0006   [-0.0040,+0.0028]  ~noise
+team_first_over_mae                  522     0      3.3785      3.3628   -0.0157   [-0.0522,+0.0181]  ~noise
+team_highest_individual_ou_29_5      522     0      0.0757      0.0747   -0.0010   [-0.0024,+0.0005]  ~noise
+team_highest_individual_ou_34_5      522     0      0.1293      0.1271   -0.0022   [-0.0048,+0.0006]  ~noise
+team_highest_individual_ou_39_5      522     0      0.1737      0.1720   -0.0017   [-0.0051,+0.0017]  ~noise
+team_total_fours_mae                 522     0      3.4987      3.4637   -0.0349   [-0.0770,+0.0073]  ~noise
+team_total_sixes_mae                 522     0      2.6457      2.6465   +0.0008   [-0.0374,+0.0397]  ~noise
+top_batter                          5835     0      0.0756      0.0759   +0.0003   [-0.0004,+0.0010]  ~noise
+top_bowler                          5829     6      0.0773      0.0771   -0.0003   [-0.0008,+0.0003]  ~noise
+
+  CI-excludes-0 families (either direction):
+    innings_runs_ou_160_5                -0.0048  [-0.0094,-0.0002]  DOWN(better)
+    batter_fours_1plus                   -0.0027  [-0.0044,-0.0010]  DOWN(better)
+    batter_fours_2plus                   -0.0018  [-0.0034,-0.0002]  DOWN(better)
+
+================================================================================================
+GATE 1: NOT MET | GATE 2: MET
+Pre-committed verdict mapping (orchestrator applies it, you don't):
+GATE1 fully met + GATE2 held -> LANDED (winner supersedes the D16 arm in the
+I17 bundle). GATE1's pooled-tail conjunct met but batter_runs_mae or a guard
+regresses CI-clean -> TABLED. Pooled tail NOT CI-clean negative -> FAILED
+(D16's lr 0.2404 no-weights arm stands).
+
+Pre-committed verdict MAPPING (orchestrator decides): FAILED

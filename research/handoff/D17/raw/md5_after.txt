@@ -1,0 +1,7 @@
+D17 md5 AFTER (recorded post-gate)
+2026-08-01T01:37:56Z
+MD5 (models/auto/d16/detail_noweights_raw_s46_n261.json) = d816ebcd5cc9190bc4c4ca578dd6bbf1
+MD5 (models/auto/d16/noweights/xgboost_model_i7.pkl) = 7ee1e1809917f45be7e726b3ea4a8a6c
+MD5 (models/xgb_i7/xgboost_model_i7.pkl) = 32b81888407dcd5cd652eb72b4ad7725
+MD5 (models/xgb_v3/xgboost_model_v3.pkl) = d448822e9bcd8cb93c126f8558b8ab46
+MD5 (models/auto/d17/vector_scaling_calibrator_d17.pkl) = c3e915ab4cc1f90a7214dec15d7b89d6

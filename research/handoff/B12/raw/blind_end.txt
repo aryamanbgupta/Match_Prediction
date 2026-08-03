@@ -1,0 +1,6 @@
+  [260/261] 1529380                                                       sim_runs={'Brazil': 117.31, 'Costa Rica': 91.56}  actual_runs={'Brazil': 157, 'Costa Rica': 88}  (8.1s)
+  [261/261] 1529381                                                       sim_runs={'Costa Rica': 106.69, 'Mexico': 105.91}  actual_runs={'Costa Rica': 45, 'Mexico': 47}  (7.6s)
+
+Done in 2150.3s
+Detail written to models/auto/b12/detail_blind_s44_n261.json
+Report written to models/auto/b12/report_blind_s44_n261.md

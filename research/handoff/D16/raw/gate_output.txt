@@ -1,0 +1,109 @@
+baseline: 261 matches (detail_control_vec_s46_n261.json)
+d16:      261 matches (detail_noweights_raw_s46_n261.json)
+pairing: cluster bootstrap by match, n_boot=2000, seed=29; delta = d16 - baseline (negative = d16 better)
+
+================================================================================================
+GATE 1(a) — teacher-forced marginal audit of the NO-WEIGHTS arm (frozen BEFORE the sim evals)
+================================================================================================
+  audit file: /Users/aryamangupta/CricML/Match_Prediction/models/auto/d16/noweights/marginal_audit.json
+  primary arm: noweights raw / venue_on (PRIMARY)  (n = 186,667)
+  dP(wicket)   +0.00319   (tol +/-0.005)
+  d runs/ball  +0.01093   (tol +/-0.05)
+  test multiclass LL 1.4253
+  GATE 1(a): PASS
+
+================================================================================================
+GATE 1(b) — POOLED TAIL dBrier over the row-pool pp_total_ou_45_5, pp_total_ou_50_5, pp_total_ou_55_5, bowler_wkts_1plus must be CI-clean negative
+================================================================================================
+pooled tail                         4673     0      0.2488      0.2372   -0.0116   [-0.0159,-0.0073]  DOWN(better)
+  (context, equal weight per family: -0.0089)
+
+  per-family breakdown (context; the pool is the gate):
+family                                 n  drop control_vec   noweights     delta   95% CI (noweights-control_vec)   flag
+pp_total_ou_45_5                     522     0      0.2414      0.2367   -0.0047   [-0.0174,+0.0082]  ~noise
+  (positional cross-check)           522                                 -0.0047   [-0.0174,+0.0082]  ~noise
+pp_total_ou_50_5                     522     0      0.2434      0.2355   -0.0079   [-0.0213,+0.0052]  ~noise
+  (positional cross-check)           522                                 -0.0079   [-0.0213,+0.0052]  ~noise
+pp_total_ou_55_5                     522     0      0.2096      0.2005   -0.0091   [-0.0193,+0.0010]  ~noise
+  (positional cross-check)           522                                 -0.0091   [-0.0193,+0.0010]  ~noise
+bowler_wkts_1plus                   3107     0      0.2575      0.2437   -0.0138   [-0.0178,-0.0100]  DOWN(better)
+  (positional cross-check)          2235                                 -0.0138   [-0.0190,-0.0088]  DOWN(better)
+
+  GATE 1(b): PASS
+
+================================================================================================
+GATE 1(c) — batter_runs_mae must NOT regress CI-clean (CI lo <= 0)
+================================================================================================
+family                                 n  drop control_vec   noweights     delta   95% CI (noweights-control_vec)   flag
+batter_runs_mae                     4252     0     14.4354     13.8905   -0.5449   [-0.6714,-0.4142]  DOWN(better)
+  (positional cross-check)          2912                                 -0.6405   [-0.8067,-0.4689]  DOWN(better)
+  GATE 1(c): PASS
+
+  GATE 1 (a AND b AND c): MET   [a=True b=True c=True]
+
+================================================================================================
+GATE 2 — guards: no CI-clean regression on top_bowler, team_first_over_mae
+================================================================================================
+family                                 n  drop control_vec   noweights     delta   95% CI (noweights-control_vec)   flag
+top_bowler                          5827     8      0.0777      0.0772   -0.0004   [-0.0014,+0.0004]  ~noise
+  (positional cross-check)          5827                                 -0.0004   [-0.0014,+0.0004]  ~noise
+team_first_over_mae                  522     0      3.4683      3.3785   -0.0898   [-0.2008,+0.0173]  ~noise
+  (positional cross-check)           522                                 -0.0898   [-0.2008,+0.0173]  ~noise
+  top_bowler                   ok
+  team_first_over_mae          ok
+  GATE 2: MET
+
+================================================================================================
+CONTEXT — full family scan (cannot flip the verdict)
+================================================================================================
+family                                 n  drop control_vec   noweights     delta   95% CI (noweights-control_vec)   flag
+batter_50plus                       4252     0      0.0802      0.0786   -0.0016   [-0.0030,-0.0002]  DOWN(better)
+batter_6plus_six                    4252     0      0.2262      0.2196   -0.0066   [-0.0097,-0.0033]  DOWN(better)
+batter_fours_1plus                  4252     0      0.2209      0.2184   -0.0025   [-0.0057,+0.0005]  ~noise
+batter_fours_2plus                  4252     0      0.2035      0.2012   -0.0023   [-0.0052,+0.0005]  ~noise
+batter_fours_3plus                  4252     0      0.1588      0.1554   -0.0034   [-0.0058,-0.0010]  DOWN(better)
+batter_fours_mae                    4252     0      1.4004      1.3589   -0.0415   [-0.0562,-0.0272]  DOWN(better)
+batter_runs_mae                     4252     0     14.4354     13.8905   -0.5449   [-0.6714,-0.4142]  DOWN(better)
+bowler_economy_ou_10_5              3107     0      0.1921      0.1912   -0.0008   [-0.0044,+0.0028]  ~noise
+bowler_economy_ou_8_5               3107     0      0.2509      0.2501   -0.0008   [-0.0068,+0.0052]  ~noise
+bowler_wkts_1plus                   3107     0      0.2575      0.2437   -0.0138   [-0.0178,-0.0100]  DOWN(better)
+bowler_wkts_2plus                   3107     0      0.2179      0.2103   -0.0076   [-0.0104,-0.0050]  DOWN(better)
+bowler_wkts_3plus                   3107     0      0.0953      0.0946   -0.0007   [-0.0018,+0.0004]  ~noise
+first_wicket_runs_ou_30_5            522     0      0.2386      0.2395   +0.0009   [-0.0078,+0.0099]  ~noise
+highest_individual_mae               261     0     16.9043     16.1951   -0.7091   [-1.5647,+0.1995]  ~noise
+highest_over_runs_ou_18_5            261     0      0.2375      0.2445   +0.0070   [-0.0077,+0.0217]  ~noise
+highest_over_runs_ou_24_5            261     0      0.1000      0.0971   -0.0030   [-0.0061,+0.0000]  ~noise
+innings_runs_ou_160_5                522     0      0.2509      0.2381   -0.0128   [-0.0344,+0.0077]  ~noise
+innings_runs_ou_170_5                522     0      0.2418      0.2297   -0.0120   [-0.0345,+0.0091]  ~noise
+innings_runs_ou_180_5                522     0      0.1956      0.1984   +0.0028   [-0.0163,+0.0215]  ~noise
+match_total_sixes_ou_15_5            261     0      0.2086      0.1980   -0.0106   [-0.0365,+0.0156]  ~noise
+match_total_sixes_ou_20_5            261     0      0.1143      0.1006   -0.0137   [-0.0284,+0.0016]  ~noise
+p_tie                                261     0      0.0004      0.0003   -0.0001   [-0.0002,-0.0000]  DOWN(better)
+pp_total_ou_45_5                     522     0      0.2414      0.2367   -0.0047   [-0.0174,+0.0082]  ~noise
+pp_total_ou_50_5                     522     0      0.2434      0.2355   -0.0079   [-0.0213,+0.0052]  ~noise
+pp_total_ou_55_5                     522     0      0.2096      0.2005   -0.0091   [-0.0193,+0.0010]  ~noise
+team_first_over_mae                  522     0      3.4683      3.3785   -0.0898   [-0.2008,+0.0173]  ~noise
+team_highest_individual_ou_29_5      522     0      0.0783      0.0757   -0.0026   [-0.0054,-0.0001]  DOWN(better)
+team_highest_individual_ou_34_5      522     0      0.1349      0.1293   -0.0056   [-0.0109,-0.0008]  DOWN(better)
+team_highest_individual_ou_39_5      522     0      0.1795      0.1737   -0.0058   [-0.0133,+0.0011]  ~noise
+team_total_fours_mae                 522     0      3.6059      3.4987   -0.1072   [-0.2306,+0.0162]  ~noise
+team_total_sixes_mae                 522     0      2.9035      2.6457   -0.2579   [-0.3953,-0.1208]  DOWN(better)
+top_batter                          5835     0      0.0766      0.0756   -0.0010   [-0.0021,+0.0000]  ~noise
+top_bowler                          5827     8      0.0777      0.0772   -0.0004   [-0.0014,+0.0004]  ~noise
+
+  CI-excludes-0 families (either direction):
+    batter_runs_mae                      -0.5449  [-0.6714,-0.4142]  DOWN(better)
+    team_total_sixes_mae                 -0.2579  [-0.3953,-0.1208]  DOWN(better)
+    batter_fours_mae                     -0.0415  [-0.0562,-0.0272]  DOWN(better)
+    bowler_wkts_1plus                    -0.0138  [-0.0178,-0.0100]  DOWN(better)
+    bowler_wkts_2plus                    -0.0076  [-0.0104,-0.0050]  DOWN(better)
+    batter_6plus_six                     -0.0066  [-0.0097,-0.0033]  DOWN(better)
+    team_highest_individual_ou_34_5      -0.0056  [-0.0109,-0.0008]  DOWN(better)
+    batter_fours_3plus                   -0.0034  [-0.0058,-0.0010]  DOWN(better)
+    team_highest_individual_ou_29_5      -0.0026  [-0.0054,-0.0001]  DOWN(better)
+    batter_50plus                        -0.0016  [-0.0030,-0.0002]  DOWN(better)
+    p_tie                                -0.0001  [-0.0002,-0.0000]  DOWN(better)
+
+================================================================================================
+GATE 1: MET | GATE 2: MET
+Pre-committed verdict MAPPING (orchestrator decides): LANDED

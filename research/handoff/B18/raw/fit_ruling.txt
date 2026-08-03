@@ -1,0 +1,74 @@
+B18 — empirical extras graft fit (promoted i7 stack, val split)
+
+  model dir : /Users/aryamangupta/CricML/Match_Prediction/models/xgb_i7_noweights_production
+  parquet   : /Users/aryamangupta/CricML/Match_Prediction/data/xgb_data_i7/cricket_data_i7_validation.parquet
+  booster md5: 7ee1e1809917f45be7e726b3ea4a8a6c
+  parquet md5: 326436317310adadabe0175825e57d1b
+  rows 124,292  features 114  matches 545  innings 1088
+  window 2024-12-31 .. 2025-06-29
+  population hash (sorted match ids + row count): 4ac7accc089e4cc3d8df761a117cbb4c
+
+==============================================================================
+STEP 1 — per-delivery rates vs D3's pre-committed val anchors
+==============================================================================
+  deliveries 124,292   legal 119,058   wide rows 4,686   no-ball rows 548
+  p_wide    = 0.037701542  (D3 anchor 0.037702)  rounded 0.037702
+  p_no_ball = 0.004408972  (D3 anchor 0.004409)  rounded 0.004409
+  anchors reproduce to 6 dp: True
+  cricsheet cross-check: 124,292 deliveries, 119,058 legal, 169,099 runs   p_wide 0.037702  p_no_ball 0.004409
+  parquet-vs-cricsheet delta: deliveries +0  legal +0  runs +0
+
+==============================================================================
+STEP 2 — per-event extras-run laws
+==============================================================================
+  WIDE (total runs on the delivery; all runs on a wide are extras)
+    n_events 4,686   mean 1.204439   anchor 1.204 (tol 0.05)
+    1:0.911225  2:0.042467  3:0.011097  4:0.001067  5:0.034144
+    counts 1x4270  2x199  3x52  4x5  5x160
+  NO_BALL (OPERATIVE per the orchestrator ruling: `noball_runs` channel ONLY)
+    n_events 548   mean 1.071168   anchor 1.071 (tol 0.05)
+    1:0.928832  2:0.071168
+    counts 1x509  2x39
+  context: mean OFF-BAT runs on no-balls = 1.465328 (deliberately NOT credited — the 6-class labels carry it)
+  context: mean TOTAL runs on no-balls   = 2.640511
+
+  candidate no-ball run definitions (permanent discrepancy record; OPERATIVE marked *):
+   *noball_runs_channel_only             mean 1.071168  |mean - 1.071| = 0.000168
+    extras_portion_runs_minus_batter     mean 1.175182  |mean - 1.071| = 0.104182
+    total_delivery_runs                  mean 2.640511  |mean - 1.071| = 1.569511
+
+  |wide mean - anchor|    = 0.000439  -> OK
+  |no-ball mean - anchor| = 0.000168  -> OK
+
+==============================================================================
+STEP 3 — analytic run-mass pre-check (B17 arithmetic, re-derived)
+==============================================================================
+    batter_encoded: 6932 classes, 0 rows unseen -> -1
+    bowler_encoded: 5179 classes, 0 rows unseen -> -1
+    matchup_type_encoded: 27 classes, 0 rows unseen -> -1
+    venue_encoded: 373 classes, 0 rows unseen -> -1
+  R_model (venue_on, all delivery rows) = 1.347522
+  A (actual runs per legal ball)        = 1.420308   (B17 1.420308, delta -2.508e-07)
+  actual extras channel per legal ball  = 0.059559   (B17 0.059559)
+
+  OLD graft: carried extras 0.020000  M 1.367522  g -0.052785   (B17 logged -0.052785, delta -3.287e-07)
+  NEW graft: carried extras = (p_w*r_w + p_nb*r_nb)/(1-p_w-p_nb)
+             = (0.037702*1.204439 + 0.004409*1.071168) / 0.957889
+             = 0.052336
+             M 1.399858  g -0.020449
+  predicted improvement in carried mass: +0.032336 runs per legal ball
+  predicted residual channels (byes/leg-byes on legal balls, threes fold, 6-class head): -0.020449
+
+  PRE-COMMITTED TOLERANCE: g_new in [-0.03, -0.012]
+    g_new = -0.020449  ->  IN TOLERANCE
+  expected cp6 quote-bias shrink ratio |g_new/g_old| = 0.3874  (plan projection: -4.78 -> -1.85 runs)
+
+  sensitivity — analytic g under EVERY candidate no-ball run law:
+    noball_runs_channel_only             r_nb 1.071168  carried 0.052336  g_new -0.020449  IN tolerance
+    extras_portion_runs_minus_batter     r_nb 1.175182  carried 0.052815  g_new -0.019971  IN tolerance
+    total_delivery_runs                  r_nb 2.640511  carried 0.059559  g_new -0.013226  IN tolerance
+  g_new at the STORED (6 dp) rates = -0.020449
+
+  wrote /Users/aryamangupta/CricML/Match_Prediction/models/auto/b18/extras_graft_v1.json
+  engine loader round-trip OK: B18 empirical extras graft ACTIVE (p_wide=0.037702, p_no_ball=0.004409, mean_runs w=1.2044/nb=1.0712)
+wrote /Users/aryamangupta/CricML/Match_Prediction/research/handoff/B18/raw/fit.txt

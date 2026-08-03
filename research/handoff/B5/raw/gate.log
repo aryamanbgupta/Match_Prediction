@@ -1,0 +1,23 @@
+B5 gate analysis on models/auto/b5/quotes_s43_n261.json
+  config: n_sims=100 seed=43 quote_center=sim_p50 elapsed=1496s
+  rows: 756 from 253 matches (8 matches skipped)
+
+checkpoint  6 (n=253):
+  MAE  sim(P50)  20.860  naive  25.897  dMAE  -5.038 [-7.970, -2.082]  SIM BETTER
+  P10-P90 coverage  0.755 [0.704, 0.810]  target [0.7, 0.9]  IN BAND
+  context: bias P50 +4.670  mean +3.163  band width P90-P10 57.8  actual sd 29.9
+checkpoint 10 (n=253):
+  MAE  sim(P50)  17.061  naive  20.000  dMAE  -2.939 [-4.947, -0.909]  SIM BETTER
+  P10-P90 coverage  0.794 [0.743, 0.846]  target [0.7, 0.9]  IN BAND
+  context: bias P50 +3.204  mean +1.994  band width P90-P10 48.0  actual sd 25.3
+checkpoint 15 (n=250):
+  MAE  sim(P50)  12.314  naive  13.575  dMAE  -1.261 [-2.613, -0.004]  SIM BETTER
+  P10-P90 coverage  0.664 [0.608, 0.724]  target [0.7, 0.9]  OUT OF BAND
+  context: bias P50 +0.514  mean +0.199  band width P90-P10 29.5  actual sd 16.9
+
+pooled paired dMAE (sim - naive, 756 rows, cluster-boot by match): -3.086 [-4.869, -1.289]
+
+GATE 1 (MAE beats naive, all 3 cps + pooled CI<0): MET (per-cp [True, True, True], pooled hi -1.289)
+GATE 2 (coverage in [0.7,0.9] at all 3 cps): NOT MET (per-cp [True, True, False])
+
+VERDICT: TABLED

@@ -1,0 +1,8 @@
+41:B10 relaxation triggered for Sydney Sixers (date=2025-12-20, phase=death, eligible=4)
+111:B10 relaxation triggered for Bangladesh (date=2025-09-11, phase=pp, eligible=4)
+113:B10 relaxation triggered for Bangladesh (date=2025-09-13, phase=pp, eligible=4)
+122:B10 relaxation triggered for Bangladesh (date=2025-09-25, phase=pp, eligible=4)
+157:B10 relaxation triggered for Bangladesh (date=2025-10-27, phase=pp, eligible=4)
+159:B10 relaxation triggered for Bangladesh (date=2025-10-29, phase=pp, eligible=4)
+161:B10 relaxation triggered for Bangladesh (date=2025-10-31, phase=pp, eligible=4)
+165:B10 relaxation triggered for Bangladesh (date=2025-12-02, phase=pp, eligible=4)

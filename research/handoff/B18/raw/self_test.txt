@@ -1,0 +1,41 @@
+B18 SELF-TEST — reproduce B16's logged numbers on its FROZEN i7 quotes
+
+  /Users/aryamangupta/CricML/Match_Prediction/models/auto/b16/quotes_i7_s48_n261.json
+    config: model=models/xgb_i7_noweights_production/xgboost_model_i7.pkl stats_version=i7 ball_calibrator=None n_sims=100 seed=48
+    usage_json=models/bowler_phase_usage.json quote_center=sim_p50 elapsed=898.8s
+    rows: 756 from 253 matches (8 matches skipped)
+  calibrator: /Users/aryamangupta/CricML/Match_Prediction/models/auto/b15/quote_calibrator_scale_only.json (scales 1.19/1.09/1.26, shift 0 — asserted, never refit)
+  bootstrap: 2000 reps, seed 29, cluster by match
+
+=== ARM: B15 scales (self-test) ===
+checkpoint  6 (n=253):  applied shift +0.0000 scale 1.19
+  MAE  corr(P50)  20.678  naive  25.897  dMAE  -5.219 [-7.803, -2.723]  CORRECTED BETTER
+  MAE  raw (P50)  20.678  naive  25.897  dMAE  -5.219 [-7.803, -2.723]   (uncorrected context)
+  P10-P90 coverage corr  0.822 [0.775, 0.866]  target [0.7, 0.9]  IN BAND
+  P10-P90 coverage raw   0.787 [0.735, 0.834]   (uncorrected context)
+  context: bias corr P50 -4.781  bias raw P50 -4.781  band width corr 69.6  raw 58.4  actual sd 29.9
+checkpoint 10 (n=253):  applied shift +0.0000 scale 1.09
+  MAE  corr(P50)  16.579  naive  20.000  dMAE  -3.421 [-4.986, -1.942]  CORRECTED BETTER
+  MAE  raw (P50)  16.579  naive  20.000  dMAE  -3.421 [-4.986, -1.942]   (uncorrected context)
+  P10-P90 coverage corr  0.838 [0.791, 0.881]  target [0.7, 0.9]  IN BAND
+  P10-P90 coverage raw   0.798 [0.751, 0.846]   (uncorrected context)
+  context: bias corr P50 -3.026  bias raw P50 -3.026  band width corr 56.3  raw 51.7  actual sd 25.3
+checkpoint 15 (n=250):  applied shift +0.0000 scale 1.26
+  MAE  corr(P50)  11.986  naive  13.575  dMAE  -1.589 [-2.525, -0.658]  CORRECTED BETTER
+  MAE  raw (P50)  11.986  naive  13.575  dMAE  -1.589 [-2.525, -0.658]   (uncorrected context)
+  P10-P90 coverage corr  0.792 [0.740, 0.840]  target [0.7, 0.9]  IN BAND
+  P10-P90 coverage raw   0.684 [0.624, 0.740]   (uncorrected context)
+  context: bias corr P50 -1.946  bias raw P50 -1.946  band width corr 38.5  raw 30.6  actual sd 16.9
+
+pooled paired dMAE (corrected - naive, 756 rows, cluster-boot by match): -3.417 [-4.878, -2.066]
+pooled paired dMAE (RAW - naive, uncorrected context): -3.417 [-4.878, -2.066]
+
+=== SELF-TEST vs B16's logged numbers (3 dp = recorded precision) ===
+            raw_bias  expected -4.781/-3.026/-1.946          got -4.781/-3.026/-1.946          PASS
+        raw_coverage  expected 0.787/0.798/0.684             got 0.787/0.798/0.684             PASS
+        b15_coverage  expected 0.822/0.838/0.792             got 0.822/0.838/0.792             PASS
+     pooled_raw_dmae  expected -3.417 [-4.878, -2.066]       got -3.417 [-4.878, -2.066]       PASS
+             raw_mae  expected 20.678/16.579/11.986          got 20.678/16.579/11.986          PASS
+           naive_mae  expected 25.897/20.000/13.575          got 25.897/20.000/13.575          PASS
+
+  SELF-TEST: PASS
