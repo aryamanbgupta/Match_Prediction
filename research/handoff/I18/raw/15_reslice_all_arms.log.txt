@@ -1,0 +1,94 @@
+############ ARM=swap_seed29  SLICE=all ############
+
+--- Slice: all ---
+  Matches: 124 / 124
+  Avg Log Loss: 0.5988  [95% CI: 0.4492, 0.6718]
+  Flat ROI: -1.14%  [95% CI: -45.24%, +23.29%]
+  Bets placed: 123, win rate: 48.0%
+  Bootstrap: tournament_time_block_v1 (11 bet clusters)
+  → models/auto/i18/swap_seed29/sliced_all/golden_envelope_cricsheet_w0p00_all.json
+
+--- Slice: min_volume_50000 ---
+  Matches: 75 / 124
+  Avg Log Loss: 0.6538  [95% CI: 0.4069, 0.6889]
+  Flat ROI: +15.70%  [95% CI: -57.35%, +32.24%]
+  Bets placed: 74, win rate: 55.4%
+  Bootstrap: tournament_time_block_v1 (9 bet clusters)
+  WARNING: fewer than 10 clusters; CI is descriptive only
+  → models/auto/i18/swap_seed29/sliced_all/golden_envelope_cricsheet_w0p00_min_volume_50000.json
+
+--- Slice: min_volume_100000 ---
+  Matches: 66 / 124
+  Avg Log Loss: 0.6767  [95% CI: 0.4277, 0.6938]
+  Flat ROI: +21.23%  [95% CI: -100.00%, +32.55%]
+  Bets placed: 65, win rate: 58.5%
+  Bootstrap: tournament_time_block_v1 (5 bet clusters)
+  WARNING: fewer than 10 clusters; CI is descriptive only
+  → models/auto/i18/swap_seed29/sliced_all/golden_envelope_cricsheet_w0p00_min_volume_100000.json
+############ ARM=swap_seed29  SLICE=50k ############
+
+--- Slice: min_volume_50000 ---
+  Matches: 75 / 124
+  Avg Log Loss: 0.6538  [95% CI: 0.4069, 0.6889]
+  Flat ROI: +15.70%  [95% CI: -57.35%, +32.24%]
+  Bets placed: 74, win rate: 55.4%
+  Bootstrap: tournament_time_block_v1 (9 bet clusters)
+  WARNING: fewer than 10 clusters; CI is descriptive only
+  → models/auto/i18/swap_seed29/sliced_50k/golden_envelope_cricsheet_w0p00_min_volume_50000.json
+############ ARM=swap_seed29  SLICE=100k ############
+
+--- Slice: min_volume_100000 ---
+  Matches: 66 / 124
+  Avg Log Loss: 0.6767  [95% CI: 0.4277, 0.6938]
+  Flat ROI: +21.23%  [95% CI: -100.00%, +32.55%]
+  Bets placed: 65, win rate: 58.5%
+  Bootstrap: tournament_time_block_v1 (5 bet clusters)
+  WARNING: fewer than 10 clusters; CI is descriptive only
+  → models/auto/i18/swap_seed29/sliced_100k/golden_envelope_cricsheet_w0p00_min_volume_100000.json
+############ ARM=base_seed29  SLICE=all ############
+
+--- Slice: all ---
+  Matches: 124 / 124
+  Avg Log Loss: 0.6056  [95% CI: 0.4526, 0.6840]
+  Flat ROI: -17.68%  [95% CI: -57.14%, +1.60%]
+  Bets placed: 123, win rate: 34.1%
+  Bootstrap: tournament_time_block_v1 (11 bet clusters)
+  → models/auto/i18/base_seed29/sliced_all/golden_envelope_cricsheet_w0p00_all.json
+
+--- Slice: min_volume_50000 ---
+  Matches: 75 / 124
+  Avg Log Loss: 0.6636  [95% CI: 0.4173, 0.7042]
+  Flat ROI: +1.23%  [95% CI: -54.20%, +11.18%]
+  Bets placed: 74, win rate: 45.9%
+  Bootstrap: tournament_time_block_v1 (9 bet clusters)
+  WARNING: fewer than 10 clusters; CI is descriptive only
+  → models/auto/i18/base_seed29/sliced_all/golden_envelope_cricsheet_w0p00_min_volume_50000.json
+
+--- Slice: min_volume_100000 ---
+  Matches: 66 / 124
+  Avg Log Loss: 0.6859  [95% CI: 0.4393, 0.7102]
+  Flat ROI: +4.36%  [95% CI: -100.00%, +10.30%]
+  Bets placed: 65, win rate: 47.7%
+  Bootstrap: tournament_time_block_v1 (5 bet clusters)
+  WARNING: fewer than 10 clusters; CI is descriptive only
+  → models/auto/i18/base_seed29/sliced_all/golden_envelope_cricsheet_w0p00_min_volume_100000.json
+############ ARM=base_seed29  SLICE=50k ############
+
+--- Slice: min_volume_50000 ---
+  Matches: 75 / 124
+  Avg Log Loss: 0.6636  [95% CI: 0.4173, 0.7042]
+  Flat ROI: +1.23%  [95% CI: -54.20%, +11.18%]
+  Bets placed: 74, win rate: 45.9%
+  Bootstrap: tournament_time_block_v1 (9 bet clusters)
+  WARNING: fewer than 10 clusters; CI is descriptive only
+  → models/auto/i18/base_seed29/sliced_50k/golden_envelope_cricsheet_w0p00_min_volume_50000.json
+############ ARM=base_seed29  SLICE=100k ############
+
+--- Slice: min_volume_100000 ---
+  Matches: 66 / 124
+  Avg Log Loss: 0.6859  [95% CI: 0.4393, 0.7102]
+  Flat ROI: +4.36%  [95% CI: -100.00%, +10.30%]
+  Bets placed: 65, win rate: 47.7%
+  Bootstrap: tournament_time_block_v1 (5 bet clusters)
+  WARNING: fewer than 10 clusters; CI is descriptive only
+  → models/auto/i18/base_seed29/sliced_100k/golden_envelope_cricsheet_w0p00_min_volume_100000.json

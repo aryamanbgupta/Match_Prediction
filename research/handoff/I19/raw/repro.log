@@ -1,0 +1,48 @@
+======================================================================
+I19 REPRODUCTION CHECK — i7_v2 retrains vs archived I17 arms
+======================================================================
+  [base_seed29]
+    candidate: models/auto/i19/base_seed29
+    reference: models/auto/i17/base_seed29
+    n_keys candidate=798  reference=798
+    OK: key sets identical
+    n_keys=798
+    max |delta p_team1| = 0.000e+00
+    rows with nonzero delta: 0
+    OK: predictions reproduce exactly (max |delta p| = 0)
+    feature_columns.txt: candidate 48 lines, reference 48 lines, byte-equal=True
+    train_metrics.json (candidate vs reference):
+      val_log_loss: 0.6531566579763646  |  0.6531566579763646
+      test_log_loss: 0.5973871207926102  |  0.5973871207926102
+      val_brier: 0.23130043775124437  |  0.23130043775124437
+      test_brier: 0.20560113187271795  |  0.20560113187271795
+      n_train: 7972  |  7972
+      n_val: 528  |  528
+      n_test: 798  |  798
+      seed: 29  |  29
+    base_seed29: PASS
+  [swap_seed29]
+    candidate: models/auto/i19/swap_seed29
+    reference: models/auto/i17/swap_seed29
+    n_keys candidate=798  reference=798
+    OK: key sets identical
+    n_keys=798
+    max |delta p_team1| = 0.000e+00
+    rows with nonzero delta: 0
+    OK: predictions reproduce exactly (max |delta p| = 0)
+    feature_columns.txt: candidate 48 lines, reference 48 lines, byte-equal=True
+    train_metrics.json (candidate vs reference):
+      val_log_loss: 0.6503653371453989  |  0.6503653371453989
+      test_log_loss: 0.5859296475141611  |  0.5859296475141611
+      val_brier: 0.23060272830523185  |  0.23060272830523185
+      test_brier: 0.2011695634868112  |  0.2011695634868112
+      n_train: 15944  |  15944
+      n_val: 528  |  528
+      n_test: 798  |  798
+      seed: 29  |  29
+    swap_seed29: PASS
+
+  base_seed29: PASS
+  swap_seed29: PASS
+
+I19 REPRODUCTION GATE: PASS

@@ -1,0 +1,7 @@
+eval-set stems in data/golden/polymarket_test: 124
+envelope entries: 124
+  already-stamped and verified: 69
+  legacy rows newly stamped   : 55
+stamped ids: 124 total, 124 unique
+FINAL GATE OK: stamped id set == eval-set stem set (124 ids, exact)
+stamped cricsheet_id on 124 entries -> models/auto/i18/golden_envelope_cricsheet.json

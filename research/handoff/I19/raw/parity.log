@@ -1,0 +1,73 @@
+candidate: data/xgb_match_data_i7_v2
+reference: data/xgb_match_data_i7
+
+======================================================================
+PASS 1 — STRICT parity (informational; expected to FAIL against a
+         pre-I15 frozen frame that lacks the identity columns)
+======================================================================
+  [train]
+    candidate shape (7972, 57)  reference shape (7972, 54)
+    FAIL: shape mismatch
+    FAIL: column list mismatch
+      candidate-only: ['display_match_id', 'match_identity_version', 'elo_update_version']
+      reference-only: []
+      column 'match_id': non-numeric mismatch, n_rows_differing=7972, examples(cand,ref)=[(0, '211048', '2005-02-17_New_Zealand_Australia_Eden_Park,_Auckland'), (1, '211028', '2005-06-13_England_Australia_The_Rose_Bowl,_Southampton'), (2, '222678', '2005-10-21_South_Africa_New_Zealand_New_Wanderers_Stadium,_Johannesburg')]
+  [validation]
+    candidate shape (528, 57)  reference shape (528, 54)
+    FAIL: shape mismatch
+    FAIL: column list mismatch
+      candidate-only: ['display_match_id', 'match_identity_version', 'elo_update_version']
+      reference-only: []
+      column 'match_id': non-numeric mismatch, n_rows_differing=528, examples(cand,ref)=[(0, '1443073', '2024-12-31_Adelaide_Strikers_Perth_Scorchers_Adelaide_Oval'), (1, '1452592', '2024-12-31_Otago_Central_Districts_Molyneux_Park,_Alexandra'), (2, '1459539', '2024-12-31_Khulna_Tigers_Chittagong_Kings_Shere_Bangla_National_Stadium,_Mirpur')]
+  [test]
+    candidate shape (798, 57)  reference shape (798, 54)
+    FAIL: shape mismatch
+    FAIL: column list mismatch
+      candidate-only: ['display_match_id', 'match_identity_version', 'elo_update_version']
+      reference-only: []
+      column 'match_id': non-numeric mismatch, n_rows_differing=798, examples(cand,ref)=[(0, '1482013', '2025-07-01_San_Francisco_Unicorns_Seattle_Orcas_Central_Broward_Regional_Park_Stadium_Turf_Ground,_Lauderhill'), (1, '1482014', '2025-07-02_Texas_Super_Kings_Washington_Freedom_Central_Broward_Regional_Park_Stadium_Turf_Ground,_Lauderhill'), (2, '1482015', '2025-07-03_Los_Angeles_Knight_Riders_MI_New_York_Central_Broward_Regional_Park_Stadium_Turf_Ground,_Lauderhill')]
+
+STRICT PARITY: FAIL
+
+======================================================================
+PASS 2 — RELAXED identity contract (the BINDING gate)
+======================================================================
+  [train]
+    OK: added columns are exactly ['display_match_id', 'elo_update_version', 'match_identity_version']
+    reference.match_id == candidate.display_match_id on 7972/7972 rows
+    candidate.match_id == candidate.cricsheet_id on 7972/7972 rows
+    cricsheet_id set equal: True  order equal: True
+    shared columns compared (excl. match_id): 53
+    OK: all shared columns (excl. match_id) bit-identical
+  [validation]
+    OK: added columns are exactly ['display_match_id', 'elo_update_version', 'match_identity_version']
+    reference.match_id == candidate.display_match_id on 528/528 rows
+    candidate.match_id == candidate.cricsheet_id on 528/528 rows
+    cricsheet_id set equal: True  order equal: True
+    shared columns compared (excl. match_id): 53
+    OK: all shared columns (excl. match_id) bit-identical
+  [test]
+    OK: added columns are exactly ['display_match_id', 'elo_update_version', 'match_identity_version']
+    reference.match_id == candidate.display_match_id on 798/798 rows
+    candidate.match_id == candidate.cricsheet_id on 798/798 rows
+    cricsheet_id set equal: True  order equal: True
+    shared columns compared (excl. match_id): 53
+    OK: all shared columns (excl. match_id) bit-identical
+  [venue_identity.json]
+    OK: {"venue_alias_active_count": 94, "venue_alias_sha256": "853b32b0ce3098dd8c0f33ba1437846f5505d50d9a425fbd37bff9c9f76745d8", "venue_alias_version": "venue_aliases_v1"}
+  [golden_test.parquet]
+    rows=227  columns=57
+    match_identity_version values: ['cricsheet_primary_v1']
+    cricsheet_id: 227 unique, 0 null
+    match_date range: 2026-04-17 -> 2026-07-12
+    OK
+
+  train: PASS
+  validation: PASS
+  test: PASS
+  venue_identity: PASS
+  golden_test: PASS
+
+I18 RELAXED PARITY GATE: PASS
+NOTE: passing does NOT authorize copying golden_test.parquet into the frozen I7 frame.
+      Score directly from data/xgb_match_data_i7_v2/golden_test.parquet (ruling 1b/1c).

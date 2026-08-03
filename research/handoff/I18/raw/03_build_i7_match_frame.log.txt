@@ -1,0 +1,5 @@
+  train: 131 -> 57 columns, 7,972 rows
+  validation: 131 -> 57 columns, 528 rows
+  test: 131 -> 57 columns, 798 rows
+  golden_test: 131 -> 57 columns, 227 rows
+wrote data/auto/i18/frame: 8 metadata + 46 numeric columns

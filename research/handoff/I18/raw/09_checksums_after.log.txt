@@ -1,0 +1,37 @@
+=== protected artifact checksums AFTER I18 run (2026-07-31T01:49:01Z) ===
+22ceb40fd10cc3db46887a94193abe0a data/xgb_match_data_i7/test.parquet
+9f225b2f9af63b1a57ba9553802b7a54 data/xgb_match_data_i7/train.parquet
+e3df5b812389464aa8f91d831050699a data/xgb_match_data_i7/validation.parquet
+72f62135985943c7a7fa412aef78c646 data/xgb_match_data_i7/venue_identity.json
+1682b75284b9c47b377d8d780f218cb4 data/xgb_match_data_i7_full/test.parquet
+b9d6a70c2f3adc317fba949e66d430ca data/xgb_match_data_i7_full/train.parquet
+d458d03f2416c29960a1db1db8524a8f data/xgb_match_data_i7_full/validation.parquet
+671ac8200b275fa3d11d848e609f5132 models/player_stats_cache_i7.sqlite
+3faf24a6d457e9fca0f98c026b3b0675 models/player_stats_cache_v3.sqlite
+--- data/xgb_match_data_i7 listing (golden_test.parquet MUST be absent) ---
+total 5792
+drwxr-xr-x@  6 aryamangupta  staff      192 Jul 25 18:02 .
+drwxr-xr-x  42 aryamangupta  staff     1344 Jul 30 17:26 ..
+-rw-r--r--@  1 aryamangupta  staff   283011 Jul 25 18:02 test.parquet
+-rw-r--r--@  1 aryamangupta  staff  2473215 Jul 25 18:02 train.parquet
+-rw-r--r--@  1 aryamangupta  staff   200351 Jul 25 18:02 validation.parquet
+-rw-r--r--@  1 aryamangupta  staff      174 Jul 25 18:02 venue_identity.json
+--- data/golden listing ---
+total 352
+drwxr-xr-x   14 aryamangupta  staff    448 Jul 30 17:19 .
+drwxr-xr-x   42 aryamangupta  staff   1344 Jul 30 17:26 ..
+drwxr-xr-x@   5 aryamangupta  staff    160 Jul 30 17:20 _staging_refresh
+-rw-r--r--@   1 aryamangupta  staff  88296 Jul 30 17:20 betting_odds_golden.json
+drwxr-xr-x@   3 aryamangupta  staff     96 May  9 15:11 blended
+drwxr-xr-x@   3 aryamangupta  staff     96 May  9 16:10 blended_clean
+drwxr-xr-x@   3 aryamangupta  staff     96 May  9 16:11 blended_clean_retrained
+-rw-r--r--@   1 aryamangupta  staff  22338 May  9 14:50 build_unmatched.json
+-rw-r--r--@   1 aryamangupta  staff  61509 May 10 12:05 golden_sim_envelope.json
+drwxr-xr-x  126 aryamangupta  staff   4032 Jul 30 17:20 polymarket_test
+drwxr-xr-x@   5 aryamangupta  staff    160 May  9 15:12 sliced
+drwxr-xr-x@   5 aryamangupta  staff    160 May  9 16:10 sliced_clean
+drwxr-xr-x@   5 aryamangupta  staff    160 May  9 16:11 sliced_clean_retrained
+drwxr-xr-x  232 aryamangupta  staff   7424 Jul 30 17:20 t20s_json
+--- golden json counts ---
+     230
+     124

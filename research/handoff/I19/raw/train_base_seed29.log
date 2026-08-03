@@ -1,0 +1,65 @@
+  train: 7,972   val: 528   test: 798
+  features (48): ['team1_batting_elo', 'team1_bowling_elo', 'team2_batting_elo', 'team2_bowling_elo', 'team1_batting_avg', 'team1_batting_sr', 'team1_bowling_avg', 'team1_bowling_econ', 'team2_batting_avg', 'team2_batting_sr', 'team2_bowling_avg', 'team2_bowling_econ', 'elo_diff_batting', 'elo_diff_bowling', 'batting_avg_diff', 'bowling_econ_diff', 'venue_avg_score', 'venue_chase_win_pct', 'venue_dot_pct', 'venue_boundary_pct', 'is_international', 'team1_batting_first', 'toss_winner_is_team1', 'toss_decision_bat', 'team1_win_rate_last_10', 'team2_win_rate_last_10', 'win_rate_diff', 'h2h_team1_win_rate_shrunk', 'h2h_n_meetings', 'team1_lhb_count', 'team1_pace_count', 'team1_spinner_count', 'team2_lhb_count', 'team2_pace_count', 'team2_spinner_count', 'is_team1_home', 'is_team2_home', 'team1_top6_batting_elo_avg', 'team2_top6_batting_elo_avg', 'top6_batting_elo_diff', 'team1_bottom5_bowling_elo_avg', 'team2_bottom5_bowling_elo_avg', 'bottom5_bowling_elo_diff', 'venue_p4', 'venue_p6', 'venue_pw', 'venue_id_encoded', 'competition_tier_encoded']
+  monotone constraints: 10/48 features constrained (8 +1, 2 -1)
+[0]	validation_0-logloss:0.69004
+[50]	validation_0-logloss:0.65471
+[85]	validation_0-logloss:0.65625
+
+  val LL  = 0.6532   val Brier  = 0.2313
+  test LL = 0.5974   test Brier = 0.2056
+  baseline (predict 0.5 always): LL=0.6931, Brier=0.25
+
+  feature importances:
+    win_rate_diff                  0.0782
+    top6_batting_elo_diff          0.0475
+    team1_top6_batting_elo_avg     0.0379
+    batting_avg_diff               0.0356
+    team1_win_rate_last_10         0.0303
+    team1_batting_sr               0.0297
+    team2_batting_sr               0.0292
+    elo_diff_bowling               0.0289
+    elo_diff_batting               0.0279
+    bottom5_bowling_elo_diff       0.0270
+    team2_batting_elo              0.0263
+    h2h_team1_win_rate_shrunk      0.0234
+    is_team2_home                  0.0229
+    competition_tier_encoded       0.0228
+    team2_spinner_count            0.0220
+    team1_pace_count               0.0199
+    team1_bottom5_bowling_elo_avg  0.0190
+    team2_bowling_elo              0.0186
+    venue_p4                       0.0185
+    is_international               0.0180
+    venue_p6                       0.0180
+    team1_batting_avg              0.0170
+    team2_pace_count               0.0167
+    team2_bottom5_bowling_elo_avg  0.0166
+    team2_batting_avg              0.0166
+    venue_boundary_pct             0.0161
+    venue_pw                       0.0159
+    team2_win_rate_last_10         0.0159
+    is_team1_home                  0.0156
+    venue_chase_win_pct            0.0156
+    venue_avg_score                0.0155
+    team1_lhb_count                0.0153
+    team1_batting_first            0.0151
+    venue_id_encoded               0.0149
+    team1_batting_elo              0.0149
+    team1_spinner_count            0.0148
+    team1_bowling_avg              0.0147
+    team2_bowling_econ             0.0147
+    team1_bowling_elo              0.0147
+    team1_bowling_econ             0.0144
+    team2_top6_batting_elo_avg     0.0144
+    venue_dot_pct                  0.0142
+    team2_lhb_count                0.0141
+    team2_bowling_avg              0.0136
+    toss_decision_bat              0.0128
+    h2h_n_meetings                 0.0128
+    bowling_econ_diff              0.0121
+    toss_winner_is_team1           0.0091
+
+  saved → models/auto/i19/base_seed29
+
+  standalone test (798 matches): LL=0.5974  Brier=0.2056
+  predictions → models/auto/i19/base_seed29/test_predictions.json

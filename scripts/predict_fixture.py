@@ -68,10 +68,14 @@ from tracker_rehydration import (  # noqa: E402
     rehydrate_venue_tracker,
 )
 
-MODEL_DIR = REPO / "models" / "xgb_match_v3_m7_swap_production"
-TRACKER_SNAPSHOT = REPO / "data" / "tracker_snapshot_test_end.pkl"
-DEFAULT_STATE_DIR = REPO / "models"
-DEFAULT_TRACKER_SOURCE_DIRS = (REPO / "data" / "t20s_json",)
+MODEL_DIR = REPO / "models" / "xgb_match_i7_swap_production"
+TRACKER_SNAPSHOT = REPO / "data" / "live_state_i7" / "tracker_snapshot.pkl"
+DEFAULT_STATE_DIR = REPO / "data" / "live_state_i7"
+DEFAULT_TRACKER_SOURCE_DIRS = (
+    REPO / "data" / "t20s_json",
+    REPO / "data" / "forward_holdout" / "2026-06-01_2026-07-13"
+    / "context_t20s_json",
+)
 DEFAULT_MAX_STATE_AGE_DAYS = 14
 PLAYER_CSV = REPO / "data" / "all_players_enriched.csv"
 A7_POLICY_ID = "a7_forward_v1"
@@ -82,7 +86,7 @@ A7_MINIMUM_VOLUME_USD = 50_000.0
 VENUE_IDENTITY_LEGACY = "legacy"
 VENUE_IDENTITY_I7 = "i7"
 VENUE_IDENTITY_MODES = (VENUE_IDENTITY_LEGACY, VENUE_IDENTITY_I7)
-DEFAULT_LIVE_VENUE_IDENTITY_MODE = VENUE_IDENTITY_LEGACY
+DEFAULT_LIVE_VENUE_IDENTITY_MODE = VENUE_IDENTITY_I7
 
 
 def resolve_venue_identity(
@@ -1042,16 +1046,16 @@ def main() -> int:
         type=Path,
         default=DEFAULT_STATE_DIR,
         help=(
-            "Directory containing player_stats_cache_v3.sqlite "
+            "Directory containing player_stats_cache_<version>.sqlite "
             f"(default: {DEFAULT_STATE_DIR})"
         ),
     )
     ap.add_argument(
         "--state-version",
-        default="v3",
+        default="i7",
         help=(
             "Stats-cache version suffix inside --state-dir, i.e. "
-            "player_stats_cache_<version>.sqlite (default: v3)"
+            "player_stats_cache_<version>.sqlite (default: i7)"
         ),
     )
     ap.add_argument(

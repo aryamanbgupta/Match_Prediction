@@ -20,9 +20,11 @@ The live CLI therefore makes the compatibility decision explicit.
 
 ## Modes
 
-### `legacy` (live default)
+### `legacy` (explicit replay only — no longer the default)
 
-Use only with the frozen pre-I7 artifact family. The fixture venue is trimmed
+Use only with the frozen pre-I7 artifact family, and only by passing
+`--venue-identity-mode legacy` plus the frozen model/state paths explicitly
+(see OPERATIONS Op 6 "Legacy replay"). The fixture venue is trimmed
 but otherwise preserved. Missing I7 metadata is accepted. This maintains
 historical serving behavior, including fragmented venue history and the risk
 that an alias spelling is unseen by the frozen encoder.
@@ -37,7 +39,7 @@ If a tracker snapshot must be rebuilt for a refreshed legacy state family, pass
 the same mode. The snapshot will retain raw venue labels and declare itself
 `legacy`.
 
-### `i7` (required for new models)
+### `i7` (live default since the 2026-07-31 promotion)
 
 Use only when the match model, SQLite cache, and tracker snapshot were all
 built under the active I7 map. The fixture venue is canonicalized and every
@@ -53,8 +55,9 @@ uv run python scripts/predict_fixture.py \
   --tracker-snapshot data/<i7-tracker>.pkl
 ```
 
-I7 is deliberately opt-in on the current live command because neither
-retrained I7 model passed its promotion gate. It remains the only permitted
+I7 became the live default with the 2026-07-31 promotion of
+`models/xgb_match_i7_swap_production` (I17/I18/I19 bundle; see
+`docs/SWAP_I7_PROMOTION_CUTOVER_PLAN.md`). It is the only permitted
 identity foundation for I8 and later experiments.
 
 ## Guardrails

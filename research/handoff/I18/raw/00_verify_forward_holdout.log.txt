@@ -1,0 +1,10 @@
+{
+  "status": "PASS",
+  "model_scoring_performed": false,
+  "selected_matches": 137,
+  "context_matches": 401,
+  "strict_timestamp_checks": 137,
+  "cricsheet_hash_checks": 137,
+  "overlap_with_existing_pools": 0,
+  "dataset_fingerprint_sha256": "82ccde16cf2b7e5f13a9236f2788f3c8be1582f312f5c028ec44a6ab76561028"
+}

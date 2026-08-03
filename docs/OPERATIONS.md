@@ -142,7 +142,32 @@ uv run python scripts/build_bowler_phase_usage.py \
 ```
 
 Backtest prop families against cricsheet actuals (Brier-skill + MAE +
-bootstrap CIs), then render per-match views and an empirical-vs-random A/B:
+bootstrap CIs), then render per-match views and an empirical-vs-random A/B.
+
+**Production ball stack (promoted 2026-08-02):** `prop_backtest.py`
+defaults load `models/xgb_i7_noweights_production/` (D16 no-class-weights
+retrain, i7 identity frame, `--stats-version i7`) and run **RAW — no
+calibrator** (D17: any vector calibrator on this stack is CI-clean worse
+on `batter_runs_mae`; D18: hyperparameter re-tune does not transfer).
+The artifact is a byte-copy of `models/auto/d16/noweights` (booster md5
+`7ee1e1809917f45be7e726b3ea4a8a6c`); canonical baseline detail for paired
+gates: `models/auto/d16/detail_noweights_raw_s46_n261.json` (seed 46).
+
+**Legacy v3 replay** (retired 2026-08-02; frame untrainable under the I7
+contract per D6) — pass every path explicitly:
+
+```bash
+uv run python scripts/sim_eval/prop_backtest.py \
+    --test-dir data/polymarket_test --n-sims 100 \
+    --model-path models/xgb_v3/xgboost_model_v3.pkl \
+    --batter-encoder models/xgb_v3/batter_encoder_v3.pkl \
+    --bowler-encoder models/xgb_v3/bowler_encoder_v3.pkl \
+    --feature-columns models/xgb_v3/feature_columns_v3.txt \
+    --stats-version v3 \
+    --ball-calibrator vector \
+    --ball-calibrator-path models/xgb_v3/vector_scaling_calibrator_v1.pkl \
+    --out reports/prop_calibration_report_legacy.md
+```
 
 ```bash
 # Aggregate prop report (writes report .md + detail .json sidecar).
@@ -1368,58 +1393,50 @@ their source-match counts to agree. By default it fails when either component
 is more than 14 days behind the fixture. State newer than the fixture is safe:
 all feature and tracker queries remain filtered by the fixture date.
 
-The default production SQLite and snapshot end on 2026-04-16, so they now
-fail loudly for later live fixtures instead of silently falling back. For a
-diagnostic probability only, `--allow-stale-state` bypasses the age failure,
-marks the output `stale_override`, and suppresses every A7 shadow candidate.
+**Defaults (post 2026-07-31 promotion).** The live command serves
+`models/xgb_match_i7_swap_production` in `i7` identity mode from
+`data/live_state_i7/` (`player_stats_cache_i7.sqlite` +
+`tracker_snapshot.pkl`, currently through 2026-07-13). The default tracker
+sources are `data/t20s_json` plus the consumed forward context dir, and the
+SQLite and tracker must both report 9,920 source matches. For a diagnostic
+probability only, `--allow-stale-state` bypasses the age failure, marks the
+output `stale_override`, and suppresses every A7 shadow candidate.
 
-**Current chronology-safe state.** The consumed forward sidecar covers
-completed matches through 2026-07-13 without changing the production cache.
-Build its matching tracker snapshot once and predict with:
-
-```bash
-uv run python scripts/predict_fixture.py \
-  --fixture fixtures/<id>.json \
-  --state-dir data/forward_state/2026-06-01_2026-07-13 \
-  --tracker-snapshot tmp/live_state/tracker_snapshot_2026-07-13.pkl \
-  --tracker-source-dir data/t20s_json \
-  --tracker-source-dir \
-    data/forward_holdout/2026-06-01_2026-07-13/context_t20s_json \
-  --rebuild-snapshot
-```
-
-Drop `--rebuild-snapshot` on subsequent runs against the same source state.
-The SQLite and tracker must both report 9,920 source matches.
-
-**Future non-destructive refresh.** Put newly completed Cricsheet matches in a
-separate non-overlapping directory, then build a new live-only cache:
+**Rebuilding the default serving state** (after a cricsheet refresh, or to
+reproduce `data/live_state_i7/` from scratch):
 
 ```bash
 uv run python scripts/build_stats_cache.py \
   --source-dir data/t20s_json \
   --extra-source-dir \
     data/forward_holdout/2026-06-01_2026-07-13/context_t20s_json \
-  --extra-source-dir <new_context_dir> \
-  --out tmp/live_state/player_stats_cache_v3.sqlite \
+  --extra-source-dir <new_context_dir_if_any> \
+  --out data/live_state_i7/player_stats_cache_i7.sqlite \
   --metadata-csv data/all_players_enriched.csv \
-  --prior-source-sqlite models/player_stats_cache_v3.sqlite \
+  --prior-source-sqlite models/player_stats_cache_i7.sqlite \
   --force-rebuild
 
+# then rebuild the matching snapshot once:
 uv run python scripts/predict_fixture.py \
   --fixture fixtures/<id>.json \
-  --state-dir tmp/live_state \
-  --tracker-snapshot tmp/live_state/tracker_snapshot.pkl \
-  --tracker-source-dir data/t20s_json \
-  --tracker-source-dir \
-    data/forward_holdout/2026-06-01_2026-07-13/context_t20s_json \
-  --tracker-source-dir <new_context_dir> \
+  --tracker-source-dir <new_context_dir_if_any> \
   --rebuild-snapshot
 ```
 
-The discipline: never add post-2026-04-16 files to `data/t20s_json`
-or rebuild `models/player_stats_cache_v3.sqlite` in place. Doing
-so contaminates the iteration + golden test sets that document the
-production model's ROI numbers.
+Newly completed Cricsheet matches go in a separate non-overlapping context
+directory passed via `--extra-source-dir` / `--tracker-source-dir`. The
+discipline: never add post-2026-04-16 files to `data/t20s_json`, and never
+rebuild `models/player_stats_cache_v3.sqlite` or
+`models/player_stats_cache_i7.sqlite` in place — those document the
+iteration + golden numbers. `data/live_state_i7/` is the only
+serving-state directory that gets rebuilt.
+
+**Legacy replay** (pre-I7 production family, frozen state through
+2026-04-16): pass `--venue-identity-mode legacy
+--model-dir models/xgb_match_v3_m7_swap_production --state-dir models
+--state-version v3 --tracker-snapshot data/tracker_snapshot_test_end.pkl`.
+This exists for rollback and historical reproduction only; its state cannot
+be extended.
 
 **A7 output is shadow-only.** Odds are normalized to two-team fair
 probabilities. The frozen rule requires positive edge for
@@ -1497,6 +1514,91 @@ The validation primary interval crossed zero and the direct five-seed
 guardrail regressed. Full commands and metrics are in
 `docs/I9_PROVISIONAL_ELO_EXPERIMENT.md` and
 `reports/i9_provisional_elo_checkpoint_20260730.md`.
+
+### Operation 9: Refresh the women's tracks (w1 T20I / w2 leagues)
+
+Two isolated women's families. Neither is production and neither carries a
+betting claim — see `docs/I12_WOMENS_TRACK_SCOPING.md` for the verdicts.
+Every path below is `_w1`/`_w2`-suffixed; nothing here touches the men's
+cache, frames, models, or odds sets.
+
+**Step 1 — corpora.** w1 is women's T20Is from the stat-generator mirror; w2
+is six women's league competitions downloaded straight from cricsheet
+(the mirror does not sync them).
+
+```bash
+uv run python scripts/extract_womens_t20s.py                    # -> data/w_t20s_json/
+uv run python scripts/extract_womens_leagues.py --download      # -> data/w_league_json/
+```
+
+**Step 2 — cache + frame + model** (shown for w2; swap `w2`→`w1` and
+`data/w_league_json`→`data/w_t20s_json` for the T20I track).
+
+```bash
+uv run python scripts/build_stats_cache.py \
+    --source-dir data/w_league_json --gender-filter female \
+    --out models/player_stats_cache_w2.sqlite
+uv run python scripts/materialize_match_features.py \
+    --source-dir data/w_league_json --sqlite-dir models --version w2 \
+    --out-dir data/xgb_match_data_w2 --gender female
+uv run python scripts/xgboost_match_v1.py --cmd both \
+    --data-dir data/xgb_match_data_w2 --model-dir models/xgb_match_w2_base \
+    --monotone --seed 29
+uv run python scripts/predict_golden.py \
+    --model-dir models/xgb_match_w2_base \
+    --parquet data/xgb_match_data_w2/golden_test.parquet \
+    --out-json models/xgb_match_w2_base/golden_predictions.json
+```
+
+`--gender female` on the materializer is mandatory and must match the gender
+the `--version` cache was built with, or the frame silently mixes pools.
+
+**Step 3 — odds.** Pull female-scoped in the sibling `polymarket-cricket`
+repo, then join and evaluate here. Use `--format t20+hundred`: under plain
+`t20` The Hundred Women's markets are dropped, and they are the deepest
+women's book on the site.
+
+```bash
+# in ~/Projects/polymarket-cricket
+uv run python extract_match_prematch_odds_strict.py \
+    --gender female --format t20+hundred --cutoff 2025-07-01 --through <today>
+
+# back in Match_Prediction — internationals then leagues
+uv run python scripts/build_womens_polymarket_odds.py \
+    --capture <capture.json> --data-dir data/xgb_match_data_w1 \
+    --arm models/xgb_match_w1_base models/xgb_match_w1_swap \
+    --out-dir data/womens_polymarket \
+    --odds-filename betting_odds_womens_w1.json --label "I12 w1 (T20I)"
+uv run python scripts/build_womens_polymarket_odds.py \
+    --capture <capture.json> --data-dir data/xgb_match_data_w2 \
+    --arm models/xgb_match_w2_base models/xgb_match_w2_swap \
+    --out-dir data/womens_polymarket_leagues \
+    --odds-filename betting_odds_womens_w2.json --label "I12-L w2 (leagues)"
+
+uv run python scripts/eval_womens_v1.py --data-dir data/xgb_match_data_w2 \
+    --arms models/xgb_match_w2_base models/xgb_match_w2_swap   # skill gates
+uv run python scripts/eval_womens_market.py \
+    --odds data/womens_polymarket_leagues/betting_odds_womens_w2.json \
+    --markdown reports/womens_market_eval_leagues.md           # vs market
+```
+
+Both builders refuse to overwrite their outputs without `--overwrite`, as
+does the strict extractor.
+
+**Reading the output — three traps.**
+
+1. **Market worse than a coinflip.** Thin women's league books price near 0.5
+   and land wrong often enough to score above ln2. `eval_womens_market.py`
+   marks those slices `!` and reports an informative-slice count (market beats
+   coinflip *and* n ≥ 30). w2 "beats the market" on 7 of 12 league slices and
+   none of the seven is informative.
+2. **Exact-date joining is deliberate.** Women's series repeat the same
+   pairing on consecutive days while Polymarket's event date can sit two days
+   off Cricsheet's, so a fuzzy window cannot tell which leg it belongs to.
+   Near misses are reported in `join_report.json`, never joined.
+3. **No market before 2026-01-20.** Polymarket listed no women's cricket
+   before then, which caps w1 test-split coverage at 46/316 regardless of
+   fixture quality.
 
 ---
 

@@ -1,0 +1,68 @@
+=== train ===
+  candidate cols (57): ['match_id', 'cricsheet_id', 'match_date', 'team1', 'team2', 'venue', 'competition_tier', 'team1_wins', 'display_match_id', 'match_identity_version'] ...
+  reference cols (54): ['match_id', 'cricsheet_id', 'match_date', 'team1', 'team2', 'venue', 'competition_tier', 'team1_wins', 'team1_batting_elo', 'team1_bowling_elo'] ...
+  candidate-only cols: ['display_match_id', 'match_identity_version', 'elo_update_version']
+  reference-only cols: []
+  candidate match_id sample: '211048'
+  reference match_id sample: '2005-02-17_New_Zealand_Australia_Eden_Park,_Auckland'
+  candidate cricsheet_id sample: '211048'
+  reference cricsheet_id sample: '211048'
+  candidate display_match_id sample: '2005-02-17_New_Zealand_Australia_Eden_Park,_Auckland'
+  reference.match_id == candidate.display_match_id on 7972/7972 rows
+  cricsheet_id set equal: True  order equal: True
+  shared columns compared (excl. match_id): 53
+  ALL shared columns (excl. match_id) are bit-identical.
+
+=== validation ===
+  candidate cols (57): ['match_id', 'cricsheet_id', 'match_date', 'team1', 'team2', 'venue', 'competition_tier', 'team1_wins', 'display_match_id', 'match_identity_version'] ...
+  reference cols (54): ['match_id', 'cricsheet_id', 'match_date', 'team1', 'team2', 'venue', 'competition_tier', 'team1_wins', 'team1_batting_elo', 'team1_bowling_elo'] ...
+  candidate-only cols: ['display_match_id', 'match_identity_version', 'elo_update_version']
+  reference-only cols: []
+  candidate match_id sample: '1443073'
+  reference match_id sample: '2024-12-31_Adelaide_Strikers_Perth_Scorchers_Adelaide_Oval'
+  candidate cricsheet_id sample: '1443073'
+  reference cricsheet_id sample: '1443073'
+  candidate display_match_id sample: '2024-12-31_Adelaide_Strikers_Perth_Scorchers_Adelaide_Oval'
+  reference.match_id == candidate.display_match_id on 528/528 rows
+  cricsheet_id set equal: True  order equal: True
+  shared columns compared (excl. match_id): 53
+  ALL shared columns (excl. match_id) are bit-identical.
+
+=== test ===
+  candidate cols (57): ['match_id', 'cricsheet_id', 'match_date', 'team1', 'team2', 'venue', 'competition_tier', 'team1_wins', 'display_match_id', 'match_identity_version'] ...
+  reference cols (54): ['match_id', 'cricsheet_id', 'match_date', 'team1', 'team2', 'venue', 'competition_tier', 'team1_wins', 'team1_batting_elo', 'team1_bowling_elo'] ...
+  candidate-only cols: ['display_match_id', 'match_identity_version', 'elo_update_version']
+  reference-only cols: []
+  candidate match_id sample: '1482013'
+  reference match_id sample: '2025-07-01_San_Francisco_Unicorns_Seattle_Orcas_Central_Broward_Regional_Park_Stadium_Turf_Ground,_Lauderhill'
+  candidate cricsheet_id sample: '1482013'
+  reference cricsheet_id sample: '1482013'
+  candidate display_match_id sample: '2025-07-01_San_Francisco_Unicorns_Seattle_Orcas_Central_Broward_Regional_Park_Stadium_Turf_Ground,_Lauderhill'
+  reference.match_id == candidate.display_match_id on 798/798 rows
+  cricsheet_id set equal: True  order equal: True
+  shared columns compared (excl. match_id): 53
+  ALL shared columns (excl. match_id) are bit-identical.
+
+=== reference frame provenance files ===
+   test.parquet
+   train.parquet
+   validation.parquet
+   venue_identity.json
+=== candidate frame provenance files ===
+   elo_update.json
+   golden_test.parquet
+   match_identity.json
+   test.parquet
+   train.parquet
+   validation.parquet
+   venue_identity.json
+
+candidate match_identity.json: {
+  "match_identity_version": "cricsheet_primary_v1",
+  "primary_key": "cricsheet_id",
+  "display_key": "display_match_id"
+}
+candidate elo_update.json: {
+  "elo_update_version": "fixed_competition_k_v1"
+}
+reference has match_identity.json: False

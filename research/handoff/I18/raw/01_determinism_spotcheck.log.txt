@@ -1,0 +1,28 @@
+n_a (cricsheet-keyed): 798   n_b (display-keyed): 788
+unique display ids in a: 788  unambiguous: 778  colliding: 10
+shared unambiguous display ids: 778
+max_abs_delta_p_team1 (unambiguous join, n=778) = 0.0
+argmax key: 2026-04-16_Rawalpindiz_Hyderabad_Kingsmen_National_Stadium,_Karachi
+
+--- colliding display ids (multiple cricsheet ids share one display id; xgb_match_i7 keeps only one) ---
+2025-08-03_Switzerland_Estonia_Estonian_National_Cricket_and_Rugby_Field
+   i17 base_seed29 rows: [('1494774', 0.4956589937), ('1494775', 0.6783771515)]  | xgb_match_i7: 0.6783771515
+2025-08-22_Romania_Czech_Republic_Moara_Vlasiei_Cricket_Ground,_Ilfov_County
+   i17 base_seed29 rows: [('1499013', 0.693174541), ('1499014', 0.6548714042)]  | xgb_match_i7: 0.6548714042
+2025-08-24_Belgium_Austria_Velden_Cricket_Ground,_Latschach
+   i17 base_seed29 rows: [('1498698', 0.3162156343), ('1498699', 0.3003154099)]  | xgb_match_i7: 0.3003154099
+2025-09-12_Eswatini_Mozambique_Malkerns_Country_Club_oval
+   i17 base_seed29 rows: [('1501502', 0.552349925), ('1501503', 0.5425723791)]  | xgb_match_i7: 0.5425723791
+2025-09-13_Eswatini_Mozambique_Malkerns_Country_Club_oval
+   i17 base_seed29 rows: [('1501504', 0.6021409631), ('1501505', 0.6315692067)]  | xgb_match_i7: 0.6315692067
+2025-11-03_Bulgaria_Cyprus_Happy_Valley_Ground_2
+   i17 base_seed29 rows: [('1506446', 0.2733271122), ('1506447', 0.3492157161)]  | xgb_match_i7: 0.3492157161
+2025-12-23_Indonesia_Cambodia_Udayana_Cricket_Ground
+   i17 base_seed29 rows: [('1515542', 0.3801591694), ('1515543', 0.4795349836)]  | xgb_match_i7: 0.4795349836
+2025-12-27_Cambodia_Indonesia_Udayana_Cricket_Ground
+   i17 base_seed29 rows: [('1515547', 0.3337378502), ('1515548', 0.3284378052)]  | xgb_match_i7: 0.3284378052
+2026-04-07_Indonesia_Sweden_Udayana_Cricket_Ground
+   i17 base_seed29 rows: [('1529787', 0.4477782547), ('1529788', 0.4052850902)]  | xgb_match_i7: 0.4052850902
+2026-04-13_Sweden_Indonesia_Udayana_Cricket_Ground
+   i17 base_seed29 rows: [('1529793', 0.6032068729), ('1529794', 0.5523288846)]  | xgb_match_i7: 0.5523288846
+max over colliding of best-matching row: 0.0

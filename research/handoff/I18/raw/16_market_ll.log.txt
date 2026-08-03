@@ -1,0 +1,36 @@
+top-level keys: ['summary', 'matches']
+summary keys: ['avg_brier_score', 'avg_log_loss', 'avg_log_loss_ci_high', 'avg_log_loss_ci_low', 'bootstrap_contract', 'bootstrap_reliable', 'bootstrap_resamples', 'bootstrap_seed', 'close_threshold', 'cluster_metadata_coverage', 'cluster_source_dir', 'flat_betting_bets_placed', 'flat_betting_roi_ci_high', 'flat_betting_roi_ci_low', 'flat_betting_roi_pct', 'flat_betting_total_pnl', 'flat_betting_win_rate', 'min_volume', 'mismatch_threshold', 'n_bootstrap_clusters', 'n_matches_evaluated', 'n_matches_in_source', 'reslice_odds', 'reslice_source', 'slice', 'slice_name', 'stratify_by']
+match entry keys: ['actual_winner', 'bet_placed', 'bet_team', 'brier_score', 'competition_cluster_id', 'cricsheet_id', 'display_match_id', 'edge', 'expected_value', 'fractional_kelly_pnl', 'full_kelly_fraction', 'full_kelly_pnl', 'log_loss', 'market_odds', 'market_prob', 'match_date', 'match_id', 'n_simulations', 'polymarket_volume_usd', 'realized_pnl', 'simulated_prob', 'simulation_time', 'teams', 'tournament', 'venue']
+  teams = ['Scotland', 'Namibia']
+  actual_winner = 'Scotland'
+  market_prob = {'Scotland': 0.7150007150007149, 'Namibia': 0.28499772001823986}
+  market_odds = {'Scotland': 1.3986, 'Namibia': 3.5088}
+  simulated_prob = {'Scotland': 0.4117408096790314, 'Namibia': 0.5882591903209686}
+  log_loss = 0.8873612303215573
+  polymarket_volume_usd = 89718.67609700002
+
+=== market log loss per slice (market_prob on the actual winner) ===
+(market LL depends only on fixtures+odds, so it is identical across arms)
+
+--- swap_seed29 ---
+Traceback (most recent call last):
+  File "<stdin>", line 20, in <module>
+KeyError: None
+entries whose actual_winner is not a key in market_prob: 1
+   1529281 ['Kolkata Knight Riders', 'Lucknow Super Giants'] winner= None log_loss= None bet_placed= False market_prob keys= ['Kolkata Knight Riders', 'Lucknow Super Giants']
+
+summary avg_log_loss: 0.5988261327300449  n_matches_evaluated: 124  bets: 123
+n entries with non-null log_loss: 123  mean: 0.5988261327300449
+
+=== market log loss per slice (excluding the 1 no-result match) ===
+(market LL depends only on fixtures+odds -> identical across arms)
+
+--- swap_seed29 ---
+  all     n_scored=123  market_LL_raw=0.5513  market_LL_norm=0.5513  model_LL=0.5988 (summary 0.5988)
+  >=50k   n_scored= 74  market_LL_raw=0.6573  market_LL_norm=0.6573  model_LL=0.6538 (summary 0.6538)
+  >=100k  n_scored= 65  market_LL_raw=0.6843  market_LL_norm=0.6843  model_LL=0.6767 (summary 0.6767)
+
+--- base_seed29 ---
+  all     n_scored=123  market_LL_raw=0.5513  market_LL_norm=0.5513  model_LL=0.6056 (summary 0.6056)
+  >=50k   n_scored= 74  market_LL_raw=0.6573  market_LL_norm=0.6573  model_LL=0.6636 (summary 0.6636)
+  >=100k  n_scored= 65  market_LL_raw=0.6843  market_LL_norm=0.6843  model_LL=0.6859 (summary 0.6859)

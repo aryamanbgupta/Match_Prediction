@@ -1,0 +1,22 @@
+Source dir(s): [PosixPath('data/t20s_json'), PosixPath('data/golden/t20s_json')]
+StatsProvider: using SQLite backend player_stats_cache_i7.sqlite (56.7 MB)
+Loading player metadata from data/all_players_enriched.csv...
+  Loaded 11,256 players
+  Batting: 8178 right, 1814 left, 1264 unknown
+  Bowling: 6256 right, 1381 left, 3619 unknown
+  [1000] matches in 19s (51.6 match/s)
+  [5000] matches in 90s (55.8 match/s)
+  [6000] matches in 106s (56.6 match/s)
+  [9000] matches in 158s (56.8 match/s)
+  wrote data/auto/i18/i7_full_golden/train.parquet (7,972 rows, 6.3 MB)
+  wrote data/auto/i18/i7_full_golden/validation.parquet (528 rows, 0.5 MB)
+  wrote data/auto/i18/i7_full_golden/test.parquet (798 rows, 0.7 MB)
+  wrote data/auto/i18/i7_full_golden/golden_test.parquet (227 rows, 0.2 MB)
+  dropped 224 matches with no valid winner / abandoned
+
+DONE: 9,525 matches → data/auto/i18/i7_full_golden in 168s
+  train: 7,972 matches
+  validation: 528 matches
+  test: 798 matches
+  golden_test: 227 matches
+EXIT_CODE= ELAPSED_SEC=168 END=2026-07-31T01:45:54Z

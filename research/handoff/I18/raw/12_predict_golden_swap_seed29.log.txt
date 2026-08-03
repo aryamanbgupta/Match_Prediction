@@ -1,0 +1,11 @@
+  loaded 227 rows from data/auto/i18/frame/golden_test.parquet
+
+  WARN: unseen categorical values mapped to fallback class:
+    venue: 3 unseen → ['Botswana Cricket Association Oval 2, Gaborone', 'Korogi Sports Park, Nisshin', 'Sano International Cricket Ground 2']
+
+  standalone metrics on 227 matches (no liquidity slice, no market join):
+    LL    = 0.6116
+    Brier = 0.2145
+    coinflip ref = 0.6931
+
+  predictions written → models/auto/i18/swap_seed29_golden_predictions.json

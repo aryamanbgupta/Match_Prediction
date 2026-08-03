@@ -1,0 +1,65 @@
+frame:     data/xgb_match_data_i7_v2
+reference: data/xgb_match_data_i7
+
+======================================================================
+I19 CONTRACT CHECK — cricsheet-primary identity on every split
+======================================================================
+  [train]
+    rows=7972 (expected 7972)  columns=57
+    match_id == cricsheet_id on 7972/7972 rows
+    display_match_id: 7943 unique, 0 null, 0 blank
+    FAIL: display_match_id is not unique per row
+    match_identity_version values: ['cricsheet_primary_v1']
+    elo_update_version values: ['fixed_competition_k_v1']
+    match_id: 7972 unique, 0 null
+    train: FAIL
+  [validation]
+    rows=528 (expected 528)  columns=57
+    match_id == cricsheet_id on 528/528 rows
+    display_match_id: 522 unique, 0 null, 0 blank
+    FAIL: display_match_id is not unique per row
+    match_identity_version values: ['cricsheet_primary_v1']
+    elo_update_version values: ['fixed_competition_k_v1']
+    match_id: 528 unique, 0 null
+    validation: FAIL
+  [test]
+    rows=798 (expected 798)  columns=57
+    match_id == cricsheet_id on 798/798 rows
+    display_match_id: 788 unique, 0 null, 0 blank
+    FAIL: display_match_id is not unique per row
+    match_identity_version values: ['cricsheet_primary_v1']
+    elo_update_version values: ['fixed_competition_k_v1']
+    match_id: 798 unique, 0 null
+    test: FAIL
+  [golden_test]
+    rows=227 (expected 227)  columns=57
+    match_id == cricsheet_id on 227/227 rows
+    display_match_id: 222 unique, 0 null, 0 blank
+    FAIL: display_match_id is not unique per row
+    match_identity_version values: ['cricsheet_primary_v1']
+    elo_update_version values: ['fixed_competition_k_v1']
+    match_id: 227 unique, 0 null
+    golden_test: FAIL
+  [venue_identity.json]
+    candidate bytes=174  reference bytes=174
+    byte-equal to data/xgb_match_data_i7/venue_identity.json: True
+    content: {"venue_alias_active_count": 94, "venue_alias_sha256": "853b32b0ce3098dd8c0f33ba1437846f5505d50d9a425fbd37bff9c9f76745d8", "venue_alias_version": "venue_aliases_v1"}
+    PASS
+  [match_identity.json]
+    observed: {"display_key": "display_match_id", "match_identity_version": "cricsheet_primary_v1", "primary_key": "cricsheet_id"}
+    expected: {"display_key": "display_match_id", "match_identity_version": "cricsheet_primary_v1", "primary_key": "cricsheet_id"}
+    PASS
+  [elo_update.json]
+    observed: {"elo_update_version": "fixed_competition_k_v1"}
+    expected: {"elo_update_version": "fixed_competition_k_v1"}
+    PASS
+
+  train: FAIL
+  validation: FAIL
+  test: FAIL
+  golden_test: FAIL
+  venue_identity: PASS
+  match_identity: PASS
+  elo_update: PASS
+
+I19 CONTRACT GATE: FAIL

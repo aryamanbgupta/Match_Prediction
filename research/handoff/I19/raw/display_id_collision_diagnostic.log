@@ -1,0 +1,44 @@
+I19 DIAGNOSTIC — display_match_id collisions (NOT a gate; reporting only)
+======================================================================
+scripts/match_identity.py docstring: the historical
+date_team1_team2_venue string 'is not unique for same-day
+doubleheaders and must never be used as a new primary key.'
+
+[train] rows=7972 display_match_id unique=7943 collision_rows=58 lost_keys=29
+    match_id=1089203  display=2017-04-14_United_Arab_Emirates_Papua_New_Guinea_Sheikh_Zayed_Stadium,_Abu_Dhabi
+    match_id=1089243  display=2017-04-14_United_Arab_Emirates_Papua_New_Guinea_Sheikh_Zayed_Stadium,_Abu_Dhabi
+    match_id=1207081  display=2020-03-08_Spain_Germany_Desert_Springs_Cricket_Ground,_Almeria
+    match_id=1207082  display=2020-03-08_Spain_Germany_Desert_Springs_Cricket_Ground,_Almeria
+    match_id=1257405  display=2021-04-05_Namibia_Uganda_Wanderers_Cricket_Ground,_Windhoek
+    match_id=1257406  display=2021-04-05_Namibia_Uganda_Wanderers_Cricket_Ground,_Windhoek
+
+[validation] rows=528 display_match_id unique=522 collision_rows=12 lost_keys=6
+    match_id=1482828  display=2025-05-06_Malta_Estonia_Marsa_Sports_Club
+    match_id=1482829  display=2025-05-06_Malta_Estonia_Marsa_Sports_Club
+    match_id=1483789  display=2025-05-31_Austria_Switzerland_Velden_Cricket_Ground,_Latschach
+    match_id=1486784  display=2025-05-31_Austria_Switzerland_Velden_Cricket_Ground,_Latschach
+    match_id=1488320  display=2025-06-12_Indonesia_Cambodia_Udayana_Cricket_Ground
+    match_id=1488321  display=2025-06-12_Indonesia_Cambodia_Udayana_Cricket_Ground
+
+[test] rows=798 display_match_id unique=788 collision_rows=20 lost_keys=10
+    match_id=1494774  display=2025-08-03_Switzerland_Estonia_Estonian_National_Cricket_and_Rugby_Field
+    match_id=1494775  display=2025-08-03_Switzerland_Estonia_Estonian_National_Cricket_and_Rugby_Field
+    match_id=1499013  display=2025-08-22_Romania_Czech_Republic_Moara_Vlasiei_Cricket_Ground,_Ilfov_County
+    match_id=1499014  display=2025-08-22_Romania_Czech_Republic_Moara_Vlasiei_Cricket_Ground,_Ilfov_County
+    match_id=1498698  display=2025-08-24_Belgium_Austria_Velden_Cricket_Ground,_Latschach
+    match_id=1498699  display=2025-08-24_Belgium_Austria_Velden_Cricket_Ground,_Latschach
+
+[golden_test] rows=227 display_match_id unique=222 collision_rows=10 lost_keys=5
+    match_id=1531681  display=2026-05-07_Malta_Gibraltar_Marsa_Sports_Club
+    match_id=1531682  display=2026-05-07_Malta_Gibraltar_Marsa_Sports_Club
+    match_id=1533397  display=2026-05-08_Cyprus_Finland_Happy_Valley_Ground
+    match_id=1533398  display=2026-05-08_Cyprus_Finland_Happy_Valley_Ground
+    match_id=1533399  display=2026-05-09_Finland_Cyprus_Happy_Valley_Ground
+    match_id=1533400  display=2026-05-09_Finland_Cyprus_Happy_Valley_Ground
+
+======================================================================
+Does the FROZEN reference frame (legacy match_id == that same string)
+carry the same non-uniqueness in its PRIMARY key?
+[train] rows=7972  legacy match_id unique=7943  cricsheet_id unique=7972
+[validation] rows=528  legacy match_id unique=522  cricsheet_id unique=528
+[test] rows=798  legacy match_id unique=788  cricsheet_id unique=798

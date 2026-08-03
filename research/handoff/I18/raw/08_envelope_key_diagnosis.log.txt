@@ -1,0 +1,25 @@
+envelope entries: 124
+  match_id that are bare numeric (cricsheet-style): 69
+  match_id that are legacy display strings        : 55
+  sample numeric : ['1529304', '1529303', '1534041', '1534040', '1534039']
+  sample display : ['2026-04-17_Scotland_Namibia_Namibia_Cricket_Ground,_Windhoek', '2026-04-17_Kolkata_Knight_Riders_Gujarat_Titans_Narendra_Modi_Stadium,_Ahmedabad', '2026-04-17_Lahore_Qalandars_Quetta_Gladiators_National_Stadium,_Karachi']
+  envelope entry keys: ['actual_winner', 'brier_score', 'cricsheet_id', 'display_match_id', 'edge', 'expected_value', 'fractional_kelly_pnl', 'full_kelly_fraction', 'full_kelly_pnl', 'log_loss', 'market_odds', 'market_prob', 'match_date', 'match_id', 'n_simulations', 'polymarket_volume_usd', 'realized_pnl', 'simulated_prob', 'simulation_time', 'teams', 'tournament', 'venue']
+
+odds is dict, top-level keys: ['source', 'generated_at', 'total_matches', 'filters', 'matches'] ... n = 5
+  odds keys bare-numeric: 0  display-style: 5
+  sample odds key: source
+  sample odds value keys: <class 'str'>
+
+polymarket_test stems: 124 sample: ['1527577', '1527578', '1527579', '1527580', '1527581']
+numeric envelope ids that ARE polymarket_test stems: 69 / 69
+
+=== is the synthesized envelope ALREADY cricsheet-keyed? ===
+entries with non-empty cricsheet_id     : 69/124
+entries with non-empty display_match_id : 124/124
+cricsheet_id unique: 70
+cricsheet_ids that are polymarket_test stems: 69 / 70
+sample entries:
+   match_id='2026-04-17_Scotland_Namibia_Namibia_Cricket_Ground,_Windhoek' cricsheet_id=None display_match_id='2026-04-17_Scotland_Namibia_Namibia_Cricket_Ground,_Windhoek'
+   match_id='2026-04-17_Kolkata_Knight_Riders_Gujarat_Titans_Narendra_Modi_Stadium,_Ahmedabad' cricsheet_id=None display_match_id='2026-04-17_Kolkata_Knight_Riders_Gujarat_Titans_Narendra_Mod'
+   match_id='1529304' cricsheet_id='1529304' display_match_id='2026-05-17_Royal_Challengers_Bengaluru_Punjab_Kings_Himachal'
+   match_id='1529303' cricsheet_id='1529303' display_match_id='2026-05-16_Kolkata_Knight_Riders_Gujarat_Titans_Eden_Gardens'

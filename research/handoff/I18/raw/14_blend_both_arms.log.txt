@@ -1,0 +1,4 @@
+=== swap_seed29 ===
+  w=0.00: 124 blended, 0 passthrough → models/auto/i18/swap_seed29/golden_envelope_cricsheet_w0p00.json
+=== base_seed29 ===
+  w=0.00: 124 blended, 0 passthrough → models/auto/i18/base_seed29/golden_envelope_cricsheet_w0p00.json
