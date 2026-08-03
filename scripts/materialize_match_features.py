@@ -1266,6 +1266,12 @@ def main() -> int:
         default=BASELINE_ELO_UPDATE_VERSION,
         help="Versioned player-ELO update contract.",
     )
+    ap.add_argument(
+        "--gender", default="male",
+        help="info.gender filter for the source pool (default: male; "
+             "pass 'female' for the I12 women's frame). Must match the "
+             "gender the --version SQLite cache was built with.",
+    )
     args = ap.parse_args()
 
     splits = dict(DEFAULT_SPLITS)
@@ -1286,7 +1292,7 @@ def main() -> int:
         out_dir=args.out_dir,
         version=args.version,
         splits=splits,
-        gender="male",
+        gender=args.gender,
         metadata_csv=args.metadata_csv,
         freeze_trackers_after=args.freeze_trackers_after,
         elo_update_version=args.elo_update_version,

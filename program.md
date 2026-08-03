@@ -113,12 +113,27 @@ bets placed. If the idea adds features, re-materialize to `data/auto/<idea-id>`
 
 ### B) Sim / prop ideas
 
+Defaults load the PROMOTED production ball stack (2026-08-02):
+`models/xgb_i7_noweights_production/` (D16 no-weights RAW, i7 identity,
+`--stats-version i7`, NO calibrator — D17 closed the calibrator chain;
+never add `--ball-calibrator vector` on this stack):
+
 ```bash
 uv run python scripts/sim_eval/prop_backtest.py \
     --test-dir data/polymarket_test --n-sims 100 \
-    --ball-calibrator vector \
     --out research/reports/auto/<idea-id>_props.md
 ```
+
+Canonical production-stack baseline detail:
+`models/auto/d16/detail_noweights_raw_s46_n261.json` (seed 46). Legacy-path
+ideas (pre-promotion pairings against `models/auto/b12/detail_b10_s44_n261.json`
+etc.) must pass every legacy path explicitly: `--model-path
+models/xgb_v3/xgboost_model_v3.pkl --batter-encoder
+models/xgb_v3/batter_encoder_v3.pkl --bowler-encoder
+models/xgb_v3/bowler_encoder_v3.pkl --feature-columns
+models/xgb_v3/feature_columns_v3.txt --stats-version v3 --ball-calibrator
+vector --ball-calibrator-path
+models/xgb_v3/vector_scaling_calibrator_v1.pkl`.
 
 Full n=261 × 100 sims ≈ 40+ min. One heavy process at a time — never
 `--parallel`, never concurrent train + eval (16 GB box).

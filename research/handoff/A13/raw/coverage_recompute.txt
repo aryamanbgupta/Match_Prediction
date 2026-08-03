@@ -1,0 +1,24 @@
+
+=== d16_noweights_PROMOTED (models/auto/d16/detail_noweights_raw_s46_n261.json, n_matches=261) ===
+batter_fours_mae             n= 4254  P10-P90 coverage =  91.37%
+batter_runs_mae              n= 4254  P10-P90 coverage =  82.51%
+highest_individual_mae       n=  261  P10-P90 coverage =  73.56%
+team_first_over_mae          n=  522  P10-P90 coverage =  77.20%
+team_total_fours_mae         n=  522  P10-P90 coverage =  76.05%
+team_total_sixes_mae         n=  522  P10-P90 coverage =  76.44%
+
+=== d16_control_i7_vec (models/auto/d16/detail_control_vec_s46_n261.json, n_matches=261) ===
+batter_fours_mae             n= 4252  P10-P90 coverage =  91.06%
+batter_runs_mae              n= 4252  P10-P90 coverage =  77.23%
+highest_individual_mae       n=  261  P10-P90 coverage =  68.97%
+team_first_over_mae          n=  522  P10-P90 coverage =  70.50%
+team_total_fours_mae         n=  522  P10-P90 coverage =  70.88%
+team_total_sixes_mae         n=  522  P10-P90 coverage =  75.29%
+
+=== b12_legacy_canonical (models/auto/b12/detail_b10_s44_n261.json, n_matches=261) ===
+batter_fours_mae             n= 4253  P10-P90 coverage =  90.90%
+batter_runs_mae              n= 4253  P10-P90 coverage =  78.72%
+highest_individual_mae       n=  261  P10-P90 coverage =  71.65%
+team_first_over_mae          n=  522  P10-P90 coverage =  72.22%
+team_total_fours_mae         n=  522  P10-P90 coverage =  70.11%
+team_total_sixes_mae         n=  522  P10-P90 coverage =  76.63%

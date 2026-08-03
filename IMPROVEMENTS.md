@@ -1196,9 +1196,9 @@ Remaining, in priority order:
 | 5 | Archive ~41 superseded `xgb_match_*` ablation model dirs + `data/xgb_match_data_v3_m*` parquets + stale tracker snapshots + `data/betting_test` (Aug 2025) — keep the 7 dirs CLAUDE.md names | safe | ~60 MB, models/ listing 59→~25 |
 | 6 | `reports/` prune: superseded `prop_calibration_detail*.json` (27 MB), non-clean `ipl_2026_dashboard.html`; archive `mlc/EDGE_BRIEF.md` (superseded per memory) | safe | ~27 MB |
 | 7 | `models/auto/` + `data/auto/` retention: delete FAILED-idea artifacts once their tracked report is committed (~8 MB/idea; LANDED artifacts stay until merged). Candidate post-night step in `night.sh` | policy | bounded growth |
-| 8 | Branch hygiene: delete dead `fixes/sim_improvements`, `feature/player-stats-cache`, `features/{cricinfo-features,mlp-model,llm-model,transformer-model}` (Oct 2025–Mar 2026); `backup-pre-rewrite` after confirming the May rewrite | decision | — |
-| 9 | Merge overdue: `main` is 6 weeks stale; `auto-20260711` ⊃ `improvement-experiments` ⊃ E-series + A-series | decision | — |
-| 10 | Move `predict_next_match.md` → `docs/` (nothing references the root path) | safe | root tidiness |
+| 8 | ~~Branch hygiene~~ **Done 2026-07-30**: all 7 audited branches deleted (local + origin) plus 5 fully-merged night branches; tip SHAs recorded in `reports/model_dir_dedup_audit.md` | decision | — |
+| 9 | ~~Merge overdue~~ **Done 2026-07-30**: `main` fast-forwarded through `auto-20260722` and pushed | decision | — |
+| 10 | ~~Move the root prediction playbook into `docs/`~~ **Done 2026-07-30**: now at `docs/predict_next_match.md` | safe | root tidiness |
 
 **Kept by explicit decision (2026-07-11)**: `models/llm_v1` (6.0 GB — may be
 used later), `cricWAR/` (1.2 GB — separate project, stays for now).
@@ -1257,6 +1257,114 @@ model transfers mechanically, picks 63.5% directionally but compresses to
 0.37–0.62 — **no edge, no betting** (headline subject to the alias-fold
 caveat in the report). Runner evolved to v3 (orchestrator/executor split,
 anti-fabrication spot-checks, clean-tree guard).
+
+## Overnight 2026-07-31 + interactive review 2026-08-01 (branch `auto-20260731`)
+
+**The D-chain closed the ball-calibration saga (the night's headline).**
+D6 (CRASH, principled): the no-class-weights retrain is unexecutable on the
+legacy frame — `data/xgb_data_v3` predates the I7 venue-alias contract and
+the trainer fail-closes, so the deployed ball model lives on an untrainable
+identity (same position the legacy match model was in). D16 (LANDED) reran
+the test on the i7 frame as a paired twin: **no-weights RAW — no calibrator
+at all — dominates the deployed-stack design** (balanced weights + val-fit
+vector): ball LL ladder 1.6316 (control raw) → 1.5072 (control+vector) →
+**1.4253** (no-weights raw); teacher-forced wicket-rate error +0.0772 →
++0.0032; pooled tail dBrier −0.0116 [−0.0159, −0.0073]; batter_runs_mae
+14.4354 → 13.8905 (−0.5449 CI-clean, ~3.4× the B6 gain); 11 CI-clean movers
+all favorable, 0 regressions in 33 families. D17 (FAILED by design) proved
+no calibrator belongs on top (near-identity fit; batter_runs_mae +0.1439
+CI-clean worse) — the marginal-calibration chain
+E5→A8→A14/A15→A16→B7→B8→D17 is CLOSED at both ends. **No-weights RAW is the
+certified i7 ball stack for the I17 promotion bundle** (human decision,
+tracked in TODO). No ROI claim attaches: the gates are forecast-accuracy
+gates, and the standing E2/I13 result (no prop family beats fair baselines)
+is unchanged. D18 (hyperparams re-tuned for the uniform-weight surface) ran
+interactively 2026-08-01 to inform the promotion.
+
+**In-play quote layer validated (B5 → B14 → B15).** B5: sim P50
+remaining-runs quotes beat naive run-rate extrapolation CI-clean at all 3
+checkpoints (pooled dMAE −3.086 [−4.869, −1.289]) — the loop's first
+validated in-play skill claim; coverage at cp15 0.664 under the 0.70 floor
+(the A13 under-dispersion defect, now confirmed three independent times).
+B14 → B15: the calibrator of record is B15's **scale-only** per-checkpoint
+band widener (coverage 0.818/0.834/0.768 all in band at zero MAE cost);
+B14's shift term moved test P50 the wrong way — durable lesson: **never fit
+a shift/bias term from a temporally disjoint val pool**. B8 (perfect null):
+the first-over calibrator lever is closed on the current engine — D14/D15
+absorbed the gain A15/B7 used to provide.
+
+**Selector shipped (B10 → B12).** The B10 usage-aligned bowler selector
+re-gated CI-clean at a fresh seed on the pre-committed primary
+(bowler_wkts_1plus −0.0046 [−0.0071, −0.0021]) and shipped as the
+`b10_asof_usage` key in `models/bowler_phase_usage.json`. Fragile until I20
+lands: the builder predates B10 and a routine regeneration silently drops
+the key (the only tell is a missing banner).
+
+**Women's market correction (interactive, 2026-08-01).** The I12 "no odds
+exist" premise was wrong — a men's-scoped capture artifact. Women's
+Polymarket odds exist: 266 T20 markets (first 2026-01-20), 175 join to the
+w1 pool exact-date outcome-blind (129 golden / 46 test; 51 ≥$50k), winner
+agreement 175/175. **The market beats w1 on LL on every liquidity slice
+that matters** — w1's coinflip/ELO skill claim stands but is bounded above
+by a market it does not beat; no edge. Join:
+`scripts/build_womens_polymarket_odds.py` → `data/womens_polymarket/`.
+
+**I12-L women's league track (interactive, 2026-08-03) — w2 fails, and that
+is the finding.** The second half of the I12 memo's premise was wrong too:
+women's league cricket *is* downloadable, just under cricsheet competition
+codes the stat-generator mirror does not sync (`wtb` Vitality Blast Women,
+`wpl`, `hnd`, `wbb` WBBL, `cec` Charlotte Edwards Cup, `ssm` Super Smash).
+`scripts/extract_womens_leagues.py --download` assembles **1,206 league T20s**
+into an isolated w2 family (own cache, frame, models) built with w1's exact
+contracts. **w2 fails both v1 gates**: the ELO-only baseline beats it on test
+(0.6781 vs base 0.6858) and golden (0.6671 vs 0.6931), base sits exactly at
+coinflip on golden and swap is worse.
+
+The value is the contrast, not the model. The same pipeline scores LL 0.4484
+/ 81% accuracy on the associate-heavy T20I pool and **0.6858 / 50% on
+evenly-matched franchise sides**. I12's caveat (1) warned that
+full-member-vs-associate mismatches inflate w1's separability; w2 measures
+it. Most of w1's headline is the model learning that Australia beats
+Indonesia. The members-only w1 slice moves from optional follow-up to
+required.
+
+Two extractor defects surfaced while extending to leagues, both fixed:
+50-over competitions with no format token in their name (WNCL, Rachael
+Heyhoe Flint) survived a `--format t20` pull, and the `SA20` tournament label
+matched the tail of any `...-usa-20xx-` slug — every SA20 label ever emitted
+was a false positive. Added `--format t20+hundred`, without which The Hundred
+Women's markets are silently dropped; at $100k–$307k per fixture they are the
+deepest women's book on the site.
+
+51 league fixtures joined (`data/womens_polymarket_leagues/`), zero winner
+conflicts across all 226 joins on both tracks. **A trap worth remembering:**
+w2 "beats the market" on 7 of 12 league slices and none of the seven is
+informative — the thin league book scores *worse than a coinflip* at high
+volume (LL 0.7082 at ≥$50k, 0.7112 at ≥$100k vs ln2 0.6931), and the ≥$100k
+slice is eight matches priced 0.425–0.60 with four called wrong.
+`scripts/eval_womens_market.py` now flags market-worse-than-coinflip slices
+with `!` and reports an explicit informative-slice count (market beats
+coinflip *and* n ≥ 30). It is also the committed path that regenerates both
+LL tables, which the 2026-08-01 entry above lacked.
+
+**I14 venue registry passes 1–3 + review.** 92 canonicals with
+coords/altitude/climate normals; top-30 (of the aliased subset) boundary
+geometry: 23 directional, 7 honest gaps, fantasy/aggregator-grade sources
+flagged as such. The 2026-08-01 review found and fixed (commit `fca0551`):
+a pass-3 column shift on the Taunton/Gabba rows, the wind column mislabeled
+m/s (values are km/h — Open-Meteo default), and the double-Wanderers
+canonical pair. Structural gap left open as **pass 3.5**: the registry
+universe is the alias map only, so single-spelling venues — including
+Mirpur (340 matches), Dubai (279), MCG (100), SCG (92) — are absent, which
+blocks the I5 three-run linkage on missing rows.
+
+**Hygiene (2026-08-01, commits `fca0551`/`fae33ce`/`0c35b12`).** Women's
+join script committed after fixing 4 latent bugs (output byte-equivalent:
+175/0-conflict numbers unchanged); B14 gate evidence tracked (its excerpt's
+"untracked as in B10/B12" precedent claim was false); I18 promotion-audit
+logs given durable `.txt` twins; stale D4 marked SUPERSEDED by D15 in the
+queue; TODO gained the status snapshot + three open human decisions (D16
+ball-stack adoption, I14 V2 sourcing grade, D5 ruling).
 
 ## What NOT To Do
 

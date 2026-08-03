@@ -8,16 +8,27 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
 
 1. **Match-level direct (winner-market predictor)** — XGBoost binary classifier
    on 49 match-level features (M1 baseline + 3 venue outcome-dist).
-   Trained on `team1_wins`. **Production variant of record (post D12
-   adoption, 2026-07-30): `models/xgb_match_v3_m7_swap_production/`** —
+   Trained on `team1_wins`. **Production variant of record (post I17/I18/I19
+   promotion, 2026-07-31): `models/xgb_match_i7_swap_production/`** —
    the M7 config plus train-time team-swap symmetry augmentation
-   (`--swap-augment`, D12 LANDED 2026-07-17; promoted after I3-block +
-   golden confirmation, see `reports/d12_swap_promotion_20260730.md`).
-   The artifact is the archived D12 swap arm promoted verbatim: its base
-   sibling reproduces the frozen M7 predictions at max |Δp| = 0, and new
-   training on the pre-I7 legacy frame is deliberately impossible, so the
-   promotion, like M7 serving, lives on the legacy identity contract.
-   Frozen `models/xgb_match_v3_m7_production/` is retained for rollback.
+   (`--swap-augment`), seed 29, trained on the I7 identity frame
+   (frame of record `data/xgb_match_data_i7_v2`, `cricsheet_primary_v1`).
+   The artifact is the I17 audited swap arm promoted verbatim
+   (`models/auto/i19/swap_seed29`, model.pkl byte-identical to the I18
+   golden-audited `models/auto/i17/swap_seed29`). Evidence: D12 swap
+   transfer confirmed on 5/5 paired seeds on the i7 frame (mean ≥$50k ΔLL
+   −0.0144, floor 0.007, `docs/I17_I7_SWAP_SUCCESSOR.md`); golden audit —
+   swap-i7 beats the slice-matched market LL on both sharp golden slices
+   where the legacy line trails (`research/reports/auto/I18.md`). It trails
+   the legacy line by ~0.005–0.009 LL on the iteration ≥$50k slice; the
+   promotion rationale is operational — the legacy serving state ended
+   2026-04-16 and is unregenerable, and only the i7 stack has a fresh-state
+   build path. Serving state lives in `data/live_state_i7/` (see
+   `docs/SWAP_I7_PROMOTION_CUTOVER_PLAN.md`). The previous production
+   `models/xgb_match_v3_m7_swap_production/` (legacy identity, D12
+   promotion 2026-07-30) and frozen `models/xgb_match_v3_m7_production/`
+   are retained for rollback and reachable only through the legacy replay
+   contract.
    M7 config: lr 0.05, colsample 0.9 (from the M7 sweep; prior config was
    over-aggressive). `predict_fixture.py` uses this model directly; raw
    probabilities (no Platt — Platt over-corrects on this config and kills
@@ -80,17 +91,50 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
    available only through the temporary legacy replay contract; do not extend
    that mode with Hundred state. See `reports/hundred_2026_adaptation.md`.
 
-2. **Ball-level sim** — XGBoost v7, 114 features (V3 + 42 outcome-dist),
-   hierarchical shrinkage on the 4 vs-type/vs-hand cells (Phase 5
-   2026-04-25); k_player=30, k_venue=200 (Phase 6 sweep). Config:
-   `experiments/configs/xgb_v6_hierarchical_shrink.yaml`. v7 lost the
-   winner-market race to the clean direct model by ~0.07 LL on ≥$50k
-   (v7 0.7402 vs clean direct golden 0.6747). Audited 2026-05-09 for
-   the analogous leakage that hit the match-level model — clean
-   structurally and empirically (`reports/v7_leakage_audit.md`). **Use
-   this for prop bets, score distributions, in-play scenarios** —
+   **Successor line (I17, 2026-07-30):** swap + M7 config trained on the
+   I7 identity frame (`data/xgb_match_data_i7`) is the designated
+   production-successor configuration — D12 swap transfer confirmed on
+   5/5 paired seeds (mean ≥$50k ΔLL −0.0144, floor 0.007); beats the
+   slice-matched market LL on 5/5 seeds where base does on 4/5. Promotion
+   is a separate decision gated on an i7 golden-frame audit and the
+   fresh-state serving cutover plan. See `docs/I17_I7_SWAP_SUCCESSOR.md`
+   and `reports/i17_i7_swap_eval_20260730.md`.
+
+2. **Ball-level sim** — **production of record (promoted 2026-08-02):
+   `models/xgb_i7_noweights_production/`** — the D16 no-class-weights
+   retrain on the i7 identity frame (`data/xgb_data_i7`,
+   `venue_aliases_v1`, i7 stats cache), served **RAW — no ball
+   calibrator**. The artifact is the D16 arm promoted verbatim
+   (booster md5 `7ee1e180…`, sidecars byte-identical to the archived
+   `models/xgb_i7` encoders). Evidence: D16 — no-weights RAW dominates
+   the calibrated legacy-design stack (ball LL 1.5072 → 1.4253; pooled
+   tail dBrier −0.0116 CI-clean; batter_runs_mae 14.435 → 13.891
+   CI-clean; 11 favorable CI-clean movers, 0 regressions in 33
+   families); D17 — calibrator-on-top is a decision-grade null (the
+   E5→…→B8 marginal-calibration chain is CLOSED; never add a vector
+   calibrator to this stack); D18 — hyperparameter re-tune fails to
+   transfer (better val LL, prop-level noise), config stands at the
+   swept lr 0.2404 / best_iteration 24. See
+   `research/reports/auto/{D16,D17,D18}.md`.
+   `scripts/sim_eval/prop_backtest.py` defaults now load this stack
+   (`--stats-version i7`); `--ball-calibrator vector` is legacy-replay
+   only and requires an explicit `--ball-calibrator-path`.
+   **Use this for prop bets, score distributions, in-play scenarios** —
    anywhere ball-level resolution matters and match-level supervision
-   can't help.
+   can't help. No betting claim attaches: E2/I13 fair-baseline results
+   are unchanged.
+
+   **Legacy line (retired to replay)**: XGBoost v7, 114 features (V3 +
+   42 outcome-dist), hierarchical shrinkage (Phase 5 2026-04-25);
+   k_player=30, k_venue=200. Config:
+   `experiments/configs/xgb_v6_hierarchical_shrink.yaml`. Lives on the
+   pre-I7 frame (`data/xgb_data_v3`, 467 raw venue strings), which
+   **fail-closes under the I7 identity contract and can no longer be
+   trained** (D6). Replay needs explicit `--model-path models/xgb_v3/…
+   --stats-version v3 --ball-calibrator vector --ball-calibrator-path
+   models/xgb_v3/vector_scaling_calibrator_v1.pkl`. v7 lost the
+   winner-market race to the clean direct model by ~0.07 LL on ≥$50k;
+   leakage-audited clean (`reports/v7_leakage_audit.md`).
 
    **Prop-bet framework (2026-05-12; REVISED 2026-07-24 by I13)**:
    `scripts/sim_eval/prop_backtest.py` backtests ~25 prop families against
@@ -104,10 +148,11 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
    **E5 root cause of the tail-event overshoot
    (`reports/e5_class_weight_fix.md`)**: v7 trains with `balanced` class
    weights and the sim sampled the tilted probabilities raw (P(wkt) 2×
-   actual per ball). Fixed by the val-fit `VectorScalingCalibrator`
-   (`models/xgb_v3/vector_scaling_calibrator_v1.pkl`) — pass
-   `--ball-calibrator vector` to `prop_backtest.py` for all prop/score
-   work. Calibrated, the PP-total overshoot disappears, bowler-wicket
+   actual per ball). Patched at the time by the val-fit
+   `VectorScalingCalibrator`
+   (`models/xgb_v3/vector_scaling_calibrator_v1.pkl`) — **legacy-replay
+   only since the 2026-08-02 promotion**: the production i7 no-weights
+   stack removes the tilt at training time and must run raw (D17). Calibrated, the PP-total overshoot disappears, bowler-wicket
    overshoot halves, but the I13 usage-share baseline beats calibrated
    `top_bowler` CI-clean (sim − baseline +0.0038
    [+0.0026, +0.0051]). The old "first binary family with skill" claim is
@@ -185,6 +230,42 @@ Use `--min-volume {50000,100000}` to slice either set for sharp markets.
 
 ---
 
+## Women's track (I12 / I12-L) — separate corpora, no edge
+
+Two fully isolated women's families, neither production and neither carrying
+any betting claim. They share no artifact with the men's line.
+
+| family | corpus | model dirs | frame | cache |
+|---|---|---|---|---|
+| **w1** | 2,086 women's T20Is (`data/w_t20s_json/`) | `models/xgb_match_w1_{base,swap}` | `data/xgb_match_data_w1` | `player_stats_cache_w1.sqlite` |
+| **w2** | 1,206 women's league T20s (`data/w_league_json/`) | `models/xgb_match_w2_{base,swap}` | `data/xgb_match_data_w2` | `player_stats_cache_w2.sqlite` |
+
+**Market odds exist** (found 2026-08-01; the I12 memo's "no odds" premise was
+an artifact of a men's-scoped pull). Women's internationals hide from
+slug-based filters because Gamma carries the gender only in the *event
+title* — see `docs/I12_WOMENS_TRACK_SCOPING.md`. Pull with
+`extract_match_prematch_odds_strict.py --gender female --format t20+hundred`,
+join with `scripts/build_womens_polymarket_odds.py`, evaluate with
+`scripts/eval_womens_market.py`. Joined sets live in
+`data/womens_polymarket/` (175 T20I fixtures) and
+`data/womens_polymarket_leagues/` (51 league fixtures); both are gitignored
+and regenerable, and neither touches any men's odds set.
+
+**Honest state**: w1 clears the coinflip and ELO-baseline gates (test LL
+0.4484, 81% acc) but **loses to the market on log loss on every liquidity
+slice**. w2 **fails** the gates outright — the ELO-only baseline beats it on
+both splits. The gap between them is the finding: the same pipeline scores
+0.4484 on the associate-heavy T20I pool and 0.6858 on evenly-matched
+franchise sides, so most of w1's headline is roster mismatch rather than
+cricket modelling. A members-only w1 slice is the required next step.
+
+When reading any women's market table, check the coinflip guard first: thin
+league books frequently score *worse* than a coinflip, and "the model beat
+the market" on such a slice means nothing. `eval_womens_market.py` flags
+those slices with `!` and reports an informative-slice count.
+
+---
+
 ## Tooling rule
 
 Always run Python via `uv run` — e.g. `uv run python scripts/run_experiment.py ...`.
@@ -223,17 +304,21 @@ uv run python scripts/sim_eval/blend_report.py \
 
 # === Predict an upcoming fixture ===
 # Hand-write fixtures/<match>.json (see fixtures/_template.json), then:
-uv run python scripts/predict_fixture.py \
-  --fixture fixtures/<match>.json \
-  --state-dir data/forward_state/2026-06-01_2026-07-13 \
-  --tracker-snapshot tmp/live_state/tracker_snapshot_2026-07-13.pkl \
-  --tracker-source-dir data/t20s_json \
-  --tracker-source-dir \
-    data/forward_holdout/2026-06-01_2026-07-13/context_t20s_json
-# Add --rebuild-snapshot once if that matching snapshot does not exist.
-# The default 2026-04-16 production state now fails when >14 days stale.
+uv run python scripts/predict_fixture.py --fixture fixtures/<match>.json
+# Defaults (post 2026-07-31 promotion): models/xgb_match_i7_swap_production,
+# i7 identity mode, state in data/live_state_i7/ (cache + tracker snapshot,
+# currently through 2026-07-13). Add --rebuild-snapshot once after any cache
+# refresh. State >14 days behind the fixture still fails loudly — refresh
+# cricsheet + rebuild data/live_state_i7 before a live fixture (OPERATIONS
+# § "Operation 6"). Legacy replay of the pre-I7 production family needs
+# explicit --venue-identity-mode legacy + the old model/state paths.
 # A7 output is ≥$50k, exact-policy, shadow-only, and never authorizes
 # execution. See docs/OPERATIONS.md § "Operation 6".
+
+# === Golden eval refresh — i7 production line (one command) ===
+# Reproduces the I18 audit numbers for the current production model:
+bash scripts/refresh_golden_i7.sh
+# (legacy-line refresh below is retained for the retired v2_clean family)
 
 # === Golden eval refresh (after new polymarket capture + cricsheet refresh) ===
 # 1. Pull new T20 cricsheet JSONs from stat-generator (date >= 2026-04-17):

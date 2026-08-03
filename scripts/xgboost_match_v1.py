@@ -139,6 +139,28 @@ _SWAP_PAIRS = [
     ("team1_bowlers_p4_expected", "team2_bowlers_p4_expected"),
     ("team1_bowlers_p6_expected", "team2_bowlers_p6_expected"),
     ("team1_bowlers_pw_expected", "team2_bowlers_pw_expected"),
+    # I12: full-superset frame columns (M3/M4/M5 feature groups that the
+    # trimmed i7 frame omits). All diffs below verified exactly t1 - t2 on
+    # the w1 train parquet (max |err| = 0).
+    ("team1_top6_bat_elo_max", "team2_top6_bat_elo_max"),
+    ("team1_top6_bat_elo_spread", "team2_top6_bat_elo_spread"),
+    ("team1_bowl_elo_max", "team2_bowl_elo_max"),
+    ("team1_bowl_elo_top2", "team2_bowl_elo_top2"),
+    ("team1_win_rate_last_60d", "team2_win_rate_last_60d"),
+    ("team1_n_matches_last_60d", "team2_n_matches_last_60d"),
+    ("team1_competition_win_rate", "team2_competition_win_rate"),
+    ("team1_competition_n_matches", "team2_competition_n_matches"),
+    ("days_since_team1_last_match", "days_since_team2_last_match"),
+    ("is_team1_back_to_back", "is_team2_back_to_back"),
+    ("team1_top6_batting_avg_recent", "team2_top6_batting_avg_recent"),
+    ("team1_top6_batting_sr_recent", "team2_top6_batting_sr_recent"),
+    ("team1_bowlers_avg_recent", "team2_bowlers_avg_recent"),
+    ("team1_bowlers_econ_recent", "team2_bowlers_econ_recent"),
+    ("team1_n_inform_batters", "team2_n_inform_batters"),
+    ("team1_n_outofform_batters", "team2_n_outofform_batters"),
+    ("team1_top6_avg_vs_opp_shrunk", "team2_top6_avg_vs_opp_shrunk"),
+    ("team1_top6_sr_vs_opp_shrunk", "team2_top6_sr_vs_opp_shrunk"),
+    ("team1_h2h_balls_total", "team2_h2h_balls_total"),
 ]
 _SWAP_NEGATE = [
     "elo_diff_batting", "elo_diff_bowling", "batting_avg_diff",
@@ -147,6 +169,14 @@ _SWAP_NEGATE = [
     # D12: M2 diffs, all verified exactly t1 - t2 on the m3_unfrozen parquet.
     "p4_batting_diff", "p6_batting_diff", "pw_batting_diff",
     "p4_bowling_diff", "p6_bowling_diff", "pw_bowling_diff",
+    # I12: superset diffs, verified exactly t1 - t2 on the w1 train parquet.
+    "top6_bat_elo_max_diff", "top6_bat_elo_spread_diff",
+    "bowl_elo_max_diff", "bowl_elo_top2_diff",
+    "win_rate_last_60d_diff", "competition_win_rate_diff",
+    "days_since_diff", "batting_avg_recent_diff", "batting_sr_recent_diff",
+    "bowling_avg_recent_diff", "bowling_econ_recent_diff",
+    "inform_batters_diff", "outofform_batters_diff",
+    "avg_vs_opp_diff", "sr_vs_opp_diff",
 ]
 _SWAP_ONE_MINUS = [
     "h2h_team1_win_rate_shrunk", "toss_winner_is_team1",
@@ -162,6 +192,9 @@ _SWAP_INVARIANT = [
     # D12: venue outcome-dist rates (M2 venue-only; properties of the venue,
     # team-order invariant).
     "venue_p4", "venue_p6", "venue_pw",
+    # I12: calendar/conditions columns (fixture properties, team-order
+    # invariant).
+    "month_of_year", "day_of_week", "is_dew_prone_month",
 ]
 
 

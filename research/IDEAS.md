@@ -269,9 +269,23 @@ exhausted at both resolutions. Reverted `eabd701`; default sim path byte-unchang
 harness `scripts/auto/a12_*.py` + `models/auto/a12/` scratch kept. See
 `research/reports/auto/A12.md`.
 
-## A13 [P3] [PENDING] Sim dispersion calibration on sampled score totals (A8 follow-up)
+## A13 [P3] [SUPERSEDED-by-D16 2026-08-03] Sim dispersion calibration on sampled score totals (A8 follow-up)
 *(claim reset by supervisor: the 2026-07-11 iteration was cut mid-eval by the
 wall clock — no verdict was reached, safe to re-run)*
+*(SUPERVISOR RE-POINT 2026-08-02, after the ball-stack promotion: run this
+on the PROMOTED stack — prop_backtest defaults now load
+`models/xgb_i7_noweights_production` with `--stats-version i7` and NO
+calibrator (D17 closed the marginal chain; do NOT pass `--ball-calibrator
+vector`). Baseline detail = `models/auto/d16/detail_noweights_raw_s46_n261.json`
+(seed 46 — use seed 46 for the paired run, not the legacy s43/s44 details).
+STEP 0 before fitting anything: re-measure P10–P90 coverage on the promoted
+stack — the under-dispersion premise was established on the legacy
+balanced-weights stack (B5/B15: cp15 coverage 0.664), and uniform-weight
+training plausibly changes the spread of sampled totals. If coverage is
+already ~in band on the promoted stack, log A13 as SUPERSEDED-by-D16
+without burning the second eval. The method text below predates the
+promotion; read `--ball-calibrator vector` references as legacy context,
+not instructions.)*
 **Hypothesis:** A8 showed vector scaling (a *marginal-rate* correction) cannot move
 the tail-overshoot props — but the vec baseline report shows the sim **under-disperses**
 score totals (`team_first_over` P10–P90 coverage 53% vs ideal 80%; `batter_runs`
@@ -290,7 +304,23 @@ edit — implement inside `sim_v1_2.py` aggregation or a post-hoc transform.
 tail Brier (`pp_total` + `first_wicket_runs` + `highest_over_runs`) improves paired
 vs the single-vector run, with no regression of `batter_runs_mae`. **Budget:** ~2 h
 (two n=261 sim runs; the vec baseline `detail_vec_n261.json` may be reused if unchanged).
-**Result:** —
+**Result:** SUPERSEDED-by-D16 2026-08-03 (STEP 0 pre-check; no eval burned, no
+implementation, nothing to revert). Re-measured P10–P90 coverage on the
+PROMOTED i7 no-weights stack from the canonical d16 s46 baseline
+(report numbers verified by per-row recompute over the detail JSONs — exact
+match on all three stacks; `research/handoff/A13/raw/coverage_recompute.txt`).
+The under-dispersion premise is GONE: all five under-dispersed families sit
+inside the pre-committed [0.70, 0.90] band (B5/B14/B15 band) — batter_runs
+82.51%, team_fours 76.05%, team_sixes 76.44%, first_over 77.20%,
+highest_individual 73.56% — vs premise-era a8-vec 73.77/64.75/74.71/64.56/68.97
+and the paired same-seed control twin (i7 + balanced weights + vector)
+77.23/70.88/75.29/70.50/68.97 → the no-weights retrain itself widened
+sampled-total dispersion toward nominal, the exact mechanism the re-point
+flagged. `batter_fours` 91.37% is out of band HIGH (over-dispersed) — the
+opposite defect, which the widening method would worsen. STEP 0 rule fires →
+SUPERSEDED-by-D16. Follow-up B16 appended (B15 quote-calibrator scales were
+fit against the legacy engine's under-dispersion → stale for any i7
+quote-path migration). See `research/reports/auto/A13.md`.
 
 ## A14 [P3] [LANDED] Per-over (not per-3-phase) ball calibrator for single-over props (A8 follow-up)
 **Hypothesis:** A8's 3-bucket phase calibrator netted to null on multi-phase aggregate
@@ -580,7 +610,7 @@ table `research/reports/auto/B4_pricing.md`; numbers
 shown weak in the tail → B9 appended (usage-share baseline re-test). Kept
 `74856a6`+`b387cbb`. See `research/reports/auto/B4.md`.
 
-## B5 [P2] [PENDING] In-play over/under quote prototype (analytics-engine seed)
+## B5 [P2] [TABLED] In-play over/under quote prototype (analytics-engine seed)
 **Resolution (2026-07-30):** the stale 2026-07-23 RUNNING claim was closed
 with a supervised CRASH row in `results.tsv` (eval died at session limits;
 no result ever produced). The additive harness
@@ -601,7 +631,31 @@ run-rate-extrapolation baseline.
 [70%, 90%] at all three checkpoints. **Budget:** ~3 h — needs sim-from-state
 plumbing; if that plumbing doesn't exist, scope THIS iteration to building +
 unit-testing it and mark the idea `TABLED (plumbing done, eval next)`.
-**Result:** —
+**Result:** TABLED 2026-07-31 (fresh claim `404905f` after the CRASH
+resolution; both void-claim conditions met pre-eval: `b5_unit_check` re-run
+ALL PASS on current post-I15 code — replay parity 253/261 with 8
+rain-curtailed skips, crease-pair 756/756, live smoke deterministic
+venue-ON — and `b5_gate_analysis.py` verified byte-intact since `26a7fd9`).
+Non-engine harness on the current default path (venue-ON + D1 + D15 + stale
+v1 vector, `EmpiricalBowlerSelector`, seed 43); eval 1495.8 s, 756 quote
+rows / 253 matches / 8 skips. **GATE 1 MET** — sim P50 remaining-runs MAE
+beats naive run-rate extrapolation at ALL THREE checkpoints: cp6 20.860 vs
+25.897 (dMAE −5.038 [−7.970, −2.082]), cp10 17.061 vs 20.000 (−2.939
+[−4.947, −0.909]), cp15 12.314 vs 13.575 (−1.261 [−2.613, −0.004]); pooled
+paired **−3.086 [−4.869, −1.289]** CI-clean → the loop's first validated
+in-play skill claim. **GATE 2 NOT MET** — P10–P90 coverage cp6 0.755
+[0.704, 0.810] and cp10 0.794 [0.743, 0.846] IN BAND, but cp15 **0.664
+[0.608, 0.724] OUT** (<0.70 floor): the late-innings band is too NARROW
+(width 29.5 vs actual sd 16.9; calibrated ~2.56σ ≈ 43) — the A13
+under-dispersion defect surfacing at the quote layer, concentrated in the
+short (death-overs) horizon. Context: P50 bias decays +4.670/+3.204/+0.514
+across cps (≈ +0.33 runs per remaining over; sign-consistent with D3's
+extras double-count finding, speculative). Exactly one gate → TABLED per
+the pre-committed mapping. Nothing reverted (zero code changes this claim;
+harness pre-existing and kept; evidence commits `ab06f0c`/`be4adac` kept;
+`models/auto/b5/` gitignored). Follow-up B14 appended (per-checkpoint
+quote-layer recalibration). See `research/reports/auto/B5.md` +
+`research/handoff/B5/`.
 
 ## B6 [P1] [LANDED] Venue-encoder fix re-gated on batter-level continuous primary at a fresh seed (B1 follow-up)
 **Hypothesis:** B1 (TABLED) fixed the sim's venue blindness but its pre-committed
@@ -702,7 +756,7 @@ default sim path byte-unchanged; artifacts gitignored `models/auto/b7/`).
 Follow-up B8 appended (hybrid v1-global + over-0 default). See
 `research/reports/auto/B7.md`.
 
-## B8 [P2] [PENDING] Hybrid calibrator: stale v1 global + over-0 vector as the venue-ON default (B7 decomposition)
+## B8 [P2] [TABLED] Hybrid calibrator: stale v1 global + over-0 vector as the venue-ON default (B7 decomposition)
 **Hypothesis:** B7 decomposed cleanly: the refit *global* vector actively hurts
 (pooled tail +0.0079 CI-clean worse — v1 is NOT stale under venue-ON) while the
 *over-0* vector delivers the A14/A15 first-over gain under venue-ON
@@ -726,7 +780,37 @@ team_total_{fours,sixes}_mae no CI-clean regression. Both → LANDED (ship the
 hybrid as the default venue-ON calibrator, superseding bare v1; re-baseline
 warning applies); exactly one → TABLED; none → FAILED. **Budget:** ~1 h (one
 n=261 run; baseline + tooling reused).
-**Result:** —
+**Result:** TABLED 2026-07-31 (per the pre-committed mapping — GATE 1 not
+met, GATE 2 held; substantively a **perfect null**: 0 of 32 scanned
+families CI-clean in either direction). Two pre-committed orchestrator
+rulings: baseline = `models/auto/b10/detail_blind_s43_n261.json` (the b6
+detail named above is invalid — D1/D15 landed after B6, and B10 measured
+CI-clean drift across the I5/I9 refactors), over-0 source = the venue-ON
+refit `models/auto/b7/over0_calibrator_venueon.pkl` using ONLY its
+`_v[0]`. Compose verified bit-exact (`hybrid._global == v1._v` and
+`_v[0] == b7 over-0` at max |Δ| = 0.0; the dropped refit global diverges
+0.1712 — B7's poison excluded by construction). One fresh n=261×100
+seed-43 run (2153.9 s), engine parity vs 91be8d7 empty, only delta =
+`--ball-calibrator-path`. **GATE 1a NOT MET**: `team_first_over_mae`
+dMAE **+0.004 [−0.014, +0.024]** noise (expected ≈ −0.02) — the A15/B7
+first-over gain is GONE: the blind first-over MAE drifted 3.535/3.526
+(A8/A15 era) → **3.411** post-D14/D15; D14's extraction-window fix (the
+6th legal delivery no longer rolled into the next over) + D15's run-out
+channel absorbed what the over-0 vector was buying. **GATE 1b MET** —
+and it confirms B7's decomposition on the regression side: pooled 6-line
+tail +0.0005 [−0.0005, +0.0017] (B7's refit-global +0.0079 fully gone),
+bowler_wkts_1plus −0.0005 (B7's +0.0024 gone), batter_runs_mae +0.000.
+**GATE 2 HELD** (top_bowler +0.0001, fours/sixes MAE noise).
+**First-over calibrator lever CLOSED on the current engine** — closes
+the E5→A8→A14/A15→A16→B7→B8 marginal-calibration chain; bare v1 stays
+the sole default calibrator; A15's artifact is superseded-by-drift. Do
+NOT re-run or combine B8 unless the sim engine changes again in a way
+that plausibly re-opens a first-over marginal defect. No re-baseline
+(nothing shipped; canonical seed-43 baseline unchanged). Nothing
+reverted (ba024ce = compose+gate harness only; default sim path
+byte-unchanged; B7/A11 precedent). Artifacts `models/auto/b8/`
+(gitignored; pkl reproducible via `scripts/auto/b8_compose_hybrid.py`).
+See `research/reports/auto/B8.md`.
 
 ## B9 [P2] [LANDED] top_bowler margin vs a usage-share fair baseline (B4 follow-up)
 **Hypothesis:** B4 showed the E2 career-wickets-share baseline is weak
@@ -774,7 +858,7 @@ revision (I13); sim who-bowls alignment appended as B10. Harness
 `scripts/auto/b9_usage_baseline.py`; artifacts `models/auto/b9/`
 (gitignored). See `research/reports/auto/B9.md`.
 
-## B10 [P2] [PENDING] Sim who-bowls usage alignment: debutants + non-bowlers (B9 follow-up, D5 superset)
+## B10 [P2] [TABLED] Sim who-bowls usage alignment: debutants + non-bowlers (B9 follow-up, D5 superset)
 **Hypothesis:** B9's usage baseline beats the calibrated sim on top_bowler
 CI-clean in every band that matters (pooled +0.0038, head-only +0.0049),
 and both exposed distortions are WHO-BOWLS errors, not per-ball-rate
@@ -809,7 +893,37 @@ G5 bowler coverage stays ≥90%. Guards = `bowler_wkts_{1,2}plus`,
 LANDED (re-baseline warning applies; subsumes D5's mechanism — its
 queue status becomes a supervisor call); exactly one → TABLED; none →
 FAILED. **Budget:** ~2.5 h. One sim idea per night.
-**Result:** —
+**Result:** TABLED 2026-07-31 (two-session relay: claim+plan+implement+both
+evals+gate ran 2026-07-30/31 at `91be8d7`/`82c00de`/`ad144ea`; executor
+died before result.md — this iteration recovered from
+`research/handoff/B10/raw/` and issued the verdict). Twin FRESH
+n=261×100 seed-43 runs (blind 2857 s / b10 2841 s) replaced the D15
+detail as baseline per the plan's binding adaptation (I5/I9 refactors
+intended-inert but unverified) — VINDICATED: drift check blind-vs-D15
+SAME seed shows `top_bowler` **−0.0010 [−0.0017, −0.0003] CI-clean** →
+the refactors are NOT draw-inert; **RE-BASELINE: canonical seed-43
+baseline = `models/auto/b10/detail_blind_s43_n261.json`** (b10 twin
+kept). Unit check PASSED pre-Arm-B (d15 30/30, legacy parity
+float-exact, exp_balls parity vs B9 exact, production usage json md5
+unchanged) and surfaced the decisive mechanism finding: veteran
+never-bowlers (≥20 apps, 0 career balls) RISE 0.270%→0.496% share —
+B9's exp_balls shrinks a 0-ball veteran to k_u·prior/(k_u+n) ≈ 1–2
+balls, ABOVE the legacy α floor, so B10-as-specified attacks defect (a)
+(debutants 1.15%→8.73% share, actual ≈9%) but moves (b) the WRONG way
+(the B9 baseline never fixed (b) either: prices that cohort 1.30% vs
+sim 1.29%). **GATE 1 NOT MET**: top_bowler dBrier −0.0002
+[−0.0008, +0.0005] straddles 0 (G5 coverage 0.9990 met); sim−usage
+margin barely closes (+0.0028 blind → +0.0026 b10; B9's +0.0038 was on
+the stale detail). **GATE 2 MET**: zero CI-clean regressions in the
+32-family scan; `bowler_wkts_1plus` CI-clean BETTER **−0.0049
+[−0.0075, −0.0023]** (the D15 residual 1plus overshoot closing), plus
+first_wicket_30_5 −0.0024 / highest_over_24_5 −0.0014 boundary-better.
+Exactly one gate → TABLED. 8 relaxation triggers (benign). Reverted
+`a8c061b` (sim + harness byte-identical to pre-B10 head; harness at
+`ad144ea`; `models/auto/b10/` kept, gitignored). Follow-ups: B12
+(fresh-seed re-gate on bowler_wkts_1plus primary), B13 (never-bowler
+damping — the (b)-direction fix). See `research/reports/auto/B10.md` +
+`research/handoff/B10/`.
 
 ## B11 [P3] [PENDING] Bias-free alpha refit for the B3 blend (B3 follow-up)
 **Hypothesis:** B3's val-fit alphas systematically lean toward the sim
@@ -836,6 +950,493 @@ CI-clean on ≥1 family AND no family regresses CI-clean vs B3's blend.
 Guards = B3's GATE 2 (no family CI-clean worse than its best parent).
 Both → LANDED (alpha.json superseded); exactly one → TABLED; none →
 FAILED (B3 alphas stand). **Budget:** ~1.5 h.
+**Result:** —
+
+## B12 [P2] [LANDED] B10 selector re-gated on bowler_wkts_1plus primary at a fresh seed (B10 follow-up; B1→B6 precedent)
+**Hypothesis:** B10 (TABLED) share-matched the usage-absent branch of
+`EmpiricalBowlerSelector`; its pre-committed top_bowler primary was flat,
+but the guard scan found a CI-clean improvement exactly where D15 left
+its residual defect: `bowler_wkts_1plus` **−0.0049 [−0.0075, −0.0023]**
+(D15's land recorded the remaining 1plus overshoot at +0.0047
+[−0.0001, +0.0095]), plus `first_wicket_runs_ou_30_5` and
+`highest_over_runs_ou_24_5` at the CI boundary, with ZERO families
+CI-clean worse anywhere. The mechanism is coherent — debutant bowlers now
+actually bowl (1.15%→8.73% XI share vs ≈9% actual), exactly the tail that
+feeds early/first wickets. But the signal was identified post hoc via a
+guard on seed-43 draws, so it must be confirmed on fresh Monte Carlo
+draws with a pre-committed primary before shipping (B1→B6 precedent:
+that confirmation reproduced −0.175 → −0.162).
+**Method:** re-apply the B10 implementation verbatim (revert `a8c061b` /
+cherry-pick `ad144ea`; sidecar + artifacts already at `models/auto/b10/`,
+rebuildable via `b10_build_usage_sidecar.py`). Re-run
+`b10_unit_check.py` first. TWO recipe-B runs at a FRESH seed (44), blind
++ b10 (both new so seed-43 selection cannot leak), same settings (venue-ON
+default path, stale v1 vector calibrator both sides). Pre-commit the
+retooled gate script (swap primary/guards in `b10_gate_analysis.py`)
+BEFORE any run.
+**Gate (sim pair):** PRIMARY = `bowler_wkts_1plus` improves CI-clean
+paired (b10 − blind, CI < 0) at seed 44. Guards = `top_bowler`,
+`bowler_wkts_2plus`, `batter_runs_mae`, `team_first_over_mae`: no
+CI-clean regression. Both → LANDED (ship the b10 usage payload as the
+default selector input; RE-BASELINE warning applies; D5's queue status
+becomes a supervisor call); exactly one → TABLED; none → FAILED (B10's
+guard signal was seed-43 selection noise). NOTE for ALL future sim
+ideas: the canonical seed-43 baseline is now
+`models/auto/b10/detail_blind_s43_n261.json` — the D15 detail drifted
+CI-clean on top_bowler (−0.0010) across the I5/I9 refactors and must not
+be paired against. **Budget:** ~2 h (two ~48 min runs). One sim idea per
+night.
+**Result:** LANDED 2026-07-31. B10 re-applied verbatim (`7617ec3` = revert
+of `a8c061b`; diff vs `ad144ea` EMPTY on all four touched paths); unit
+check fully passed twice; retooled gate `scripts/auto/b12_gate_analysis.py`
+committed (`a50f905`) before any eval output. Twin fresh n=261×100 **seed
+44** runs (blind 2150.3 s / b10 2149.6 s; B10-ACTIVE banner Arm B only).
+**GATE 1 MET**: `bowler_wkts_1plus` dBrier **−0.0046 [−0.0071, −0.0021]**
+CI-clean (blind 0.2578 → b10 0.2532; the s43 signal −0.0049
+[−0.0075, −0.0023] reproduces on fresh draws — B1→B6 pattern). **GATE 2
+MET**: top_bowler −0.0002 [−0.0008,+0.0005], wkts_2plus −0.0009,
+batter_runs_mae +0.0125, first_over_mae +0.0122 [−0.0006,+0.0246] — no
+CI-clean regression. Both → LANDED. Scan: zero families CI-clean worse;
+only other CI-clean better = highest_over_24_5 −0.0014 [−0.0030,−0.0000];
+first_wicket_30_5 did NOT reproduce (boundary); positional cross-check on
+the primary ~noise at s44 (identity-keyed pre-committed stat decides —
+recorded honestly). G5 0.9958/0.9990; sim−usage margin +0.0029→+0.0027
+(defect (b) untouched → B13); 8 relaxation triggers. **SHIPPED** per the
+pre-committed action: `b10_asof_usage` key added to
+`models/bowler_phase_usage.json` (argparse defaults pin the eval path
+there) — md5 ea0c73d3… → 2e650423f0c949631fca1f15dd1c8a56, pre-ship backup
+`models/auto/b12/bowler_phase_usage_pre_b12.json`, stable corpus
+`models/b10_usage_corpus.pkl`; smoke confirms the DEFAULT path prints
+`B10 usage-aligned bowler selector ACTIVE (k_u=5.0)`. **RE-BASELINE IN
+FORCE**: canonical default-path baseline =
+`models/auto/b12/detail_b10_s44_n261.json` (s44 blind twin + s43 pair kept
+as pre-ship lineage). Caveats: b10_unit_check md5 pin is now
+pre-ship-stale by design; `build_bowler_phase_usage.py` rebuild would
+silently drop the key (→ I20); D5 queue status = supervisor call. See
+`research/reports/auto/B12.md` + `research/handoff/B12/`.
+
+## B13 [P3] [TABLED] Never-bowler damping in the usage-absent branch (B10 defect-(b) fix)
+**Hypothesis:** B10's unit check proved the shared B9/B10 exp_balls
+formula mechanically CANNOT fix defect (b): a veteran never-bowler (n≥20
+appearances, 0 corpus balls) still gets k_u·prior/(k_u+n) ≈ 1–2 expected
+balls at k_u=5, so B10 nearly doubled that cohort's bowling share
+(0.270%→0.496%) instead of sending it toward ~0 — and the B9 baseline
+itself prices B9's seen-never-took-wicket cohort at 1.30% vs 0.62%
+actual (sim 1.29%), i.e. nobody has fixed (b) yet. A zero-usage-aware
+damping — e.g. exp_balls scaled by a beta-binomial-style
+P(bowls at all | n appearances, 0 balls) that → 0 as n grows, or a
+cohort cap at the empirical never-bowler share — keeps B10's debutant
+fix (n=0 → lineup-uniform prior untouched) while pushing high-n
+zero-ball veterans toward their true ≈0 share. Attacks the remaining
+sim−usage gap (+0.0026 after B10) and B4's 477-row p_sim≥2% non-bowler
+tail (keepers/batters at 5–10%).
+**Method:** small extension of the B10 selector branch (recoverable at
+`ad144ea`): only the usage-absent weight for players with n>0
+appearances and 0 corpus balls changes; n=0 debutants and
+phase-usage-present players byte-untouched. Extend the
+`b10_unit_check.py` weight table: cohort (b) share must FALL below the
+legacy α share (target ≪0.27%), cohort (a) retained ≈9%. Twin fresh
+recipe-B runs at one seed, pre-committed gate. If B12 has landed first,
+run against B12's shipped default as the blind arm instead (then the
+delta is (b)-damping alone).
+**Gate (sim pair):** PRIMARY = `top_bowler` Brier improves CI-clean
+paired (defect (b) lives there per B4's non-bowler tail) AND the
+recomputed sim−usage margin shrinks vs the blind arm. Guards =
+`bowler_wkts_{1,2}plus`, `batter_runs_mae`, `team_first_over_mae`: no
+CI-clean regression. Both → LANDED; exactly one → TABLED; none → FAILED
+(the non-bowler top_bowler tail is a per-ball-rate problem, not
+who-bowls). **Budget:** ~2 h. One sim idea per night.
+**Result:** TABLED 2026-08-03. First loop idea evaluated on the PROMOTED i7
+no-weights RAW stack. Damping constants fit as-of <2025-07-01 from the b10
+corpus (49,485 events with n≥1 apps / 0 prior balls, 2.031% bowled):
+beta-geometric MLE **k_damp = 0.153993**, **mu_active = 12.163**; the
+one-parameter `k/(k+n)` curve tracks the empirical decay across three orders
+of magnitude (11.7% at n=1 → 0.13% at n≥51). Opt-in sidecar
+(`models/auto/b13/bowler_phase_usage_b13.json`); default path proven
+byte-inert without the key. Unit check PASSED: veteran never-bowler blended
+XI share **0.496% → 0.020%** (legacy α 0.270%), debutants byte-untouched
+(8.733%, Δ 0.0000pp), usage-present weights float-exact. ONE recipe-B eval
+s46 n=261×100 (1285.5 s, 261/261, 0 skips), paired vs the canonical
+`models/auto/d16/detail_noweights_raw_s46_n261.json` (pairing pre-verified:
+engine diff empty since the D16 run, same seed, B10 banner in the d16 log)
+via pre-committed `b13_gate_analysis.py`. **GATE 1a NOT MET**: `top_bowler`
+dBrier **+0.0001 [−0.0004, +0.0005]** ~noise. **GATE 1b NOT MET**: sim−usage
+margin **+0.002973 → +0.003038** (grew 6.5e-5 — coin-flip scale vs
+~±0.0009-wide CIs, but the pre-committed point test fails). **GATE 2 MET**:
+all four guards held (wkts_1plus −0.0006, wkts_2plus −0.0008,
+batter_runs_mae −0.0255, first_over_mae +0.0084; every CI includes 0).
+Exactly one gate → TABLED. Scan: 33 families, 1 CI-clean better
+(`batter_6plus_six` −0.0013), 0 worse; G5 0.9994 → 0.9984. **Reading: the
+mechanism works perfectly and buys nothing** — the cohort (1,059/5,835 rows)
+is already priced ≈0 by both the sim and the B9 baseline, so removing its
+~0.5% share redistributes ~0.09pp of innings share and the margin doesn't
+move: the FAILED-clause diagnosis is confirmed in spirit (the non-bowler
+top_bowler tail is a per-ball-rate problem, not who-bowls; the selector
+share-alignment lever is now fully explored post B10/B12/B13). Costs
+recorded: relaxation triggers 8 → 32 (2.0% of cells, thin-squad BBL/PSL
+sides at eligible=4 — `min_share` needs joint re-derivation if ever
+revisited); `other_unknown` cohort 5.548% → 3.487% unpinned collateral.
+Engine reverted selectively (`sim_v1_2.py` byte-identical to pre-B13;
+harness `scripts/auto/b13_*.py` kept; `models/auto/b13/` scratch kept,
+gitignored). Queue note: D5 [P2] was skipped at claim (B10/B12 records mark
+it a supervisor call); B13's null resolves D5's mechanism question
+negatively — recommend the supervisor retire it as SUPERSEDED. See
+`research/reports/auto/B13.md` + `research/handoff/B13/`.
+
+## B14 [P2] [LANDED] Per-checkpoint quote-layer recalibration for in-play bands (B5 follow-up)
+**Hypothesis:** B5 (TABLED) proved the sim's in-play remaining-runs P50
+beats naive run-rate extrapolation CI-clean at every checkpoint (pooled
+dMAE −3.086 [−4.869, −1.289]) and failed ONLY the cp-15 coverage bar:
+P10–P90 coverage 0.664 [0.608, 0.724] vs the 0.70 floor, because the
+late-innings band is too narrow (width 29.5 vs actual sd 16.9; a calibrated
+~2.56σ band ≈ 43) — the A13 under-dispersion defect at the quote layer,
+concentrated in the short horizon. A post-hoc per-checkpoint correction —
+bias shift on P50 (B5 measured +4.670/+3.204/+0.514 at cps 6/10/15) plus a
+multiplicative widening of the P10/P90 band about the corrected P50, both
+fit on VAL quotes only — should lift cp15 into the band without disturbing
+the GATE-1 MAE win (the cp-15 shift is just +0.5 runs) and without any
+engine change. If it lands, sim + quote-layer calibrator becomes the
+analytics-engine seed artifact B5 was fishing for. A13 (engine-level
+dispersion, PENDING) attacks the same defect upstream and would supersede
+this patch if it ever lands; B5's cp-15 result is fresh independent
+evidence for it.
+**Method:** build a val-match dir from the post-B2 ball-model val split
+stems (2024-12-31..2025-06-29, ~545 matches, the B3 split; files from
+`data/t20s_json/`), run `scripts/auto/b5_inplay_quotes.py` against it
+(~25–30 min, seed distinct from 43 is fine — no pairing) → fit per-cp
+(shift, scale) with scale chosen so val P10–P90 coverage hits ~0.80. Apply
+to the EXISTING test quotes `models/auto/b5/quotes_s43_n261.json` (no new
+test sim). Pre-commit an extended gate script as a NEW file (do NOT edit
+`b5_gate_analysis.py`) BEFORE computing any corrected test number.
+Non-engine (B3/B5 precedent — no sim-engine slot consumed; default path
+untouched).
+**Gate (sim pair):** GATE 1′ (no-regress) = corrected P50 still beats naive
+at all 3 cps AND pooled paired dMAE CI hi < 0. GATE 2′ = corrected P10–P90
+coverage in [0.70, 0.90] at ALL THREE checkpoints. Both → LANDED; exactly
+one → TABLED; none → FAILED (the correction transferred badly val→test).
+**Budget:** ~1.5 h.
+**Result:** LANDED 2026-07-31. Val fit on a fresh s47 quote run of the post-B2
+val split (545 files; usage PINNED to the pre-B12 legacy json, md5 `ea0c73d3…`
+verified, no B10 banner; 3215.2 s, 1532 rows / 512 matches / 33 skips = 6.06%,
+all structural). Pre-committed fit rule → cp6 shift −1.4482 / scale 1.19,
+cp10 −1.7812 / 1.09, cp15 −2.9715 / 1.26 (val corrected coverage
+0.7988/0.8027/0.7992 ≈ the 0.80 target exactly). Applied to the FROZEN B5 test
+quotes (756/253/8, read-only) via pre-committed `b14_gate_analysis.py`
+(@`5e9c963`, before any corrected test number). **GATE 1′ MET**: corrected P50
+beats naive at all 3 cps (−4.759/−2.565/−0.977) and pooled paired dMAE
+**−2.774 [−4.631, −0.864]** CI hi < 0. **GATE 2′ MET**: corrected P10–P90
+coverage **0.802/0.802/0.756 all in [0.70, 0.90]** — B5's sole failure cp15
+0.664 OUT → 0.756 IN (CI lo 0.704 above the floor), cp6/cp10 not pushed
+through 0.90. Both → LANDED; commits kept; quote calibrator of record =
+`models/auto/b14/quote_calibrator.json` (gitignored, reproducible). The B5
+analytics-engine seed artifact now exists: sim + val-fit quote calibrator
+passes both quote-quality bars. HONEST CAVEATS: (1) val/test bias SIGN
+MISMATCH — val shifts negative vs test raw bias positive (+4.670/+3.204/
++0.514), so the shift term moves test P50 the WRONG way (corrected bias
++6.118/+4.985/+3.485) and every corrected test MAE is slightly worse than
+raw; ~all of the win is the scale/widening term; (2) cp15 per-cp dMAE CI
+straddles 0 post-correction ([−2.565, +0.461] vs raw [−2.613, −0.004]) — do
+not quote cp15 alone as CI-clean; (3) pooled margin −3.086 → −2.774 = the
+~0.31 price for the coverage fix. Relay: original executor implemented +
+launched the val run, session ended mid-eval; replacement waited on the
+surviving detached process and ran fit + gate. Follow-up B15 appended
+(scale-only variant on FRESH test draws). See `research/reports/auto/B14.md`
++ `research/handoff/B14/`.
+
+## B15 [P3] [LANDED] Scale-only quote calibrator re-gated on fresh test draws (B14 follow-up)
+**Hypothesis:** B14 LANDED with a val/test bias sign mismatch: the fitted P50
+shifts are negative (the sim under-predicts remaining runs on the
+2024-12→2025-06 val pool) while frozen-test raw bias is positive
+(+4.670/+3.204/+0.514 on 2025-07→2026-04), so B14's shift term moved test P50
+the WRONG way (corrected bias +6.118/+4.985/+3.485) and cost MAE margin
+(pooled −3.086 → −2.774; cp15 per-cp CI reopened across 0). Essentially all
+of B14's win is the band-widening scale term. A scale-only calibrator
+(shift ≡ 0, same scales) should keep the cp15 coverage fix at ~zero MAE cost
+— but testing it against the SAME frozen s43 quotes after seeing B14's
+decomposition would be post-hoc selection, so it needs FRESH test draws
+(B1→B6 precedent). The bias-sign drift itself (val negative → test positive,
+decaying +4.67→+0.51 across checkpoints) is information about era/composition
+drift in the sim's scoring-pace error and argues shift should never be fit
+from a temporally-disjoint val pool.
+**Method:** ONE fresh test quote run at a new seed ∉ {42,43,44,47} via
+`b5_inplay_quotes.py` on `data/polymarket_test` (~25 min; pin
+`--usage-json models/auto/b12/bowler_phase_usage_pre_b12.json` so the engine
+matches what both calibrator and B5/B14 history were built on — the shipped
+default is B10-ACTIVE post-B12 and would confound). Apply BOTH the existing
+B14 calibrator and a scale-only variant (same scales, shift=0 — NO refit) to
+the fresh quotes; pre-commit the gate script before the run. Include a small
+val-vs-test per-checkpoint bias table as a diagnostic (no gate weight).
+**Gate (sim pair):** PRIMARY = on fresh draws, scale-only corrected coverage
+in [0.70, 0.90] at all 3 cps AND scale-only pooled paired dMAE (corr − naive)
+CI hi < 0 with per-cp point wins — i.e. the B14 gate pair transfers to fresh
+draws without the shift term. SECONDARY (recommendation only, not the
+verdict): scale-only beats B14-full on pooled dMAE point estimate → scale-only
+becomes the quote calibrator of record; else B14-full stands. Both primary
+conditions → LANDED; exactly one → TABLED; none → FAILED (B14's land was
+frozen-set luck; escalate to A13, which attacks the dispersion defect at the
+engine level and supersedes any quote-layer patch). **Budget:** ~1.5 h.
+**Result:** LANDED 2026-07-31. ONE fresh quote run at seed 45 (usage PINNED
+to `models/auto/b12/bowler_phase_usage_pre_b12.json`, md5 `ea0c73d3…`
+verified, zero B10 banners; venue-ON; 1487.2 s; 756 rows / 253 matches / 8
+structural skips = B5's structure exactly). Gate `b15_gate_analysis.py`
+pre-committed (`7dfcb4a`) with a MANDATORY frozen-s43 self-test that
+reproduced B14's logged numbers exactly (pooled −2.774 [−4.631, −0.864],
+coverage 0.802/0.802/0.756) and B5's raw (−3.086 [−4.869, −1.289],
+0.755/0.794/0.664) before any fresh number existed. **PRIMARY-A MET**:
+scale-only corrected P10–P90 coverage **0.818 [0.771, 0.866] /
+0.834 [0.787, 0.881] / 0.768 [0.716, 0.824]** — all in [0.70, 0.90], cp15 CI
+lo clears the floor outright; raw cp15 0.660 [0.604, 0.720] OUT = B5's
+under-dispersion defect reproduces on fresh draws. **PRIMARY-B MET**: pooled
+paired dMAE **−3.131 [−4.909, −1.356]** CI hi < 0, per-cp point wins
+−5.125/−3.010/−1.237 (cp15 alone straddles [−2.581, +0.016]; not gated
+per-cp). Both → LANDED. **SECONDARY**: scale-only −3.131 beats B14-full
+−2.839 (Δ −0.292) at equal in-band coverage (B14-full fresh
+0.810/0.802/0.748) → per the pre-committed rule **scale-only supersedes
+B14-full as quote calibrator of record**:
+`models/auto/b15/quote_calibrator_scale_only.json` (gitignored; derived =
+B14 json with shifts zeroed). Scale-only leaves P50 untouched (corrected
+rows == raw rows identically), so the calibrator's whole contribution is the
+coverage fix at ZERO MAE cost — the hypothesis exactly; bonus: B5's GATE 1
+(raw P50 beats naive CI-clean) re-validates independently at s45.
+DIAGNOSTIC: the val→test bias sign mismatch replicates (val shifts
+−1.448/−1.781/−2.971 vs fresh raw test bias +4.259/+2.777/+0.410) — never
+fit a location/shift term from a temporally disjoint val pool; scale terms
+transfer, location terms do not. Nothing reverted (additive harness only;
+b5/b14 inputs mtime-verified unchanged; default sim path byte-untouched).
+Kept `7dfcb4a`+`1578313`. B14 stays LANDED (established the coverage fix).
+No new queue ideas (A13 PENDING already covers the upstream dispersion
+lever). See `research/reports/auto/B15.md` + `research/handoff/B15/`.
+
+## B16 [P3] [LANDED] Quote-layer coverage re-check on the promoted i7 stack (B15 staleness guard; A13 surfacing)
+**Hypothesis:** the B15 scale-only quote calibrator (scales 1.19/1.09/1.26,
+record `models/auto/b15/quote_calibrator_scale_only.json`) was fit against the
+LEGACY balanced-weights engine's under-dispersion. A13's STEP 0 (2026-08-03)
+showed the promoted i7 no-weights stack disperses materially wider at the
+prop layer (e.g. first_over P10–P90 coverage 64.6→77.2%, batter_runs
+73.8→82.5%), so if the in-play quote path (`b5_inplay_quotes.py`, currently
+wired to the legacy default path) migrates to the promoted stack, the B15
+scales would over-widen the bands — plausibly pushing cp6/cp10 coverage
+through the 0.90 ceiling. The raw promoted-stack quotes may already be in
+band with NO calibrator (mirroring D17's null one layer up).
+**Method:** only when/if the quote path is pointed at the promoted stack
+(`--stats-version i7`, no ball calibrator): ONE quote run at the B5
+checkpoints (overs 6/10/15, n=261 test pool, ~25 min at i7 speed), measure
+raw P10–P90 band coverage per checkpoint; compare raw vs B15-scaled vs a
+freshly refit scale-only calibrator (val-fit, B15 fit rule, scale grid, no
+shift term per the B15 diagnostic). Pre-commit the gate before any run.
+**Gate (sim pair):** PRIMARY = whichever arm (raw / B15 scales / refit
+scales) keeps coverage in [0.70, 0.90] at ALL three checkpoints with pooled
+P50-vs-naive dMAE CI-clean retained (B5 GATE 1); B15 scales stay the record
+for the legacy path regardless. If raw is in band → retire the calibrator
+for the i7 path (null = clean outcome, mirrors D17). **Budget:** ~1.5 h.
+**Result:** LANDED 2026-08-03. Harness gained opt-in i7-stack args (legacy
+no-args behavior preserved); gate pre-committed @`653069a` with a mandatory
+frozen-s45 self-test reproducing B15's logged numbers exactly at 3dp. ONE
+fresh i7 quote run (s48, n=261×100, RAW promoted stack, banners verified,
+898.8 s, 756 rows / 253 matches / 8 skips = B15's exact skip set). **GATE 1
+MET**: pooled raw dMAE vs naive **−3.417 [−4.878, −2.066]** (per-cp
+−5.219/−3.421/−1.589; B5's in-play skill survives the migration,
+point-better than legacy at every cp). **GATE 2 MET via ARM 2**: RAW
+coverage 0.787/0.798/**0.684** FAILS (cp15 below the 0.70 floor, CI
+[0.624, 0.740]); B15 scales 0.822/0.838/0.792 ALL IN BAND → certified arm =
+**B15 scales** per the pre-committed preference; refit arm + val run
+correctly not fired. Both → LANDED. **Hypothesis refuted though gates
+pass**: A13's prop-layer dispersion widening does NOT propagate to the
+quote layer — raw band widths ~unchanged (58.3→58.4 / 48.2→51.7 /
+29.4→30.6), the cp15 under-dispersion defect reproduces on i7, and no arm
+over-widened through 0.90 (max 0.838) → the B15 scale-only calibrator is
+NOT stale: `models/auto/b15/quote_calibrator_scale_only.json` is the quote
+calibrator of record for BOTH legacy and i7 quote paths. NEW FACT: raw P50
+bias sign-flips on i7 (legacy +4.259/+2.777/+0.410 → i7
+−4.781/−3.026/−1.946 ≈ −0.34 runs/over at cp6) — re-confirms the B15
+never-fit-a-shift diagnostic from the other direction; B17 appended for
+attribution. i7 quote runs are 1.65× faster than legacy. Kept
+`653069a`+`28288bb`; nothing reverted. See `research/reports/auto/B16.md`.
+
+## B17 [P3] [TABLED] i7 in-play P50 bias attribution (B16 surfacing; D3 linkage)
+**Hypothesis:** B16 found the raw i7 quote-path P50 bias sign-flipped vs
+legacy (+4.259/+2.777/+0.410 → −4.781/−3.026/−1.946 remaining runs at cps
+6/10/15, ≈ −0.34 runs/over at cp6) while still beating naive on MAE. The
+per-over magnitude mirrors B5's legacy +0.33/over, which B5 flagged as
+sign-consistent with the D3 extras finding. Prime suspect: the flat 1%+1%
+extras graft (true wides ≈3.77%) composes differently with the no-weights
+class distribution — D3 showed the legacy labels-fold-extras channel
+over-carried runs (true-rate graft double-counted, +2.9 runs/inn); the
+retrained conditionals may now under-carry, leaving continuation totals
+~1.9–4.8 runs short.
+**Method:** diagnostic FIRST, engine change only if attribution is clean.
+(1) Decompose the continuation bias by over/phase on the existing B16
+quotes (`models/auto/b16/quotes_i7_s48_n261.json` — free). (2)
+Teacher-forced extras audit on the val split, both stacks: per-legal-ball
+run mass carried by the 6 classes vs actual runs including extras. (3) Only
+if extras under-carry explains ≥ half the bias: ONE engine arm re-tuning
+the graft (reuse the D3 harness as the acceptance check) + one fresh quote
+run. Respect one-sim-engine-idea-per-night.
+**Gate (sim pair):** PRIMARY = |P50 bias| shrinks at all 3 checkpoints on
+fresh draws AND pooled dMAE-vs-naive stays CI-clean; GUARDS =
+`innings_runs` 160/170/180 + `pp_total` lines no CI-clean regression (D3's
+exact failure mode) and coverage stays in band on the certified arm
+(B15 scales). Diagnostic-only outcome (attribution inconclusive, no engine
+arm) → FAILED with the decomposition logged. **Budget:** ~2.5 h
+(diagnostic ~30 min; quote run + recipe-B only if the engine arm fires).
+**Result:** TABLED 2026-08-03 (diagnostic-only iteration by pre-committed
+scope — B13 had consumed the night's engine slot; attribution thresholds
+committed in the plan @`bdebd43` BEFORE any number existed: CLEAN iff
+(a) g_i7 ≤ −0.0285 runs/legal ball AND (b) g_i7 − g_legacy ≤ −0.0538).
+**Attribution CLEAN — both conditions MET.** Teacher-forced run-mass audit
+on the byte-identical 545-match / 124,292-delivery val populations (rows =
+ALL deliveries, verified 10/10 vs cricsheet per frame; D3 anchors reproduce
+to 6 dp; A = 1.420308 runs/legal ball; engine composition VERIFIED from
+`sim_v1_2.py`, not assumed: M = R_model + 0.02, wide/nb credit exactly 1 +
+re-delivery, calibrator pre-graft): i7 RAW g = **−0.052785** (92.7% of its
+own cp6 quote bias −0.056917; margin −0.024285) and paired contrast
+g_i7 − g_legacy = **−0.069951** (65.0% of the sign-flip delta −0.107619;
+margin −0.016151), robust to legal-rows-only (−0.054731/−0.070510) and
+cricsheet-A sensitivities. Quote-side decomposition (b16 s48 + b15 s45
+twins; headline reproduced tol <0.001 on both): i7 deficit FLAT across
+paired segments (−0.073123/−0.048533/−0.064867 per legal ball at
+6→10/10→15/15→20) = per-ball run-mass profile, not a death mechanism.
+CHANNELS: the flat 1%+1% graft under-carries explicit extras **−0.039559**
+for BOTH stacks (0.0200 grafted vs 0.059559 actual); threes fold −0.005300
+shared; the ENTIRE paired contrast is the 6-class channel (C_class i7
+−0.007926 ≈ neutral vs legacy **+0.062025** over-carry; identity residual
+0.0e+00) — the no-weights retrain removed the over-carry that masked the
+graft deficit on legacy, exposing it on i7, and retro-explains D3's legacy
+GATE-2 failure (true-rate extras on top of a +0.062 over-carry = innings
+overshoot). Side findings recorded NOT queued: legacy over-carry is a
+venue_on serving artifact (venue_zero reproduces val marginals EXACTLY,
+all six deltas 0.00000; venue_on +0.065392; i7 venue-insensitive
+−0.001835 — D6-pattern, legacy retired); both stacks share a score-tercile
+gradient (bias falls as cp score rises; cp6 T3 i7 −11.20 / legacy −1.12 =
+shared under-response to the in-progress rate). Nothing reverted (analysis
+harnesses `scripts/auto/b17_*.py` + handoff evidence only; `sim_v1_2.py`
+and default paths byte-untouched). Engine arm split out as **B18 [P2]**.
+See `research/reports/auto/B17.md` + `research/handoff/B17/`.
+
+## B18 [P2] [LANDED] Empirical extras rates on the promoted i7 quote path (B17 attribution; D3 re-applied where it can work)
+**Hypothesis:** B17 attributed the i7 quote-path P50 under-prediction
+(−4.78/−3.03/−1.95 at cps 6/10/15) to carried run mass: g_i7 = −0.0528
+runs/legal ball (92.7% of the cp6 bias), of which −0.0396 is the flat 1%+1%
+graft under-carrying explicit extras (0.0200 vs 0.059559 actual; true val
+rates p_wide 0.037702 / p_no_ball 0.004409 per D3), −0.0053 the threes
+fold, and only −0.0079 the 6-class head. D3's empirical-rates graft FAILED
+its guard gate on legacy because the legacy serving path over-carries
++0.0620 through the 6-class channel — true-rate extras on top over-shot
+innings totals. The promoted no-weights i7 head is marginally neutral, so
+the same fix should now close most of the gap WITHOUT the innings-total
+regression — that is the falsifiable claim.
+**Method:** engine arm — one-sim-engine-idea-per-night; claim only on a
+night with a free slot. Re-apply the D3 composition (empirical val rates,
+marginal-preserving; recoverable from the D3 revert; D3 harness
+`scripts/auto/d3_*.py` as the acceptance check that live draw rates match)
+— decide opt-in flag vs module constants so legacy replay stays
+reproducible. B17 arithmetic for design: at true rates crediting 1
+run/event, carried extras ≈0.0440/legal ball → predicted residual g_i7 ≈
+−0.029 (cp6 bias roughly halves); crediting empirical mean event runs
+(wides ≈1.204, no-balls ≈1.071 — recompute from
+`models/auto/b17/runmass_audit.json`) closes the wide/nb channel exactly →
+predicted g_i7 ≈ −0.020. ONE fresh i7 quote run (`b5_inplay_quotes.py` with
+the B16 i7-stack args, fresh seed) + ONE recipe-B paired run vs
+`models/auto/d16/detail_noweights_raw_s46_n261.json`; pre-commit the gate
+script before any run.
+**Gate (sim pair; = B17's original gate):** PRIMARY = |P50 bias| shrinks at
+all 3 checkpoints on fresh quote draws AND pooled dMAE-vs-naive stays
+CI-clean. GUARDS = `innings_runs` 160/170/180 + `pp_total` lines no
+CI-clean regression (D3's exact legacy failure mode), `batter_runs_mae`
+held, coverage in band on the certified arm (B15 scales — refit only if
+out of band, B16 ARM-3 pattern). Both → LANDED; exactly one → TABLED;
+none → FAILED (the mass deficit is not fixable at the graft). **Budget:**
+~2.5 h (i7 recipe-B ≈22 min + quote run ≈15 min + fit/audit/gate).
+**Result:** LANDED 2026-08-03. Opt-in empirical extras graft (engine
+sidecar auto-detect on `<model_dir>/extras_graft_v1.json`; sidecar-absent
+path proven float-exact + ZERO extra RNG draws vs the pre-B18 engine; only
+`models/auto/b18/` carries the sidecar — production/legacy untouched). Fit
+tripped the plan's own pre-committed no-ball sanity STOP (prose definition
+runs−batter_runs measures 1.175182 vs anchor 1.071); orchestrator ruling
+mid-session set the operative law = `noball_runs` channel only (1.071168,
+matches the anchor to 0.000168) — STOP + ruling recorded verbatim in
+`research/handoff/B18/result.md`. Fitted p_wide 0.037702 / p_nb 0.004409
+(D3 anchors reproduce to 6 dp), wide runs 1.204439 / nb 1.071168; analytic
+g −0.052785 → **−0.020449** IN the pre-committed [−0.030,−0.012]; B17
+arithmetic reproduces to 7 dp. ALL gates MET (pre-committed `1907903`,
+self-test 6/6) → LANDED. **P-A**: |P50 bias| shrinks at all 3 cps on
+same-seed s49 twins (−4.872/−3.134/−1.976 → **−0.121/+0.093/−1.054**) —
+over-delivers the analytic projection (−1.85) at cp6/cp10; cp15 residual =
+the unmodeled byes/legbyes+threes+head channels, concentrated at the death.
+**P-B**: pooled dMAE vs naive **−3.699 [−5.233,−2.262]** (raw twin −3.412).
+**G-1**: D3's legacy failure mode INVERTED — 0 lines CI-clean worse, 5/6
+CI-clean BETTER (innings 160/170/180 −0.0154/−0.0115/−0.0153, pp 45/50
+−0.0126/−0.0106). **G-2**: keyed batter_runs_mae +0.0688 [−0.0145,+0.1453]
+noise; **FLAG** — positional cross-check (n=2913) +0.1174 [+0.0279,+0.2083]
+CI-clean WORSE, the only adverse move anywhere (keyed pairing is the
+pre-committed statistic and positional pairing permutes under engine
+changes, but B6 pattern → confirm on fresh draws, B19). **G-3**: B15-scaled
+coverage 0.866/0.810/0.788 all in band (ARM-3 not needed); b18 RAW coverage
+0.802/0.779/0.708 in band UNSCALED at all cps while the raw twin's cp15
+0.696 is OUT — the graft alone fixes the cp15 raw-coverage defect; scaled
+cp6 0.866 drifts toward the 0.90 edge (B15 scales are pre-graft → B20).
+33-family scan: 7 CI-clean, ALL favorable. Eval relay: attempt-1 recipe-B
+died at 76/261 at session close (log kept); rerun 1335.9 s + s49 twins
+916.0/959.6 s; skip lists == B16. NOTHING shipped to production (D16
+precedent; promotion = human decision). Kept
+`4f8050d`/`1907903`/`cf2855d`/`53a6ca4`. Follow-ups B19 + B20 appended.
+See `research/reports/auto/B18.md` + `research/handoff/B18/`.
+
+## B19 [P2] [RUNNING 2026-08-03T13:12:18Z] Fresh-seed confirmation of the graft's batter-level cost (B18 flag; B6 pattern)
+**Hypothesis:** B18's only adverse signal anywhere was the G-2 positional
+cross-check on `batter_runs_mae`: +0.1174 [+0.0279,+0.2083] CI-clean worse
+(n=2913), while the pre-committed identity-keyed statistic read +0.0688
+[−0.0145,+0.1453] ~noise (n=4254). Positional (row-order) pairing is
+unreliable under engine changes — first-appearance row order permutes,
+the documented reason B12 pre-committed keyed pairing — so this is
+plausibly a pairing artifact. But B1→B6 established that a post-hoc-surfaced
+batter-level signal must be confirmed or killed on fresh Monte Carlo draws
+before it can be trusted either way, and if the graft genuinely costs
+batter-runs accuracy (the E2-validated continuous skill), the promotion
+decision needs to know before any adoption of the sidecar.
+**Method:** TWO recipe-B runs at a FRESH seed (47; 46 is consumed by
+d16/B18, 42/43 by legacy history): graft arm (`models/auto/b18/` with its
+committed sidecar, unchanged) vs no-graft arm
+(`models/xgb_i7_noweights_production/`), identical otherwise (i7 stats, no
+calibrator). No engine EDIT involved (both arms run committed code), but
+claim it on a night with a free sim slot — pairing validity. Pre-commit the
+gate script BEFORE any run; report keyed AND positional pairings side by
+side on both seeds.
+**Gate (sim pair):** PRIMARY = keyed `batter_runs_mae` paired delta at s47
+shows NO CI-clean regression (graft − no-graft) AND the B18 G-1 lines hold
+direction (no CI-clean regression) → LANDED (flag resolved as artifact;
+nothing ships). Keyed CI-clean regression at s47 → FAILED-with-finding:
+record the real batter-level cost prominently for the promotion decision
+(B18 itself stays LANDED — its gate was met on its pre-committed
+statistic). **Budget:** ~50 min (two ~22-min runs + gate).
+**Result:** —
+
+## B20 [P3] [PENDING] Byes/leg-byes channel graft on legal deliveries (B18 residual; B17 accounting)
+**Hypothesis:** B18 closed the wide/no-ball carried-mass channel and the
+cp6/cp10 quote bias collapsed (−4.87→−0.12, −3.13→+0.09), but cp15 residual
+is −1.054 and B17's accounting still leaves ≈−0.020 runs/legal ball
+unmodeled: byes/leg-byes on legal deliveries ≈−0.0072, threes fold −0.0053,
+6-class head −0.0079. Byes/leg-byes is the largest single graftable
+remaining piece: on a legal-delivery outcome draw, overlay an empirical
+bye/leg-bye run law (val-fit p_event + integer run distribution) without
+touching the 6-class marginals — the D3/B18 composition extended one
+channel down. Predicted residual g ≈ −0.013.
+**Method:** engine arm (one-sim-engine-idea-per-night). Extend the
+`extras_graft_v1.json` schema (v2) with the legal-delivery byes/leg-byes
+law, fit on the same B17 val frame with the same channel accounting
+(`b18_fit_extras_graft.py` pattern; pre-commit an analytic g tolerance
+before fitting). Sidecar-absent AND v1-sidecar paths must stay byte-inert —
+extend `b18_unit_check.py`. ONE recipe-B paired run + same-seed quote twins
+where the reference arm is the B18 v1-graft arm (NOT the raw stack — the
+question is incremental). Pre-commit the gate script first. Watch scaled
+coverage: B15 scales are pre-graft and cp6 scaled 0.866 already drifts
+toward the 0.90 edge — if out of band, the B14-rule refit (B16 ARM-3
+pattern) applies.
+**Gate (sim pair; B18 mapping):** PRIMARY = |P50 bias| at cp15 shrinks on
+same-seed twins (point test) AND pooled dMAE-vs-naive stays CI-clean.
+GUARDS = innings/pp lines no CI-clean regression, keyed `batter_runs_mae`
+held, coverage in band on the certified arm. Both → LANDED; one → TABLED;
+none → FAILED. **Budget:** ~2.5 h.
 **Result:** —
 
 ---
@@ -994,7 +1595,12 @@ correct by construction; `d3_unit_check.py` + `d3_gate_analysis.py` are
 the ready-made acceptance check). No new ideas appended. See
 `research/reports/auto/D3.md`.
 
-## D4 [P2] [PENDING] Wicket-type modeling: run-outs in the sim (attribution fix)
+## D4 [P2] [SUPERSEDED by D15 — do not claim] Wicket-type modeling: run-outs in the sim (attribution fix)
+*(status corrected by supervisor 2026-08-01: D15 [LANDED] already shipped
+exactly this mechanism — empirical dismissal-type draw with run-out
+striker/non-striker split and no bowler credit — as part of its "D2 + D14
+snapshot + D4 run-out dismissals" unit. Left PENDING by oversight; a night
+claiming it would redo landed work.)*
 **Hypothesis:** the sim attributes 100% of dismissals to bowler-vs-striker
 (`sim_v1_2.py:321-324`; bowling card ~:3606-3614). Real T20 has ~5–8%
 run-outs (often the non-striker, never credited to the bowler). This is
@@ -1026,7 +1632,7 @@ to ≈0 AND bowler coverage stays ≥90% (the G5 bar) AND no CI-clean guard
 regression (top_bowler, bowler_wkts, batter_runs_mae). **Budget:** ~1.5 h.
 **Result:** —
 
-## D6 [P1] [PENDING] Retrain the ball model WITHOUT balanced class weights (structural E5 alternative)
+## D6 [P1] [CRASH] Retrain the ball model WITHOUT balanced class weights (structural E5 alternative)
 **Hypothesis:** E5's root cause was `balanced` class weights sampled raw; the
 fix so far is post-hoc marginal patching (E5 global vector → A8 → A14/A15 →
 A16 → B7), which "can't be right everywhere" (the tilt is phase-dependent)
@@ -1050,7 +1656,27 @@ tolerance) AND, paired vs the CALIBRATED venue-ON baseline, tail families
 does NOT regress CI-clean (the exact trade the calibrator couldn't deliver).
 Guards: top_bowler, team_first_over_mae. Both → LANDED (promotion to default
 sim model is a human follow-up decision). **Budget:** ~5 h.
-**Result:** —
+**Result:** CRASH 2026-07-31. Training is not executable on the frame the
+production ball model lives on: `assert_venue_alias_contract`
+(`identity_maps.py:159` via `xgboost_v2.py:70`) fail-closes on
+`data/xgb_data_v3` — its `.feature_hash` predates I7 (no `venue_alias_*`
+fields; 467 raw venue strings vs 373 canonical under the active map, 94
+renames; `models/xgb_v3` venue encoder is 467-class). The deployed ball
+model, the B12 canonical baseline, and the whole prop-sim eval path live on a
+legacy identity contract that can no longer be trained against — the same
+position CLAUDE.md documents for the pre-I7 match model. Orchestrator
+declined both unblocks (bypassing a deliberate fail-close = policy violation;
+substituting `data/xgb_data_i7` = four-way confound, not a class-weights
+test); no replacement executor (neither finishes this idea). Implementation
+reverted `2a815e2` (trainer flags + audit + gate harness recoverable at
+`5fb16bb`); `models/xgb_v3/` md5-verified untouched; ~4 min compute. Side
+finding (read-only prod audit, verified): the deployed v1 vector calibrator
+misses D6's own marginal tolerance on the venue-ON path it actually serves
+(ΔP(wkt) +0.00576, Δruns/ball +0.0814, ~19% of raw overshoot surviving vs
+~6% in its venue_zero fit distribution) — recorded, NOT queued (B7 already
+showed the venue-ON refit degrades tail props CI-clean). Successor idea D16
+appended (paired twin design on the i7 frame). See
+`research/reports/auto/D6.md` + `research/handoff/D6/`.
 
 ## D7 [P1] [LANDED] Team-swap symmetry augmentation (match model)
 **Hypothesis:** the match model consumes absolute team1_/team2_ features and
@@ -1471,6 +2097,155 @@ attribution unit). D4's mechanism is subsumed — its queue status is a
 supervisor call (entry not edited by the loop). No new ideas appended
 (D5/D6 already cover the residual). See `research/reports/auto/D15.md`.
 
+## D16 [P2] [LANDED] No-class-weights ball retrain on the i7 frame, paired twin design (D6 redesign)
+**Hypothesis:** D6's structural question — balanced class weights corrupt the
+sim's conditional distributions; retraining without them beats post-hoc
+marginal patching — is still untested. D6 CRASHED because the legacy
+`data/xgb_data_v3` frame fail-closes under the I7 venue-alias contract and
+the loop must not bypass a deliberate fail-close. The i7 ball frame exists
+(`data/xgb_data_i7`; `models/xgb_i7` with a 373-venue encoder), so the
+class-weights test is executable there as a PAIRED twin design with zero
+frame confound.
+**Method:** FEASIBILITY CHECK FIRST (~15 min, before claiming any compute):
+verify an end-to-end i7 ball-EVAL path exists — `prop_backtest.py` stats
+version/cache for i7, tracker state, and that `models/xgb_i7` actually loads
+on it. If any leg is missing, STOP: update this entry to note exactly which
+leg is missing and leave it for the interactive backlog (do not build eval
+infrastructure overnight; that surface is loop-forbidden anyway). If
+feasible: twin trainings on `data/xgb_data_i7` into `models/auto/d16/` —
+control arm (weights ON; check whether it byte-reproduces `models/xgb_i7`
+for a free determinism control) and no-weights arm (recover
+`--no-class-weights`/`--model-dir` + `d6_marginal_audit.py` +
+`d6_gate_analysis.py` from commit `5fb16bb`). Fit a fresh val-fit
+`VectorScalingCalibrator` on the CONTROL arm's val predictions (the E5
+recipe reproduced on i7). Teacher-forced marginal audit on both arms. Twin
+fresh sim evals at ONE seed, identical settings: control+vector vs
+no-weights-RAW (the deployed-stack design transplanted to i7; the calibrator
+asymmetry is the point). Pair with the b12 cluster-boot tooling; pre-commit
+the gate script before any eval.
+**Gate (sim pair):** as D6's pre-committed pair — PRIMARY = no-weights
+marginal audit passes (|ΔP(wkt)| ≤ 0.005, |Δruns/ball| ≤ 0.05, on the arm's
+own served input distribution) AND pooled tail dBrier
+{`pp_total_ou_45_5/50_5/55_5`, `bowler_wkts_1plus`} improves CI-clean vs
+control+vector AND `batter_runs_mae` does not regress CI-clean; GUARDS =
+`top_bowler`, `team_first_over_mae` no CI-clean regression. Both → LANDED
+(nothing ships — i7 serving is gated on the human I17 promotion bundle;
+NO re-baseline of the legacy canonical detail). **Budget:** ~6 h (2
+trainings + 2 evals); start only with a full night ahead.
+**Result:** LANDED 2026-07-31. Twin trainings on `data/xgb_data_i7` (config
+extracted programmatically from `xgb_i7_venue_identity.yaml`); hard sidecar
+check PASS (6/6 byte-identical across arms); control byte-reproduces the
+archived `models/xgb_i7` booster + encoders (free exact determinism control,
+I19 precedent). Early stopping cut the no-weights arm to best_iteration 24
+(125 trees, 38 MB) vs control 443 — anticipated structural consequence.
+**GATE 1(a)** frozen pre-eval: no-weights marginal audit **PASS** on its
+served venue-ON distribution (186,667 test balls; ΔP(wkt) +0.00319 tol 0.005,
+Δruns/ball +0.01093 tol 0.05, ball LL 1.4253); control raw FAILS
++0.07724/+0.4394 (E5 signature reproduced BIGGER on i7 than legacy
++0.0647/+0.3829); control + fresh d16 vector passes (−0.00095/+0.0161,
+LL 1.5072) → the structural arm beats the calibrated control by 0.0819 ball
+LL. Twin sim evals seed 46, n=261×100, `--stats-version i7`, 0 skips.
+**GATE 1(b)** pooled tail dBrier **−0.0116 [−0.0159, −0.0073]** CI-clean
+(bowler_wkts_1plus alone −0.0138 [−0.0178,−0.0100]); **GATE 1(c)**
+batter_runs_mae **−0.5449 [−0.6714, −0.4142]** IMPROVES CI-clean
+(14.4354→13.8905, ~3.4× the B6 venue-encoder gain); **GATE 2** guards held
+(top_bowler −0.0004 [−0.0014,+0.0004]; team_first_over_mae −0.0898
+[−0.2008,+0.0173]). Both → LANDED. Context scan: **11 CI-clean movers all
+favoring no-weights, zero CI-clean regressions in 33 families**
+(team_total_sixes_mae −0.2579, batter_fours_mae −0.0415, bowler_wkts_2plus
+−0.0076, batter_6plus_six −0.0066, …). D6's structural hypothesis CONFIRMED:
+the whole E5→B8 calibration chain was compensating for the balanced-weights
+distortion; no-weights RAW with no calibrator dominates the deployed-stack
+design. Ships NOTHING (pre-committed): artifacts in `models/auto/d16/`,
+default legacy sim path untouched, B12 s44 detail remains canonical for
+legacy-path ideas; i7 serving stays gated on the human I17 promotion bundle —
+this result belongs in that bundle (the i7 ball model of record should
+plausibly be a no-weights retrain). Kept `ea4acdb`+`0c569cf`. Follow-ups
+appended: D17 (vector on the no-weights residual), D18 (no-weights-adapted
+hyperparameters). See `research/reports/auto/D16.md` +
+`research/handoff/D16/`.
+
+## D17 [P2] [FAILED] Val-fit vector calibrator on the no-weights arm (is the calibration chain closed post-structural-fix?)
+**Rationale:** D16 follow-up. The no-weights arm passes the marginal audit
+RAW, but with nonzero residuals (+0.00319 P(wkt), +0.00276 six,
++0.01093 runs/ball on 186,667 test balls). A vector calibrator fit on the
+no-weights arm's OWN val predictions is the one remaining cheap marginal
+lever; a null result closes the calibration chain for the structural arm and
+certifies RAW as the final i7 stack for the I17 bundle.
+**Method:** fit `VectorScalingCalibrator` on `models/auto/d16/noweights` val
+predictions via `scripts/auto/d16_fit_vector_calibrator.py --model-dir
+models/auto/d16/noweights` (venue-ON path, same as D16). ONE recipe-B eval:
+seed 46, n=261×100, `--stats-version i7`, identical settings to D16's Arm N
+plus the calibrator; pair vs the EXISTING
+`models/auto/d16/detail_noweights_raw_s46_n261.json` (same seed, same engine,
+only delta = calibrator — B7 pairing precedent). Pre-commit the gate script
+(adapt `d16_gate_analysis.py`) before the eval. Never touch `models/xgb_i7/`,
+`models/xgb_v3/`, or the legacy sim path; regenerate the noweights arm from
+`ea4acdb` config if `models/auto/d16/` was cleaned (gitignored).
+**Gate (sim pair):** pooled tail dBrier {pp_total 45/50/55,
+`bowler_wkts_1plus`} improves CI-clean vs no-weights RAW AND
+`batter_runs_mae` does not regress CI-clean; guards `top_bowler` +
+`team_first_over_mae` no CI-clean regression. Pre-run expectation check:
+print the fitted 6-vector's max |ratio−1| — if < the ~0.05 washout threshold,
+expect null and say so (that null still closes the chain: FAILED here =
+chain closed, a decision-grade negative). **Budget:** ~1 h (calibrator fit
+minutes + one ~22-min eval — the no-weights booster is 1.7× faster).
+**Result:** FAILED 2026-07-31 — the pre-registered decision-grade null.
+Calibrator fit on the no-weights arm's own val preds is **nearly the
+identity**: max |6v−1| = 0.0545, wicket class only (−5.4%); all other classes
+below the ~0.05 washout threshold (D16's control needed 0.9508 — the
+structural result restated in calibrator params). Val LL 1.433437 → 1.433238
+(−0.0002). ONE paired eval s46 n=261×100 i7 vs
+`detail_noweights_raw_s46_n261.json` (1309.8 s, 261/261, 0 skips; gate
+pre-committed `538ca24`): GATE 1(i) pooled tail **+0.0011 [−0.0001,+0.0022]**
+~noise wrong sign; GATE 1(ii) batter_runs_mae **+0.1439 [+0.0942,+0.1949]
+CI-clean WORSE** (the E5-era calibrator trade reproduced on the structural
+arm); GATE 2 guards held. Context scan = redistribution not gain (6 aggregate
+families better, 4 per-player families worse). **Chain CLOSED:
+E5→A8→A14/A15→A16→B7→B8→D17 — no-weights RAW certified as the final i7 ball
+stack for the I17 bundle; do not put a marginal calibrator on it.** Nothing
+reverted (purely additive harness; md5s verified). Surviving levers already
+queued: D18 (hyperparams), A13 (dispersion). See
+`research/reports/auto/D17.md` + `research/handoff/D17/`.
+
+## D18 [P3] [FAILED 2026-08-01 — INTERACTIVE] No-weights-adapted hyperparameters on i7 (early stopping cut 444→24)
+*(executed by the interactive track 2026-08-01 to inform the D16 promotion
+decision; launcher `scripts/auto/d18_train_arms.py`, handoff
+`research/handoff/D18/`, report `research/reports/auto/D18.md`.)*
+**Rationale:** D16 follow-up. The i7 config (lr 0.2404, n_estimators 444) was
+swept under balanced weights; with uniform weights, early stopping cut the
+booster to best_iteration 24 of 444 — the loss surface changed and the config
+is now over-aggressive. A gentler learning rate with more effective trees
+plausibly extends the D16 gain; this also de-risks the I17 bundle's ball
+model choice.
+**Method:** val-LL-only selection (D8/E4 discipline — no test peeking) over a
+small grid, all `--no-class-weights --model-dir models/auto/d18/<arm>` on
+`data/xgb_data_i7` (trainings ran ~2–7 min each in D16, so a 3–4 arm grid is
+cheap): e.g. lr {0.05, 0.10, 0.2404} with n_estimators raised so early
+stopping chooses (control point: D16 no-weights val mlogloss 1.4334 at its
+best iteration). Winner must beat 1.4334 on val; if nothing does, STOP —
+FAILED without burning a sim eval. Then ONE recipe-B eval of the val winner
+(seed 46, n=261×100, `--stats-version i7`, settings == D16 Arm N), paired vs
+`detail_noweights_raw_s46_n261.json`. Pre-commit the gate script before the
+eval. `--model-dir` mandatory (default is the protected `models/xgb_i7/`).
+**Gate (sim pair):** pooled tail dBrier improves CI-clean vs D16 no-weights
+RAW AND `batter_runs_mae` does not regress CI-clean; guards `top_bowler` +
+`team_first_over_mae` no CI-clean regression. **Budget:** ~1.5–2 h.
+**Result:** FAILED (2026-08-01, interactive). Val grid: lr0025 1.4271 /
+lr005 1.4282 / lr010 1.4295 all beat D16's 1.4334 (early stopping chose in
+every arm; monotone toward gentler lr, diminishing returns). Winner lr0025
+evaluated once, recipe B s46 n=261×100 i7 (banners verified, 0 skips,
+sidecars md5-identical to the D16 arm — booster-only delta). Pre-committed
+gate (77d752c, before eval): pooled tail dBrier −0.0005 [−0.0021, +0.0011]
+~noise → GATE 1(i) FAIL → FAILED per mapping; batter_runs_mae −0.0374
+[−0.1000, +0.0268] fine, guards held, context scan 3 small CI-clean movers
+all favorable (innings_runs_160_5 −0.0048, batter_fours_1plus −0.0027,
+2plus −0.0018), zero regressions in 33 families. Better val LL does NOT
+transfer to prop forecasts — the D16 lr 0.2404 no-weights arm STANDS as
+the certified i7 ball stack; hyperparameter lever closed. The I17-bundle
+ball-stack promotion needs no further gating. See
+`research/reports/auto/D18.md`.
+
 ---
 
 ## Combination ideas (C-series)
@@ -1762,7 +2537,17 @@ EB-shrunk threshold-rate baselines (candidate − retained +0.0067
 standing prop guidance now state that no binary prop family clears the
 fair-baseline bar.
 
-## I14 [INTERACTIVE] Physical venue context: dimensions, altitude, and seasonal weather
+## I14 [INTERACTIVE — first integration test FAILED 2026-08-02] Physical venue context: dimensions, altitude, and seasonal weather
+*(Status: registry passes 1–3.5 DONE (119 venues; see
+`docs/I14_VENUE_REGISTRY_PLAN.md`). First ball-model integration (I14B,
+2026-08-02): global concatenation of 10 vphys_* features onto the promoted
+no-weights stack FAILED its pre-committed low-history gate — but the 1–5
+train-match bucket improved CI-clean (−0.0029 [−0.0051, −0.0006]) while
+21–100 regressed tinily; the 0-bucket is a registry-coverage hole, not a
+physics null. Follow-ups before any retry, each with its own pre-committed
+gate: (1) extend registry coverage into the sparse tail, (2) history-gated
+vphys features, (3) full grouped-by-venue holdout design. See
+`research/reports/auto/I14B.md`.)*
 The learned venue ID embedding has to infer physical ground characteristics
 from match outcomes alone and cannot generalize those characteristics to a
 new or renamed venue. Build a canonical venue registry with latitude,
@@ -1846,6 +2631,55 @@ test predictions (782/782, max |Δp| = 0); the swap arm improves the paired
 human decision and sat untracked from 2026-07-17 until this entry
 (2026-07-30 review).
 
+## I17 [DONE 2026-07-30 — ADOPT-CANDIDATE] Swap augmentation on the I7 identity frame
+**Interactive, precommitted** (`docs/I17_I7_SWAP_SUCCESSOR.md` frozen
+before any swap-arm training). Motivation: the legacy production line's
+state cache ends 2026-04-16 and cannot be regenerated; only the I7 stack
+has a fresh-state build path, and D12 swap was validated on the legacy
+frame only. Paired A1 seeds {7,13,29,42,101}, M7 config + `--monotone` on
+`data/xgb_match_data_i7`, base vs `--swap-augment`; eval via the
+cricsheet-id-stamped iteration envelope (new
+`scripts/patch_envelope_cricsheet_ids.py`; 261/261 joined, determinism
+gate max |Δp| = 0 vs archived `models/xgb_match_i7`). **Transfer
+confirmed: swap better LL on 5/5 seeds at every slice; ≥$50k mean ΔLL
+−0.0144 (floor 0.007, legacy-frame effect was −0.0092), ΔROI +5.18pp.**
+Swap-i7 beats the slice-matched market LL (0.6482) on 5/5 seeds; trails
+legacy production by ~0.005–0.009 LL (inside the precommitted 0.02
+threshold; legacy was selected on this set). Seed-29 I3 readout: ROI
++20.54% [−5.56, +43.47], 19 blocks — straddles zero, no edge claim.
+Swap+M7-on-i7 is the designated production-successor config; promotion is
+a separate decision gated on an i7 golden-frame audit and the fresh-state
+serving cutover plan. `reports/i17_i7_swap_eval_20260730.md`.
+
+## I18 [P1] [LANDED] i7-identity golden frame + swap-i7 golden audit (I17 promotion gate)
+**Night-executable.** Build the golden (124-fixture) match frame under the
+I7 identity contract and score the fixed I17 successor candidate on it.
+This is a *gate readout for a human promotion decision* — golden is
+audit-only, the candidate is pre-specified, and NOTHING about the result
+feeds model selection or production. Steps:
+1. Materialize an i7-identity golden frame (state through 2026-06-17
+   fixtures; start from `scripts/build_i7_match_frame.py` and the I7/I15
+   contracts — `docs/I15_MATCH_IDENTITY_CONTRACT.md`,
+   `docs/OPERATIONS.md` § Operation 7). Frame must carry
+   `venue_identity.json` (venue_aliases_v1), `cricsheet_id`, and
+   `match_identity_version`; fail closed otherwise.
+2. Gate A (integrity): all 124 golden odds rows join by `cricsheet_id`;
+   `verify_forward_holdout` still reports zero overlap / unchanged
+   fingerprint; no write touches production caches, `data/golden/`
+   inputs, or `data/forward_holdout/`.
+3. Gate B (readout): score `models/auto/i17/swap_seed29` (candidate) and
+   `models/auto/i17/base_seed29` (control) — regenerate via the exact
+   commands in `reports/i17_i7_swap_eval_20260730.md` if absent
+   (deterministic, max |Δp|=0) — then blend→reslice vs
+   `data/golden/betting_odds_golden.json` at all/≥50k/≥100k with I3
+   blocks. Report LL/ROI vs slice-matched market. Verdict is DESCRIPTIVE
+   regardless of numbers (golden slices are ≤11 blocks): log the readout,
+   do not adopt, promote, or revert anything.
+Deliverables: `reports/auto/I18.md`, frame under `data/xgb_match_data_i7/`
+(golden split only; do not touch train/val/test), results.tsv row marked
+descriptive. Human follow-up (NOT night work): fresh-state serving
+cutover plan, then the promotion decision.
+
 The decision now includes a frame choice: (a) retrain the frozen-M7 line
 `xgb_match_v3_m7_production` with `--swap-augment` (direct adoption of the
 D12 result), or (b) fold `--swap-augment` into the I7-identity line
@@ -1854,3 +2688,105 @@ window arbitrate promotion. Either path requires golden-eval confirmation
 on the production-launch checklist before `predict_fixture.py` switches,
 and must not touch the consumed forward set. D12's frozen-vs-unfrozen
 frame observation (report caveat 3) folds into the same decision.
+**Result:** LANDED 2026-07-30 (descriptive readout by predeclaration).
+Gate A PASS with two orchestrator rulings: (1) strict parity vs the frozen
+`data/xgb_match_data_i7` fails on I15/I16 schema drift (57 vs 54 cols) but
+all 53 shared columns are bit-identical on train/val/test and the delta is
+exactly the identity set → relaxed parity PASS; the sanctioned
+`golden_test.parquet` copy into `data/xgb_match_data_i7/` was WITHHELD
+(pre-I15 siblings; mixed-key dir = the I15 silent-join hazard) — coherent
+current-contract frame lives at `data/auto/i18/frame/` (gitignored,
+regenerable), re-key decision → I19; (2) the extended golden odds file is
+mixed-key (55 legacy display-id rows preserved verbatim + 69 cricsheet-id
+rows), so the shared patch tool fails closed — additive
+`scripts/auto/i18_stamp_envelope.py` verifies the 69 and stamps the 55,
+124/124 exact-set vs `data/golden/polymarket_test` stems (do NOT normalize
+the odds file; consumers must handle mixed keys). Readout (124 fixtures,
+blocks 11/9/5, one no-result excluded): swap-i7 LL 0.5988/0.6538/0.6767 vs
+base-i7 0.6056/0.6636/0.6859 (all/≥50k/≥100k), swap ROI −1.14/+15.70/
++21.23% vs base −17.68/+1.23/+4.36%. Swap beats the slice-matched market
+LL on BOTH sharp slices (0.6573/0.6843) where base beats neither — and
+where the legacy swap production trailed on the same fixtures (0.6685/
+0.6938; indicative, different state contracts). All-slice trails the
+WC-sharp market (0.5988 vs 0.5513); every ROI block CI straddles 0 → no
+betting edge. Golden-audit leg of the I17 promotion path is satisfied;
+remaining legs (fresh-state cutover plan, frame choice, switch) are human.
+See `research/reports/auto/I18.md` + `research/handoff/I18/`.
+
+## I19 [P2] [LANDED] Coherent-contract i7 frame re-key (I18 surfacing; promotion-bundle prerequisite)
+**Hypothesis:** the successor line's training frame `data/xgb_match_data_i7`
+predates I15/I16 (`match_id` = legacy display string; no
+`display_match_id` / `match_identity_version` / `elo_update_version`
+columns), while the current materializer emits the cricsheet-primary
+contract. I18 proved the 46 features and all shared metadata bit-identical
+across the drift, so re-keying is pure identity hygiene — it removes the
+mixed-contract hazard that forced I18 to withhold its golden split from
+the frame directory, and pre-clears the frame question inside the human
+promotion bundle.
+**Method (night-executable):** regenerate the coherent frame
+(`materialize_match_features.py --version i7 --extra-source-dir
+data/golden/t20s_json` → `build_i7_match_frame.py`; ~3 min, or reuse
+I18's parity-verified `data/auto/i18/frame/` if still on disk) into
+`data/xgb_match_data_i7_v2` (all four splits + venue_identity /
+match_identity / elo_update sidecars). Re-verify with
+`scripts/auto/i18_frame_parity.py` (relaxed contract). Retrain both I17
+seed-29 arms on the v2 frame (`xgboost_match_v1.py --monotone --seed 29`
+[/ `--swap-augment`]) and confirm their `test_predictions.json` reproduce
+`models/auto/i17/*` at max |Δp| = 0 (expected — features identical; if
+nonzero, STOP and report, something about column order or encoders is
+load-bearing). Do NOT delete or overwrite `data/xgb_match_data_i7` (the
+I17 frame of record); switching the successor line's frame of record is
+the human's call in the promotion bundle.
+**Gate:** correctness/instrumentation — LANDED iff relaxed parity passes,
+both retrained arms reproduce at max |Δp| = 0, and the v2 frame carries
+the full identity contract (fail closed otherwise). **Budget:** ~30 min.
+**Result:** LANDED 2026-07-31. Reuse path: `data/xgb_match_data_i7_v2` =
+md5-verified byte-copy (7/7 files) of I18's parity-verified frame — no golden
+read, no rematerialization, `build_i7_match_frame.py` never run (its default
+`--out-dir` is the frozen frame of record). GATE 1 relaxed parity PASS (strict
+fails only on the expected I15 drift; 53 shared cols bit-identical). GATE 2
+PASS: both seed-29 arms retrained on v2 (exact I17 command) reproduce
+`models/auto/i17/{base,swap}_seed29` at **max |Δp| = 0.000e+00** over
+identical 798-key sets; feature_columns byte-equal; all train_metrics
+digit-identical; bonus **model.pkl md5-identical both arms** → the I15/I16
+schema drift is provably inert for training. GATE 3 PASS after orchestrator
+ruling: the plan's `display_match_id`-unique assertion was mis-specified
+(match_identity.py defines the display string as non-unique for same-day
+doubleheaders; all 25 collisions verified genuine doubleheaders); the
+contract-defining properties (match_id==cricsheet_id 100%, match_id unique
+4/4 splits, version constants, 3 sidecars exact) all pass. SURFACED: the
+frozen `data/xgb_match_data_i7` has a NON-UNIQUE display-keyed primary key on
+45 rows (legacy joins fan out) — v2 removes it; I17's eval chain was safe
+(joined via cricsheet_id). i19 model dirs stamped `cricsheet_primary_v1` vs
+i17's `synthetic_fixture_v1` (same weights, honest provenance). Kept
+`24d0cc6`+`05864a2`; artifacts gitignored `data/xgb_match_data_i7_v2/` +
+`models/auto/i19/`. Frame-of-record switch remains a HUMAN promotion-bundle
+decision — the loop must not auto-adopt v2. See `research/reports/auto/I19.md`.
+
+## I20 [DONE 2026-08-01] Fold the shipped `b10_asof_usage` key into `build_bowler_phase_usage.py`
+*(closed interactively 2026-08-01: the builder now stamps the key by default
+— k_usage imported from `b9_usage_baseline.K_USAGE`, corpus path
+`models/b10_usage_corpus.pkl` — and FAILS CLOSED if the corpus is missing;
+`--no-b10-key` builds a legacy payload deliberately. Verified: a fresh
+rebuild is content-identical to the shipped payload on every count section,
+carries an equal `b10_asof_usage` key, and the selector smoke prints the
+`B10 usage-aligned ... ACTIVE` banner. The shipped
+`models/bowler_phase_usage.json` was not touched; the b10_unit_check md5 pin
+remains valid.)*
+*(appended by B12, 2026-07-31)*
+**Why:** B12 shipped the B10 usage-aligned selector by adding the
+`b10_asof_usage` key to `models/bowler_phase_usage.json` (the eval scripts'
+argparse defaults pin the payload path, and the eval framework is
+loop-forbidden). But `scripts/build_bowler_phase_usage.py` predates B10:
+re-running it regenerates the payload WITHOUT the key, silently reverting
+the shipped fix — the only tell is the missing
+`B10 usage-aligned bowler selector ACTIVE` banner in run logs. The as-of
+corpus (`models/b10_usage_corpus.pkl`) similarly needs a documented rebuild
+path (`b10_build_usage_sidecar.py` / `b9_usage_baseline.py` currently write
+to `models/auto/`).
+**What:** teach the builder to emit the key (and optionally rebuild the
+corpus) so regeneration is idempotent with the shipped state; update the
+b10_unit_check md5 pin (pre-ship `ea0c73d3…`, post-ship
+`2e650423f0c949631fca1f15dd1c8a56`, pre-ship backup at
+`models/auto/b12/bowler_phase_usage_pre_b12.json`). Interactive because it
+touches a production builder plus the shipped-artifact contract.

@@ -9,7 +9,155 @@
 > `reports/i3_eval_statistics_hardening.md`. The new forward holdout is
 > sealed and remains unscored.
 
+## Status snapshot + next steps (2026-08-01)
+
+Post-review synthesis of the 2026-07-31 overnight run (`auto-20260731`), the
+I14 boundary-geometry pass, and the women's-odds discovery. Full evidence:
+`research/reports/auto/{B10,B8,B5,B12,B14,B15,D6,D16,D17}.md`,
+`docs/I12_WOMENS_TRACK_SCOPING.md`, `docs/I14_VENUE_REGISTRY_PLAN.md`.
+
+### Where results stand
+- **Match model (production)**: `models/xgb_match_i7_swap_production`
+  (promoted 2026-07-31, i7 identity, serving state `data/live_state_i7/`
+  through 07-13). Iteration ≥$50k LL 0.6215 vs slice-matched market 0.6482;
+  golden audit beats the matched market LL on both sharp slices; every block
+  ROI CI still straddles zero — A7 stays shadow-only, no betting edge
+  established.
+- **Ball stack (the big overnight result)**: the D6→D16→D17 chain closed the
+  two-month calibration saga. D16: retraining the i7 ball model WITHOUT
+  balanced class weights beats the deployed-design calibrated stack on
+  everything at once (pooled tail dBrier −0.0116 [−0.0159, −0.0073];
+  batter_runs_mae −0.5449 [−0.6714, −0.4142]; 11 CI-clean favorable movers,
+  0 regressions across 33 families). D17: no calibrator belongs on top
+  (near-identity fit; CI-clean worse batter_runs_mae) — the
+  marginal-calibration chain (E5→A8→A14/A15→A16→B7→B8→D17) is CLOSED and
+  **no-weights RAW is the certified i7 ball stack for the I17 bundle**.
+  Nothing shipped yet. D6's crash also established that the deployed legacy
+  ball model lives on an untrainable frame (`data/xgb_data_v3` predates the
+  I7 identity contract) — same position the legacy match model was in.
+- **In-play quotes**: B5 = first validated in-play skill claim (sim P50 beats
+  naive run-rate extrapolation CI-clean at all 3 checkpoints, pooled dMAE
+  −3.086 [−4.869, −1.289]); B15's scale-only per-checkpoint quote calibrator
+  is the calibrator of record (coverage 0.818/0.834/0.768 all in band, at
+  zero MAE cost; supersedes B14-full). Residual cp15 under-dispersion is
+  A13's target — now confirmed three independent times (B5, B15, D16 era).
+- **Bowler selector**: B12 shipped the B10 usage-aligned selector
+  (`b10_asof_usage` key in `models/bowler_phase_usage.json`;
+  bowler_wkts_1plus −0.0046 [−0.0071, −0.0021] at a fresh seed). Fragile
+  until I20 lands — see hygiene below.
+- **Women's track (I12 + I12-L)**: two isolated families, no edge on either.
+  w1 (2,086 T20Is) beats coinflip+ELO on both splits; 5-seed swap test SPLIT
+  → base stays reference. **w2 (1,206 league T20s, new 2026-08-01) FAILS both
+  gates** — the ELO-only baseline beats it on test (0.6781 vs 0.6858) and
+  golden (0.6671 vs 0.6931). Women's Polymarket odds DO exist: 293 markets,
+  175 joined to w1 + 51 to w2, zero winner conflicts across all 226. The
+  market beats w1 on LL on every liquidity slice that matters.
+  **Headline finding is w2-about-w1**: the same pipeline scores LL 0.4484 /
+  81% acc on the associate-heavy T20I pool and 0.6858 / 50% on evenly-matched
+  franchise sides, so most of w1's headline is roster mismatch, not cricket
+  modelling. All numbers reproduce via `scripts/eval_womens_market.py`.
+- **Venue registry (I14)**: passes 1–3 done as pure data collection (92
+  venues coords/altitude/climate; top-30-of-aliased boundary geometry: 23
+  directional + 7 honest gaps). Not wired into any feature path yet.
+
+### Review findings 2026-08-01 (fix before building on these)
+- I14 registry defects:
+  - [ ] `config/identity/venue_registry_v0.csv:25` (Taunton) and `:29`
+        (Gabba): pass-3 column shift — URL sits in `dimensions_obs_date`,
+        date in `notes`, `dimensions_source` empty; gap notes lost.
+  - [ ] `config/identity/venue_climate_normals_v0.csv` column
+        `windmax_ms_mean` is actually **km/h** (Open-Meteo default;
+        `build_venue_climate.py` never sets `windspeed_unit`). Rename or
+        convert ÷3.6 and rebuild.
+  - [ ] Same ground under two canonicals: "New Wanderers Stadium" (line 34)
+        and "The Wanderers Stadium" (line 42) — identical coords/altitude;
+        any join double-counts. Contradicts I14's own one-name-per-ground
+        rule.
+  - [ ] **Registry universe = the 92 alias-map canonicals only.** Venues with
+        a single stable spelling are absent entirely — including the true
+        top-volume grounds: Mirpur (340 corpus matches), Dubai International
+        (279), MCG (100), SCG (92). The three-run motivation venues
+        (MCG/SCG/Mirpur) are all missing, so the I5 linkage is blocked on
+        missing ROWS, not missing modeling. Needs a "pass 3.5" universe
+        extension before any integration.
+  - [ ] `docs/I14_VENUE_REGISTRY_PLAN.md` stale ("passes 1–2 done"); V2
+        sourcing-grade decision still unanswered (pass-3 sources are
+        fantasy/aggregator grade; 7 of 23 sourced rows undated).
+- Women's odds work — **ALL CLOSED 2026-08-01/03, committed**:
+  - [x] `scripts/build_womens_polymarket_odds.py` 4 latent bugs fixed
+        (volume tiebreak now takes the latest quote; near misses computed
+        against the final consumed set; winner check asserts winner ∈
+        {team1, team2}; `volume_usd` coerced). None had invalidated the
+        published numbers.
+  - [x] `scripts/eval_womens_v1.py` docstring corrected;
+        `scripts/eval_womens_market.py` added as the committed path that
+        regenerates both LL tables.
+  - [x] Extractor gaps found and fixed while extending to leagues: WNCL /
+        Rachael Heyhoe (50-over, no format token) were surviving a
+        `--format t20` pull; the `SA20` label matched any `...-usa-20xx-`
+        slug (every SA20 label in the corpus was a false positive).
+  - [x] Feb–Mar bilateral gaps RESOLVED as genuine market gaps, not
+        extractor misses (Pak-SA had ODI markets only; the March NZ-SA and
+        Aus-WI series had no h2h markets; Polymarket listed only the 2nd/3rd
+        T20I of the Feb Aus-Ind series).
+- Overnight-loop hygiene:
+  - [ ] `research/handoff/B14/raw/gate_output.txt` is untracked (it is NOT
+        gitignored; the B10/B12 siblings ARE tracked) — B14's LANDED gate
+        numbers exist in git only as transcriptions. Also fix
+        `raw_excerpt.md`'s incorrect "stay untracked, as in B10/B12" claim.
+        Optional: `.txt` twins for B14's 3 logs and I18's 17 raw logs (I18 is
+        the golden-audit leg of an executed production promotion).
+  - [ ] `research/IDEAS.md` D4 is still [PENDING] but D15 [LANDED] already
+        shipped its mechanism ("D4 run-out dismissals" is in D15's title) —
+        mark D4 SUPERSEDED so a night doesn't re-claim it.
+- Verified clean: D16/D17 "ships nothing" holds (protected-model md5s
+  identical before/after), reverts left no strays, all LANDED verdicts have
+  CI-clean pre-committed primaries, and B5's double `results.tsv` row is a
+  stale-claim closure record plus a fresh result record — not a duplicate.
+
+### Ranked next steps
+1. **Hygiene batch (~30 min total)**: I14 two-row repair + wind-unit fix +
+   Wanderers merge + plan-doc refresh; women's-script 4 fixes + docstring +
+   commit; B14 evidence commit; D4 → SUPERSEDED.
+2. **I20 (interactive, small)**: fold `b10_asof_usage` into
+   `build_bowler_phase_usage.py` — until then a routine payload rebuild
+   silently reverts the shipped B12 selector (only tell: a missing banner).
+3. **Ball-stack promotion decision (human)**: adopt D16 no-weights RAW as the
+   i7 ball model in the I17 bundle. Optionally run D18 first (val-only
+   sweep, cheap, de-risks: current lr/n_estimators were tuned under balanced
+   weights and early stopping now cuts 444→24 trees).
+4. **Tonight's queue**: D18 + A13 are the surviving ball-sim levers (A13
+   thrice-confirmed); then B13. D5 needs a supervisor ruling (per B12's row)
+   before a night may claim it; A10/B11 remain P3.
+5. **I14 pass 3.5** (extend the universe to the true top-volume venues), then
+   the modeling integration behind a grouped-by-venue holdout gate, with the
+   I5 three-run ablation as its downstream consumer.
+6. **Women's analytic next**, reordered by the w2 league result:
+   (a) **members-only w1 slice — now REQUIRED, not optional.** w2 quantified
+   how much of w1's LL 0.4484 is full-member-vs-associate mismatch; the
+   members-only number is the only honest version of the w1 headline.
+   (b) I3 tournament-block ROI on the ≥$50k joined slice (n=51 internationals;
+   descriptive under 10 blocks). (c) Re-pull Hundred Women odds once the 2026
+   season completes — at $100k–$307k per fixture it is the only women's book
+   deep enough to test an edge against, and only 11 of its markets had
+   resolved at capture time. (d) WBBL Oct–Dec 2026 is the first league season
+   that will have both a market and a complete cricsheet record from day one.
+
 ## Open decisions (human)
+- [x] **Adopt D16 no-weights RAW as the i7 ball model in the I17 bundle?**
+  DONE 2026-08-02: promoted as `models/xgb_i7_noweights_production/`
+  (byte-copy of the D16 arm, booster md5 `7ee1e180…`), served RAW.
+  `prop_backtest.py` defaults switched (i7 stack, `--stats-version i7`,
+  no calibrator; vector now requires an explicit path — fail-closed);
+  program.md recipe B updated; A13 supervisor-re-pointed to the promoted
+  stack with a step-0 coverage re-measure; legacy v3 replay documented in
+  OPERATIONS. Evidence chain: D16 (LANDED) + D17 (null, chain closed) +
+  D18 (null, config stands).
+- [ ] **I14 V2 sourcing grade**: is fantasy/aggregator-grade boundary
+  sourcing acceptable for modeling, or does integration wait on
+  official/ESPNcricinfo-grade numbers?
+- [ ] **D5 ruling** (flagged by B12): may the night loop claim the bowler
+  eligibility filter now that share-alignment (B10/B12) has shipped?
 - [x] **Adopt D12 swap augmentation in production?** DONE 2026-07-30:
   archived D12 swap arm promoted as
   `models/xgb_match_v3_m7_swap_production`; `predict_fixture.py` switched.
