@@ -3,7 +3,9 @@ pre-match polymarket odds, model prediction, our bet, PnL, cumulative ROI.
 
 Joins three sources:
   - cricsheet JSONs (live pool + golden pool) for match metadata + scores
-  - betting_odds_polymarket.json + betting_odds_golden.json for market odds
+  - betting_odds_polymarket_v2.json + data/golden/betting_odds_golden_v2.json
+    for market odds (the _v2 files are the benchmarks of record since the
+    2026-08-05 toss-market selection fix)
   - test_predictions.json + golden_predictions.json for model probabilities
 
 Bet rule mirrors match_evaluator / blend_eval_json: bet 1 unit flat on the
@@ -33,8 +35,13 @@ LIVE_POOL = REPO / 'data' / 't20s_json'
 GOLDEN_POOL = REPO / 'data' / 'golden' / 't20s_json'
 PRED_TEST = REPO / 'models' / 'xgb_match_v2_clean' / 'test_predictions.json'
 PRED_GOLDEN = REPO / 'models' / 'xgb_match_v2_clean' / 'golden_predictions.json'
-ODDS_MAIN = REPO / 'betting_odds_polymarket.json'
-ODDS_GOLDEN = REPO / 'data' / 'golden' / 'betting_odds_golden.json'
+# Odds files of record since 2026-08-05: the pre-_v2 files were built under the
+# defective market-selection rule (the "Who wins the toss?" market was shipped
+# as the winner market on lopsided fixtures) and are frozen evidence only —
+# rendering them here produced stale market columns. See
+# reports/market_benchmark_toss_defect_20260805.md.
+ODDS_MAIN = REPO / 'betting_odds_polymarket_v2.json'
+ODDS_GOLDEN = REPO / 'data' / 'golden' / 'betting_odds_golden_v2.json'
 OUT_HTML = REPO / 'reports' / 'ipl_2026_dashboard_clean.html'
 
 EDGE_THRESHOLD = 0.0  # match blend_eval_json.py

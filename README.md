@@ -62,7 +62,12 @@ Win probabilities & score distributions → compared to Polymarket / bookmaker o
 log loss **0.7122**, Brier **0.2562**, flat ROI **−7.1 %**, fractional-Kelly
 ROI **+0.7 %**. Calibration vs the v4 baseline improved ~5–6 %; flat-betting
 regressed (sharper probabilities compress betting edges — a known
-calibration-vs-ROI tension). Market log loss on the same set is 0.6267.
+calibration-vs-ROI tension). Market log loss on the same set is **0.5901**
+(all) / **0.5940** (≥ $50 K) — the long-quoted 0.6267 / 0.6482 came from a
+defective odds file that scored the "Who wins the toss?" market as the winner
+market on 23 of 261 fixtures, and is retracted
+(see [the toss-defect audit](reports/market_benchmark_toss_defect_20260805.md);
+benchmark of record is now `betting_odds_polymarket_v2.json`, 255 fixtures).
 See [the I7 checkpoint](reports/i7_rebuild_checkpoint_20260725.md) and
 [the I8 checkpoint](reports/i8_phase_matchup_checkpoint_20260730.md) for the
 newer same-simulator paired results and liquidity slices.
@@ -272,13 +277,27 @@ scripts). See [archive/README.md](archive/README.md).
 
 Every experiment reports four benchmarks side by side: coinflip (0.6931 LL
 floor), always-bet-favorite (~4 % ROI honest baseline), the current Polymarket
-market (0.6267 LL ceiling), and our model. Before claiming skill:
+market (**0.5940 LL ceiling** on the ≥ $50 K slice; **0.5377** at ≥ $100 K),
+and our model. Before claiming skill:
 
 1. Model log loss must beat market log loss on the ≥ $50 K liquidity slice.
-2. Flat-ROI bootstrap CI on that slice must exclude zero.
+2. Flat-ROI bootstrap CI on that slice must exclude zero
+   (whole-competition blocks, not per-match i.i.d. — see CLAUDE.md invariant 7).
 
 Anything weaker is counterparty noise — see [TODO.md](TODO.md)
 § "Evaluation Discipline".
+
+**The market ceiling was restated on 2026-08-05 and it moved a long way.** The
+0.6267 / 0.6482 figures quoted throughout this repo's history came from an odds
+builder that kept the event's "Who wins the toss?" market instead of the
+head-to-head winner market on 23 of 261 fixtures, pricing World Cup mismatches
+at a coin flip. Corrected, **no model in this project beats the market on log
+loss on the iteration set** (production arm ≥ $50 K: 0.6249 vs 0.5940), and
+iteration flat ROI falls from +20–25 % to +3.4 % / +7.4 % with intervals that
+straddle zero — as they always did. Model-vs-model comparisons and the sealed
+forward holdout are unaffected. Details:
+[reports/market_benchmark_toss_defect_20260805.md](reports/market_benchmark_toss_defect_20260805.md).
+Score new work against `betting_odds_polymarket_v2.json`.
 
 ---
 

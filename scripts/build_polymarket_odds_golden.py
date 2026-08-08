@@ -40,9 +40,14 @@ GOLDEN_POLYMARKET_PATH = Path(
 GOLDEN_DIR = REPO_ROOT / "data" / "golden"
 GOLDEN_CRICSHEET_DIR = GOLDEN_DIR / "t20s_json"
 LIVE_CRICSHEET_DIR = REPO_ROOT / "data" / "t20s_json"  # union for matching only
-GOLDEN_OUT_ODDS = GOLDEN_DIR / "betting_odds_golden.json"
-GOLDEN_OUT_TEST_DIR = GOLDEN_DIR / "polymarket_test"
-GOLDEN_OUT_UNMATCHED = GOLDEN_DIR / "build_unmatched.json"
+# Defaults write to the _v2 (post-toss-fix) paths. The pre-2026-08-05
+# data/golden/betting_odds_golden.json + polymarket_test/ are frozen evidence of
+# what was shipped under the defective market-selection rule
+# (reports/market_benchmark_toss_defect_20260805.md) and must not be clobbered by
+# a plain run of the golden-refresh recipe. Override with --out-odds et al.
+GOLDEN_OUT_ODDS = GOLDEN_DIR / "betting_odds_golden_v2.json"
+GOLDEN_OUT_TEST_DIR = GOLDEN_DIR / "polymarket_test_v2"
+GOLDEN_OUT_UNMATCHED = GOLDEN_DIR / "build_unmatched_v2.json"
 
 GOLDEN_WINDOW_START = datetime(2026, 4, 17)
 GOLDEN_WINDOW_END = datetime(2099, 12, 31)  # open-ended; capped only by file
@@ -134,6 +139,13 @@ def _merge_staging_into_golden(staging: Path) -> None:
         have.add(k)
         appended += 1
 
+    # The header must describe the merged file, not the pre-merge one: earlier
+    # merges left `total_matches` frozen at the original row count.
+    existing["total_matches"] = len(existing["matches"])
+    existing["selection_rule"] = staged.get("selection_rule")
+    existing["winner_used_for_market_selection"] = staged.get(
+        "winner_used_for_market_selection", False
+    )
     GOLDEN_OUT_ODDS.write_text(json.dumps(existing, indent=2))
     copied = 0
     for p in sorted((staging / "polymarket_test").glob("*.json")):
@@ -147,7 +159,8 @@ def _merge_staging_into_golden(staging: Path) -> None:
 
 
 def main() -> None:
-    global GOLDEN_POLYMARKET_PATH
+    global GOLDEN_POLYMARKET_PATH, GOLDEN_OUT_ODDS, GOLDEN_OUT_TEST_DIR
+    global GOLDEN_OUT_UNMATCHED
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true",
                         help="Counts + sample, no writes.")
@@ -163,12 +176,20 @@ def main() -> None:
         help="Append newly matched fixtures to the existing golden odds "
              "manifest instead of overwriting it; existing rows are kept "
              "verbatim and forward-holdout fixtures fail closed.")
+    base.add_output_arguments(parser)
     args = parser.parse_args()
 
     if args.polymarket_path is not None:
         GOLDEN_POLYMARKET_PATH = args.polymarket_path
 
     _patch_constants()
+    if args.out_odds:
+        GOLDEN_OUT_ODDS = args.out_odds
+    if args.out_test_dir:
+        GOLDEN_OUT_TEST_DIR = args.out_test_dir
+    if args.out_unmatched:
+        GOLDEN_OUT_UNMATCHED = args.out_unmatched
+    base.apply_output_overrides(args)
 
     if not GOLDEN_POLYMARKET_PATH.exists():
         print(f"ERROR: golden polymarket file not found: {GOLDEN_POLYMARKET_PATH}",
@@ -228,16 +249,23 @@ def main() -> None:
         print("\nDry run — no writes.")
         return
 
+    restrict_to = (
+        base.load_manifest_identities(args.restrict_to_manifest)
+        if args.restrict_to_manifest else None
+    )
+
     if args.merge_into_existing:
         staging = GOLDEN_DIR / "_staging_refresh"
         (staging / "polymarket_test").mkdir(parents=True, exist_ok=True)
         base.OUT_ODDS_PATH = staging / "betting_odds_golden_new.json"
         base.OUT_TEST_DIR = staging / "polymarket_test"
         base.OUT_UNMATCHED_PATH = staging / "build_unmatched.json"
-        base.write_outputs(matched, unmatched)
+        base.write_outputs(matched, unmatched, timestamp_guard=args.timestamp_guard,
+                           restrict_to=restrict_to)
         _merge_staging_into_golden(staging)
     else:
-        base.write_outputs(matched, unmatched)
+        base.write_outputs(matched, unmatched, timestamp_guard=args.timestamp_guard,
+                           restrict_to=restrict_to)
     print(f"\nGolden artifacts written under {GOLDEN_DIR}")
 
 

@@ -5,19 +5,25 @@ Thin wrapper around build_polymarket_odds.py that:
   - Reads the Blast pre-match odds file (data/polymarket_t20blast_prematch_odds_*.json
     from the polymarket-cricket repo). It already ships the same `matches[]`
     schema the base loader expects (volume_usd, winner, prematch_price_team1/2,
-    low_liquidity), and the upstream extractor already resolved the YES/NO and
-    toss-market duplication by selecting each event's head-to-head market.
+    low_liquidity), and the upstream extractor emits one record per event,
+    having already picked that event's head-to-head market. That claim is no
+    longer taken on trust: since the 2026-08-05 toss-market fix the shared
+    builder re-derives each record's Gamma market identity
+    (`market_volume_exact` resolves the Blast capture, which persists
+    market-level volume) and drops anything not structurally head-to-head.
   - Adds the one Blast-specific name alias the base TEAM_NAME_MAP is missing:
     Polymarket says "Warwickshire", Cricsheet's T20 brand is "Birmingham Bears".
   - Pairs against data/golden_blast/t20s_json/ (extracted by
     extract_blast_golden.py). Order-independent (date, team-set) matching +
     match_id dedup are inherited unchanged from the base module.
-  - Writes everything under data/golden_blast/* so nothing else is touched.
+  - Writes everything under data/golden_blast/* so nothing else is touched,
+    defaulting to the _v2 paths so the pre-fix evidence files survive.
 
 Usage:
     uv run python scripts/build_blast_odds.py
     uv run python scripts/build_blast_odds.py --dry-run
     uv run python scripts/build_blast_odds.py --verify-mapping
+    uv run python scripts/build_blast_odds.py --out-odds /tmp/blast_experiment.json
 """
 from __future__ import annotations
 
@@ -39,9 +45,15 @@ BLAST_ODDS_PATH = Path(
 )
 BLAST_DIR = REPO_ROOT / "data" / "golden_blast"
 BLAST_CRICSHEET_DIR = BLAST_DIR / "t20s_json"
-BLAST_OUT_ODDS = BLAST_DIR / "betting_odds_blast.json"
-BLAST_OUT_TEST_DIR = BLAST_DIR / "polymarket_test"
-BLAST_OUT_UNMATCHED = BLAST_DIR / "build_unmatched.json"
+# Defaults write to the _v2 (post-toss-fix) paths, mirroring
+# build_polymarket_odds{,_golden}.py. The pre-2026-08-05
+# data/golden_blast/betting_odds_blast.json + polymarket_test/ are frozen
+# evidence of what was shipped under the defective market-selection rule
+# (reports/market_benchmark_toss_defect_20260805.md) and must not be clobbered
+# by a plain run of this script. Override with --out-odds et al.
+BLAST_OUT_ODDS = BLAST_DIR / "betting_odds_blast_v2.json"
+BLAST_OUT_TEST_DIR = BLAST_DIR / "polymarket_test_v2"
+BLAST_OUT_UNMATCHED = BLAST_DIR / "build_unmatched_v2.json"
 
 BLAST_WINDOW_START = datetime(2026, 4, 17)
 BLAST_WINDOW_END = datetime(2099, 12, 31)
@@ -111,9 +123,11 @@ def main() -> None:
                         help="Counts + sample, no writes.")
     parser.add_argument("--verify-mapping", action="store_true",
                         help="Print Polymarket→Cricsheet team-name diff, exit.")
+    base.add_output_arguments(parser)
     args = parser.parse_args()
 
     _patch_constants()
+    base.apply_output_overrides(args)
 
     if not BLAST_ODDS_PATH.exists():
         print(f"ERROR: Blast odds file not found: {BLAST_ODDS_PATH}", file=sys.stderr)
@@ -160,7 +174,11 @@ def main() -> None:
         print("\nDry run — no writes.")
         return
 
-    base.write_outputs(matched, unmatched)
+    base.write_outputs(matched, unmatched,
+                       timestamp_guard=args.timestamp_guard,
+                       restrict_to=(
+                           base.load_manifest_identities(args.restrict_to_manifest)
+                           if args.restrict_to_manifest else None))
     print(f"\nBlast odds artifacts written under {BLAST_DIR}")
 
 

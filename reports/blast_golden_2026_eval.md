@@ -1,5 +1,25 @@
 # T20 Blast 2026 — out-of-sample golden eval (2026-05-28)
 
+> **⚠️ 2026-08-05 — the ROI/market figures in this report are UNVERIFIED and
+> need a rebuild.** `scripts/build_blast_odds.py` drives the same
+> `build_polymarket_odds.write_outputs` that carried the toss-market selection
+> defect (candidates ranked by a `max price ≤ 0.92 = "plausible"` flag first,
+> so lopsided winner markets were rejected in favour of the ~0.50 "Who wins
+> the toss?" sibling; see
+> `reports/market_benchmark_toss_defect_20260805.md`). The Blast odds file
+> `data/golden_blast/betting_odds_blast.json` was therefore built under the
+> defective rule and **has not been re-derived**. Everything downstream of it
+> is unverified: the 2026-06-04 betting eval on the expanded 34-match pool
+> (**flat ROI −12.1%**, CI [−50%, +29%], **market LL 0.6894**, underdog on
+> 29/34 picks), which is rendered in `reports/blast_2026_dashboard.html` by
+> `scripts/build_blast_dashboard.py`. **Rebuild the odds file with the fixed
+> builder and restate those figures before quoting them.**
+>
+> The report *below* is unaffected: it is a pure prediction-quality eval on
+> the original 17-match pool (LL / Brier / accuracy vs coinflip) and states
+> explicitly that no market odds existed for it — no number in it references
+> a price. Tracked in TODO.md § "Market-benchmark correction follow-ups".
+
 A second golden pool, analogous to the IPL-2026 golden set, but for the
 **English domestic T20 Blast** (cricsheet `ntb_json.zip`). The 2026 Blast
 season was never ingested locally — `extract_golden_cricsheet.py` only

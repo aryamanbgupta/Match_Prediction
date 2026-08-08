@@ -7,6 +7,14 @@ and bet counts. Also runs a per-match decomposition: how often does the
 ensemble beat both components and where does it flip the bet side
 relative to sim alone.
 
+The market log-loss reference is **computed per slice from the sliced JSONs
+themselves** (`market_prob` × `actual_winner` on the priced matches of that
+exact slice), not hardcoded — so it always tracks whichever odds file the
+reslice was run against. `reslice_eval_json.py` emits no market-LL summary
+field, but its per-match rows carry `market_prob`, which is the same
+margin-normalized implied probability `BettingOddsLoader` produces. Hardcoded
+constants are used only if a slice has no priced rows at all.
+
 Usage:
     uv run python scripts/sim_eval/blend_report.py \\
         --sliced-dir eval_out_blend_a1/sliced \\
@@ -17,14 +25,30 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 
 # Hardcoded reference baselines from CLAUDE.md / TODO.md.
 COINFLIP_LL = 0.6931
-MARKET_LL_ALL = 0.6267  # frozen baseline LL on all-261; same number listed in TODO.md
 ALWAYS_FAVORITE_ROI_PCT = 4.15
+
+# Fallback ONLY — the market LL is normally recomputed per slice from the
+# sliced JSON's own `market_prob` / `actual_winner` rows (see
+# `_market_ll_from_matches`). These constants are the corrected iteration-set
+# market log losses on `betting_odds_polymarket_v2.json`
+# (255 fixtures / 168 at ≥$50k / 110 at ≥$100k), from
+# `reports/market_benchmark_toss_defect_20260805.md` § "Restated headline —
+# iteration set". They supersede the retracted 0.6267 (all) / 0.6482 (≥$50k) /
+# 0.6224 (≥$100k), which were inflated by the toss-market benchmark defect:
+# the odds builder shipped the "Who wins the toss?" coin flip instead of the
+# head-to-head winner market on 23 of 261 fixtures.
+MARKET_LL_FALLBACK = {
+    "all": 0.5901,
+    "min_volume_50000": 0.5940,
+    "min_volume_100000": 0.5377,
+}
 
 W_VALUES = [0.0, 0.2, 0.35, 0.5, 0.65, 0.8, 1.0]
 W_LABEL = {
@@ -36,10 +60,12 @@ W_LABEL = {
     0.8: "0.80",
     1.0: "1.00 (sim alone, v7)",
 }
+# Counts are read from each sliced JSON, never assumed — they move whenever the
+# odds file changes (the v2 rebuild took the iteration set 261 → 255).
 SLICE_LABEL = {
-    "all": "all (261)",
-    "min_volume_50000": "≥$50k (168)",
-    "min_volume_100000": "≥$100k (110)",
+    "all": "all",
+    "min_volume_50000": "≥$50k",
+    "min_volume_100000": "≥$100k",
 }
 SLICE_ORDER = ["all", "min_volume_50000", "min_volume_100000"]
 
@@ -72,7 +98,43 @@ def _format_row(w: float, summary: dict) -> str:
     )
 
 
-def _build_grid(sliced_dir: Path) -> Dict[str, Dict[float, dict]]:
+def _market_ll_from_matches(matches: List[dict]) -> Tuple[Optional[float], int]:
+    """Slice-matched market log loss from per-match rows.
+
+    `reslice_eval_json.py` writes no market-LL summary field, but every row it
+    keeps carries `market_prob` (margin-normalized implied probability, exactly
+    what `BettingOddsLoader` produces) and `actual_winner`. Averaging
+    −log p_market(winner) over the priced rows of a slice reproduces the
+    published market LL for that slice exactly, and tracks whichever odds file
+    the reslice consumed. Returns (market_ll, n_priced); market_ll is None when
+    the slice has no priced rows.
+    """
+    losses = []
+    for m in matches:
+        probs = m.get("market_prob")
+        winner = m.get("actual_winner")
+        if not probs or winner not in probs:
+            continue
+        p = probs[winner]
+        if p is None:
+            continue
+        p = min(max(float(p), 1e-15), 1.0 - 1e-15)
+        losses.append(-math.log(p))
+    if not losses:
+        return None, 0
+    return sum(losses) / len(losses), len(losses)
+
+
+def _build_grid(
+    sliced_dir: Path,
+    market: Optional[Dict[str, dict]] = None,
+) -> Dict[str, Dict[float, dict]]:
+    """Build the slice × w summary grid.
+
+    If `market` is given it is filled in-place with, per slice,
+    {"market_ll", "n_priced", "source"} — computed from the sliced JSON when
+    the slice has priced rows, else falling back to MARKET_LL_FALLBACK.
+    """
     grid: Dict[str, Dict[float, dict]] = {s: {} for s in SLICE_ORDER}
     for path in sliced_dir.glob("*.json"):
         w, slice_tag = _parse_w_slice(path.name)
@@ -81,6 +143,27 @@ def _build_grid(sliced_dir: Path) -> Dict[str, Dict[float, dict]]:
         with open(path) as f:
             data = json.load(f)
         grid[slice_tag][w] = data["summary"]
+        if market is not None and slice_tag not in market:
+            # Blending rescales the model probability only — `market_prob` is
+            # identical across w — so any one file per slice is enough.
+            market_ll, n_priced = _market_ll_from_matches(data.get("matches", []))
+            if market_ll is None:
+                fallback = MARKET_LL_FALLBACK.get(slice_tag)
+                if fallback is None:
+                    continue
+                market[slice_tag] = {
+                    "market_ll": fallback,
+                    "n_priced": 0,
+                    "source": "fallback constant (v2 odds, audit 2026-08-05)",
+                }
+            else:
+                market[slice_tag] = {
+                    "market_ll": market_ll,
+                    "n_priced": n_priced,
+                    "source": Path(
+                        data["summary"].get("reslice_odds") or path
+                    ).name,
+                }
     return grid
 
 
@@ -164,18 +247,31 @@ def _per_match_decomposition(sliced_dir: Path,
     }
 
 
-def _gate_check(grid: Dict[str, Dict[float, dict]]) -> dict:
+def _gate_check(grid: Dict[str, Dict[float, dict]],
+                market: Dict[str, dict]) -> dict:
     """Apply the go/no-go gate on the ≥$50k slice. Both required:
-        1. Some blended LL < market LL = 0.6267
+        1. Some blended LL < the ≥$50k slice's own market LL
         2. Some blended flat-ROI CI excludes zero (lower bound > 0)
     Report which w values clear each condition (none, possibly).
+
+    The LL bar is the market log loss on this exact slice, recomputed from the
+    sliced JSON. It used to be a hardcoded all-slice constant (0.6267), which
+    was both the wrong slice and a retracted number.
     """
     target = "min_volume_50000"
     sub = grid.get(target, {})
-    ll_winners = [w for w, s in sub.items() if s["avg_log_loss"] < MARKET_LL_ALL]
+    mk = market.get(target) or {}
+    bar = mk.get("market_ll", MARKET_LL_FALLBACK[target])
+    ll_winners = [w for w, s in sub.items() if s["avg_log_loss"] < bar]
     roi_winners = [w for w, s in sub.items()
                    if s["flat_betting_roi_ci_low"] > 0]
     return {
+        "market_ll": bar,
+        "market_ll_basis": (
+            "slice-matched, from the sliced eval JSON"
+            if mk.get("n_priced") else
+            "fallback constant — slice had no priced rows"
+        ),
         "ll_clears_market": ll_winners,
         "roi_ci_excludes_zero": roi_winners,
         "both_clear": sorted(set(ll_winners) & set(roi_winners)),
@@ -183,7 +279,8 @@ def _gate_check(grid: Dict[str, Dict[float, dict]]) -> dict:
 
 
 def render_markdown(sliced_dir: Path, direct_json: Path) -> str:
-    grid = _build_grid(sliced_dir)
+    market: Dict[str, dict] = {}
+    grid = _build_grid(sliced_dir, market=market)
     out = []
     out.append("# Phase A1 — Direct + Sim Blend Report\n")
     out.append("LL/ROI by blend weight `w` and slice. "
@@ -192,15 +289,34 @@ def render_markdown(sliced_dir: Path, direct_json: Path) -> str:
                "block contract; historical reports retain the intervals "
                "recorded at generation time.\n")
 
+    market_bits = ", ".join(
+        f"{SLICE_LABEL[s]} {market[s]['market_ll']:.4f}"
+        for s in SLICE_ORDER if s in market
+    ) or "unavailable"
     out.append(f"**Reference baselines** — coinflip LL {COINFLIP_LL:.4f}, "
-               f"market LL {MARKET_LL_ALL:.4f}, "
-               f"always-favorite flat ROI {ALWAYS_FAVORITE_ROI_PCT:+.2f}%.\n")
+               f"always-favorite flat ROI {ALWAYS_FAVORITE_ROI_PCT:+.2f}%, "
+               f"slice-matched market LL: {market_bits}. Market LL is "
+               "recomputed per slice from the sliced eval JSON's own "
+               "`market_prob` rows, so it follows the odds file that reslice "
+               "consumed (see "
+               "`reports/market_benchmark_toss_defect_20260805.md` — the old "
+               "hardcoded 0.6267 is retracted).\n")
 
     for slice_tag in SLICE_ORDER:
         sub = grid.get(slice_tag, {})
         if not sub:
             continue
-        out.append(f"\n## Slice: {SLICE_LABEL[slice_tag]}\n")
+        n_eval = next(iter(sub.values())).get("n_matches_evaluated")
+        header = SLICE_LABEL[slice_tag]
+        if n_eval is not None:
+            header = f"{header} ({n_eval})"
+        out.append(f"\n## Slice: {header}\n")
+        mk = market.get(slice_tag)
+        if mk:
+            out.append(
+                f"Market LL on this slice: **{mk['market_ll']:.4f}** "
+                f"(n priced = {mk['n_priced']}, source: {mk['source']})\n"
+            )
         out.append("| w | LL | LL 95% CI | Flat ROI | ROI 95% CI | Win rate | Bets |")
         out.append("|---|---|---|---|---|---|---|")
         for w in W_VALUES:
@@ -250,8 +366,9 @@ def render_markdown(sliced_dir: Path, direct_json: Path) -> str:
 
     # Gate check.
     out.append("\n## Go/no-go gate check (≥$50k slice)\n")
-    out.append("Required: model LL < market LL (0.6267) AND flat-ROI CI excludes zero.")
-    g = _gate_check(grid)
+    g = _gate_check(grid, market)
+    out.append(f"Required: model LL < market LL ({g['market_ll']:.4f}; "
+               f"{g['market_ll_basis']}) AND flat-ROI CI excludes zero.")
     out.append(f"- LL < market: clears at w = {g['ll_clears_market'] or 'none'}")
     out.append(f"- ROI CI excludes 0: clears at w = {g['roi_ci_excludes_zero'] or 'none'}")
     out.append(f"- BOTH conditions: w = {g['both_clear'] or 'none'}")

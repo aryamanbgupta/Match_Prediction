@@ -2,7 +2,9 @@
 
 The Blast analogue of build_ipl_dashboard.py. Joins three sources:
   - cricsheet JSONs in data/golden_blast/t20s_json/ (metadata + scores + result)
-  - data/golden_blast/betting_odds_blast.json (polymarket pre-match odds)
+  - data/golden_blast/betting_odds_blast_v2.json (polymarket pre-match odds,
+    rebuilt under the fixed head-to-head selection rule — see
+    reports/blast_v2_restatement_20260807.md)
   - models/xgb_match_v3_m7_production/blast_golden_predictions.json (model probs)
 
 Bet rule mirrors the production sizing rule (M8) + build_ipl_dashboard: 1 unit
@@ -37,7 +39,11 @@ from build_ipl_dashboard import (  # noqa: E402
 from identity_maps import canonicalize_venue  # noqa: E402
 
 POOL = REPO / "data" / "golden_blast" / "t20s_json"
-ODDS = REPO / "data" / "golden_blast" / "betting_odds_blast.json"
+# Odds file of record since the 2026-08-05 market-selection fix. The pre-_v2
+# data/golden_blast/betting_odds_blast.json is frozen evidence of what the
+# defective builder shipped (reports/market_benchmark_toss_defect_20260805.md,
+# restated in reports/blast_v2_restatement_20260807.md).
+ODDS = REPO / "data" / "golden_blast" / "betting_odds_blast_v2.json"
 PRED = REPO / "models" / "xgb_match_v3_m7_production" / "blast_golden_predictions.json"
 OUT_HTML = REPO / "reports" / "blast_2026_dashboard.html"
 
@@ -81,10 +87,19 @@ def collect_blast_matches() -> list[dict]:
 
 
 def load_odds_lookup() -> dict:
+    """Index each odds entry under every identity it carries.
+
+    The v2 rebuild emits Cricsheet-primary `match_id`s (I15) while the frozen
+    pre-v2 file keys on the synthetic display id, and `build_rows` joins on
+    `cricsheet_id` first — so index both rather than assuming either.
+    """
     out = {}
     if ODDS.exists():
         for m in json.load(open(ODDS)).get("matches", []):
-            out[m["match_id"]] = m
+            for key in (m.get("match_id"), m.get("cricsheet_id"),
+                        m.get("display_match_id")):
+                if key:
+                    out[str(key)] = m
     return out
 
 

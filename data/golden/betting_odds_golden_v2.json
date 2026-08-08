@@ -1,0 +1,3883 @@
+{
+  "source": "polymarket",
+  "generated_at": "2026-08-06T00:27:30.647828Z",
+  "match_identity": {
+    "match_identity_version": "cricsheet_primary_v1",
+    "primary_key": "cricsheet_id",
+    "display_key": "display_match_id"
+  },
+  "total_matches": 124,
+  "winner_used_for_market_selection": false,
+  "selection_rule": {
+    "version": "h2h_identity_outcome_blind_v2",
+    "primary": "keep only the event's head-to-head market: Gamma sportsMarketType == 'moneyline' when present, otherwise market.question == event.title; where both signals exist they must agree or the record is unresolved",
+    "tiebreak": [
+      "highest market volume_usd",
+      "lowest market_id"
+    ],
+    "capture_order_used_for_tiebreak": false,
+    "winner_used_for_market_selection": false,
+    "price_magnitude_filter": null,
+    "timestamp_guard": "report",
+    "low_liquidity_filter": true,
+    "min_volume_usd": 1000.0,
+    "market_catalog": "/Users/aryamangupta/CricML/Match_Prediction/data/polymarket_market_catalog.json",
+    "raw_market_index": "/Users/aryamangupta/Projects/polymarket-cricket/data/polymarket_match_events.json",
+    "dropped_fixture_count": 0,
+    "dropped_fixture_reasons": {},
+    "non_prematch_selected_count": 0
+  },
+  "filters": {
+    "min_volume_usd": 1000.0,
+    "test_window_start": "2026-04-17",
+    "test_window_end": "2099-12-31",
+    "requires_resolved_winner": true,
+    "requires_match_type_t20_male": true
+  },
+  "matches": [
+    {
+      "match_id": "1529146",
+      "cricsheet_id": "1529146",
+      "display_match_id": "2026-04-17_Scotland_Namibia_Namibia_Cricket_Ground,_Windhoek",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-17",
+      "team1": "Scotland",
+      "team2": "Namibia",
+      "venue": "Namibia Cricket Ground, Windhoek",
+      "actual_winner": "Scotland",
+      "odds": {
+        "winner": {
+          "Scotland": 1.3986,
+          "Namibia": 3.5088,
+          "timestamp": "2026-04-17T11:00:56Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-nam-sco-2026-04-17",
+      "polymarket_volume_usd": 89718.67609700002,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "1938227",
+        "market_question": "T20 Series Namibia vs Scotland: Namibia vs Scotland",
+        "event_title": "T20 Series Namibia vs Scotland: Namibia vs Scotland",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 89718.67609700002,
+        "scheduled_start_timestamp": "2026-04-17 12:00:00+00",
+        "resolver": "ordered_capture_index"
+      }
+    },
+    {
+      "match_id": "1529268",
+      "cricsheet_id": "1529268",
+      "display_match_id": "2026-04-17_Kolkata_Knight_Riders_Gujarat_Titans_Narendra_Modi_Stadium,_Ahmedabad",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-17",
+      "team1": "Kolkata Knight Riders",
+      "team2": "Gujarat Titans",
+      "venue": "Narendra Modi Stadium, Ahmedabad",
+      "actual_winner": "Gujarat Titans",
+      "odds": {
+        "winner": {
+          "Kolkata Knight Riders": 2.3529,
+          "Gujarat Titans": 1.7391,
+          "timestamp": "2026-04-17T11:00:57Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-guj-kol-2026-04-17",
+      "polymarket_volume_usd": 2505777.309993992,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "1938263",
+        "market_question": "Indian Premier League: Gujarat Titans vs Kolkata Knight Riders",
+        "event_title": "Indian Premier League: Gujarat Titans vs Kolkata Knight Riders",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2505777.309993992,
+        "scheduled_start_timestamp": "2026-04-17 14:00:00+00",
+        "resolver": "ordered_capture_index"
+      }
+    },
+    {
+      "match_id": "1527577",
+      "cricsheet_id": "1527577",
+      "display_match_id": "2026-04-17_Lahore_Qalandars_Quetta_Gladiators_National_Stadium,_Karachi",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-17",
+      "team1": "Lahore Qalandars",
+      "team2": "Quetta Gladiators",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Quetta Gladiators",
+      "odds": {
+        "winner": {
+          "Lahore Qalandars": 1.9802,
+          "Quetta Gladiators": 2.0202,
+          "timestamp": "2026-04-17T13:00:45Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-lah-que-2026-04-17",
+      "polymarket_volume_usd": 143922.41067899985,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "1938275",
+        "market_question": "Pakistan Super League: Lahore Qalandars vs Quetta Gladiators",
+        "event_title": "Pakistan Super League: Lahore Qalandars vs Quetta Gladiators",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 143922.41067899985,
+        "scheduled_start_timestamp": "2026-04-17 15:00:00+00",
+        "resolver": "ordered_capture_index"
+      }
+    },
+    {
+      "match_id": "1529147",
+      "cricsheet_id": "1529147",
+      "display_match_id": "2026-04-18_Scotland_Namibia_Namibia_Cricket_Ground,_Windhoek",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-18",
+      "team1": "Scotland",
+      "team2": "Namibia",
+      "venue": "Namibia Cricket Ground, Windhoek",
+      "actual_winner": "Namibia",
+      "odds": {
+        "winner": {
+          "Scotland": 1.5038,
+          "Namibia": 2.9851,
+          "timestamp": "2026-04-18T11:00:09Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-nam-sco-2026-04-18",
+      "polymarket_volume_usd": 59990.580047999996,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "1947884",
+        "market_question": "T20 Series Namibia vs Scotland: Namibia vs Scotland",
+        "event_title": "T20 Series Namibia vs Scotland: Namibia vs Scotland",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 59990.580047999996,
+        "scheduled_start_timestamp": "2026-04-18 12:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529269",
+      "cricsheet_id": "1529269",
+      "display_match_id": "2026-04-18_Royal_Challengers_Bengaluru_Delhi_Capitals_M_Chinnaswamy_Stadium,_Bengaluru",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-18",
+      "team1": "Royal Challengers Bengaluru",
+      "team2": "Delhi Capitals",
+      "venue": "M Chinnaswamy Stadium, Bengaluru",
+      "actual_winner": "Delhi Capitals",
+      "odds": {
+        "winner": {
+          "Royal Challengers Bengaluru": 1.626,
+          "Delhi Capitals": 2.5974,
+          "timestamp": "2026-04-18T08:00:55Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-roy-del-2026-04-18",
+      "polymarket_volume_usd": 1873933.3879420056,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "1947902",
+        "market_question": "Indian Premier League: Royal Challengers Bangalore vs Delhi Capitals",
+        "event_title": "Indian Premier League: Royal Challengers Bangalore vs Delhi Capitals",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 1873933.3879420056,
+        "scheduled_start_timestamp": "2026-04-18 10:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529270",
+      "cricsheet_id": "1529270",
+      "display_match_id": "2026-04-18_Sunrisers_Hyderabad_Chennai_Super_Kings_Rajiv_Gandhi_International_Stadium,_Uppal,_Hyderabad",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-18",
+      "team1": "Sunrisers Hyderabad",
+      "team2": "Chennai Super Kings",
+      "venue": "Rajiv Gandhi International Stadium, Uppal, Hyderabad",
+      "actual_winner": "Sunrisers Hyderabad",
+      "odds": {
+        "winner": {
+          "Sunrisers Hyderabad": 1.8692,
+          "Chennai Super Kings": 2.1505,
+          "timestamp": "2026-04-18T11:00:12Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-sun-che-2026-04-18",
+      "polymarket_volume_usd": 2117653.687590003,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "1947914",
+        "market_question": "Indian Premier League: Sunrisers Hyderabad vs Chennai Super Kings",
+        "event_title": "Indian Premier League: Sunrisers Hyderabad vs Chennai Super Kings",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2117653.687590003,
+        "scheduled_start_timestamp": "2026-04-18 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1527578",
+      "cricsheet_id": "1527578",
+      "display_match_id": "2026-04-18_Lahore_Qalandars_Rawalpindiz_National_Stadium,_Karachi",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-18",
+      "team1": "Lahore Qalandars",
+      "team2": "Rawalpindiz",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Lahore Qalandars",
+      "odds": {
+        "winner": {
+          "Lahore Qalandars": 1.6667,
+          "Rawalpindiz": 2.5,
+          "timestamp": "2026-04-18T11:00:21Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-lah-raw-2026-04-18",
+      "polymarket_volume_usd": 85712.13539199998,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "1947926",
+        "market_question": "Pakistan Super League: Lahore Qalandars vs Rawalpindi Pindiz",
+        "event_title": "Pakistan Super League: Lahore Qalandars vs Rawalpindi Pindiz",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 85712.13539199998,
+        "scheduled_start_timestamp": "2026-04-18 15:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529271",
+      "cricsheet_id": "1529271",
+      "display_match_id": "2026-04-19_Rajasthan_Royals_Kolkata_Knight_Riders_Eden_Gardens,_Kolkata",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-19",
+      "team1": "Rajasthan Royals",
+      "team2": "Kolkata Knight Riders",
+      "venue": "Eden Gardens, Kolkata",
+      "actual_winner": "Kolkata Knight Riders",
+      "odds": {
+        "winner": {
+          "Rajasthan Royals": 1.6807,
+          "Kolkata Knight Riders": 2.4691,
+          "timestamp": "2026-04-19T08:00:59Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-kol-raj-2026-04-19",
+      "polymarket_volume_usd": 2502812.387225998,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "1959740",
+        "market_question": "Indian Premier League: Kolkata Knight Riders vs Rajasthan Royals",
+        "event_title": "Indian Premier League: Kolkata Knight Riders vs Rajasthan Royals",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2502812.387225998,
+        "scheduled_start_timestamp": "2026-04-19 10:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529272",
+      "cricsheet_id": "1529272",
+      "display_match_id": "2026-04-19_Punjab_Kings_Lucknow_Super_Giants_Maharaja_Yadavindra_Singh_International_Cricket_Stadium,_New_Chandigarh",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-19",
+      "team1": "Punjab Kings",
+      "team2": "Lucknow Super Giants",
+      "venue": "Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh",
+      "actual_winner": "Punjab Kings",
+      "odds": {
+        "winner": {
+          "Punjab Kings": 1.6,
+          "Lucknow Super Giants": 2.6667,
+          "timestamp": "2026-04-19T13:00:52Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-pun-luc-2026-04-19",
+      "polymarket_volume_usd": 1479413.7518910028,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "1959752",
+        "market_question": "Indian Premier League: Punjab Kings vs Lucknow Super Giants",
+        "event_title": "Indian Premier League: Punjab Kings vs Lucknow Super Giants",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 1479413.7518910028,
+        "scheduled_start_timestamp": "2026-04-19 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1527579",
+      "cricsheet_id": "1527579",
+      "display_match_id": "2026-04-19_Multan_Sultans_Karachi_Kings_National_Stadium,_Karachi",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-19",
+      "team1": "Multan Sultans",
+      "team2": "Karachi Kings",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Multan Sultans",
+      "odds": {
+        "winner": {
+          "Multan Sultans": 1.7699,
+          "Karachi Kings": 2.2989,
+          "timestamp": "2026-04-19T09:00:45Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-mul-kar-2026-04-19",
+      "polymarket_volume_usd": 187227.3766209996,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "1959764",
+        "market_question": "Pakistan Super League: Multan Sultans vs Karachi Kings",
+        "event_title": "Pakistan Super League: Multan Sultans vs Karachi Kings",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 187227.3766209996,
+        "scheduled_start_timestamp": "2026-04-19 09:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1527580",
+      "cricsheet_id": "1527580",
+      "display_match_id": "2026-04-19_Peshawar_Zalmi_Quetta_Gladiators_National_Stadium,_Karachi",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-19",
+      "team1": "Peshawar Zalmi",
+      "team2": "Quetta Gladiators",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Peshawar Zalmi",
+      "odds": {
+        "winner": {
+          "Peshawar Zalmi": 1.7857,
+          "Quetta Gladiators": 2.2727,
+          "timestamp": "2026-04-19T07:00:44Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-pes-que-2026-04-19",
+      "polymarket_volume_usd": 83027.29843799995,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "1959800",
+        "market_question": "Pakistan Super League: Peshawar Zalmi vs Quetta Gladiators",
+        "event_title": "Pakistan Super League: Peshawar Zalmi vs Quetta Gladiators",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 83027.29843799995,
+        "scheduled_start_timestamp": "2026-04-19 15:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529273",
+      "cricsheet_id": "1529273",
+      "display_match_id": "2026-04-20_Mumbai_Indians_Gujarat_Titans_Narendra_Modi_Stadium,_Ahmedabad",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-20",
+      "team1": "Mumbai Indians",
+      "team2": "Gujarat Titans",
+      "venue": "Narendra Modi Stadium, Ahmedabad",
+      "actual_winner": "Mumbai Indians",
+      "odds": {
+        "winner": {
+          "Mumbai Indians": 1.8692,
+          "Gujarat Titans": 2.1505,
+          "timestamp": "2026-04-20T13:00:17Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-guj-mum-2026-04-20",
+      "polymarket_volume_usd": 1710189.406935005,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "1970618",
+        "market_question": "Indian Premier League: Gujarat Titans vs Mumbai Indians",
+        "event_title": "Indian Premier League: Gujarat Titans vs Mumbai Indians",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 1710189.406935005,
+        "scheduled_start_timestamp": "2026-04-20 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529274",
+      "cricsheet_id": "1529274",
+      "display_match_id": "2026-04-21_Sunrisers_Hyderabad_Delhi_Capitals_Rajiv_Gandhi_International_Stadium,_Uppal,_Hyderabad",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-21",
+      "team1": "Sunrisers Hyderabad",
+      "team2": "Delhi Capitals",
+      "venue": "Rajiv Gandhi International Stadium, Uppal, Hyderabad",
+      "actual_winner": "Sunrisers Hyderabad",
+      "odds": {
+        "winner": {
+          "Sunrisers Hyderabad": 1.8692,
+          "Delhi Capitals": 2.1505,
+          "timestamp": "2026-04-21T10:00:40Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-sun-del-2026-04-21",
+      "polymarket_volume_usd": 2651647.015909996,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "1981948",
+        "market_question": "Indian Premier League: Sunrisers Hyderabad vs Delhi Capitals",
+        "event_title": "Indian Premier League: Sunrisers Hyderabad vs Delhi Capitals",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2651647.015909996,
+        "scheduled_start_timestamp": "2026-04-21 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1527581",
+      "cricsheet_id": "1527581",
+      "display_match_id": "2026-04-21_Lahore_Qalandars_Quetta_Gladiators_Gaddafi_Stadium,_Lahore",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-21",
+      "team1": "Lahore Qalandars",
+      "team2": "Quetta Gladiators",
+      "venue": "Gaddafi Stadium, Lahore",
+      "actual_winner": "Lahore Qalandars",
+      "odds": {
+        "winner": {
+          "Lahore Qalandars": 1.8349,
+          "Quetta Gladiators": 2.1978,
+          "timestamp": "2026-04-21T08:00:29Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-lah-que-2026-04-21",
+      "polymarket_volume_usd": 295631.8522419997,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "1981960",
+        "market_question": "Pakistan Super League: Lahore Qalandars vs Quetta Gladiators",
+        "event_title": "Pakistan Super League: Lahore Qalandars vs Quetta Gladiators",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 295631.8522419997,
+        "scheduled_start_timestamp": "2026-04-21 09:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1527582",
+      "cricsheet_id": "1527582",
+      "display_match_id": "2026-04-21_Rawalpindiz_Multan_Sultans_National_Stadium,_Karachi",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-21",
+      "team1": "Rawalpindiz",
+      "team2": "Multan Sultans",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Multan Sultans",
+      "odds": {
+        "winner": {
+          "Rawalpindiz": 3.5088,
+          "Multan Sultans": 1.3986,
+          "timestamp": "2026-04-21T14:00:14Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-raw-mul-2026-04-21",
+      "polymarket_volume_usd": 112565.45383700005,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "1981972",
+        "market_question": "Pakistan Super League: Rawalpindi Pindiz vs Multan Sultans",
+        "event_title": "Pakistan Super League: Rawalpindi Pindiz vs Multan Sultans",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 112565.45383700005,
+        "scheduled_start_timestamp": "2026-04-21 15:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529275",
+      "cricsheet_id": "1529275",
+      "display_match_id": "2026-04-22_Rajasthan_Royals_Lucknow_Super_Giants_Bharat_Ratna_Shri_Atal_Bihari_Vajpayee_Ekana_Cricket_Stadium,_Lucknow",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-22",
+      "team1": "Rajasthan Royals",
+      "team2": "Lucknow Super Giants",
+      "venue": "Bharat Ratna Shri Atal Bihari Vajpayee Ekana Cricket Stadium, Lucknow",
+      "actual_winner": "Rajasthan Royals",
+      "odds": {
+        "winner": {
+          "Rajasthan Royals": 1.7391,
+          "Lucknow Super Giants": 2.3529,
+          "timestamp": "2026-04-22T13:00:05Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-luc-raj-2026-04-22",
+      "polymarket_volume_usd": 2195365.522791005,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "1992533",
+        "market_question": "Indian Premier League: Lucknow Super Giants vs Rajasthan Royals",
+        "event_title": "Indian Premier League: Lucknow Super Giants vs Rajasthan Royals",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2195365.522791005,
+        "scheduled_start_timestamp": "2026-04-22 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1527583",
+      "cricsheet_id": "1527583",
+      "display_match_id": "2026-04-22_Karachi_Kings_Peshawar_Zalmi_Gaddafi_Stadium,_Lahore",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-22",
+      "team1": "Karachi Kings",
+      "team2": "Peshawar Zalmi",
+      "venue": "Gaddafi Stadium, Lahore",
+      "actual_winner": "Peshawar Zalmi",
+      "odds": {
+        "winner": {
+          "Karachi Kings": 2.4096,
+          "Peshawar Zalmi": 1.7094,
+          "timestamp": "2026-04-22T09:00:05Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-kar-pes-2026-04-22",
+      "polymarket_volume_usd": 292275.8910579998,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "1992557",
+        "market_question": "Pakistan Super League: Karachi Kings vs Peshawar Zalmi",
+        "event_title": "Pakistan Super League: Karachi Kings vs Peshawar Zalmi",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 292275.8910579998,
+        "scheduled_start_timestamp": "2026-04-22 09:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1527584",
+      "cricsheet_id": "1527584",
+      "display_match_id": "2026-04-22_Multan_Sultans_Hyderabad_Kingsmen_National_Stadium,_Karachi",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-22",
+      "team1": "Multan Sultans",
+      "team2": "Hyderabad Kingsmen",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Hyderabad Kingsmen",
+      "odds": {
+        "winner": {
+          "Multan Sultans": 1.6807,
+          "Hyderabad Kingsmen": 2.4691,
+          "timestamp": "2026-04-22T13:00:07Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-hyd-mul-2026-04-22",
+      "polymarket_volume_usd": 298913.82826899993,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "1992581",
+        "market_question": "Pakistan Super League: Hyderabad Kingsmen vs Multan Sultans",
+        "event_title": "Pakistan Super League: Hyderabad Kingsmen vs Multan Sultans",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 298913.82826899993,
+        "scheduled_start_timestamp": "2026-04-22 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529276",
+      "cricsheet_id": "1529276",
+      "display_match_id": "2026-04-23_Chennai_Super_Kings_Mumbai_Indians_Wankhede_Stadium,_Mumbai",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-23",
+      "team1": "Chennai Super Kings",
+      "team2": "Mumbai Indians",
+      "venue": "Wankhede Stadium, Mumbai",
+      "actual_winner": "Chennai Super Kings",
+      "odds": {
+        "winner": {
+          "Chennai Super Kings": 2.6667,
+          "Mumbai Indians": 1.6,
+          "timestamp": "2026-04-23T13:00:09Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-mum-che-2026-04-23",
+      "polymarket_volume_usd": 1975238.975414993,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2000122",
+        "market_question": "Indian Premier League: Mumbai Indians vs Chennai Super Kings",
+        "event_title": "Indian Premier League: Mumbai Indians vs Chennai Super Kings",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 1975238.975414993,
+        "scheduled_start_timestamp": "2026-04-23 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1527585",
+      "cricsheet_id": "1527585",
+      "display_match_id": "2026-04-23_Islamabad_United_Rawalpindiz_National_Stadium,_Karachi",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-23",
+      "team1": "Islamabad United",
+      "team2": "Rawalpindiz",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Rawalpindiz",
+      "odds": {
+        "winner": {
+          "Islamabad United": 1.5152,
+          "Rawalpindiz": 2.9412,
+          "timestamp": "2026-04-23T09:00:08Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-raw-isl-2026-04-23",
+      "polymarket_volume_usd": 182011.9126169999,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2000134",
+        "market_question": "Pakistan Super League: Rawalpindi Pindiz vs Islamabad United",
+        "event_title": "Pakistan Super League: Rawalpindi Pindiz vs Islamabad United",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 182011.9126169999,
+        "scheduled_start_timestamp": "2026-04-23 09:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1527586",
+      "cricsheet_id": "1527586",
+      "display_match_id": "2026-04-23_Lahore_Qalandars_Karachi_Kings_Gaddafi_Stadium,_Lahore",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-23",
+      "team1": "Lahore Qalandars",
+      "team2": "Karachi Kings",
+      "venue": "Gaddafi Stadium, Lahore",
+      "actual_winner": "Karachi Kings",
+      "odds": {
+        "winner": {
+          "Lahore Qalandars": 1.7391,
+          "Karachi Kings": 2.3529,
+          "timestamp": "2026-04-23T13:00:09Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-lah-kar-2026-04-23",
+      "polymarket_volume_usd": 209100.28786399984,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2000146",
+        "market_question": "Pakistan Super League: Lahore Qalandars vs Karachi Kings",
+        "event_title": "Pakistan Super League: Lahore Qalandars vs Karachi Kings",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 209100.28786399984,
+        "scheduled_start_timestamp": "2026-04-23 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529277",
+      "cricsheet_id": "1529277",
+      "display_match_id": "2026-04-24_Gujarat_Titans_Royal_Challengers_Bengaluru_M_Chinnaswamy_Stadium,_Bengaluru",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-24",
+      "team1": "Gujarat Titans",
+      "team2": "Royal Challengers Bengaluru",
+      "venue": "M Chinnaswamy Stadium, Bengaluru",
+      "actual_winner": "Royal Challengers Bengaluru",
+      "odds": {
+        "winner": {
+          "Gujarat Titans": 2.4096,
+          "Royal Challengers Bengaluru": 1.7094,
+          "timestamp": "2026-04-24T13:00:06Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-roy-guj-2026-04-24",
+      "polymarket_volume_usd": 1767649.4612150034,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2007171",
+        "market_question": "Indian Premier League: Royal Challengers Bangalore vs Gujarat Titans",
+        "event_title": "Indian Premier League: Royal Challengers Bangalore vs Gujarat Titans",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 1767649.4612150034,
+        "scheduled_start_timestamp": "2026-04-24 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1527587",
+      "cricsheet_id": "1527587",
+      "display_match_id": "2026-04-24_Hyderabad_Kingsmen_Islamabad_United_National_Stadium,_Karachi",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-24",
+      "team1": "Hyderabad Kingsmen",
+      "team2": "Islamabad United",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Islamabad United",
+      "odds": {
+        "winner": {
+          "Hyderabad Kingsmen": 1.9417,
+          "Islamabad United": 2.0619,
+          "timestamp": "2026-04-24T13:00:05Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-hyd-isl-2026-04-24",
+      "polymarket_volume_usd": 103123.37898099983,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2007195",
+        "market_question": "Pakistan Super League: Hyderabad Kingsmen vs Islamabad United",
+        "event_title": "Pakistan Super League: Hyderabad Kingsmen vs Islamabad United",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 103123.37898099983,
+        "scheduled_start_timestamp": "2026-04-24 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529278",
+      "cricsheet_id": "1529278",
+      "display_match_id": "2026-04-25_Delhi_Capitals_Punjab_Kings_Arun_Jaitley_Stadium,_Delhi",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-25",
+      "team1": "Delhi Capitals",
+      "team2": "Punjab Kings",
+      "venue": "Arun Jaitley Stadium, Delhi",
+      "actual_winner": "Punjab Kings",
+      "odds": {
+        "winner": {
+          "Delhi Capitals": 2.2472,
+          "Punjab Kings": 1.8018,
+          "timestamp": "2026-04-25T09:00:08Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-del-pun-2026-04-25",
+      "polymarket_volume_usd": 3211985.322908996,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2015213",
+        "market_question": "Indian Premier League: Delhi Capitals vs Punjab Kings",
+        "event_title": "Indian Premier League: Delhi Capitals vs Punjab Kings",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 3211985.322908996,
+        "scheduled_start_timestamp": "2026-04-25 10:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529279",
+      "cricsheet_id": "1529279",
+      "display_match_id": "2026-04-25_Rajasthan_Royals_Sunrisers_Hyderabad_Sawai_Mansingh_Stadium,_Jaipur",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-25",
+      "team1": "Rajasthan Royals",
+      "team2": "Sunrisers Hyderabad",
+      "venue": "Sawai Mansingh Stadium, Jaipur",
+      "actual_winner": "Sunrisers Hyderabad",
+      "odds": {
+        "winner": {
+          "Rajasthan Royals": 1.9048,
+          "Sunrisers Hyderabad": 2.1053,
+          "timestamp": "2026-04-25T13:00:07Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-raj-sun-2026-04-25",
+      "polymarket_volume_usd": 1656789.342075005,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2015225",
+        "market_question": "Indian Premier League: Rajasthan Royals vs Sunrisers Hyderabad",
+        "event_title": "Indian Premier League: Rajasthan Royals vs Sunrisers Hyderabad",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 1656789.342075005,
+        "scheduled_start_timestamp": "2026-04-25 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1527588",
+      "cricsheet_id": "1527588",
+      "display_match_id": "2026-04-25_Quetta_Gladiators_Karachi_Kings_Gaddafi_Stadium,_Lahore",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-25",
+      "team1": "Quetta Gladiators",
+      "team2": "Karachi Kings",
+      "venue": "Gaddafi Stadium, Lahore",
+      "actual_winner": "Karachi Kings",
+      "odds": {
+        "winner": {
+          "Quetta Gladiators": 2.3529,
+          "Karachi Kings": 1.7391,
+          "timestamp": "2026-04-25T09:00:08Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-que-kar-2026-04-25",
+      "polymarket_volume_usd": 140738.7571029999,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2015244",
+        "market_question": "Pakistan Super League: Quetta Gladiators vs Karachi Kings",
+        "event_title": "Pakistan Super League: Quetta Gladiators vs Karachi Kings",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 140738.7571029999,
+        "scheduled_start_timestamp": "2026-04-25 09:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1527589",
+      "cricsheet_id": "1527589",
+      "display_match_id": "2026-04-25_Peshawar_Zalmi_Lahore_Qalandars_Gaddafi_Stadium,_Lahore",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-25",
+      "team1": "Peshawar Zalmi",
+      "team2": "Lahore Qalandars",
+      "venue": "Gaddafi Stadium, Lahore",
+      "actual_winner": "Lahore Qalandars",
+      "odds": {
+        "winner": {
+          "Peshawar Zalmi": 1.9048,
+          "Lahore Qalandars": 2.1053,
+          "timestamp": "2026-04-25T13:00:07Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-lah-pes-2026-04-25",
+      "polymarket_volume_usd": 175230.4409989999,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2015268",
+        "market_question": "Pakistan Super League: Lahore Qalandars vs Peshawar Zalmi",
+        "event_title": "Pakistan Super League: Lahore Qalandars vs Peshawar Zalmi",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 175230.4409989999,
+        "scheduled_start_timestamp": "2026-04-25 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1531694",
+      "cricsheet_id": "1531694",
+      "display_match_id": "2026-04-20_Nepal_United_Arab_Emirates_Tribhuvan_University_International_Cricket_Ground,_Kirtipur",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-20",
+      "team1": "Nepal",
+      "team2": "United Arab Emirates",
+      "venue": "Tribhuvan University International Cricket Ground, Kirtipur",
+      "actual_winner": "United Arab Emirates",
+      "odds": {
+        "winner": {
+          "Nepal": 1.5873,
+          "United Arab Emirates": 2.7027,
+          "timestamp": "2026-04-20T11:00:51Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-npl-are-2026-04-20",
+      "polymarket_volume_usd": 55317.98264400002,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2024019",
+        "market_question": "T20 Series Nepal vs UAE: Nepal vs United Arab Emirates",
+        "event_title": "T20 Series Nepal vs UAE: Nepal vs United Arab Emirates",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 55317.98264400002,
+        "scheduled_start_timestamp": "2026-04-20 11:15:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1531695",
+      "cricsheet_id": "1531695",
+      "display_match_id": "2026-04-21_United_Arab_Emirates_Nepal_Tribhuvan_University_International_Cricket_Ground,_Kirtipur",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-21",
+      "team1": "United Arab Emirates",
+      "team2": "Nepal",
+      "venue": "Tribhuvan University International Cricket Ground, Kirtipur",
+      "actual_winner": "Nepal",
+      "odds": {
+        "winner": {
+          "United Arab Emirates": 2.439,
+          "Nepal": 1.6949,
+          "timestamp": "2026-04-21T10:00:39Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-npl-are-2026-04-21",
+      "polymarket_volume_usd": 33607.26550300001,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2024031",
+        "market_question": "T20 Series Nepal vs UAE: Nepal vs United Arab Emirates",
+        "event_title": "T20 Series Nepal vs UAE: Nepal vs United Arab Emirates",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 33607.26550300001,
+        "scheduled_start_timestamp": "2026-04-21 11:15:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529280",
+      "cricsheet_id": "1529280",
+      "display_match_id": "2026-04-26_Chennai_Super_Kings_Gujarat_Titans_MA_Chidambaram_Stadium,_Chepauk,_Chennai",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-26",
+      "team1": "Chennai Super Kings",
+      "team2": "Gujarat Titans",
+      "venue": "MA Chidambaram Stadium, Chepauk, Chennai",
+      "actual_winner": "Gujarat Titans",
+      "odds": {
+        "winner": {
+          "Chennai Super Kings": 1.9417,
+          "Gujarat Titans": 2.0619,
+          "timestamp": "2026-04-26T09:00:04Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-che-guj-2026-04-26",
+      "polymarket_volume_usd": 1180063.6120750029,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2024067",
+        "market_question": "Indian Premier League: Chennai Super Kings vs Gujarat Titans",
+        "event_title": "Indian Premier League: Chennai Super Kings vs Gujarat Titans",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 1180063.6120750029,
+        "scheduled_start_timestamp": "2026-04-26 10:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529281",
+      "cricsheet_id": "1529281",
+      "display_match_id": "2026-04-26_Kolkata_Knight_Riders_Lucknow_Super_Giants_Bharat_Ratna_Shri_Atal_Bihari_Vajpayee_Ekana_Cricket_Stadium,_Lucknow",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-26",
+      "team1": "Kolkata Knight Riders",
+      "team2": "Lucknow Super Giants",
+      "venue": "Bharat Ratna Shri Atal Bihari Vajpayee Ekana Cricket Stadium, Lucknow",
+      "actual_winner": null,
+      "odds": {
+        "winner": {
+          "Kolkata Knight Riders": 2.0619,
+          "Lucknow Super Giants": 1.9417,
+          "timestamp": "2026-04-26T13:00:08Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-luc-kol-2026-04-26",
+      "polymarket_volume_usd": 2543782.188152008,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2024079",
+        "market_question": "Indian Premier League: Lucknow Super Giants vs Kolkata Knight Riders",
+        "event_title": "Indian Premier League: Lucknow Super Giants vs Kolkata Knight Riders",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2543782.188152008,
+        "scheduled_start_timestamp": "2026-04-26 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1527590",
+      "cricsheet_id": "1527590",
+      "display_match_id": "2026-04-26_Hyderabad_Kingsmen_Rawalpindiz_National_Stadium,_Karachi",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-26",
+      "team1": "Hyderabad Kingsmen",
+      "team2": "Rawalpindiz",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Hyderabad Kingsmen",
+      "odds": {
+        "winner": {
+          "Hyderabad Kingsmen": 1.6807,
+          "Rawalpindiz": 2.4691,
+          "timestamp": "2026-04-26T09:00:04Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-hyd-raw-2026-04-26",
+      "polymarket_volume_usd": 246739.04611499995,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2024103",
+        "market_question": "Pakistan Super League: Hyderabad Kingsmen vs Rawalpindi Pindiz",
+        "event_title": "Pakistan Super League: Hyderabad Kingsmen vs Rawalpindi Pindiz",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 246739.04611499995,
+        "scheduled_start_timestamp": "2026-04-26 09:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1527591",
+      "cricsheet_id": "1527591",
+      "display_match_id": "2026-04-26_Multan_Sultans_Islamabad_United_National_Stadium,_Karachi",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-26",
+      "team1": "Multan Sultans",
+      "team2": "Islamabad United",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Islamabad United",
+      "odds": {
+        "winner": {
+          "Multan Sultans": 1.9417,
+          "Islamabad United": 2.0619,
+          "timestamp": "2026-04-26T13:00:05Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-isl-mul-2026-04-26",
+      "polymarket_volume_usd": 175914.8283399999,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2024115",
+        "market_question": "Pakistan Super League: Islamabad United vs Multan Sultans",
+        "event_title": "Pakistan Super League: Islamabad United vs Multan Sultans",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 175914.8283399999,
+        "scheduled_start_timestamp": "2026-04-26 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1528275",
+      "cricsheet_id": "1528275",
+      "display_match_id": "2026-04-27_New_Zealand_Bangladesh_Bir_Sreshtho_Flight_Lieutenant_Matiur_Rahman_Stadium,_Chattogram",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-27",
+      "team1": "New Zealand",
+      "team2": "Bangladesh",
+      "venue": "Bir Sreshtho Flight Lieutenant Matiur Rahman Stadium, Chattogram",
+      "actual_winner": "Bangladesh",
+      "odds": {
+        "winner": {
+          "New Zealand": 2.5,
+          "Bangladesh": 1.6667,
+          "timestamp": "2026-04-27T07:00:05Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-bgd-nzl-2026-04-27",
+      "polymarket_volume_usd": 446658.22362600017,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2034624",
+        "market_question": "T20 Series Bangladesh vs. New Zealand: Bangladesh vs New Zealand",
+        "event_title": "T20 Series Bangladesh vs. New Zealand: Bangladesh vs New Zealand",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 446658.22362600017,
+        "scheduled_start_timestamp": "2026-04-27 08:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529282",
+      "cricsheet_id": "1529282",
+      "display_match_id": "2026-04-27_Delhi_Capitals_Royal_Challengers_Bengaluru_Arun_Jaitley_Stadium,_Delhi",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-27",
+      "team1": "Delhi Capitals",
+      "team2": "Royal Challengers Bengaluru",
+      "venue": "Arun Jaitley Stadium, Delhi",
+      "actual_winner": "Royal Challengers Bengaluru",
+      "odds": {
+        "winner": {
+          "Delhi Capitals": 2.2989,
+          "Royal Challengers Bengaluru": 1.7699,
+          "timestamp": "2026-04-27T13:00:07Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-del-roy-2026-04-27",
+      "polymarket_volume_usd": 2038835.5070579993,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2034709",
+        "market_question": "Indian Premier League: Delhi Capitals vs Royal Challengers Bengaluru",
+        "event_title": "Indian Premier League: Delhi Capitals vs Royal Challengers Bengaluru",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2038835.5070579993,
+        "scheduled_start_timestamp": "2026-04-27 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529283",
+      "cricsheet_id": "1529283",
+      "display_match_id": "2026-04-28_Punjab_Kings_Rajasthan_Royals_Maharaja_Yadavindra_Singh_International_Cricket_Stadium,_New_Chandigarh",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-28",
+      "team1": "Punjab Kings",
+      "team2": "Rajasthan Royals",
+      "venue": "Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh",
+      "actual_winner": "Rajasthan Royals",
+      "odds": {
+        "winner": {
+          "Punjab Kings": 1.7699,
+          "Rajasthan Royals": 2.2989,
+          "timestamp": "2026-04-28T13:00:07Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-pun-raj-2026-04-28",
+      "polymarket_volume_usd": 2174726.6815509964,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2044761",
+        "market_question": "Indian Premier League: Punjab Kings vs Rajasthan Royals",
+        "event_title": "Indian Premier League: Punjab Kings vs Rajasthan Royals",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2174726.6815509964,
+        "scheduled_start_timestamp": "2026-04-28 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529284",
+      "cricsheet_id": "1529284",
+      "display_match_id": "2026-04-29_Mumbai_Indians_Sunrisers_Hyderabad_Wankhede_Stadium,_Mumbai",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-29",
+      "team1": "Mumbai Indians",
+      "team2": "Sunrisers Hyderabad",
+      "venue": "Wankhede Stadium, Mumbai",
+      "actual_winner": "Sunrisers Hyderabad",
+      "odds": {
+        "winner": {
+          "Mumbai Indians": 1.9048,
+          "Sunrisers Hyderabad": 2.1053,
+          "timestamp": "2026-04-29T13:00:04Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-mum-sun-2026-04-29",
+      "polymarket_volume_usd": 5735251.376863994,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2078392",
+        "market_question": "Indian Premier League: Mumbai Indians vs Sunrisers Hyderabad",
+        "event_title": "Indian Premier League: Mumbai Indians vs Sunrisers Hyderabad",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 5735251.376863994,
+        "scheduled_start_timestamp": "2026-04-29 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1528277",
+      "cricsheet_id": "1528277",
+      "display_match_id": "2026-05-02_Bangladesh_New_Zealand_Shere_Bangla_National_Stadium,_Mirpur",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-02",
+      "team1": "Bangladesh",
+      "team2": "New Zealand",
+      "venue": "Shere Bangla National Stadium, Mirpur",
+      "actual_winner": "New Zealand",
+      "odds": {
+        "winner": {
+          "Bangladesh": 1.7391,
+          "New Zealand": 2.3529,
+          "timestamp": "2026-05-02T07:00:21Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-bgd-nzl-2026-05-02",
+      "polymarket_volume_usd": 145186.05977099985,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2089259",
+        "market_question": "T20 Series Bangladesh vs. New Zealand: Bangladesh vs New Zealand",
+        "event_title": "T20 Series Bangladesh vs. New Zealand: Bangladesh vs New Zealand",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 145186.05977099985,
+        "scheduled_start_timestamp": "2026-05-02 08:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1533390",
+      "cricsheet_id": "1533390",
+      "display_match_id": "2026-05-01_Indonesia_Malaysia_Bayuemas_Oval,_Kuala_Lumpur",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-01",
+      "team1": "Indonesia",
+      "team2": "Malaysia",
+      "venue": "Bayuemas Oval, Kuala Lumpur",
+      "actual_winner": "Malaysia",
+      "odds": {
+        "winner": {
+          "Indonesia": 9.5238,
+          "Malaysia": 1.1173,
+          "timestamp": "2026-05-01T01:00:19Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-mys-idn-2026-04-30",
+      "polymarket_volume_usd": 12636.011638,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2089339",
+        "market_question": "T20 Series Malaysia vs Indonesia: Malaysia vs Indonesia",
+        "event_title": "T20 Series Malaysia vs Indonesia: Malaysia vs Indonesia",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 12636.011638,
+        "scheduled_start_timestamp": "2026-05-01 02:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1533391",
+      "cricsheet_id": "1533391",
+      "display_match_id": "2026-05-02_Malaysia_Indonesia_Bayuemas_Oval,_Kuala_Lumpur",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-02",
+      "team1": "Malaysia",
+      "team2": "Indonesia",
+      "venue": "Bayuemas Oval, Kuala Lumpur",
+      "actual_winner": "Malaysia",
+      "odds": {
+        "winner": {
+          "Malaysia": 1.1494,
+          "Indonesia": 7.6923,
+          "timestamp": "2026-05-02T01:00:06Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-mys-idn-2026-05-01",
+      "polymarket_volume_usd": 16168.123313000006,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2089351",
+        "market_question": "T20 Series Malaysia vs Indonesia: Malaysia vs Indonesia",
+        "event_title": "T20 Series Malaysia vs Indonesia: Malaysia vs Indonesia",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 16168.123313000006,
+        "scheduled_start_timestamp": "2026-05-02 01:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529285",
+      "cricsheet_id": "1529285",
+      "display_match_id": "2026-04-30_Royal_Challengers_Bengaluru_Gujarat_Titans_Narendra_Modi_Stadium,_Ahmedabad",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-30",
+      "team1": "Royal Challengers Bengaluru",
+      "team2": "Gujarat Titans",
+      "venue": "Narendra Modi Stadium, Ahmedabad",
+      "actual_winner": "Gujarat Titans",
+      "odds": {
+        "winner": {
+          "Royal Challengers Bengaluru": 1.7094,
+          "Gujarat Titans": 2.4096,
+          "timestamp": "2026-04-30T13:00:07Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-guj-roy-2026-04-30",
+      "polymarket_volume_usd": 1640055.150341996,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2090796",
+        "market_question": "Indian Premier League: Gujarat Titans vs Royal Challengers Bengaluru",
+        "event_title": "Indian Premier League: Gujarat Titans vs Royal Challengers Bengaluru",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 1640055.150341996,
+        "scheduled_start_timestamp": "2026-04-30 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529286",
+      "cricsheet_id": "1529286",
+      "display_match_id": "2026-05-01_Rajasthan_Royals_Delhi_Capitals_Sawai_Mansingh_Stadium,_Jaipur",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-01",
+      "team1": "Rajasthan Royals",
+      "team2": "Delhi Capitals",
+      "venue": "Sawai Mansingh Stadium, Jaipur",
+      "actual_winner": "Delhi Capitals",
+      "odds": {
+        "winner": {
+          "Rajasthan Royals": 1.7391,
+          "Delhi Capitals": 2.3529,
+          "timestamp": "2026-05-01T13:00:04Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-raj-del-2026-05-01",
+      "polymarket_volume_usd": 2843121.146647991,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2090808",
+        "market_question": "Indian Premier League: Rajasthan Royals vs Delhi Capitals",
+        "event_title": "Indian Premier League: Rajasthan Royals vs Delhi Capitals",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2843121.146647991,
+        "scheduled_start_timestamp": "2026-05-01 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529287",
+      "cricsheet_id": "1529287",
+      "display_match_id": "2026-05-02_Mumbai_Indians_Chennai_Super_Kings_MA_Chidambaram_Stadium,_Chepauk,_Chennai",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-02",
+      "team1": "Mumbai Indians",
+      "team2": "Chennai Super Kings",
+      "venue": "MA Chidambaram Stadium, Chepauk, Chennai",
+      "actual_winner": "Chennai Super Kings",
+      "odds": {
+        "winner": {
+          "Mumbai Indians": 1.8018,
+          "Chennai Super Kings": 2.2472,
+          "timestamp": "2026-05-02T13:00:09Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-che-mum-2026-05-02",
+      "polymarket_volume_usd": 1922602.7683229987,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2090820",
+        "market_question": "Indian Premier League: Chennai Super Kings vs Mumbai Indians",
+        "event_title": "Indian Premier League: Chennai Super Kings vs Mumbai Indians",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 1922602.7683229987,
+        "scheduled_start_timestamp": "2026-05-02 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529288",
+      "cricsheet_id": "1529288",
+      "display_match_id": "2026-05-03_Sunrisers_Hyderabad_Kolkata_Knight_Riders_Rajiv_Gandhi_International_Stadium,_Uppal,_Hyderabad",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-03",
+      "team1": "Sunrisers Hyderabad",
+      "team2": "Kolkata Knight Riders",
+      "venue": "Rajiv Gandhi International Stadium, Uppal, Hyderabad",
+      "actual_winner": "Kolkata Knight Riders",
+      "odds": {
+        "winner": {
+          "Sunrisers Hyderabad": 1.6807,
+          "Kolkata Knight Riders": 2.4691,
+          "timestamp": "2026-05-03T09:00:07Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-sun-kol-2026-05-03",
+      "polymarket_volume_usd": 1874096.586053004,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2090832",
+        "market_question": "Indian Premier League: Sunrisers Hyderabad vs Kolkata Knight Riders",
+        "event_title": "Indian Premier League: Sunrisers Hyderabad vs Kolkata Knight Riders",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 1874096.586053004,
+        "scheduled_start_timestamp": "2026-05-03 10:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529289",
+      "cricsheet_id": "1529289",
+      "display_match_id": "2026-05-03_Punjab_Kings_Gujarat_Titans_Narendra_Modi_Stadium,_Ahmedabad",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-03",
+      "team1": "Punjab Kings",
+      "team2": "Gujarat Titans",
+      "venue": "Narendra Modi Stadium, Ahmedabad",
+      "actual_winner": "Gujarat Titans",
+      "odds": {
+        "winner": {
+          "Punjab Kings": 1.7699,
+          "Gujarat Titans": 2.2989,
+          "timestamp": "2026-05-03T13:00:08Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-guj-pun-2026-05-03",
+      "polymarket_volume_usd": 2035252.9263790038,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2090844",
+        "market_question": "Indian Premier League: Gujarat Titans vs Punjab Kings",
+        "event_title": "Indian Premier League: Gujarat Titans vs Punjab Kings",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2035252.9263790038,
+        "scheduled_start_timestamp": "2026-05-03 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1527592",
+      "cricsheet_id": "1527592",
+      "display_match_id": "2026-04-28_Peshawar_Zalmi_Islamabad_United_National_Stadium,_Karachi",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-28",
+      "team1": "Peshawar Zalmi",
+      "team2": "Islamabad United",
+      "venue": "National Stadium, Karachi",
+      "actual_winner": "Peshawar Zalmi",
+      "odds": {
+        "winner": {
+          "Peshawar Zalmi": 1.8349,
+          "Islamabad United": 2.1978,
+          "timestamp": "2026-04-28T13:00:05Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-pes-isl-2026-04-28",
+      "polymarket_volume_usd": 122902.506112,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2090856",
+        "market_question": "Pakistan Super League: Peshawar Zalmi vs Islamabad United",
+        "event_title": "Pakistan Super League: Peshawar Zalmi vs Islamabad United",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 122902.506112,
+        "scheduled_start_timestamp": "2026-04-28 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1527593",
+      "cricsheet_id": "1527593",
+      "display_match_id": "2026-04-29_Multan_Sultans_Hyderabad_Kingsmen_Gaddafi_Stadium,_Lahore",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-04-29",
+      "team1": "Multan Sultans",
+      "team2": "Hyderabad Kingsmen",
+      "venue": "Gaddafi Stadium, Lahore",
+      "actual_winner": "Hyderabad Kingsmen",
+      "odds": {
+        "winner": {
+          "Multan Sultans": 1.8868,
+          "Hyderabad Kingsmen": 2.1277,
+          "timestamp": "2026-04-29T13:00:05Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-mul-hyd-2026-04-29",
+      "polymarket_volume_usd": 136289.09031000003,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2090868",
+        "market_question": "Pakistan Super League: Multan Sultans vs Hyderabad Kingsmen",
+        "event_title": "Pakistan Super League: Multan Sultans vs Hyderabad Kingsmen",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 136289.09031000003,
+        "scheduled_start_timestamp": "2026-04-29 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1527594",
+      "cricsheet_id": "1527594",
+      "display_match_id": "2026-05-01_Hyderabad_Kingsmen_Islamabad_United_Gaddafi_Stadium,_Lahore",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-01",
+      "team1": "Hyderabad Kingsmen",
+      "team2": "Islamabad United",
+      "venue": "Gaddafi Stadium, Lahore",
+      "actual_winner": "Hyderabad Kingsmen",
+      "odds": {
+        "winner": {
+          "Hyderabad Kingsmen": 2.0619,
+          "Islamabad United": 1.9417,
+          "timestamp": "2026-05-01T13:00:05Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-isl-hyd-2026-05-01",
+      "polymarket_volume_usd": 150849.64445299993,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2121660",
+        "market_question": "Pakistan Super League: Islamabad United vs Hyderabad Kingsmen",
+        "event_title": "Pakistan Super League: Islamabad United vs Hyderabad Kingsmen",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 150849.64445299993,
+        "scheduled_start_timestamp": "2026-05-01 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1533392",
+      "cricsheet_id": "1533392",
+      "display_match_id": "2026-05-04_Malaysia_Indonesia_Bayuemas_Oval,_Kuala_Lumpur",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-04",
+      "team1": "Malaysia",
+      "team2": "Indonesia",
+      "venue": "Bayuemas Oval, Kuala Lumpur",
+      "actual_winner": "Malaysia",
+      "odds": {
+        "winner": {
+          "Malaysia": 1.1834,
+          "Indonesia": 6.4516,
+          "timestamp": "2026-05-04T01:00:04Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-mys-idn-2026-05-03",
+      "polymarket_volume_usd": 9041.154384,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2141120",
+        "market_question": "T20 Series Malaysia vs Indonesia: Malaysia vs Indonesia",
+        "event_title": "T20 Series Malaysia vs Indonesia: Malaysia vs Indonesia",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 9041.154384,
+        "scheduled_start_timestamp": "2026-05-04 02:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529290",
+      "cricsheet_id": "1529290",
+      "display_match_id": "2026-05-04_Lucknow_Super_Giants_Mumbai_Indians_Wankhede_Stadium,_Mumbai",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-04",
+      "team1": "Lucknow Super Giants",
+      "team2": "Mumbai Indians",
+      "venue": "Wankhede Stadium, Mumbai",
+      "actual_winner": "Mumbai Indians",
+      "odds": {
+        "winner": {
+          "Lucknow Super Giants": 2.4691,
+          "Mumbai Indians": 1.6807,
+          "timestamp": "2026-05-04T13:00:05Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-mum-luc-2026-05-04",
+      "polymarket_volume_usd": 2337988.211698996,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2141132",
+        "market_question": "Indian Premier League: Mumbai Indians vs Lucknow Super Giants",
+        "event_title": "Indian Premier League: Mumbai Indians vs Lucknow Super Giants",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2337988.211698996,
+        "scheduled_start_timestamp": "2026-05-04 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529291",
+      "cricsheet_id": "1529291",
+      "display_match_id": "2026-05-05_Delhi_Capitals_Chennai_Super_Kings_Arun_Jaitley_Stadium,_Delhi",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-05",
+      "team1": "Delhi Capitals",
+      "team2": "Chennai Super Kings",
+      "venue": "Arun Jaitley Stadium, Delhi",
+      "actual_winner": "Chennai Super Kings",
+      "odds": {
+        "winner": {
+          "Delhi Capitals": 1.8018,
+          "Chennai Super Kings": 2.2472,
+          "timestamp": "2026-05-05T13:00:06Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-del-che-2026-05-05",
+      "polymarket_volume_usd": 2136123.616417992,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2141144",
+        "market_question": "Indian Premier League: Delhi Capitals vs Chennai Super Kings",
+        "event_title": "Indian Premier League: Delhi Capitals vs Chennai Super Kings",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2136123.616417992,
+        "scheduled_start_timestamp": "2026-05-05 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1527595",
+      "cricsheet_id": "1527595",
+      "display_match_id": "2026-05-03_Hyderabad_Kingsmen_Peshawar_Zalmi_Gaddafi_Stadium,_Lahore",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-03",
+      "team1": "Hyderabad Kingsmen",
+      "team2": "Peshawar Zalmi",
+      "venue": "Gaddafi Stadium, Lahore",
+      "actual_winner": "Peshawar Zalmi",
+      "odds": {
+        "winner": {
+          "Hyderabad Kingsmen": 2.3529,
+          "Peshawar Zalmi": 1.7391,
+          "timestamp": "2026-05-03T14:00:06Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricpsl-pes-hyd-2026-05-03",
+      "polymarket_volume_usd": 179099.052571,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2141156",
+        "market_question": "Pakistan Super League: Peshawar Zalmi vs Hyderabad Kingsmen",
+        "event_title": "Pakistan Super League: Peshawar Zalmi vs Hyderabad Kingsmen",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 179099.052571,
+        "scheduled_start_timestamp": "2026-05-03 15:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529292",
+      "cricsheet_id": "1529292",
+      "display_match_id": "2026-05-06_Sunrisers_Hyderabad_Punjab_Kings_Rajiv_Gandhi_International_Stadium,_Uppal,_Hyderabad",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-06",
+      "team1": "Sunrisers Hyderabad",
+      "team2": "Punjab Kings",
+      "venue": "Rajiv Gandhi International Stadium, Uppal, Hyderabad",
+      "actual_winner": "Sunrisers Hyderabad",
+      "odds": {
+        "winner": {
+          "Sunrisers Hyderabad": 2.1053,
+          "Punjab Kings": 1.9048,
+          "timestamp": "2026-05-06T13:00:08Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-sun-pun-2026-05-06",
+      "polymarket_volume_usd": 2026524.0627679962,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2149026",
+        "market_question": "Indian Premier League: Sunrisers Hyderabad vs Punjab Kings",
+        "event_title": "Indian Premier League: Sunrisers Hyderabad vs Punjab Kings",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2026524.0627679962,
+        "scheduled_start_timestamp": "2026-05-06 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1533393",
+      "cricsheet_id": "1533393",
+      "display_match_id": "2026-05-05_Indonesia_Malaysia_Bayuemas_Oval,_Kuala_Lumpur",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-05",
+      "team1": "Indonesia",
+      "team2": "Malaysia",
+      "venue": "Bayuemas Oval, Kuala Lumpur",
+      "actual_winner": "Malaysia",
+      "odds": {
+        "winner": {
+          "Indonesia": 15.3846,
+          "Malaysia": 1.0695,
+          "timestamp": "2026-05-05T01:00:08Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-mys-idn-2026-05-04",
+      "polymarket_volume_usd": 6444.512368000001,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2156920",
+        "market_question": "T20 Series Malaysia vs Indonesia: Malaysia vs Indonesia",
+        "event_title": "T20 Series Malaysia vs Indonesia: Malaysia vs Indonesia",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 6444.512368000001,
+        "scheduled_start_timestamp": "2026-05-05 01:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529293",
+      "cricsheet_id": "1529293",
+      "display_match_id": "2026-05-07_Lucknow_Super_Giants_Royal_Challengers_Bengaluru_Bharat_Ratna_Shri_Atal_Bihari_Vajpayee_Ekana_Cricket_Stadium,_Lucknow",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-07",
+      "team1": "Lucknow Super Giants",
+      "team2": "Royal Challengers Bengaluru",
+      "venue": "Bharat Ratna Shri Atal Bihari Vajpayee Ekana Cricket Stadium, Lucknow",
+      "actual_winner": "Lucknow Super Giants",
+      "odds": {
+        "winner": {
+          "Lucknow Super Giants": 2.5974,
+          "Royal Challengers Bengaluru": 1.626,
+          "timestamp": "2026-05-07T13:00:03Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-luc-roy-2026-05-07",
+      "polymarket_volume_usd": 2584758.3660329725,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2160065",
+        "market_question": "Indian Premier League: Lucknow Super Giants vs Royal Challengers Bangalore",
+        "event_title": "Indian Premier League: Lucknow Super Giants vs Royal Challengers Bangalore",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2584758.3660329725,
+        "scheduled_start_timestamp": "2026-05-07 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529304",
+      "cricsheet_id": "1529304",
+      "display_match_id": "2026-05-17_Royal_Challengers_Bengaluru_Punjab_Kings_Himachal_Pradesh_Cricket_Association_Stadium,_Dharamsala",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-17",
+      "team1": "Royal Challengers Bengaluru",
+      "team2": "Punjab Kings",
+      "venue": "Himachal Pradesh Cricket Association Stadium, Dharamsala",
+      "actual_winner": "Royal Challengers Bengaluru",
+      "odds": {
+        "winner": {
+          "Royal Challengers Bengaluru": 1.9048,
+          "Punjab Kings": 2.1053,
+          "timestamp": "2026-05-17T09:00:09Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-pun-roy-2026-05-17",
+      "polymarket_volume_usd": 2128989.041925007,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2260991",
+        "market_question": "Indian Premier League: Punjab Kings vs Royal Challengers Bengaluru",
+        "event_title": "Indian Premier League: Punjab Kings vs Royal Challengers Bengaluru",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2128989.041925007,
+        "scheduled_start_timestamp": "2026-05-17 10:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529303",
+      "cricsheet_id": "1529303",
+      "display_match_id": "2026-05-16_Kolkata_Knight_Riders_Gujarat_Titans_Eden_Gardens,_Kolkata",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-16",
+      "team1": "Kolkata Knight Riders",
+      "team2": "Gujarat Titans",
+      "venue": "Eden Gardens, Kolkata",
+      "actual_winner": "Kolkata Knight Riders",
+      "odds": {
+        "winner": {
+          "Kolkata Knight Riders": 2.2472,
+          "Gujarat Titans": 1.8018,
+          "timestamp": "2026-05-16T13:00:07Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-kol-guj-2026-05-16",
+      "polymarket_volume_usd": 1884233.587565003,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2257475",
+        "market_question": "Indian Premier League: Kolkata Knight Riders vs Gujarat Titans",
+        "event_title": "Indian Premier League: Kolkata Knight Riders vs Gujarat Titans",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 1884233.587565003,
+        "scheduled_start_timestamp": "2026-05-16 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1534041",
+      "cricsheet_id": "1534041",
+      "display_match_id": "2026-05-16_Malta_Austria_Happy_Valley_Ground_2",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-16",
+      "team1": "Malta",
+      "team2": "Austria",
+      "venue": "Happy Valley Ground 2",
+      "actual_winner": "Austria",
+      "odds": {
+        "winner": {
+          "Malta": 4.4444,
+          "Austria": 1.2903,
+          "timestamp": "2026-05-16T12:00:12Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-aut-mlt-2026-05-16",
+      "polymarket_volume_usd": 13151.210618,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2257153",
+        "market_question": "T20 World Cup Sub Regional Europe Qualifier A: Austria vs Malta",
+        "event_title": "T20 World Cup Sub Regional Europe Qualifier A: Austria vs Malta",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 13151.210618,
+        "scheduled_start_timestamp": "2026-05-16 12:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1534040",
+      "cricsheet_id": "1534040",
+      "display_match_id": "2026-05-16_Switzerland_Jersey_Happy_Valley_Ground",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-16",
+      "team1": "Switzerland",
+      "team2": "Jersey",
+      "venue": "Happy Valley Ground",
+      "actual_winner": "Jersey",
+      "odds": {
+        "winner": {
+          "Switzerland": 12.5,
+          "Jersey": 1.087,
+          "timestamp": "2026-05-16T12:00:09Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-jer-che-2026-05-16",
+      "polymarket_volume_usd": 1496.8264639999998,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2257141",
+        "market_question": "T20 World Cup Sub Regional Europe Qualifier A: Jersey vs Switzerland",
+        "event_title": "T20 World Cup Sub Regional Europe Qualifier A: Jersey vs Switzerland",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 1496.8264639999998,
+        "scheduled_start_timestamp": "2026-05-16 12:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1534039",
+      "cricsheet_id": "1534039",
+      "display_match_id": "2026-05-16_Guernsey_Sweden_Happy_Valley_Ground_2",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-16",
+      "team1": "Guernsey",
+      "team2": "Sweden",
+      "venue": "Happy Valley Ground 2",
+      "actual_winner": "Guernsey",
+      "odds": {
+        "winner": {
+          "Guernsey": 1.6129,
+          "Sweden": 2.6316,
+          "timestamp": "2026-05-16T07:00:08Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-gue-swe-2026-05-16",
+      "polymarket_volume_usd": 16898.067016999998,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2257117",
+        "market_question": "T20 World Cup Sub Regional Europe Qualifier A: Guernsey vs Sweden",
+        "event_title": "T20 World Cup Sub Regional Europe Qualifier A: Guernsey vs Sweden",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 16898.067016999998,
+        "scheduled_start_timestamp": "2026-05-16 07:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1534038",
+      "cricsheet_id": "1534038",
+      "display_match_id": "2026-05-16_Cyprus_France_Happy_Valley_Ground",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-16",
+      "team1": "Cyprus",
+      "team2": "France",
+      "venue": "Happy Valley Ground",
+      "actual_winner": "France",
+      "odds": {
+        "winner": {
+          "Cyprus": 2.9412,
+          "France": 1.5152,
+          "timestamp": "2026-05-16T07:00:08Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-cyp-fra-2026-05-16",
+      "polymarket_volume_usd": 4544.8869509999995,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2257129",
+        "market_question": "T20 World Cup Sub Regional Europe Qualifier A: Cyprus vs France",
+        "event_title": "T20 World Cup Sub Regional Europe Qualifier A: Cyprus vs France",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 4544.8869509999995,
+        "scheduled_start_timestamp": "2026-05-16 07:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1532650",
+      "cricsheet_id": "1532650",
+      "display_match_id": "2026-05-13_Samoa_Papua_New_Guinea_Sano_International_Cricket_Ground",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-13",
+      "team1": "Samoa",
+      "team2": "Papua New Guinea",
+      "venue": "Sano International Cricket Ground",
+      "actual_winner": "Papua New Guinea",
+      "odds": {
+        "winner": {
+          "Samoa": 2.7397,
+          "Papua New Guinea": 1.5748,
+          "timestamp": "2026-05-13T00:00:16Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-png-wsm-2026-05-12",
+      "polymarket_volume_usd": 18492.840555,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2242311",
+        "market_question": "T20 World Cup, East Asia-Pacific Qualifier, Regional Final: Papua New Guinea vs Samoa",
+        "event_title": "T20 World Cup, East Asia-Pacific Qualifier, Regional Final: Papua New Guinea vs Samoa",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 18492.840555,
+        "scheduled_start_timestamp": "2026-05-13 00:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1532651",
+      "cricsheet_id": "1532651",
+      "display_match_id": "2026-05-13_Cook_Islands_Vanuatu_Sano_International_Cricket_Ground",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-13",
+      "team1": "Cook Islands",
+      "team2": "Vanuatu",
+      "venue": "Sano International Cricket Ground",
+      "actual_winner": "Cook Islands",
+      "odds": {
+        "winner": {
+          "Cook Islands": 1.5748,
+          "Vanuatu": 2.7397,
+          "timestamp": "2026-05-13T04:00:10Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-coo-vut-2026-05-13",
+      "polymarket_volume_usd": 31969.376120999994,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2242335",
+        "market_question": "T20 World Cup, East Asia-Pacific Qualifier, Regional Final: Cook Islands vs Vanuatu",
+        "event_title": "T20 World Cup, East Asia-Pacific Qualifier, Regional Final: Cook Islands vs Vanuatu",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 31969.376120999994,
+        "scheduled_start_timestamp": "2026-05-13 05:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529301",
+      "cricsheet_id": "1529301",
+      "display_match_id": "2026-05-14_Punjab_Kings_Mumbai_Indians_Himachal_Pradesh_Cricket_Association_Stadium,_Dharamsala",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-14",
+      "team1": "Punjab Kings",
+      "team2": "Mumbai Indians",
+      "venue": "Himachal Pradesh Cricket Association Stadium, Dharamsala",
+      "actual_winner": "Mumbai Indians",
+      "odds": {
+        "winner": {
+          "Punjab Kings": 1.7699,
+          "Mumbai Indians": 2.2989,
+          "timestamp": "2026-05-14T13:00:10Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-pun-mum-2026-05-14",
+      "polymarket_volume_usd": 2014967.9498170074,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2237494",
+        "market_question": "Indian Premier League: Punjab Kings vs Mumbai Indians",
+        "event_title": "Indian Premier League: Punjab Kings vs Mumbai Indians",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2014967.9498170074,
+        "scheduled_start_timestamp": "2026-05-14 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1532648",
+      "cricsheet_id": "1532648",
+      "display_match_id": "2026-05-12_Japan_Indonesia_Sano_International_Cricket_Ground",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-12",
+      "team1": "Japan",
+      "team2": "Indonesia",
+      "venue": "Sano International Cricket Ground",
+      "actual_winner": "Japan",
+      "odds": {
+        "winner": {
+          "Japan": 1.2121,
+          "Indonesia": 5.7143,
+          "timestamp": "2026-05-12T04:00:06Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-jpn-idn-2026-05-12",
+      "polymarket_volume_usd": 33810.29634500001,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2232128",
+        "market_question": "T20 World Cup, East Asia-Pacific Qualifier, Regional Final: Japan vs Indonesia",
+        "event_title": "T20 World Cup, East Asia-Pacific Qualifier, Regional Final: Japan vs Indonesia",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 33810.29634500001,
+        "scheduled_start_timestamp": "2026-05-12 05:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1532646",
+      "cricsheet_id": "1532646",
+      "display_match_id": "2026-05-12_Vanuatu_Samoa_Sano_International_Cricket_Ground",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-12",
+      "team1": "Vanuatu",
+      "team2": "Samoa",
+      "venue": "Sano International Cricket Ground",
+      "actual_winner": "Samoa",
+      "odds": {
+        "winner": {
+          "Vanuatu": 3.4483,
+          "Samoa": 1.4085,
+          "timestamp": "2026-05-12T00:00:09Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-wsm-vut-2026-05-11",
+      "polymarket_volume_usd": 3775.92396,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2232116",
+        "market_question": "T20 World Cup, East Asia-Pacific Qualifier, Regional Final: Samoa vs Vanuatu",
+        "event_title": "T20 World Cup, East Asia-Pacific Qualifier, Regional Final: Samoa vs Vanuatu",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 3775.92396,
+        "scheduled_start_timestamp": "2026-05-12 00:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529305",
+      "cricsheet_id": "1529305",
+      "display_match_id": "2026-05-17_Rajasthan_Royals_Delhi_Capitals_Arun_Jaitley_Stadium,_Delhi",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-17",
+      "team1": "Rajasthan Royals",
+      "team2": "Delhi Capitals",
+      "venue": "Arun Jaitley Stadium, Delhi",
+      "actual_winner": "Delhi Capitals",
+      "odds": {
+        "winner": {
+          "Rajasthan Royals": 1.7699,
+          "Delhi Capitals": 2.2989,
+          "timestamp": "2026-05-17T13:00:07Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-del-raj-2026-05-17",
+      "polymarket_volume_usd": 2291273.515695014,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2232147",
+        "market_question": "Indian Premier League: Delhi Capitals vs Rajasthan Royals",
+        "event_title": "Indian Premier League: Delhi Capitals vs Rajasthan Royals",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2291273.515695014,
+        "scheduled_start_timestamp": "2026-05-17 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529300",
+      "cricsheet_id": "1529300",
+      "display_match_id": "2026-05-13_Kolkata_Knight_Riders_Royal_Challengers_Bengaluru_Shaheed_Veer_Narayan_Singh_International_Stadium,_Raipur",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-13",
+      "team1": "Kolkata Knight Riders",
+      "team2": "Royal Challengers Bengaluru",
+      "venue": "Shaheed Veer Narayan Singh International Stadium, Raipur",
+      "actual_winner": "Royal Challengers Bengaluru",
+      "odds": {
+        "winner": {
+          "Kolkata Knight Riders": 2.4691,
+          "Royal Challengers Bengaluru": 1.6807,
+          "timestamp": "2026-05-13T13:00:13Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-roy-kol-2026-05-13",
+      "polymarket_volume_usd": 2649688.316947997,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2227691",
+        "market_question": "Indian Premier League: Royal Challengers Bangalore vs Kolkata Knight Riders",
+        "event_title": "Indian Premier League: Royal Challengers Bangalore vs Kolkata Knight Riders",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2649688.316947997,
+        "scheduled_start_timestamp": "2026-05-13 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529302",
+      "cricsheet_id": "1529302",
+      "display_match_id": "2026-05-15_Chennai_Super_Kings_Lucknow_Super_Giants_Bharat_Ratna_Shri_Atal_Bihari_Vajpayee_Ekana_Cricket_Stadium,_Lucknow",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-15",
+      "team1": "Chennai Super Kings",
+      "team2": "Lucknow Super Giants",
+      "venue": "Bharat Ratna Shri Atal Bihari Vajpayee Ekana Cricket Stadium, Lucknow",
+      "actual_winner": "Lucknow Super Giants",
+      "odds": {
+        "winner": {
+          "Chennai Super Kings": 1.8018,
+          "Lucknow Super Giants": 2.2472,
+          "timestamp": "2026-05-15T13:00:15Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-luc-che-2026-05-15",
+      "polymarket_volume_usd": 1585758.0243260057,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2223381",
+        "market_question": "Indian Premier League: Lucknow Super Giants vs Chennai Super Kings",
+        "event_title": "Indian Premier League: Lucknow Super Giants vs Chennai Super Kings",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 1585758.0243260057,
+        "scheduled_start_timestamp": "2026-05-15 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1532645",
+      "cricsheet_id": "1532645",
+      "display_match_id": "2026-05-10_Papua_New_Guinea_Cook_Islands_Korogi_Sports_Park,_Nisshin",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-10",
+      "team1": "Papua New Guinea",
+      "team2": "Cook Islands",
+      "venue": "Korogi Sports Park, Nisshin",
+      "actual_winner": "Papua New Guinea",
+      "odds": {
+        "winner": {
+          "Papua New Guinea": 1.1173,
+          "Cook Islands": 9.5238,
+          "timestamp": "2026-05-10T04:00:06Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-png-coo-2026-05-10",
+      "polymarket_volume_usd": 17497.446222000002,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2215750",
+        "market_question": "T20 World Cup, East Asia-Pacific Qualifier, Regional Final: Papua New Guinea vs Cook Islands",
+        "event_title": "T20 World Cup, East Asia-Pacific Qualifier, Regional Final: Papua New Guinea vs Cook Islands",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 17497.446222000002,
+        "scheduled_start_timestamp": "2026-05-10 05:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1532644",
+      "cricsheet_id": "1532644",
+      "display_match_id": "2026-05-10_Fiji_Japan_Korogi_Sports_Park,_Nisshin",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-10",
+      "team1": "Fiji",
+      "team2": "Japan",
+      "venue": "Korogi Sports Park, Nisshin",
+      "actual_winner": "Japan",
+      "odds": {
+        "winner": {
+          "Fiji": 20.0,
+          "Japan": 1.0526,
+          "timestamp": "2026-05-10T00:00:07Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-jpn-fji-2026-05-09",
+      "polymarket_volume_usd": 2930.0152300000004,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2215738",
+        "market_question": "T20 World Cup, East Asia-Pacific Qualifier, Regional Final: Japan vs Fiji",
+        "event_title": "T20 World Cup, East Asia-Pacific Qualifier, Regional Final: Japan vs Fiji",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2930.0152300000004,
+        "scheduled_start_timestamp": "2026-05-10 00:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529299",
+      "cricsheet_id": "1529299",
+      "display_match_id": "2026-05-12_Gujarat_Titans_Sunrisers_Hyderabad_Narendra_Modi_Stadium,_Ahmedabad",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-12",
+      "team1": "Gujarat Titans",
+      "team2": "Sunrisers Hyderabad",
+      "venue": "Narendra Modi Stadium, Ahmedabad",
+      "actual_winner": "Gujarat Titans",
+      "odds": {
+        "winner": {
+          "Gujarat Titans": 2.0202,
+          "Sunrisers Hyderabad": 1.9802,
+          "timestamp": "2026-05-12T13:00:05Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-guj-sun-2026-05-12",
+      "polymarket_volume_usd": 2034315.2077349978,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2215784",
+        "market_question": "Indian Premier League: Gujarat Titans vs Sunrisers Hyderabad",
+        "event_title": "Indian Premier League: Gujarat Titans vs Sunrisers Hyderabad",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2034315.2077349978,
+        "scheduled_start_timestamp": "2026-05-12 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535415",
+      "cricsheet_id": "1535415",
+      "display_match_id": "2026-05-23_Kenya_Mali_Botswana_Cricket_Association_Oval_2,_Gaborone",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-23",
+      "team1": "Kenya",
+      "team2": "Mali",
+      "venue": "Botswana Cricket Association Oval 2, Gaborone",
+      "actual_winner": "Kenya",
+      "odds": {
+        "winner": {
+          "Kenya": 1.023,
+          "Mali": 44.4444,
+          "timestamp": "2026-05-23T11:00:05Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ken-mli-2026-05-23",
+      "polymarket_volume_usd": 17220.252923000004,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2322105",
+        "market_question": "T20 World Cup, Sub Regional Africa, Qualifier A: Kenya vs Mali",
+        "event_title": "T20 World Cup, Sub Regional Africa, Qualifier A: Kenya vs Mali",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 17220.252923000004,
+        "scheduled_start_timestamp": "2026-05-23 11:50:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529313",
+      "cricsheet_id": "1529313",
+      "display_match_id": "2026-05-24_Delhi_Capitals_Kolkata_Knight_Riders_Eden_Gardens,_Kolkata",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-24",
+      "team1": "Delhi Capitals",
+      "team2": "Kolkata Knight Riders",
+      "venue": "Eden Gardens, Kolkata",
+      "actual_winner": "Delhi Capitals",
+      "odds": {
+        "winner": {
+          "Delhi Capitals": 2.2989,
+          "Kolkata Knight Riders": 1.7699,
+          "timestamp": "2026-05-24T13:00:06Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-kol-del-2026-05-24",
+      "polymarket_volume_usd": 1269116.8825980003,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2313446",
+        "market_question": "Indian Premier League: Kolkata Knight Riders vs Delhi Capitals",
+        "event_title": "Indian Premier League: Kolkata Knight Riders vs Delhi Capitals",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 1269116.8825980003,
+        "scheduled_start_timestamp": "2026-05-24 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1534055",
+      "cricsheet_id": "1534055",
+      "display_match_id": "2026-05-22_Austria_Sweden_Happy_Valley_Ground_2",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-22",
+      "team1": "Austria",
+      "team2": "Sweden",
+      "venue": "Happy Valley Ground 2",
+      "actual_winner": "Sweden",
+      "odds": {
+        "winner": {
+          "Austria": 1.6129,
+          "Sweden": 2.6316,
+          "timestamp": "2026-05-22T07:00:12Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-aut-swe-2026-05-22",
+      "polymarket_volume_usd": 25951.544051999994,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2313398",
+        "market_question": "T20 World Cup Sub Regional Europe Qualifier A: Austria vs Sweden",
+        "event_title": "T20 World Cup Sub Regional Europe Qualifier A: Austria vs Sweden",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 25951.544051999994,
+        "scheduled_start_timestamp": "2026-05-22 07:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529312",
+      "cricsheet_id": "1529312",
+      "display_match_id": "2026-05-24_Rajasthan_Royals_Mumbai_Indians_Wankhede_Stadium,_Mumbai",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-24",
+      "team1": "Rajasthan Royals",
+      "team2": "Mumbai Indians",
+      "venue": "Wankhede Stadium, Mumbai",
+      "actual_winner": "Rajasthan Royals",
+      "odds": {
+        "winner": {
+          "Rajasthan Royals": 1.9802,
+          "Mumbai Indians": 2.0202,
+          "timestamp": "2026-05-24T09:00:09Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-mum-raj-2026-05-24",
+      "polymarket_volume_usd": 2513437.418218028,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2313434",
+        "market_question": "Indian Premier League: Mumbai Indians vs Rajasthan Royals",
+        "event_title": "Indian Premier League: Mumbai Indians vs Rajasthan Royals",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2513437.418218028,
+        "scheduled_start_timestamp": "2026-05-24 10:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1534057",
+      "cricsheet_id": "1534057",
+      "display_match_id": "2026-05-22_Slovenia_Malta_Happy_Valley_Ground_2",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-22",
+      "team1": "Slovenia",
+      "team2": "Malta",
+      "venue": "Happy Valley Ground 2",
+      "actual_winner": "Malta",
+      "odds": {
+        "winner": {
+          "Slovenia": 3.9216,
+          "Malta": 1.3423,
+          "timestamp": "2026-05-22T12:00:13Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-mlt-svn-2026-05-22",
+      "polymarket_volume_usd": 3301.689589,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2313422",
+        "market_question": "T20 World Cup Sub Regional Europe Qualifier A: Malta vs Slovenia",
+        "event_title": "T20 World Cup Sub Regional Europe Qualifier A: Malta vs Slovenia",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 3301.689589,
+        "scheduled_start_timestamp": "2026-05-22 12:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1534056",
+      "cricsheet_id": "1534056",
+      "display_match_id": "2026-05-22_Croatia_Cyprus_Happy_Valley_Ground",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-22",
+      "team1": "Croatia",
+      "team2": "Cyprus",
+      "venue": "Happy Valley Ground",
+      "actual_winner": "Croatia",
+      "odds": {
+        "winner": {
+          "Croatia": 1.8018,
+          "Cyprus": 2.2472,
+          "timestamp": "2026-05-22T12:00:13Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-cyp-hrv-2026-05-22",
+      "polymarket_volume_usd": 25200.223806999984,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2313410",
+        "market_question": "T20 World Cup Sub Regional Europe Qualifier A: Cyprus vs Croatia",
+        "event_title": "T20 World Cup Sub Regional Europe Qualifier A: Cyprus vs Croatia",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 25200.223806999984,
+        "scheduled_start_timestamp": "2026-05-22 12:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1534054",
+      "cricsheet_id": "1534054",
+      "display_match_id": "2026-05-22_France_Switzerland_Happy_Valley_Ground",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-22",
+      "team1": "France",
+      "team2": "Switzerland",
+      "venue": "Happy Valley Ground",
+      "actual_winner": "France",
+      "odds": {
+        "winner": {
+          "France": 1.2121,
+          "Switzerland": 5.7143,
+          "timestamp": "2026-05-22T07:00:12Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-fra-che-2026-05-22",
+      "polymarket_volume_usd": 50121.831407999984,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2313386",
+        "market_question": "T20 World Cup Sub Regional Europe Qualifier A: France vs Switzerland",
+        "event_title": "T20 World Cup Sub Regional Europe Qualifier A: France vs Switzerland",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 50121.831407999984,
+        "scheduled_start_timestamp": "2026-05-22 07:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1534052",
+      "cricsheet_id": "1534052",
+      "display_match_id": "2026-05-20_Sweden_Malta_Happy_Valley_Ground",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-20",
+      "team1": "Sweden",
+      "team2": "Malta",
+      "venue": "Happy Valley Ground",
+      "actual_winner": "Malta",
+      "odds": {
+        "winner": {
+          "Sweden": 1.3605,
+          "Malta": 3.7736,
+          "timestamp": "2026-05-20T12:00:11Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-swe-mlt-2026-05-20",
+      "polymarket_volume_usd": 17654.499491,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2303695",
+        "market_question": "T20 World Cup Sub Regional Europe Qualifier A: Sweden vs Malta",
+        "event_title": "T20 World Cup Sub Regional Europe Qualifier A: Sweden vs Malta",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 17654.499491,
+        "scheduled_start_timestamp": "2026-05-20 12:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1534053",
+      "cricsheet_id": "1534053",
+      "display_match_id": "2026-05-20_Jersey_Croatia_Happy_Valley_Ground_2",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-20",
+      "team1": "Jersey",
+      "team2": "Croatia",
+      "venue": "Happy Valley Ground 2",
+      "actual_winner": "Jersey",
+      "odds": {
+        "winner": {
+          "Jersey": 1.1236,
+          "Croatia": 9.0909,
+          "timestamp": "2026-05-20T12:00:15Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-hrv-jer-2026-05-20",
+      "polymarket_volume_usd": 9199.892610999997,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2303683",
+        "market_question": "T20 World Cup Sub Regional Europe Qualifier A: Croatia vs Jersey",
+        "event_title": "T20 World Cup Sub Regional Europe Qualifier A: Croatia vs Jersey",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 9199.892610999997,
+        "scheduled_start_timestamp": "2026-05-20 12:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1534051",
+      "cricsheet_id": "1534051",
+      "display_match_id": "2026-05-20_Switzerland_Cyprus_Happy_Valley_Ground_2",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-20",
+      "team1": "Switzerland",
+      "team2": "Cyprus",
+      "venue": "Happy Valley Ground 2",
+      "actual_winner": "Switzerland",
+      "odds": {
+        "winner": {
+          "Switzerland": 1.6667,
+          "Cyprus": 2.5,
+          "timestamp": "2026-05-20T07:00:06Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-cyp-che-2026-05-20",
+      "polymarket_volume_usd": 30322.953709000012,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2303671",
+        "market_question": "T20 World Cup Sub Regional Europe Qualifier A: Cyprus vs Switzerland",
+        "event_title": "T20 World Cup Sub Regional Europe Qualifier A: Cyprus vs Switzerland",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 30322.953709000012,
+        "scheduled_start_timestamp": "2026-05-20 07:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529311",
+      "cricsheet_id": "1529311",
+      "display_match_id": "2026-05-23_Lucknow_Super_Giants_Punjab_Kings_Bharat_Ratna_Shri_Atal_Bihari_Vajpayee_Ekana_Cricket_Stadium,_Lucknow",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-23",
+      "team1": "Lucknow Super Giants",
+      "team2": "Punjab Kings",
+      "venue": "Bharat Ratna Shri Atal Bihari Vajpayee Ekana Cricket Stadium, Lucknow",
+      "actual_winner": "Punjab Kings",
+      "odds": {
+        "winner": {
+          "Lucknow Super Giants": 2.5316,
+          "Punjab Kings": 1.6529,
+          "timestamp": "2026-05-23T13:00:04Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-luc-pun-2026-05-23",
+      "polymarket_volume_usd": 2019332.709749004,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2303708",
+        "market_question": "Indian Premier League: Lucknow Super Giants vs Punjab Kings",
+        "event_title": "Indian Premier League: Lucknow Super Giants vs Punjab Kings",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2019332.709749004,
+        "scheduled_start_timestamp": "2026-05-23 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1534050",
+      "cricsheet_id": "1534050",
+      "display_match_id": "2026-05-20_Slovenia_Guernsey_Happy_Valley_Ground",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-20",
+      "team1": "Slovenia",
+      "team2": "Guernsey",
+      "venue": "Happy Valley Ground",
+      "actual_winner": "Guernsey",
+      "odds": {
+        "winner": {
+          "Slovenia": 10.5263,
+          "Guernsey": 1.105,
+          "timestamp": "2026-05-20T07:00:05Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-svn-gue-2026-05-20",
+      "polymarket_volume_usd": 6076.1655359999995,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2303659",
+        "market_question": "T20 World Cup Sub Regional Europe Qualifier A: Slovenia vs Guernsey",
+        "event_title": "T20 World Cup Sub Regional Europe Qualifier A: Slovenia vs Guernsey",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 6076.1655359999995,
+        "scheduled_start_timestamp": "2026-05-20 07:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529310",
+      "cricsheet_id": "1529310",
+      "display_match_id": "2026-05-22_Sunrisers_Hyderabad_Royal_Challengers_Bengaluru_Rajiv_Gandhi_International_Stadium,_Uppal,_Hyderabad",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-22",
+      "team1": "Sunrisers Hyderabad",
+      "team2": "Royal Challengers Bengaluru",
+      "venue": "Rajiv Gandhi International Stadium, Uppal, Hyderabad",
+      "actual_winner": "Sunrisers Hyderabad",
+      "odds": {
+        "winner": {
+          "Sunrisers Hyderabad": 2.1505,
+          "Royal Challengers Bengaluru": 1.8692,
+          "timestamp": "2026-05-22T13:00:05Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-sun-roy-2026-05-22",
+      "polymarket_volume_usd": 1922144.2446039885,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2293672",
+        "market_question": "Indian Premier League: Sunrisers Hyderabad vs Royal Challengers Bengaluru",
+        "event_title": "Indian Premier League: Sunrisers Hyderabad vs Royal Challengers Bengaluru",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 1922144.2446039885,
+        "scheduled_start_timestamp": "2026-05-22 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529309",
+      "cricsheet_id": "1529309",
+      "display_match_id": "2026-05-21_Gujarat_Titans_Chennai_Super_Kings_Narendra_Modi_Stadium,_Ahmedabad",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-21",
+      "team1": "Gujarat Titans",
+      "team2": "Chennai Super Kings",
+      "venue": "Narendra Modi Stadium, Ahmedabad",
+      "actual_winner": "Gujarat Titans",
+      "odds": {
+        "winner": {
+          "Gujarat Titans": 1.7391,
+          "Chennai Super Kings": 2.3529,
+          "timestamp": "2026-05-21T13:00:09Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-guj-che-2026-05-21",
+      "polymarket_volume_usd": 1952003.6158950047,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2293660",
+        "market_question": "Indian Premier League: Gujarat Titans vs Chennai Super Kings",
+        "event_title": "Indian Premier League: Gujarat Titans vs Chennai Super Kings",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 1952003.6158950047,
+        "scheduled_start_timestamp": "2026-05-21 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1534047",
+      "cricsheet_id": "1534047",
+      "display_match_id": "2026-05-19_Slovenia_Sweden_Happy_Valley_Ground_2",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-19",
+      "team1": "Slovenia",
+      "team2": "Sweden",
+      "venue": "Happy Valley Ground 2",
+      "actual_winner": "Sweden",
+      "odds": {
+        "winner": {
+          "Slovenia": 6.0606,
+          "Sweden": 1.1976,
+          "timestamp": "2026-05-19T07:00:04Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-swe-svn-2026-05-19",
+      "polymarket_volume_usd": 9777.519475000003,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2289530",
+        "market_question": "T20 World Cup Sub Regional Europe Qualifier A: Sweden vs Slovenia",
+        "event_title": "T20 World Cup Sub Regional Europe Qualifier A: Sweden vs Slovenia",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 9777.519475000003,
+        "scheduled_start_timestamp": "2026-05-19 07:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1534046",
+      "cricsheet_id": "1534046",
+      "display_match_id": "2026-05-19_France_Jersey_Happy_Valley_Ground",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-19",
+      "team1": "France",
+      "team2": "Jersey",
+      "venue": "Happy Valley Ground",
+      "actual_winner": "Jersey",
+      "odds": {
+        "winner": {
+          "France": 4.0816,
+          "Jersey": 1.3245,
+          "timestamp": "2026-05-19T07:00:04Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-jer-fra-2026-05-19",
+      "polymarket_volume_usd": 25946.51400200001,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2289379",
+        "market_question": "T20 World Cup Sub Regional Europe Qualifier A: Jersey vs France",
+        "event_title": "T20 World Cup Sub Regional Europe Qualifier A: Jersey vs France",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 25946.51400200001,
+        "scheduled_start_timestamp": "2026-05-19 07:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529307",
+      "cricsheet_id": "1529307",
+      "display_match_id": "2026-05-19_Lucknow_Super_Giants_Rajasthan_Royals_Sawai_Mansingh_Stadium,_Jaipur",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-19",
+      "team1": "Lucknow Super Giants",
+      "team2": "Rajasthan Royals",
+      "venue": "Sawai Mansingh Stadium, Jaipur",
+      "actual_winner": "Rajasthan Royals",
+      "odds": {
+        "winner": {
+          "Lucknow Super Giants": 2.3529,
+          "Rajasthan Royals": 1.7391,
+          "timestamp": "2026-05-19T13:00:09Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-raj-luc-2026-05-19",
+      "polymarket_volume_usd": 2133646.070879998,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2288459",
+        "market_question": "Indian Premier League: Rajasthan Royals vs Lucknow Super Giants",
+        "event_title": "Indian Premier League: Rajasthan Royals vs Lucknow Super Giants",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2133646.070879998,
+        "scheduled_start_timestamp": "2026-05-19 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1532662",
+      "cricsheet_id": "1532662",
+      "display_match_id": "2026-05-18_Cook_Islands_Samoa_Sano_International_Cricket_Ground",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-18",
+      "team1": "Cook Islands",
+      "team2": "Samoa",
+      "venue": "Sano International Cricket Ground",
+      "actual_winner": "Samoa",
+      "odds": {
+        "winner": {
+          "Cook Islands": 2.1505,
+          "Samoa": 1.8692,
+          "timestamp": "2026-05-18T00:00:07Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-coo-wsm-2026-05-17",
+      "polymarket_volume_usd": 3787.829872999999,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2285315",
+        "market_question": "T20 World Cup, East Asia-Pacific Qualifier, Regional Final: Cook Islands vs Samoa",
+        "event_title": "T20 World Cup, East Asia-Pacific Qualifier, Regional Final: Cook Islands vs Samoa",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 3787.829872999999,
+        "scheduled_start_timestamp": "2026-05-18 00:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529308",
+      "cricsheet_id": "1529308",
+      "display_match_id": "2026-05-20_Mumbai_Indians_Kolkata_Knight_Riders_Eden_Gardens,_Kolkata",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-20",
+      "team1": "Mumbai Indians",
+      "team2": "Kolkata Knight Riders",
+      "venue": "Eden Gardens, Kolkata",
+      "actual_winner": "Kolkata Knight Riders",
+      "odds": {
+        "winner": {
+          "Mumbai Indians": 1.9048,
+          "Kolkata Knight Riders": 2.1053,
+          "timestamp": "2026-05-20T13:00:08Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-kol-mum-2026-05-20",
+      "polymarket_volume_usd": 2169618.511907016,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2285351",
+        "market_question": "Indian Premier League: Kolkata Knight Riders vs Mumbai Indians",
+        "event_title": "Indian Premier League: Kolkata Knight Riders vs Mumbai Indians",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2169618.511907016,
+        "scheduled_start_timestamp": "2026-05-20 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1529306",
+      "cricsheet_id": "1529306",
+      "display_match_id": "2026-05-18_Chennai_Super_Kings_Sunrisers_Hyderabad_MA_Chidambaram_Stadium,_Chepauk,_Chennai",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-18",
+      "team1": "Chennai Super Kings",
+      "team2": "Sunrisers Hyderabad",
+      "venue": "MA Chidambaram Stadium, Chepauk, Chennai",
+      "actual_winner": "Sunrisers Hyderabad",
+      "odds": {
+        "winner": {
+          "Chennai Super Kings": 2.1978,
+          "Sunrisers Hyderabad": 1.8349,
+          "timestamp": "2026-05-18T13:00:04Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-che-sun-2026-05-18",
+      "polymarket_volume_usd": 2509227.7451690077,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2285339",
+        "market_question": "Indian Premier League: Chennai Super Kings vs Sunrisers Hyderabad",
+        "event_title": "Indian Premier League: Chennai Super Kings vs Sunrisers Hyderabad",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2509227.7451690077,
+        "scheduled_start_timestamp": "2026-05-18 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1532663",
+      "cricsheet_id": "1532663",
+      "display_match_id": "2026-05-18_Japan_Papua_New_Guinea_Sano_International_Cricket_Ground",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-18",
+      "team1": "Japan",
+      "team2": "Papua New Guinea",
+      "venue": "Sano International Cricket Ground",
+      "actual_winner": "Japan",
+      "odds": {
+        "winner": {
+          "Japan": 3.5714,
+          "Papua New Guinea": 1.3889,
+          "timestamp": "2026-05-18T04:00:06Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-jpn-png-2026-05-18",
+      "polymarket_volume_usd": 43564.45446400001,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2285327",
+        "market_question": "T20 World Cup, East Asia-Pacific Qualifier, Regional Final: Japan vs Papua New Guinea",
+        "event_title": "T20 World Cup, East Asia-Pacific Qualifier, Regional Final: Japan vs Papua New Guinea",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 43564.45446400001,
+        "scheduled_start_timestamp": "2026-05-18 05:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1534049",
+      "cricsheet_id": "1534049",
+      "display_match_id": "2026-05-19_Guernsey_Austria_Happy_Valley_Ground_2",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-19",
+      "team1": "Guernsey",
+      "team2": "Austria",
+      "venue": "Happy Valley Ground 2",
+      "actual_winner": "Guernsey",
+      "odds": {
+        "winner": {
+          "Guernsey": 1.6393,
+          "Austria": 2.5641,
+          "timestamp": "2026-05-19T12:00:30Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-gue-aut-2026-05-19",
+      "polymarket_volume_usd": 20750.28621000001,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2285303",
+        "market_question": "T20 World Cup Sub Regional Europe Qualifier A: Guernsey vs Austria",
+        "event_title": "T20 World Cup Sub Regional Europe Qualifier A: Guernsey vs Austria",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 20750.28621000001,
+        "scheduled_start_timestamp": "2026-05-19 12:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1534048",
+      "cricsheet_id": "1534048",
+      "display_match_id": "2026-05-19_Croatia_Switzerland_Happy_Valley_Ground",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-19",
+      "team1": "Croatia",
+      "team2": "Switzerland",
+      "venue": "Happy Valley Ground",
+      "actual_winner": "Croatia",
+      "odds": {
+        "winner": {
+          "Croatia": 8.0,
+          "Switzerland": 1.1429,
+          "timestamp": "2026-05-19T12:00:26Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-che-hrv-2026-05-19",
+      "polymarket_volume_usd": 35502.740917000025,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2285284",
+        "market_question": "T20 World Cup Sub Regional Europe Qualifier A: Switzerland vs Croatia",
+        "event_title": "T20 World Cup Sub Regional Europe Qualifier A: Switzerland vs Croatia",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 35502.740917000025,
+        "scheduled_start_timestamp": "2026-05-19 12:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535465",
+      "cricsheet_id": "1535465",
+      "display_match_id": "2026-05-31_Gujarat_Titans_Royal_Challengers_Bengaluru_Narendra_Modi_Stadium,_Ahmedabad",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-31",
+      "team1": "Gujarat Titans",
+      "team2": "Royal Challengers Bengaluru",
+      "venue": "Narendra Modi Stadium, Ahmedabad",
+      "actual_winner": "Royal Challengers Bengaluru",
+      "odds": {
+        "winner": {
+          "Gujarat Titans": 2.1505,
+          "Royal Challengers Bengaluru": 1.8692,
+          "timestamp": "2026-05-31T13:00:03Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-roy-guj-2026-05-31",
+      "polymarket_volume_usd": 2424331.8272649995,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2389871",
+        "market_question": "Indian Premier League: Royal Challengers Bengaluru vs Gujarat Titans",
+        "event_title": "Indian Premier League: Royal Challengers Bengaluru vs Gujarat Titans",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2424331.8272649995,
+        "scheduled_start_timestamp": "2026-05-31 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535431",
+      "cricsheet_id": "1535431",
+      "display_match_id": "2026-05-30_Mali_Sierra_Leone_Botswana_Cricket_Association_Oval_1,_Gaborone",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-30",
+      "team1": "Mali",
+      "team2": "Sierra Leone",
+      "venue": "Botswana Cricket Association Oval 1, Gaborone",
+      "actual_winner": "Sierra Leone",
+      "odds": {
+        "winner": {
+          "Mali": 9.5238,
+          "Sierra Leone": 1.1173,
+          "timestamp": "2026-05-30T07:00:06Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-mli3-sle3-2026-05-30",
+      "polymarket_volume_usd": 28251.637016000004,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2389774",
+        "market_question": "T20 World Cup, Sub Regional Africa, Qualifier A: Mali vs Sierra Leone",
+        "event_title": "T20 World Cup, Sub Regional Africa, Qualifier A: Mali vs Sierra Leone",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 28251.637016000004,
+        "scheduled_start_timestamp": "2026-05-30 07:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535432",
+      "cricsheet_id": "1535432",
+      "display_match_id": "2026-05-30_Ivory_Coast_Kenya_Botswana_Cricket_Association_Oval_2,_Gaborone",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-30",
+      "team1": "Ivory Coast",
+      "team2": "Kenya",
+      "venue": "Botswana Cricket Association Oval 2, Gaborone",
+      "actual_winner": "Kenya",
+      "odds": {
+        "winner": {
+          "Ivory Coast": 400.0,
+          "Kenya": 1.0025,
+          "timestamp": "2026-05-30T07:00:06Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ken2-ivo3-2026-05-30",
+      "polymarket_volume_usd": 66519.91612300002,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2386725",
+        "market_question": "T20 World Cup, Sub Regional Africa, Qualifier A: Kenya vs Ivory Coast",
+        "event_title": "T20 World Cup, Sub Regional Africa, Qualifier A: Kenya vs Ivory Coast",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 66519.91612300002,
+        "scheduled_start_timestamp": "2026-05-30 07:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535433",
+      "cricsheet_id": "1535433",
+      "display_match_id": "2026-05-30_Rwanda_Botswana_Botswana_Cricket_Association_Oval_1,_Gaborone",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-30",
+      "team1": "Rwanda",
+      "team2": "Botswana",
+      "venue": "Botswana Cricket Association Oval 1, Gaborone",
+      "actual_winner": "Rwanda",
+      "odds": {
+        "winner": {
+          "Rwanda": 1.5625,
+          "Botswana": 2.7778,
+          "timestamp": "2026-05-30T11:00:05Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-bwa3-rwa3-2026-05-30",
+      "polymarket_volume_usd": 38447.200665,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2386777",
+        "market_question": "T20 World Cup, Sub Regional Africa, Qualifier A: Botswana vs Rwanda",
+        "event_title": "T20 World Cup, Sub Regional Africa, Qualifier A: Botswana vs Rwanda",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 38447.200665,
+        "scheduled_start_timestamp": "2026-05-30 11:50:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535429",
+      "cricsheet_id": "1535429",
+      "display_match_id": "2026-05-29_Ivory_Coast_Sierra_Leone_Botswana_Cricket_Association_Oval_2,_Gaborone",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-29",
+      "team1": "Ivory Coast",
+      "team2": "Sierra Leone",
+      "venue": "Botswana Cricket Association Oval 2, Gaborone",
+      "actual_winner": "Sierra Leone",
+      "odds": {
+        "winner": {
+          "Ivory Coast": 24.3902,
+          "Sierra Leone": 1.0428,
+          "timestamp": "2026-05-29T07:00:07Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-sle10-ivo3-2026-05-29",
+      "polymarket_volume_usd": 4480.513606999997,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2383456",
+        "market_question": "T20 World Cup, Sub Regional Africa, Qualifier A: Sierra Leone vs Ivory Coast",
+        "event_title": "T20 World Cup, Sub Regional Africa, Qualifier A: Sierra Leone vs Ivory Coast",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 4480.513606999997,
+        "scheduled_start_timestamp": "2026-05-29 07:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535428",
+      "cricsheet_id": "1535428",
+      "display_match_id": "2026-05-29_Cameroon_Mali_Botswana_Cricket_Association_Oval_1,_Gaborone",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-29",
+      "team1": "Cameroon",
+      "team2": "Mali",
+      "venue": "Botswana Cricket Association Oval 1, Gaborone",
+      "actual_winner": "Cameroon",
+      "odds": {
+        "winner": {
+          "Cameroon": 1.1976,
+          "Mali": 6.0606,
+          "timestamp": "2026-05-29T07:00:07Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-cmr4-mli3-2026-05-29",
+      "polymarket_volume_usd": 46570.013843000015,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2379397",
+        "market_question": "T20 World Cup, Sub Regional Africa, Qualifier A: Cameroon vs Mali",
+        "event_title": "T20 World Cup, Sub Regional Africa, Qualifier A: Cameroon vs Mali",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 46570.013843000015,
+        "scheduled_start_timestamp": "2026-05-29 07:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535464",
+      "cricsheet_id": "1535464",
+      "display_match_id": "2026-05-29_Rajasthan_Royals_Gujarat_Titans_Maharaja_Yadavindra_Singh_International_Cricket_Stadium,_New_Chandigarh",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-29",
+      "team1": "Rajasthan Royals",
+      "team2": "Gujarat Titans",
+      "venue": "Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh",
+      "actual_winner": "Gujarat Titans",
+      "odds": {
+        "winner": {
+          "Rajasthan Royals": 1.8349,
+          "Gujarat Titans": 2.1978,
+          "timestamp": "2026-05-29T13:00:04Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-guj-raj-2026-05-29",
+      "polymarket_volume_usd": 3369954.3649059967,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2375538",
+        "market_question": "Indian Premier League: Gujarat Titans vs Rajasthan Royals",
+        "event_title": "Indian Premier League: Gujarat Titans vs Rajasthan Royals",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 3369954.3649059967,
+        "scheduled_start_timestamp": "2026-05-29 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535427",
+      "cricsheet_id": "1535427",
+      "display_match_id": "2026-05-28_Cameroon_Kenya_Botswana_Cricket_Association_Oval_1,_Gaborone",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-28",
+      "team1": "Cameroon",
+      "team2": "Kenya",
+      "venue": "Botswana Cricket Association Oval 1, Gaborone",
+      "actual_winner": "Kenya",
+      "odds": {
+        "winner": {
+          "Cameroon": 10.5263,
+          "Kenya": 1.105,
+          "timestamp": "2026-05-28T11:00:03Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ken2-cmr3-2026-05-28",
+      "polymarket_volume_usd": 26526.647519999988,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2362247",
+        "market_question": "T20 World Cup, Sub Regional Africa, Qualifier A: Kenya vs Cameroon",
+        "event_title": "T20 World Cup, Sub Regional Africa, Qualifier A: Kenya vs Cameroon",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 26526.647519999988,
+        "scheduled_start_timestamp": "2026-05-28 11:50:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535425",
+      "cricsheet_id": "1535425",
+      "display_match_id": "2026-05-28_Botswana_Ivory_Coast_Botswana_Cricket_Association_Oval_1,_Gaborone",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-28",
+      "team1": "Botswana",
+      "team2": "Ivory Coast",
+      "venue": "Botswana Cricket Association Oval 1, Gaborone",
+      "actual_winner": "Botswana",
+      "odds": {
+        "winner": {
+          "Botswana": 1.0163,
+          "Ivory Coast": 62.5,
+          "timestamp": "2026-05-28T07:00:04Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ivo3-bwa3-2026-05-28",
+      "polymarket_volume_usd": 145464.15108799996,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2362144",
+        "market_question": "T20 World Cup, Sub Regional Africa, Qualifier A: Ivory Coast vs Botswana",
+        "event_title": "T20 World Cup, Sub Regional Africa, Qualifier A: Ivory Coast vs Botswana",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 145464.15108799996,
+        "scheduled_start_timestamp": "2026-05-28 07:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535426",
+      "cricsheet_id": "1535426",
+      "display_match_id": "2026-05-28_Sierra_Leone_Rwanda_Botswana_Cricket_Association_Oval_2,_Gaborone",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-28",
+      "team1": "Sierra Leone",
+      "team2": "Rwanda",
+      "venue": "Botswana Cricket Association Oval 2, Gaborone",
+      "actual_winner": "Rwanda",
+      "odds": {
+        "winner": {
+          "Sierra Leone": 15.3846,
+          "Rwanda": 1.0695,
+          "timestamp": "2026-05-28T07:00:04Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-sle5-rwa3-2026-05-28",
+      "polymarket_volume_usd": 16497.246113999994,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2362188",
+        "market_question": "T20 World Cup, Sub Regional Africa, Qualifier A: Sierra Leone vs Rwanda",
+        "event_title": "T20 World Cup, Sub Regional Africa, Qualifier A: Sierra Leone vs Rwanda",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 16497.246113999994,
+        "scheduled_start_timestamp": "2026-05-28 07:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535424",
+      "cricsheet_id": "1535424",
+      "display_match_id": "2026-05-26_Cameroon_Ivory_Coast_Botswana_Cricket_Association_Oval_2,_Gaborone",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-26",
+      "team1": "Cameroon",
+      "team2": "Ivory Coast",
+      "venue": "Botswana Cricket Association Oval 2, Gaborone",
+      "actual_winner": "Cameroon",
+      "odds": {
+        "winner": {
+          "Cameroon": 1.0433,
+          "Ivory Coast": 24.0964,
+          "timestamp": "2026-05-26T11:00:05Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ivo-cmr-2026-05-26",
+      "polymarket_volume_usd": 11410.004252999997,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2354318",
+        "market_question": "T20 World Cup, Sub Regional Africa, Qualifier A: Ivory Coast vs Cameroon",
+        "event_title": "T20 World Cup, Sub Regional Africa, Qualifier A: Ivory Coast vs Cameroon",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 11410.004252999997,
+        "scheduled_start_timestamp": "2026-05-26 11:50:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535422",
+      "cricsheet_id": "1535422",
+      "display_match_id": "2026-05-26_Mali_Rwanda_Botswana_Cricket_Association_Oval_2,_Gaborone",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-26",
+      "team1": "Mali",
+      "team2": "Rwanda",
+      "venue": "Botswana Cricket Association Oval 2, Gaborone",
+      "actual_winner": "Rwanda",
+      "odds": {
+        "winner": {
+          "Mali": 23.8095,
+          "Rwanda": 1.0438,
+          "timestamp": "2026-05-26T07:00:04Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-mli-rwa-2026-05-26",
+      "polymarket_volume_usd": 104844.46905500004,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2354191",
+        "market_question": "T20 World Cup, Sub Regional Africa, Qualifier A: Mali vs Rwanda",
+        "event_title": "T20 World Cup, Sub Regional Africa, Qualifier A: Mali vs Rwanda",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 104844.46905500004,
+        "scheduled_start_timestamp": "2026-05-26 07:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535423",
+      "cricsheet_id": "1535423",
+      "display_match_id": "2026-05-26_Kenya_Sierra_Leone_Botswana_Cricket_Association_Oval_1,_Gaborone",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-26",
+      "team1": "Kenya",
+      "team2": "Sierra Leone",
+      "venue": "Botswana Cricket Association Oval 1, Gaborone",
+      "actual_winner": "Kenya",
+      "odds": {
+        "winner": {
+          "Kenya": 1.0521,
+          "Sierra Leone": 20.202,
+          "timestamp": "2026-05-26T11:00:05Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ken-sle-2026-05-26",
+      "polymarket_volume_usd": 23581.883398999995,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2354255",
+        "market_question": "T20 World Cup, Sub Regional Africa, Qualifier A: Kenya vs Sierra Leone",
+        "event_title": "T20 World Cup, Sub Regional Africa, Qualifier A: Kenya vs Sierra Leone",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 23581.883398999995,
+        "scheduled_start_timestamp": "2026-05-26 11:50:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535463",
+      "cricsheet_id": "1535463",
+      "display_match_id": "2026-05-27_Rajasthan_Royals_Sunrisers_Hyderabad_Maharaja_Yadavindra_Singh_International_Cricket_Stadium,_New_Chandigarh",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-27",
+      "team1": "Rajasthan Royals",
+      "team2": "Sunrisers Hyderabad",
+      "venue": "Maharaja Yadavindra Singh International Cricket Stadium, New Chandigarh",
+      "actual_winner": "Rajasthan Royals",
+      "odds": {
+        "winner": {
+          "Rajasthan Royals": 2.1053,
+          "Sunrisers Hyderabad": 1.9048,
+          "timestamp": "2026-05-27T13:00:03Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-sun-raj-2026-05-27",
+      "polymarket_volume_usd": 3240677.712739991,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2350190",
+        "market_question": "Indian Premier League: Sunrisers Hyderabad vs Rajasthan Royals",
+        "event_title": "Indian Premier League: Sunrisers Hyderabad vs Rajasthan Royals",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 3240677.712739991,
+        "scheduled_start_timestamp": "2026-05-27 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535421",
+      "cricsheet_id": "1535421",
+      "display_match_id": "2026-05-25_Ivory_Coast_Mali_Botswana_Cricket_Association_Oval_2,_Gaborone",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-25",
+      "team1": "Ivory Coast",
+      "team2": "Mali",
+      "venue": "Botswana Cricket Association Oval 2, Gaborone",
+      "actual_winner": "Mali",
+      "odds": {
+        "winner": {
+          "Ivory Coast": 4.2553,
+          "Mali": 1.3072,
+          "timestamp": "2026-05-25T11:00:04Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ivo-mli-2026-05-25",
+      "polymarket_volume_usd": 47968.30284,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2349885",
+        "market_question": "T20 World Cup, Sub Regional Africa, Qualifier A: Ivory Coast vs Mali",
+        "event_title": "T20 World Cup, Sub Regional Africa, Qualifier A: Ivory Coast vs Mali",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 47968.30284,
+        "scheduled_start_timestamp": "2026-05-25 11:50:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535420",
+      "cricsheet_id": "1535420",
+      "display_match_id": "2026-05-25_Botswana_Cameroon_Botswana_Cricket_Association_Oval_2,_Gaborone",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-25",
+      "team1": "Botswana",
+      "team2": "Cameroon",
+      "venue": "Botswana Cricket Association Oval 2, Gaborone",
+      "actual_winner": "Botswana",
+      "odds": {
+        "winner": {
+          "Botswana": 1.0638,
+          "Cameroon": 16.6667,
+          "timestamp": "2026-05-25T07:00:06Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-cmr-bwa-2026-05-25",
+      "polymarket_volume_usd": 18037.375607,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2349873",
+        "market_question": "T20 World Cup, Sub Regional Africa, Qualifier A: Cameroon vs Botswana",
+        "event_title": "T20 World Cup, Sub Regional Africa, Qualifier A: Cameroon vs Botswana",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 18037.375607,
+        "scheduled_start_timestamp": "2026-05-25 07:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535419",
+      "cricsheet_id": "1535419",
+      "display_match_id": "2026-05-25_Kenya_Rwanda_Botswana_Cricket_Association_Oval_1,_Gaborone",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-25",
+      "team1": "Kenya",
+      "team2": "Rwanda",
+      "venue": "Botswana Cricket Association Oval 1, Gaborone",
+      "actual_winner": "Rwanda",
+      "odds": {
+        "winner": {
+          "Kenya": 1.3605,
+          "Rwanda": 3.7736,
+          "timestamp": "2026-05-25T07:00:08Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-ken-rwa-2026-05-25",
+      "polymarket_volume_usd": 35177.40354299999,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2349861",
+        "market_question": "T20 World Cup, Sub Regional Africa, Qualifier A: Kenya vs Rwanda",
+        "event_title": "T20 World Cup, Sub Regional Africa, Qualifier A: Kenya vs Rwanda",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 35177.40354299999,
+        "scheduled_start_timestamp": "2026-05-25 07:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535416",
+      "cricsheet_id": "1535416",
+      "display_match_id": "2026-05-24_Rwanda_Ivory_Coast_Botswana_Cricket_Association_Oval_1,_Gaborone",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-24",
+      "team1": "Rwanda",
+      "team2": "Ivory Coast",
+      "venue": "Botswana Cricket Association Oval 1, Gaborone",
+      "actual_winner": "Rwanda",
+      "odds": {
+        "winner": {
+          "Rwanda": 1.0194,
+          "Ivory Coast": 52.6316,
+          "timestamp": "2026-05-24T07:00:08Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-rwa-ivo-2026-05-24",
+      "polymarket_volume_usd": 22212.400166,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2343481",
+        "market_question": "T20 World Cup, Sub Regional Africa, Qualifier A: Rwanda vs Ivory Coast",
+        "event_title": "T20 World Cup, Sub Regional Africa, Qualifier A: Rwanda vs Ivory Coast",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 22212.400166,
+        "scheduled_start_timestamp": "2026-05-24 07:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535417",
+      "cricsheet_id": "1535417",
+      "display_match_id": "2026-05-24_Mali_Botswana_Botswana_Cricket_Association_Oval_1,_Gaborone",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-24",
+      "team1": "Mali",
+      "team2": "Botswana",
+      "venue": "Botswana Cricket Association Oval 1, Gaborone",
+      "actual_winner": "Botswana",
+      "odds": {
+        "winner": {
+          "Mali": 71.4286,
+          "Botswana": 1.0142,
+          "timestamp": "2026-05-24T11:00:04Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-bwa-mli-2026-05-24",
+      "polymarket_volume_usd": 2604.464121,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2343493",
+        "market_question": "T20 World Cup, Sub Regional Africa, Qualifier A: Botswana vs Mali",
+        "event_title": "T20 World Cup, Sub Regional Africa, Qualifier A: Botswana vs Mali",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2604.464121,
+        "scheduled_start_timestamp": "2026-05-24 11:50:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535418",
+      "cricsheet_id": "1535418",
+      "display_match_id": "2026-05-24_Sierra_Leone_Cameroon_Botswana_Cricket_Association_Oval_2,_Gaborone",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-24",
+      "team1": "Sierra Leone",
+      "team2": "Cameroon",
+      "venue": "Botswana Cricket Association Oval 2, Gaborone",
+      "actual_winner": "Cameroon",
+      "odds": {
+        "winner": {
+          "Sierra Leone": 1.4286,
+          "Cameroon": 3.3333,
+          "timestamp": "2026-05-24T11:00:04Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-cmr-sle-2026-05-24",
+      "polymarket_volume_usd": 4467.589336000001,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2343505",
+        "market_question": "T20 World Cup, Sub Regional Africa, Qualifier A: Cameroon vs Sierra Leone",
+        "event_title": "T20 World Cup, Sub Regional Africa, Qualifier A: Cameroon vs Sierra Leone",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 4467.589336000001,
+        "scheduled_start_timestamp": "2026-05-24 11:50:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1535462",
+      "cricsheet_id": "1535462",
+      "display_match_id": "2026-05-26_Royal_Challengers_Bengaluru_Gujarat_Titans_Himachal_Pradesh_Cricket_Association_Stadium,_Dharamsala",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-26",
+      "team1": "Royal Challengers Bengaluru",
+      "team2": "Gujarat Titans",
+      "venue": "Himachal Pradesh Cricket Association Stadium, Dharamsala",
+      "actual_winner": "Royal Challengers Bengaluru",
+      "odds": {
+        "winner": {
+          "Royal Challengers Bengaluru": 1.8692,
+          "Gujarat Titans": 2.1505,
+          "timestamp": "2026-05-26T13:00:06Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "cricipl-roy-guj-2026-05-26",
+      "polymarket_volume_usd": 2934732.1945950114,
+      "tournament": "IPL 2026",
+      "market_selection": {
+        "market_id": "2336883",
+        "market_question": "Indian Premier League: Royal Challengers Bengaluru vs Gujarat Titans",
+        "event_title": "Indian Premier League: Royal Challengers Bengaluru vs Gujarat Titans",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 2934732.1945950114,
+        "scheduled_start_timestamp": "2026-05-26 14:00:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1534060",
+      "cricsheet_id": "1534060",
+      "display_match_id": "2026-05-23_Croatia_Austria_Happy_Valley_Ground",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-23",
+      "team1": "Croatia",
+      "team2": "Austria",
+      "venue": "Happy Valley Ground",
+      "actual_winner": "Austria",
+      "odds": {
+        "winner": {
+          "Croatia": 3.2258,
+          "Austria": 1.4493,
+          "timestamp": "2026-05-23T12:00:09Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-hrv-aut-2026-05-23",
+      "polymarket_volume_usd": 13817.316992000004,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2336621",
+        "market_question": "T20 World Cup Sub Regional Europe Qualifier A: Croatia vs Austria",
+        "event_title": "T20 World Cup Sub Regional Europe Qualifier A: Croatia vs Austria",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 13817.316992000004,
+        "scheduled_start_timestamp": "2026-05-23 12:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1534059",
+      "cricsheet_id": "1534059",
+      "display_match_id": "2026-05-23_Malta_Switzerland_Happy_Valley_Ground",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-23",
+      "team1": "Malta",
+      "team2": "Switzerland",
+      "venue": "Happy Valley Ground",
+      "actual_winner": "Switzerland",
+      "odds": {
+        "winner": {
+          "Malta": 2.1277,
+          "Switzerland": 1.8868,
+          "timestamp": "2026-05-23T07:00:09Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-che-mlt-2026-05-23",
+      "polymarket_volume_usd": 36786.03427099999,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2336609",
+        "market_question": "T20 World Cup Sub Regional Europe Qualifier A: Switzerland vs Malta",
+        "event_title": "T20 World Cup Sub Regional Europe Qualifier A: Switzerland vs Malta",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 36786.03427099999,
+        "scheduled_start_timestamp": "2026-05-23 07:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1538450",
+      "cricsheet_id": "1538450",
+      "display_match_id": "2026-06-05_Bahrain_Singapore_Singapore_National_Cricket_Ground",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-06-05",
+      "team1": "Bahrain",
+      "team2": "Singapore",
+      "venue": "Singapore National Cricket Ground",
+      "actual_winner": "Bahrain",
+      "odds": {
+        "winner": {
+          "Bahrain": 1.5748,
+          "Singapore": 2.7397,
+          "timestamp": "2026-06-05T01:00:06Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-bhr-sgp-2026-06-04",
+      "polymarket_volume_usd": 47246.36789399999,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2436838",
+        "market_question": "T20 Asian Games, Qualifier: Bahrain vs Singapore",
+        "event_title": "T20 Asian Games, Qualifier: Bahrain vs Singapore",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 47246.36789399999,
+        "scheduled_start_timestamp": "2026-06-05 01:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1538442",
+      "cricsheet_id": "1538442",
+      "display_match_id": "2026-06-01_Oman_Singapore_Singapore_National_Cricket_Ground",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-06-01",
+      "team1": "Oman",
+      "team2": "Singapore",
+      "venue": "Singapore National Cricket Ground",
+      "actual_winner": "Oman",
+      "odds": {
+        "winner": {
+          "Oman": 1.2903,
+          "Singapore": 4.4444,
+          "timestamp": "2026-06-01T01:00:03Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-omn2-sgp-2026-05-31",
+      "polymarket_volume_usd": 27523.56574300001,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2402895",
+        "market_question": "T20 Asian Games, Qualifier: Oman vs Singapore",
+        "event_title": "T20 Asian Games, Qualifier: Oman vs Singapore",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 27523.56574300001,
+        "scheduled_start_timestamp": "2026-06-01 01:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1538443",
+      "cricsheet_id": "1538443",
+      "display_match_id": "2026-06-01_Bahrain_Hong_Kong_Singapore_National_Cricket_Ground",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-06-01",
+      "team1": "Bahrain",
+      "team2": "Hong Kong",
+      "venue": "Singapore National Cricket Ground",
+      "actual_winner": "Hong Kong",
+      "odds": {
+        "winner": {
+          "Bahrain": 3.5714,
+          "Hong Kong": 1.3889,
+          "timestamp": "2026-06-01T06:00:06Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-hon2-bhr-2026-06-01",
+      "polymarket_volume_usd": 61695.573110999976,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2402948",
+        "market_question": "T20 Asian Games, Qualifier: Hong Kong, China vs Bahrain",
+        "event_title": "T20 Asian Games, Qualifier: Hong Kong, China vs Bahrain",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 61695.573110999976,
+        "scheduled_start_timestamp": "2026-06-01 06:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1538440",
+      "cricsheet_id": "1538440",
+      "display_match_id": "2026-05-31_Nepal_China_Singapore_National_Cricket_Ground",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-05-31",
+      "team1": "Nepal",
+      "team2": "China",
+      "venue": "Singapore National Cricket Ground",
+      "actual_winner": "Nepal",
+      "odds": {
+        "winner": {
+          "Nepal": 1.1364,
+          "China": 8.3333,
+          "timestamp": "2026-05-31T01:00:07Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-npl2-chn2-2026-05-30",
+      "polymarket_volume_usd": 67889.46341899999,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2394232",
+        "market_question": "T20 Asian Games, Qualifier: Nepal vs China",
+        "event_title": "T20 Asian Games, Qualifier: Nepal vs China",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 67889.46341899999,
+        "scheduled_start_timestamp": "2026-05-31 01:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1538452",
+      "cricsheet_id": "1538452",
+      "display_match_id": "2026-06-07_Oman_Nepal_Singapore_National_Cricket_Ground",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-06-07",
+      "team1": "Oman",
+      "team2": "Nepal",
+      "venue": "Singapore National Cricket Ground",
+      "actual_winner": "Nepal",
+      "odds": {
+        "winner": {
+          "Oman": 11.1111,
+          "Nepal": 1.0989,
+          "timestamp": "2026-06-07T01:00:05Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-npl2-omn2-2026-06-06",
+      "polymarket_volume_usd": 5700.878767,
+      "tournament": "International",
+      "market_selection": {
+        "market_id": "2456773",
+        "market_question": "T20 Asian Games, Qualifier: Nepal vs Oman",
+        "event_title": "T20 Asian Games, Qualifier: Nepal vs Oman",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 5700.878767,
+        "scheduled_start_timestamp": "2026-06-07 01:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    },
+    {
+      "match_id": "1532483",
+      "cricsheet_id": "1532483",
+      "display_match_id": "2026-06-17_Bangladesh_Australia_Bir_Sreshtho_Flight_Lieutenant_Matiur_Rahman_Stadium,_Chattogram",
+      "match_identity_version": "cricsheet_primary_v1",
+      "date": "2026-06-17",
+      "team1": "Bangladesh",
+      "team2": "Australia",
+      "venue": "Bir Sreshtho Flight Lieutenant Matiur Rahman Stadium, Chattogram",
+      "actual_winner": "Australia",
+      "odds": {
+        "winner": {
+          "Bangladesh": 18.1818,
+          "Australia": 1.0582,
+          "timestamp": "2026-06-17T09:00:23Z"
+        }
+      },
+      "source": "polymarket",
+      "polymarket_event_slug": "crint-aus2-bgd3-2026-06-17",
+      "polymarket_volume_usd": 164057.09910699975,
+      "tournament": "T20 World Cup 2026",
+      "market_selection": {
+        "market_id": "2544102",
+        "market_question": "ICC T20 World Cup, Women: Australia vs Bangladesh",
+        "event_title": "ICC T20 World Cup, Women: Australia vs Bangladesh",
+        "sports_market_type": "moneyline",
+        "market_volume_usd": 164057.09910699975,
+        "scheduled_start_timestamp": "2026-06-17 09:30:00+00",
+        "resolver": "market_volume_exact"
+      }
+    }
+  ]
+}

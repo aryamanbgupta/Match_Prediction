@@ -1,0 +1,38 @@
+{
+  "_comment": "The Hundred 2026. PROJECTED XIs: each side's most recent XI in data/hundred/season_2026_men_v2 (Sunrisers Leeds from 1521247 on 2026-08-02; London Spirit from 1521246 on 2026-08-01). Not confirmed teamsheets. Toss withheld -> both bat-first branches averaged.",
+  "date": "2026-08-04",
+  "team1": "Sunrisers Leeds",
+  "team2": "London Spirit",
+  "venue": "Headingley, Leeds",
+  "team1_lineup": [
+    "3d8feaf8",
+    "e66732f8",
+    "922e1b19",
+    "4ae1755b",
+    "4b685e2d",
+    "961b8ff1",
+    "d48c0f40",
+    "cad40f5e",
+    "894b2d25",
+    "9eb1455b",
+    "abb7c76c"
+  ],
+  "team2_lineup": [
+    "60aa2db3",
+    "abb83e27",
+    "521595e7",
+    "50c6bc2b",
+    "844e79d1",
+    "9c643d7b",
+    "59559bc2",
+    "7f048519",
+    "7c7d63a2",
+    "350bb1b1",
+    "14f96089"
+  ],
+  "_lineup_provenance": "projected XI: SL=1521247 (2026-08-02), LS=1521246 (2026-08-01)",
+  "competition_tier": "Vitality Blast",
+  "team_type": "club",
+  "toss_winner": null,
+  "toss_decision": null
+}

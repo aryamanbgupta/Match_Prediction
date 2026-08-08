@@ -1382,7 +1382,12 @@ precedent; promotion = human decision). Kept
 `4f8050d`/`1907903`/`cf2855d`/`53a6ca4`. Follow-ups B19 + B20 appended.
 See `research/reports/auto/B18.md` + `research/handoff/B18/`.
 
-## B19 [P2] [RUNNING 2026-08-03T13:12:18Z] Fresh-seed confirmation of the graft's batter-level cost (B18 flag; B6 pattern)
+## B19 [P2] [PENDING] Fresh-seed confirmation of the graft's batter-level cost (B18 flag; B6 pattern)
+*(claim reset by supervisor 2026-08-07: the 2026-08-03T13:12 claim (`ab32820`)
+and orchestrator plan (`4e27ee4`, `research/handoff/B19/plan.md`) landed but
+the loop died before the executor ran — no eval artifacts exist
+(`models/auto/b19/` absent, no logs) and no verdict was reached. Safe to
+re-claim; the committed plan may be reused as-is.)*
 **Hypothesis:** B18's only adverse signal anywhere was the G-2 positional
 cross-check on `batter_runs_mae`: +0.1174 [+0.0279,+0.2083] CI-clean worse
 (n=2913), while the pre-committed identity-keyed statistic read +0.0688
@@ -1618,7 +1623,17 @@ CI-clean regression (it redistributes credit — watch it), batter_runs_mae,
 team_first_over_mae. **Budget:** ~2.5 h.
 **Result:** —
 
-## D5 [P2] [PENDING] Bowler eligibility filter (stop keepers/pure batters bowling)
+## D5 [P2] [SUPERSEDED by B13 — supervisor ruling 2026-08-07, do not claim] Bowler eligibility filter (stop keepers/pure batters bowling)
+*(supervisor ruling 2026-08-07, resolving the "supervisor call" flagged at
+B12: RETIRED. The selector share-alignment lever is fully explored — B10/B12
+shipped the debutant fix, and B13 proved the remaining veteran never-bowler
+cohort is already priced ≈0 by both the sim and the B9 baseline: damping its
+share 0.496%→0.020% moved nothing (top_bowler +0.0001 ~noise, sim−usage
+margin flat), and B13's verdict records the FAILED-clause diagnosis
+confirmed — the non-bowler top_bowler tail is a per-ball-rate problem, not
+who-bowls. A hard eligibility filter is a blunter version of B13's damping
+with nothing left to buy, at the same thin-squad relaxation cost. See
+`research/reports/auto/B13.md`.)*
 **Hypothesis:** `get_available_bowlers` (`sim_v1_2.py:263-279`) iterates all
 11 players; `EmpiricalBowlerSelector` gives unknown bowlers a league-share
 floor α, so non-bowlers bowl at a small nonzero rate, diluting bowler-family

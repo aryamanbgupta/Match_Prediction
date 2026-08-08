@@ -1,5 +1,19 @@
 # TODO
 
+> **⚠️ BENCHMARK CORRECTION (2026-08-05) — supersedes every market LL and
+> iteration ROI figure below.** The odds builder scored the event's *"Who wins
+> the toss?"* market as the winner market on 23 of 261 iteration fixtures.
+> The market LL "ceiling" is **0.5940** on ≥$50k (not 0.6482) and **0.5901**
+> on all (not 0.6267); **no model in this project beats the market on LL on
+> the iteration set** — the production arm reads 0.6249 vs 0.5940. Iteration
+> flat ROI falls to **+3.38%** (i7 arm) / **+7.40%** (legacy arm) on ≥$50k and
+> goes negative at ≥$100k; every interval straddled zero before and still
+> does. Benchmarks of record: `betting_odds_polymarket_v2.json` (255) and
+> `data/golden/betting_odds_golden_v2.json` (124). Model-vs-model verdicts,
+> the ball-level line, and the sealed forward holdout are **unaffected**;
+> **A7 and M8's edge threshold are retracted**. See
+> `reports/market_benchmark_toss_defect_20260805.md`.
+
 > **Current evaluation note (I3, 2026-07-23):** match-winner headline
 > intervals now use 10,000 seed-42 whole-competition resamples, not
 > per-match i.i.d. bootstrap. The old positive ROI lower bounds in this
@@ -19,10 +33,14 @@ I14 boundary-geometry pass, and the women's-odds discovery. Full evidence:
 ### Where results stand
 - **Match model (production)**: `models/xgb_match_i7_swap_production`
   (promoted 2026-07-31, i7 identity, serving state `data/live_state_i7/`
-  through 07-13). Iteration ≥$50k LL 0.6215 vs slice-matched market 0.6482;
-  golden audit beats the matched market LL on both sharp slices; every block
-  ROI CI still straddles zero — A7 stays shadow-only, no betting edge
-  established.
+  through 07-13). **Restated 2026-08-05 on the corrected benchmark:**
+  iteration ≥$50k LL **0.6249 vs slice-matched market 0.5940** — the model
+  *loses* to the market on LL, it does not win; flat ROI **+3.38%**
+  [−14.63%, +37.06%] (18 blocks), and **−5.19%** at ≥$100k. The golden
+  "beats the matched market LL" claim is withdrawn (margins below the
+  seed-noise floor). Every block ROI CI still straddles zero, no betting edge
+  established, and **A7 is now withdrawn/UNVALIDATED rather than merely
+  shadow-only**. The promotion itself stands on model-vs-model evidence.
 - **Ball stack (the big overnight result)**: the D6→D16→D17 chain closed the
   two-month calibration saga. D16: retraining the i7 ball model WITHOUT
   balanced class weights beats the deployed-design calibrated stack on
@@ -101,15 +119,22 @@ I14 boundary-geometry pass, and the women's-odds discovery. Full evidence:
         Aus-WI series had no h2h markets; Polymarket listed only the 2nd/3rd
         T20I of the Feb Aus-Ind series).
 - Overnight-loop hygiene:
-  - [ ] `research/handoff/B14/raw/gate_output.txt` is untracked (it is NOT
+  - [x] `research/handoff/B14/raw/gate_output.txt` is untracked (it is NOT
         gitignored; the B10/B12 siblings ARE tracked) — B14's LANDED gate
         numbers exist in git only as transcriptions. Also fix
         `raw_excerpt.md`'s incorrect "stay untracked, as in B10/B12" claim.
         Optional: `.txt` twins for B14's 3 logs and I18's 17 raw logs (I18 is
         the golden-audit leg of an executed production promotion).
-  - [ ] `research/IDEAS.md` D4 is still [PENDING] but D15 [LANDED] already
+        **DONE 2026-08-01 (`0c35b12`)** — gate_output.txt + `.txt` twins +
+        I18 raw logs tracked; raw_excerpt.md corrected. Checkbox was stale.
+  - [x] `research/IDEAS.md` D4 is still [PENDING] but D15 [LANDED] already
         shipped its mechanism ("D4 run-out dismissals" is in D15's title) —
         mark D4 SUPERSEDED so a night doesn't re-claim it.
+        **DONE 2026-08-01 (`0c35b12`)**. Checkbox was stale.
+  - [x] **B19 orphaned RUNNING claim cleared (2026-08-07)**: the 2026-08-03
+        loop died before the executor ran (claim `ab32820` + plan `4e27ee4`
+        landed, no eval artifacts). Status reset to PENDING in IDEAS.md with
+        a supervisor note; the committed plan is reusable.
 - Verified clean: D16/D17 "ships nothing" holds (protected-model md5s
   identical before/after), reverts left no strays, all LANDED verdicts have
   CI-clean pre-committed primaries, and B5's double `results.tsv` row is a
@@ -143,6 +168,127 @@ I14 boundary-geometry pass, and the women's-odds discovery. Full evidence:
    resolved at capture time. (d) WBBL Oct–Dec 2026 is the first league season
    that will have both a market and a complete cricsheet record from day one.
 
+### The Hundred follow-ups (added 2026-08-05, after the betting backtest)
+
+Context: the predeclared flat rule returned **−2.80%** on the 15-bet backtest
+slice with model LL worse than a coinflip, the sealed forward set settled at
+3 bets / +25.89% with its one bettable fixture lost, combined 18 bets /
++1.98% — one I3 block, descriptive only, **no betting**. See
+`reports/hundred_roi_backtest_2026-08-03.md` + settlement addendum.
+
+- [ ] **Settle the rest of the season as it completes.** Finals are later in
+      August. Add winners to `data/hundred/forward_results_2026-08-05.json`
+      (or a dated successor) and re-run
+      `uv run python scripts/hundred_roi_eval.py … --forward-results <file>`
+      — winners-only input, so it structurally cannot alter a seal. Re-pull
+      `polymarket_odds_2026_v2.json` first so late fixtures get a real
+      pre-toss quote instead of seed liquidity. Note the odds fetch is the
+      only networked step; the eval itself is deterministic.
+- [ ] **Ball-level model has NOT been evaluated on the Hundred at all**
+      (deferred by explicit user decision 2026-08-05 — match-level only for
+      now). Anything ball-level here needs 5-ball overs / 100-ball innings
+      handled in the sim, plus the standing E2/I13 bar: no prop claim without
+      clearing the fair baselines, not base rates.
+- [ ] **Women's Hundred is the bigger untapped set** and is now unblocked on
+      both sides: the sibling `polymarket-cricket` repo has already captured
+      **11+ women's Hundred fixtures with real Polymarket markets** through
+      2026-08-01 (at $100k–$307k per fixture, the deepest women's book on the
+      site — pull needs `--format t20+hundred` or they are silently dropped),
+      and cricsheet publishes the women's 2026 Hundred. Blocked-by-honesty,
+      not by data: **w1 and w2 both carry their own no-edge status** (w1
+      loses to the market on LL on every liquidity slice; w2 fails the ELO
+      gate outright), so a women's Hundred run is a measurement, not a
+      betting path. Do the members-only w1 slice (item 6a above) first so the
+      baseline being carried in is an honest one.
+
+### Market-benchmark correction follow-ups (added 2026-08-05)
+
+Context: `reports/market_benchmark_toss_defect_20260805.md`. The builder is
+already fixed and both benchmarks rebuilt to `betting_odds_polymarket_v2.json`
+/ `data/golden/betting_odds_golden_v2.json`; CLAUDE.md, README, program.md,
+the production PROVENANCE, the cutover plan, M8 and A7 have been corrected.
+What remains:
+
+- [x] **P0 — re-derive A7 from scratch on v2 prices, or retire it.**
+      **DONE 2026-08-07: RETIRED.** Pre-registered protocol
+      (`reports/a7_m8_rederivation_v2_20260807.md`, rules committed before
+      any sweep): full boundary × threshold grid, both slices, both arms,
+      I3 blocks. No cell clears any part of the bar; the originally-landed
+      cell (5, 0.10) *hurts* on both slices (≥$50k +3.38→+0.19, ≥$100k
+      −5.19→−12.05), and the legacy (3, 0.15) ≥$100k cell is CI-clean
+      negative — the mismatch-high-edge subset is the sweep's most toxic on
+      honest prices. `predict_fixture.py` now sets `A7_POLICY_RETIRED =
+      True` (shadow decision suppressed, `policy_status: "retired"`).
+- [x] **P0 — re-derive the M8 sizing sweep** on v2 prices *and* under
+      `tournament_time_block_v1` (its CIs are also pre-I3 i.i.d.).
+      **DONE 2026-08-07** in the same report: no global threshold clears
+      (no ≥$50k CI excludes 0; ROI degrades as the threshold rises —
+      inverse of the retracted M8 shape, because large edges vs a sharp
+      market are model error). **Flat 1-unit at threshold 0 stands as the
+      reporting default.** No betting edge established anywhere.
+- [x] **P1 — `scripts/sim_eval/blend_report.py:26` hardcodes
+      `MARKET_LL_ALL = 0.6267`.** It gates the report's "beats market" call.
+      Correct to 0.5901 or, better, read the market LL out of the sliced eval
+      JSON instead of hardcoding it.
+      **DONE 2026-08-07**: market LL now recomputed per slice from the sliced
+      JSON's own `market_prob` rows (reproduces 0.5901/0.5940/0.5377 exactly;
+      corrected constants kept as labeled fallback only). Also fixed a second
+      latent bug: the ≥$50k gate compared against the *all-slice* constant —
+      it now uses the slice-matched market LL, and correctly reports that no
+      w clears the gate (the old code called w=0 a market-beater).
+- [ ] **P1 — historical-report sweep (deliberately deferred, do NOT edit
+      piecemeal).** These still quote the defective market/ROI constants and
+      should get one consistent pass with a pointer to the audit rather than
+      individual rewrites: `reports/d12_swap_promotion_20260730.md`,
+      `reports/i17_i7_swap_eval_20260730.md`, `docs/I17_I7_SWAP_SUCCESSOR.md`,
+      `research/reports/auto/{D7,D8,D9,D11,D12,D13,A1,A2,A3,A5,A9,A11}.md`,
+      `research/results.tsv` (its `market_ll` / `roi_50k_pct` columns —
+      **append a note, never edit existing rows**), `reports/blast_golden_2026_eval.md`,
+      and IMPROVEMENTS.md's E-series and I-series sections. Their *paired*
+      model-vs-model columns are fine; only market-referenced columns move.
+- [x] **P1 — Blast track is EXPOSED and its ROI needs a rebuild.**
+      **DONE 2026-08-07 — rebuilt, numbers UNCHANGED to every decimal**
+      (`reports/blast_v2_restatement_20260807.md`): the Blast capture was
+      structurally immune (one record per event → the defective dedup never
+      ran; max price 0.665, 0/34 above the 0.92 cap). 0 of 34 prices moved;
+      ROI −12.14%, market 0.6894 < coinflip < model 0.7138 all survive —
+      previously unverified, now verified. v2 outputs are the new builder
+      defaults; both dashboards repointed to v2 odds and regenerated.
+      Original item text follows for the record.
+      `scripts/build_blast_odds.py` drives the same (previously defective)
+      `base.write_outputs`, so `data/golden_blast/betting_odds_blast.json` was
+      built under the old selection rule, so the 2026-06-04 betting eval
+      (−12.1% ROI, market LL 0.6894, rendered in
+      `reports/blast_2026_dashboard.html`) is unverified. Rebuild with the
+      fixed builder, then restate it. Note the 2026-05-28
+      `reports/blast_golden_2026_eval.md` itself is prediction-quality only
+      and is fine — it carries a pointer to this item.
+      Also `scripts/build_ipl_dashboard.py`
+      and `scripts/build_blast_dashboard.py` consume the pre-v2 odds files and
+      will render stale market columns until repointed.
+- [x] **P2 — open question, cuts the other way: re-look at recalibration.**
+      Platt (M7) and E1 temperature sharpening were both discarded for
+      "costing ROI" — measured on the corrupt ROI surface, where fake edges on
+      mispriced coin-flip fixtures were the thing recalibration destroyed.
+      That verdict may not survive on v2 prices. Record as an open question,
+      **not** a reversal: nothing here says recalibration helps, only that its
+      rejection is no longer supported by the evidence cited.
+      **DONE 2026-08-07 (`reports/p2_recalibration_v2_20260807.md`,
+      pre-registered): the rejection is UNSUPPORTED and its evidence
+      inverts.** Val-fit Platt on the production artifact *sharpens*
+      (a=1.107, not a squeeze toward 0.5) and is point-favorable on BOTH
+      metrics on every slice (≥$50k LL 0.6249→0.6191, ROI +3.38→+7.07pp;
+      ≥$100k −5.19→+1.74pp) with all paired CIs straddling zero. Verdict:
+      recalibration's settled-negative status is rescinded; it is a
+      legitimate future candidate, but nothing positive is established and
+      serving stays raw (model still loses to market LL calibrated).
+      Isotonic still regresses (M1 finding stands).
+- [ ] **P2 — golden odds header.** The shipped
+      `data/golden/betting_odds_golden.json` says `total_matches: 55` while
+      holding 124 rows (an append bug in `_merge_staging_into_golden`, fixed in
+      the writer; the v2 file is correct). Decide whether to correct the
+      shipped file's header in place in a separate, clearly-labelled commit.
+
 ## Open decisions (human)
 - [x] **Adopt D16 no-weights RAW as the i7 ball model in the I17 bundle?**
   DONE 2026-08-02: promoted as `models/xgb_i7_noweights_production/`
@@ -156,8 +302,12 @@ I14 boundary-geometry pass, and the women's-odds discovery. Full evidence:
 - [ ] **I14 V2 sourcing grade**: is fantasy/aggregator-grade boundary
   sourcing acceptable for modeling, or does integration wait on
   official/ESPNcricinfo-grade numbers?
-- [ ] **D5 ruling** (flagged by B12): may the night loop claim the bowler
+- [x] **D5 ruling** (flagged by B12): may the night loop claim the bowler
   eligibility filter now that share-alignment (B10/B12) has shipped?
+  DONE 2026-08-07: **retired as SUPERSEDED by B13** (B13's null proved the
+  never-bowler cohort is already priced ≈0 by sim and baseline; the
+  non-bowler top_bowler tail is a per-ball-rate problem, not who-bowls —
+  an eligibility filter has nothing left to buy). IDEAS.md status flipped.
 - [x] **Adopt D12 swap augmentation in production?** DONE 2026-07-30:
   archived D12 swap arm promoted as
   `models/xgb_match_v3_m7_swap_production`; `predict_fixture.py` switched.
@@ -192,7 +342,7 @@ Sequential. Each step unblocks the next; the ultimate goal is a 500+ match betti
 
 ## Evaluation Discipline (P0 — post-polymarket-baseline, 2026-04-19)
 
-Gate items before any new modeling work. Baseline is frozen at XGBoost v3 / clean-dedup Polymarket: model LL 0.7319, market LL 0.6267, coinflip LL 0.6931, flat ROI +0.06% (CI [−19%, +23%]), always-favorite baseline +4.15%. Model is worse than coinflip on log loss and worse than always-favorite on ROI. Close these gaps before claiming skill.
+Gate items before any new modeling work. Baseline is frozen at XGBoost v3 / clean-dedup Polymarket: model LL 0.7319, market LL ~~0.6267~~ **0.5901** (corrected 2026-08-05), coinflip LL 0.6931, flat ROI +0.06% (CI [−19%, +23%]), always-favorite baseline +4.15%. Model is worse than coinflip on log loss and worse than always-favorite on ROI. Close these gaps before claiming skill. (The corrected market line is *stronger*, so this gap is wider than recorded, not narrower.)
 
 ### Blockers (must fix before next eval run)
 - [x] **Fix incomplete-lineup bug** (2026-04-19) — `_extract_team_players` rewritten to use `info.players[team]` as the authoritative roster; 104 dummy `Player` objects eliminated across 96 matches. Affected-slice ΔLL = −0.049 (paired-bootstrap 95% CI [−0.082, −0.021], excludes 0); unaffected slice bit-identical; flat ROI +0.06% → +2.78%. See `docs/POLYMARKET_INTEGRATION.md` → "Lineup-fix impact". Regression guards: `scripts/tests/test_lineup_extraction.py` (8 tests).
@@ -210,7 +360,7 @@ Gate items before any new modeling work. Baseline is frozen at XGBoost v3 / clea
   |---|---|---|
   | Coinflip (50/50) | Sanity floor — any model below this is broken | 0.6931 LL |
   | Always-bet-favorite | Honest ROI baseline (no model needed) | +4.15% flat ROI, 64% WR |
-  | Polymarket market | Ceiling — closing this is the real win | 0.6267 LL |
+  | Polymarket market | Ceiling — closing this is the real win | **0.5901 LL** (all) / **0.5940** (≥$50k) / **0.5377** (≥$100k) — corrected 2026-08-05; the old 0.6267 / 0.6482 / 0.6224 are retracted |
   | Our model | Subject under test | 0.7319 LL, +0.06% ROI |
 
   Reject any experiment that improves model ROI but not model log loss vs market — that's counterparty noise, not skill.

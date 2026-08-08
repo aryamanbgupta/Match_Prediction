@@ -1,0 +1,38 @@
+{
+  "_comment": "The Hundred 2026. PROJECTED XIs: MSG from 1521248 (2026-08-02), Welsh Fire from 1521245 (2026-08-01). Not confirmed teamsheets. Toss withheld.",
+  "date": "2026-08-05",
+  "team1": "Manchester Super Giants",
+  "team2": "Welsh Fire",
+  "venue": "Old Trafford, Manchester",
+  "team1_lineup": [
+    "4663bd23",
+    "6a26221c",
+    "99b75528",
+    "235c2bb6",
+    "6e6fb538",
+    "85dcb721",
+    "4a461c24",
+    "70d57519",
+    "efc04be7",
+    "1f1b4c89",
+    "78c12883"
+  ],
+  "team2_lineup": [
+    "3d284ca3",
+    "a343262c",
+    "ba5e1069",
+    "ff154ecd",
+    "f836b33d",
+    "86f84b37",
+    "eafe8a94",
+    "81c36ee9",
+    "4c5d73db",
+    "2f9d0389",
+    "679cd31e"
+  ],
+  "_lineup_provenance": "projected XI: MSG=1521248 (2026-08-02), WF=1521245 (2026-08-01)",
+  "competition_tier": "Vitality Blast",
+  "team_type": "club",
+  "toss_winner": null,
+  "toss_decision": null
+}

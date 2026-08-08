@@ -1,5 +1,47 @@
 # M8 — sizing rules (2026-05-10)
 
+> # ⚠️ RETRACTION — 2026-08-05: this sizing rule was selected on a corrupt ROI surface
+>
+> **Every ROI number and CI in this report was computed against
+> `betting_odds_polymarket.json`, which scored the event's *"Who wins the
+> toss?"* market as the winner market on 23 of 261 fixtures** (the builder
+> ranked candidates by a `max price ≤ 0.92 = "plausible"` flag first, which
+> rejects lopsided — i.e. informative — winner markets and keeps the ~0.50
+> coin flip). See `reports/market_benchmark_toss_defect_20260805.md`.
+>
+> **What this retracts.** The landing argument here is verbatim *"Threshold 0
+> is the only config where the ROI CI cleanly excludes 0"*. That statement is
+> a property of the corrupt ROI surface — 17 lopsided fixtures were recorded
+> at ~0.50 when their true prices were 0.72–0.99, which manufactures large
+> fake edges and pays them at ~2.0 decimal odds instead of ~1.05. The whole
+> threshold sweep, both slices, and the mismatch-slice table (which A7 was
+> then built on) are therefore **not evidence for anything** and must be
+> **re-derived on `betting_odds_polymarket_v2.json`** (255 fixtures,
+> `--cluster-source-dir data/polymarket_test_v2`) before being quoted again.
+> Note also that these CIs are per-match i.i.d. bootstraps, which invariant 7
+> superseded in I3 — a second, independent reason not to quote them.
+>
+> **What is NOT retracted.** *Flat 1-unit staking* is a conservative default
+> that carries no ROI-surface dependence and is not itself at risk; keep it.
+> `scripts/sim_eval/sizing_rules.py` is fine as tooling. What is gone is the
+> *empirical justification* for the specific edge threshold and for the
+> "low-edge bets are predictive" claim below.
+>
+> **Downstream:** `research/reports/auto/A7.md` (the slice-conditional rule
+> derived from the mismatch table) is retracted with it, and A7 is withdrawn
+> from forward use. Corrected production ROI on the ≥$50k slice is **+3.38%**
+> (i7 arm, block CI [−14.63%, +37.06%]) / **+7.40%** (legacy arm), not the
+> +20–25% these tables assume as the baseline.
+>
+> **RE-DERIVED 2026-08-07 — `reports/a7_m8_rederivation_v2_20260807.md` is
+> the re-derivation of record.** Under a pre-registered protocol on v2
+> prices with I3 blocks: no global edge threshold clears the bar (ROI
+> *degrades* as the threshold rises on honest prices — the inverse of this
+> report's retracted finding), so **flat 1-unit at threshold 0 stands as
+> the default**; and no A7 grid cell clears, so **A7 is retired** (the
+> originally-landed cell hurts on both slices). No betting edge of any kind
+> is established — every interval straddles zero.
+
 Phase 8 of match-level v3. Final phase. **Outcome: flat 1-unit betting at edge threshold 0 is the production sizing rule.** Higher edge thresholds and Kelly variants explored; none improve aggregate ROI/CI on iteration evidence. A slice-conditional threshold finding is documented for future enhancement but not landed (complexity + small-n on mismatch slice).
 
 **Production sizing rule (LANDED)**:

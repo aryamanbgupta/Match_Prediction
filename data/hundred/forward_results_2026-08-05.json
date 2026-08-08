@@ -1,0 +1,70 @@
+{
+  "_comment": "Settlement results for the fixtures sealed on 2026-08-03 in predictions/hundred/forward_2026-08-03_sealed.json (sha256 caecbe114b02dae0e8bc11e0dcbf91c145e446de7c3873000ed6259ac81746fd). Winners only -- this file NEVER carries a model probability or a price, so it cannot alter a sealed prediction. Every row is cross-checked against at least two independent sources. Compiled 2026-08-05T23:30Z.",
+  "compiled_at_utc": "2026-08-05T23:30:00+00:00",
+  "seal_sha256": "caecbe114b02dae0e8bc11e0dcbf91c145e446de7c3873000ed6259ac81746fd",
+  "results": [
+    {
+      "cricsheet_match_id": "1521249",
+      "date": "2026-08-03",
+      "team1": "Welsh Fire",
+      "team2": "Southern Brave",
+      "venue": "Sophia Gardens, Cardiff",
+      "winner": "Welsh Fire",
+      "margin": "6 wickets",
+      "scores": "Southern Brave 115/8; Welsh Fire 116/4 (95 balls)",
+      "cricsheet_published": true,
+      "sources": [
+        "cricsheet hnd_json 1521249.json (downloaded 2026-08-05): outcome.winner = Welsh Fire, by.wickets = 6",
+        "ESPNcricinfo match report 1521249 'Short trumps Stoinis as Fire keep pace with Rockets'",
+        "Sky Sports cricket coverage 2026-08-03"
+      ]
+    },
+    {
+      "cricsheet_match_id": "1521250",
+      "date": "2026-08-04",
+      "team1": "Sunrisers Leeds",
+      "team2": "London Spirit",
+      "venue": "Headingley, Leeds",
+      "winner": "Sunrisers Leeds",
+      "margin": "37 runs",
+      "scores": "Sunrisers Leeds 241/2; London Spirit 204 (Willey 83*)",
+      "cricsheet_published": false,
+      "sources": [
+        "ESPNcricinfo 1521250 live-score header 'Sunrisers beat Spirit, Sunrisers won by 37 runs'",
+        "ESPNcricinfo match report 'Marsh, Rickelton, Brook blast Sunrisers to record total in big win'",
+        "Sky Sports 'SunRisers Leeds thrash London Spirit after scoring 241 to set highest total in tournament history'"
+      ]
+    },
+    {
+      "cricsheet_match_id": "1521251",
+      "date": "2026-08-05",
+      "team1": "Manchester Super Giants",
+      "team2": "Welsh Fire",
+      "venue": "Old Trafford, Manchester",
+      "winner": "Manchester Super Giants",
+      "margin": "9 wickets",
+      "scores": "Welsh Fire 155/4 (Short 71); Manchester Super Giants 161/1 (69 balls; Seifert 62*, Buttler 51*)",
+      "cricsheet_published": false,
+      "sources": [
+        "cricket.com.au match report 4554800: 'Manchester Super Giants, 9 wickets; Welsh Fire 4-155, Manchester Super Giants 1-161'",
+        "ESPNcricinfo match report 1521251 'Buttler takes T20 runs record as Super Giants snap losing streak'",
+        "cricketworld.com 'Manchester Super Giants thrash Welsh Fire by nine wickets'"
+      ]
+    },
+    {
+      "cricsheet_match_id": "1521252",
+      "date": "2026-08-05",
+      "team1": "Trent Rockets",
+      "team2": "Birmingham Phoenix",
+      "venue": "Trent Bridge, Nottingham",
+      "winner": "Trent Rockets",
+      "margin": "7 wickets",
+      "scores": "Birmingham Phoenix 111/6; Trent Rockets 116/3 (83 balls; Billings 31*)",
+      "cricsheet_published": false,
+      "sources": [
+        "cricket.com.au match report 4554800: 'Trent Rockets, 7 wickets; Birmingham Phoenix 6-111, Trent Rockets 3-116'",
+        "ESPNcricinfo scorecard 1521252, 22nd Match at Nottingham: Trent Rockets won by 7 wickets, PoM Lewis Gregory 2/20"
+      ]
+    }
+  ]
+}

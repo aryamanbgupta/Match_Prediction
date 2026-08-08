@@ -46,6 +46,8 @@ SLUG_ABBREV = {
 # Cutoff hour (UTC) used as "pre-match": 17:00Z is an hour before the usual
 # 18:30 UK start and matches the sibling extractor's timestamps.
 CUTOFF_HOUR_UTC = 17
+# Toss is called ~30 min before the scheduled start; 60 min clears it.
+PRETOSS_LEAD_SECONDS = 3600
 
 
 def get_json(url: str, retries: int = 3):
@@ -71,8 +73,20 @@ def event_slug(team1: str, team2: str, date: str) -> str:
 
 
 def winner_market(event: dict) -> dict | None:
-    """Return the head-to-head winner market, not toss / completed-match."""
-    for market in event.get("markets") or []:
+    """Return the head-to-head winner market, not toss / completed-match.
+
+    Polymarket ships each Hundred fixture as an event holding three binary
+    markets: the moneyline (outcomes = the two team names), the toss winner
+    (also two team names), and a "Completed match?" Yes/No. The moneyline is
+    identified by `sportsMarketType == "moneyline"`, which is an explicit
+    field rather than an ordering accident; the question-suffix test is kept
+    as a fallback for events that predate that field.
+    """
+    markets = event.get("markets") or []
+    for market in markets:
+        if market.get("sportsMarketType") == "moneyline":
+            return market
+    for market in markets:
         question = market.get("question") or ""
         if " - " in question:  # side markets are suffixed
             continue
@@ -81,6 +95,29 @@ def winner_market(event: dict) -> dict | None:
             outcomes = json.loads(outcomes)
         if outcomes and len(outcomes) == 2:
             return market
+    return None
+
+
+def parse_iso(value: str | None) -> datetime | None:
+    """Parse the mixed ISO shapes Gamma returns ('...Z' and '... +00:00')."""
+    if not value:
+        return None
+    text = str(value).strip().replace("Z", "+00:00")
+    if len(text) > 10 and text[10] == " ":
+        text = text[:10] + "T" + text[11:]
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def scheduled_start(event: dict, market: dict) -> datetime | None:
+    """Polymarket's own declared start for the fixture, in UTC."""
+    for source in (market.get("gameStartTime"), event.get("startTime")):
+        parsed = parse_iso(source)
+        if parsed is not None:
+            return parsed.astimezone(timezone.utc)
     return None
 
 
@@ -96,7 +133,7 @@ def price_at_cutoff(token_id: str, cutoff_ts: int) -> tuple[float, int] | None:
 
 
 def fetch_match(team1: str, team2: str, date: str,
-                completed: bool) -> dict:
+                completed: bool, start_mode: str = "fixed") -> dict:
     # Polymarket's slug usually lists the home side first, but not always;
     # try the reverse ordering before giving up.
     events, slug = [], None
@@ -139,7 +176,52 @@ def fetch_match(team1: str, team2: str, date: str,
     row["current_prices"] = [float(p) for p in prices] if prices else None
     row["closed"] = bool(market.get("closed"))
 
-    if completed and tokens:
+    if start_mode == "gamma":
+        start = scheduled_start(event, market)
+        row["scheduled_start_utc"] = start.isoformat() if start else None
+        if not tokens:
+            row["error"] = "no clob tokens"
+            return row
+        if start is None:
+            row["error"] = "no gameStartTime on market"
+            return row
+        idx = outcomes.index(team1) if team1 in outcomes else 0
+        start_ts = int(start.timestamp())
+        quotes, stamps = {}, {}
+        for slot, token in enumerate(tokens[:2]):
+            found = price_at_cutoff(token, start_ts - 1)
+            if found is not None:
+                quotes[slot], stamps[slot] = found
+        if idx not in quotes:
+            row["error"] = "no quote strictly before scheduled start"
+            return row
+        price, stamp = quotes[idx], stamps[idx]
+        other = 1 - idx
+        row["prematch_prob_team1"] = price
+        row["prematch_prob_team2"] = (quotes[other] if other in quotes
+                                      else round(1.0 - price, 6))
+        row["prematch_prob_team2_is_complement"] = other not in quotes
+        row["prematch_price_timestamp"] = datetime.fromtimestamp(
+            stamp, tz=timezone.utc).isoformat()
+        row["prematch_price_timestamp_team2"] = (
+            datetime.fromtimestamp(stamps[other], tz=timezone.utc).isoformat()
+            if other in stamps else None)
+        row["quote_lead_seconds"] = start_ts - stamp
+        row["cutoff_utc"] = "scheduled_start_minus_1s"
+        row["quote_is_prematch"] = stamp < start_ts
+        # The last quote before the scheduled start is taken AFTER the toss
+        # (tossed ~30 min out), so it carries information a pre-match model
+        # does not have. Record a pre-toss quote alongside it so a backtest
+        # can pick the information set it actually wants to be judged against.
+        pretoss = price_at_cutoff(tokens[idx], start_ts - PRETOSS_LEAD_SECONDS)
+        if pretoss is not None:
+            row["pretoss_prob_team1"] = pretoss[0]
+            row["pretoss_price_timestamp"] = datetime.fromtimestamp(
+                pretoss[1], tz=timezone.utc).isoformat()
+            row["pretoss_lead_seconds"] = start_ts - pretoss[1]
+        if not 0.0 < price < 1.0:
+            row["warning"] = "degenerate pre-start price"
+    elif completed and tokens:
         idx = outcomes.index(team1) if team1 in outcomes else 0
         year, month, day = (int(part) for part in date.split("-"))
         # On double-header days the earlier match has already resolved by
@@ -162,9 +244,18 @@ def fetch_match(team1: str, team2: str, date: str,
             row["error"] = "no non-degenerate pre-match price"
     elif not completed and prices:
         idx = outcomes.index(team1) if team1 in outcomes else 0
+        start = scheduled_start(event, market)
+        row["scheduled_start_utc"] = start.isoformat() if start else None
+        now = datetime.now(timezone.utc)
         row["prematch_prob_team1"] = float(prices[idx])
-        row["prematch_price_timestamp"] = datetime.now(
-            timezone.utc).isoformat()
+        row["prematch_prob_team2"] = float(prices[1 - idx])
+        row["prematch_prob_team2_is_complement"] = False
+        row["prematch_price_timestamp"] = now.isoformat()
+        row["prematch_price_timestamp_team2"] = now.isoformat()
+        row["cutoff_utc"] = "live_quote_at_fetch_time"
+        row["quote_is_prematch"] = start is None or now < start
+        row["quote_lead_seconds"] = (
+            int((start - now).total_seconds()) if start else None)
     return row
 
 
@@ -177,20 +268,38 @@ def main() -> int:
     ap.add_argument("--team1")
     ap.add_argument("--team2")
     ap.add_argument("--date")
+    ap.add_argument("--start-mode", choices=("fixed", "gamma"), default="fixed",
+                    help="fixed = legacy 17:00Z/12:30Z cutoff; gamma = last "
+                         "quote strictly before the market's gameStartTime")
+    ap.add_argument("--fixtures", type=Path,
+                    help="Fixture list with per-match `status` "
+                         "(played / in_progress / upcoming). Overrides "
+                         "--source; unplayed fixtures get the live quote.")
     args = ap.parse_args()
 
     if args.upcoming:
-        row = fetch_match(args.team1, args.team2, args.date, completed=False)
+        row = fetch_match(args.team1, args.team2, args.date, completed=False,
+                          start_mode=args.start_mode)
         print(json.dumps(row, indent=2))
         return 0
 
-    source = json.loads(args.source.read_text())
+    source = json.loads((args.fixtures or args.source).read_text())
     rows = []
     for match in source["matches"]:
         team1, team2 = match["teams"]
-        print(f"  {match['date']}  {team1} vs {team2}")
-        row = fetch_match(team1, team2, match["date"], completed=True)
-        row["winner"] = match["winner"]
+        status = match.get("status", "played")
+        # An in-progress fixture must be priced from history like a played
+        # one: its *current* quote is in-play, not pre-match.
+        completed = status in ("played", "in_progress")
+        print(f"  {match['date']}  {team1} vs {team2}  [{status}]")
+        row = fetch_match(team1, team2, match["date"], completed=completed,
+                          start_mode=args.start_mode if completed else "fixed")
+        row["winner"] = match.get("winner")
+        row["status"] = status
+        if match.get("match_id"):
+            row["cricsheet_match_id"] = match["match_id"]
+        if match.get("venue"):
+            row["venue"] = match["venue"]
         rows.append(row)
         if "prematch_prob_team1" in row:
             print(f"     market P({team1}) = "
@@ -203,6 +312,7 @@ def main() -> int:
     args.out.write_text(json.dumps(
         {"fetched_at": datetime.now(timezone.utc).isoformat(),
          "cutoff_hour_utc": CUTOFF_HOUR_UTC,
+         "start_mode": args.start_mode,
          "matches": rows}, indent=2))
     print(f"\nWrote {args.out}")
     return 0

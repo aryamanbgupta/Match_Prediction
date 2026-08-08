@@ -1438,7 +1438,18 @@ serving-state directory that gets rebuilt.
 This exists for rollback and historical reproduction only; its state cannot
 be extended.
 
-**A7 output is shadow-only.** Odds are normalized to two-team fair
+**A7 output is shadow-only — and as of 2026-08-05 it is also WITHDRAWN and
+UNVALIDATED.** The evidence that landed A7 was measured against an odds file
+that substituted the ~0.50 "Who wins the toss?" market for the real winner
+market on lopsided fixtures — i.e. on precisely the `mismatch` fixtures A7
+bets. Its reported gain is very likely a pure artifact. Do not act on the A7
+line, and do not quote its ROI, until it is re-derived from scratch on
+`betting_odds_polymarket_v2.json`. See
+`reports/market_benchmark_toss_defect_20260805.md` and the retraction at the
+top of `research/reports/auto/A7.md`. The mechanical contract below is
+unchanged and still describes what the code emits.
+
+Odds are normalized to two-team fair
 probabilities. The frozen rule requires positive edge for
 `|top6_batting_elo_diff| <= 5` and edge strictly above 10 percentage points
 when the absolute difference is greater than 5. The live path additionally
@@ -1454,10 +1465,14 @@ The Hundred is 100 balls with 5-ball overs and its franchises are not in the
 training corpus. The match-level model never touches a ball, so it can be
 pointed at those fixtures — see
 [reports/hundred_2026_adaptation.md](../reports/hundred_2026_adaptation.md) for
-the full evaluation. The headline: it picks the winner 63.5% of the time across
-159 historical Hundred matches (p = 0.0004) but its probabilities are pinned in
-a 0.37–0.62 band, so log loss barely beats a coinflip, it sits within ~3pp of
-the Polymarket line, and there is no edge to bet.
+the full evaluation. The headline: it picks the winner 61.0% of the time across
+159 historical Hundred matches (97/159 after the 2026-07-30 alias copy-fold fix
+and rerun; i.i.d. p = 0.0034, season-block sign test p ≈ 0.03) but its
+probabilities are pinned in a 0.37–0.62 band, so log loss barely beats a
+coinflip, it sits within ~3pp of the Polymarket line, and there is no edge to
+bet. The 2026 season put that no-edge verdict to a betting test and it held —
+`reports/hundred_roi_backtest_2026-08-03.md`, summarised under "2026 season"
+below.
 
 Three pieces make it work:
 
@@ -1466,7 +1481,8 @@ Three pieces make it work:
 #    form/H2H/home; the pool is counted separately so the SQLite/tracker
 #    source-count check still guards the primary T20 pool.
 --tracker-aux-dir data/hundred/context_hnd_json
---tracker-aux-dir data/hundred/season_2026_men
+--tracker-aux-dir data/hundred/season_2026_men_v2   # real cricsheet 2026 records;
+                                                    # supersedes season_2026_men/
 
 # 2. Franchise renames folded into tracker history.
 --team-aliases data/hundred/team_aliases_2026.json
@@ -1483,6 +1499,119 @@ non-destructive cache refresh above; score completed fixtures with
 `scripts/backtest_hundred.py`; pull odds with
 `scripts/fetch_hundred_polymarket.py`. Every command is in the report's
 "Reproduce" section.
+
+#### 2026 season — data of record, odds, and the betting backtest
+
+**Data of record (2026-08-05).** Cricsheet now publishes the 2026 season, so
+the real ball-by-ball records supersede the hand-transcribed info-only ones.
+`data/hundred/season_2026_men_v2/` (19 matches, ids 1521231–1521249) is the
+pool to use; `data/hundred/season_2026_men/` (8 transcribed matches) is
+retained for provenance and must not be rebuilt over. `--extract-history`
+writes *every* men's Hundred match, so split the output by season — 2021–2025
+is tracker context, 2026 is the season pool:
+
+```bash
+# Refresh hnd_json.zip in the stat-generator mirror first, then:
+uv run python scripts/build_hundred_matches.py --extract-history \
+  --history-source /Users/aryamangupta/Projects/stat-generator/data/cricsheet/hnd_json.zip \
+  --history-dir data/hundred/_hnd_all_men
+
+uv run python - <<'PY'
+import json, shutil
+from pathlib import Path
+src = Path("data/hundred/_hnd_all_men")
+ctx = Path("data/hundred/context_hnd_json")
+cur = Path("data/hundred/season_2026_men_v2")
+for d in (ctx, cur):
+    d.mkdir(parents=True, exist_ok=True)
+for f in sorted(src.glob("*.json")):
+    date = json.loads(f.read_text())["info"]["dates"][0]
+    shutil.copy2(f, (cur if date >= "2026-01-01" else ctx) / f.name)
+PY
+```
+
+Pre-2026-08-03 command lines that name `--tracker-aux-dir
+data/hundred/season_2026_men` (including the "Reproduce" section of
+`reports/hundred_2026_adaptation.md`) should now use `…_v2`, and any rerun must
+write a **new** snapshot filename (never overwrite an existing
+`tracker_snapshot_*.pkl` — the sealed-prediction audit trail depends on the old
+ones staying put).
+
+**Odds (patched fetcher).** Defaults are unchanged, so the legacy invocation
+still reproduces `polymarket_odds_2026.json` byte-for-byte. The current file is
+built with the two new flags:
+
+```bash
+uv run python scripts/fetch_hundred_polymarket.py \
+  --fixtures data/hundred/fixtures_2026_men_v2.json \
+  --start-mode gamma \
+  --out data/hundred/polymarket_odds_2026_v2.json
+```
+
+- `--fixtures PATH` — fixture list carrying a per-match `status`
+  (`played` / `in_progress` / `upcoming`). Played and in-progress fixtures are
+  priced from quote *history*; upcoming ones get the live quote. An
+  in-progress fixture must never be priced from its current quote — that is an
+  in-play price.
+- `--start-mode gamma` — take scheduled start from Polymarket's own
+  `gameStartTime` per fixture instead of the legacy hardcoded cutoff. Hundred
+  starts vary (13:30Z / 14:00Z / 17:00Z / 17:30Z) and **the old 17:00Z cutoff
+  fell after the start of every early double-header**. The fetcher also picks
+  the moneyline market by the explicit `sportsMarketType == "moneyline"` field
+  (not a question-suffix heuristic) and maps team → price by name via
+  `clobTokenIds` rather than positional order.
+
+**Pre-toss vs post-toss quotes.** Each row now carries both:
+`pretoss_prob_team1` (last quote before **T−60min**) and
+`prematch_prob_team1` (last quote strictly before scheduled start, which is
+**post-toss** — the toss is called ~30 min out and moves the price a mean
+3.5pp, max 9.0pp, systematically against team1). A toss-blind model must be
+scored on the **pre-toss** basis; that is the headline everywhere. Post-toss is
+a diagnostic only, and it flatters the model because it prices it against a
+strictly better-informed line.
+
+**ROI eval + settlement.** `scripts/hundred_roi_eval.py` is deterministic and
+does no network I/O: it joins predictions ↔ odds, applies the predeclared flat
+rule (1 unit on the side where model p > market p, pre-toss price, no edge
+threshold) and emits the ledger plus every diagnostic in the report.
+
+```bash
+uv run python scripts/hundred_roi_eval.py \
+  --odds data/hundred/polymarket_odds_2026_v2.json \
+  --aliases data/hundred/team_aliases_2026.json \
+  --arm i7=eval_out/hundred_roi_2026-08-03/preds_i7.json \
+  --arm swap=eval_out/hundred_roi_2026-08-03/preds_swap.json \
+  --forward-arm i7=eval_out/hundred_roi_2026-08-03/preds_i7_cutaux0801.json \
+  --fixture-pred i7=predictions/hundred/<fixture>__i7__cut0801.json \
+  --fixture-pred swap=predictions/hundred/<fixture>__swap__cut0801.json \
+  --out-json eval_out/hundred_roi_2026-08-03/roi_eval.json
+
+# Seal not-yet-played fixtures BEFORE any result is known
+uv run python scripts/seal_hundred_forward.py \
+  --roi-eval eval_out/hundred_roi_2026-08-03/roi_eval.json \
+  --odds data/hundred/polymarket_odds_2026_v2.json \
+  --out predictions/hundred/forward_2026-08-03_sealed.json
+shasum -a 256 predictions/hundred/forward_2026-08-03_sealed.json   # record it in the report
+
+# Settle later, from a winners-only file (no prices, no probabilities)
+uv run python scripts/hundred_roi_eval.py \
+  ... same args as above ... \
+  --forward-results data/hundred/forward_results_2026-08-05.json \
+  --out-json eval_out/hundred_roi_2026-08-03/roi_eval_settled_20260805.json
+```
+
+`--forward-results` carries winners only, so it **structurally cannot alter a
+sealed prediction**, and re-running without it reproduces the pre-settlement
+ledger exactly. Settle a new ledger to a new filename and append to the report
+rather than editing either in place. The seal lives under the repo's blanket
+`*.json` gitignore, so its integrity rests on the sha256 recorded in the
+tracked report — `git add -f` if the artifact itself should be committed.
+
+**Standing verdict.** 18 settled bets across one tournament is one
+`tournament_time_block_v1` block (invariant 7): descriptive only, no CI, no
+edge, **no betting**. Backtest slice −2.80% with model LL 0.7040 vs market
+0.6857 vs coinflip 0.6931; combined +1.98%. Do not quote any ROI figure from
+this study as an edge.
 
 **Lineup names must resolve.** More than two unresolved players in one XI now
 raises rather than warning — an unresolved player silently loses their career

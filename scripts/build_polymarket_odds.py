@@ -2,25 +2,40 @@
 
 Reads:
   - /Users/aryamangupta/Projects/polymarket-cricket/data/polymarket_prematch_odds.json
+  - data/polymarket_market_catalog.json  (Gamma event -> markets snapshot; see
+    docs note in `load_market_catalog`)
   - data/t20s_json/*.json
 
-Writes:
-  - betting_odds_polymarket.json      (sim-eval-compatible odds file)
-  - data/polymarket_test/*.json       (copies of matched Cricsheet JSONs)
-  - data/polymarket_build_unmatched.json  (diagnostic: markets that didn't match)
+Writes (defaults; the pre-2026-08-05 non-_v2 paths are frozen evidence and are
+never written by default — see the OUT_* constants below):
+  - betting_odds_polymarket_v2.json      (sim-eval-compatible odds file)
+  - data/polymarket_test_v2/*.json       (copies of matched Cricsheet JSONs)
+  - data/polymarket_build_unmatched_v2.json  (diagnostic: markets that didn't match)
 
 Pipeline:
-  1. Load Polymarket markets; apply filters (volume >= $1000, resolved, not low_liquidity,
-     prematch prices present, date in [2025-07-01, 2026-04-16]).
-  2. Normalize team names via TEAM_NAME_MAP (from docs/DATA_REFRESH_HANDOFF.md).
-  3. For each filtered market, find the Cricsheet JSON with matching date + teams +
+  1. Load Polymarket markets; resolve each capture record to the Gamma market that
+     produced it and label it head-to-head / not (see "Market identity" below).
+  2. Apply filters (volume >= $1000, resolved, not low_liquidity, prematch prices
+     present, date in [2025-07-01, 2026-04-16]).
+  3. Normalize team names via TEAM_NAME_MAP (from docs/DATA_REFRESH_HANDOFF.md).
+  4. For each filtered market, find the Cricsheet JSON with matching date + teams +
      match_type=T20 + gender=male.
-  4. Emit odds file + copy matched JSONs into data/polymarket_test/.
+  5. Select ONE market per fixture with a structural, outcome-blind rule, then emit
+     the odds file + copy matched JSONs into data/polymarket_test/.
+
+Market identity (why step 1 exists):
+  Each Gamma cricket event carries several binary markets — the head-to-head
+  winner market, "Who wins the toss?", "Completed match?" — and the upstream
+  prematch capture drops the market question/id, emitting one bare record per
+  market. Selecting between those records therefore requires re-attaching the
+  market identity from the Gamma catalog before anything else can be decided.
 
 CLI:
   uv run python scripts/build_polymarket_odds.py                   # full run
   uv run python scripts/build_polymarket_odds.py --dry-run         # counts + sample, no writes
   uv run python scripts/build_polymarket_odds.py --verify-mapping  # print team diff, exit
+  uv run python scripts/build_polymarket_odds.py \
+      --out-odds /tmp/odds_experiment.json                         # write elsewhere
 """
 
 from __future__ import annotations
@@ -29,10 +44,11 @@ import argparse
 import difflib
 import glob
 import json
+import re
 import shutil
 import sys
 from collections import Counter, defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from identity_maps import canonicalize_venue
@@ -45,13 +61,35 @@ from match_identity import (
 REPO_ROOT = Path(__file__).resolve().parent.parent
 POLYMARKET_PATH = Path("/Users/aryamangupta/Projects/polymarket-cricket/data/polymarket_prematch_odds.json")
 CRICSHEET_DIR = REPO_ROOT / "data" / "t20s_json"
-OUT_ODDS_PATH = REPO_ROOT / "betting_odds_polymarket.json"
-OUT_TEST_DIR = REPO_ROOT / "data" / "polymarket_test"
-OUT_UNMATCHED_PATH = REPO_ROOT / "data" / "polymarket_build_unmatched.json"
+# Defaults write to the _v2 (post-toss-fix) paths, NOT to the pre-fix files
+# shipped before 2026-08-05. `betting_odds_polymarket.json` and
+# `data/polymarket_test/` are frozen evidence of what was shipped under the
+# defective selection rule (reports/market_benchmark_toss_defect_20260805.md);
+# a default that pointed at them meant any plain `python build_polymarket_odds.py`
+# silently destroyed that evidence. Pass --out-odds/--out-test-dir/--out-unmatched
+# to write somewhere else.
+OUT_ODDS_PATH = REPO_ROOT / "betting_odds_polymarket_v2.json"
+OUT_TEST_DIR = REPO_ROOT / "data" / "polymarket_test_v2"
+OUT_UNMATCHED_PATH = REPO_ROOT / "data" / "polymarket_build_unmatched_v2.json"
+
+# Gamma snapshot of every event id referenced by the prematch captures, and the
+# ordered market list the legacy capture iterated over. Both are regenerable;
+# see reports/market_benchmark_toss_defect_20260805.md § "Reproducing".
+MARKET_CATALOG_PATH = REPO_ROOT / "data" / "polymarket_market_catalog.json"
+RAW_MARKET_INDEX_PATH = Path(
+    "/Users/aryamangupta/Projects/polymarket-cricket/data/polymarket_match_events.json"
+)
 
 TEST_WINDOW_START = datetime(2025, 7, 1)
 TEST_WINDOW_END = datetime(2026, 4, 16)
 MIN_VOLUME_USD = 1000.0
+
+SELECTION_RULE_VERSION = "h2h_identity_outcome_blind_v2"
+MONEYLINE_TYPE = "moneyline"
+# `report` records how many selected rows carry a price stamped at/after the
+# scheduled start without changing n; `enforce` drops them. Off by default so
+# fixture counts are decided by the head-to-head rule alone.
+TIMESTAMP_GUARD_MODES = ("off", "report", "enforce")
 
 
 # ---------------------------------------------------------------------------
@@ -100,9 +138,262 @@ def normalize_team(name: str) -> str:
 # ---------------------------------------------------------------------------
 
 def load_polymarket_markets(path: Path) -> list[dict]:
+    """Load capture records and attach the market identity each one came from."""
     with open(path) as f:
         blob = json.load(f)
-    return blob.get("matches", [])
+    markets = blob.get("matches", [])
+    attach_market_identity(markets)
+    return markets
+
+
+# ---------------------------------------------------------------------------
+# Market identity
+# ---------------------------------------------------------------------------
+
+def load_market_catalog(path: Path | None = None) -> dict[str, dict]:
+    """Gamma `event_id -> {event_title, markets:[...]}` snapshot.
+
+    Regenerate with a batched `GET /events?id=...` pull over every event id in
+    the capture files; markets are closed, so their question/type/volume are
+    frozen and the snapshot is stable.
+    """
+    path = Path(path or MARKET_CATALOG_PATH)
+    if not path.exists():
+        return {}
+    with open(path) as f:
+        return json.load(f).get("events", {})
+
+
+def load_raw_market_index(path: Path | None = None) -> list[dict]:
+    """The ordered market list the legacy prematch capture iterated over.
+
+    The capture appends one output record per surviving input market, in order,
+    so this list lets a record be traced back to its exact market even though
+    the capture itself persisted neither market id nor question.
+    """
+    path = Path(path or RAW_MARKET_INDEX_PATH)
+    if not path.exists():
+        return []
+    with open(path) as f:
+        rows = json.load(f)
+    return [
+        r for r in rows
+        if r.get("closed") and (r.get("volume") or 0) > 0
+        and r.get("token_id1") and r.get("token_id2")
+    ]
+
+
+def _raw_index_winner(row: dict) -> str | None:
+    if row.get("price1") == 1.0:
+        return row.get("team1")
+    if row.get("price2") == 1.0:
+        return row.get("team2")
+    return None
+
+
+def _align_to_raw_index(markets: list[dict], raw_index: list[dict]) -> dict[int, dict]:
+    """Monotone alignment of capture records onto the ordered raw market list.
+
+    The capture is an order-preserving subsequence of `raw_index`, so a single
+    forward scan is exact even when two markets of one event are otherwise
+    indistinguishable. Records that do not align are simply left unresolved.
+    """
+    hits: dict[int, dict] = {}
+    cursor = 0
+    for idx, record in enumerate(markets):
+        key = (
+            str(record.get("event_id")),
+            record.get("team1"),
+            record.get("team2"),
+            record.get("winner"),
+        )
+        probe = cursor
+        while probe < len(raw_index):
+            row = raw_index[probe]
+            row_key = (
+                str(row.get("event_id")),
+                row.get("team1"),
+                row.get("team2"),
+                _raw_index_winner(row),
+            )
+            if row_key == key:
+                hits[idx] = row
+                cursor = probe + 1
+                break
+            probe += 1
+    return hits
+
+
+def _classify_h2h(question, title, sports_market_type) -> tuple[bool | None, str | None]:
+    """Structural head-to-head test. Never consults the fixture outcome.
+
+    Two independent signals: Gamma's explicit `sportsMarketType` and the
+    repository's established `market.question == event.title` identity rule.
+    Where both exist they must agree; a conflict yields no verdict rather than
+    a guess.
+    """
+    by_identity = None
+    if question is not None and title is not None:
+        by_identity = str(question).strip() == str(title).strip()
+    by_type = None
+    if sports_market_type:
+        by_type = str(sports_market_type) == MONEYLINE_TYPE
+    if by_type is None and by_identity is None:
+        return None, "no_h2h_evidence"
+    if by_type is not None and by_identity is not None and by_type != by_identity:
+        return None, "h2h_rule_conflict"
+    return (by_type if by_type is not None else by_identity), None
+
+
+def attach_market_identity(markets: list[dict]) -> Counter:
+    """Resolve each capture record to its Gamma market and label it H2H or not.
+
+    Resolvers, in priority order:
+      1. `ordered_capture_index` — exact provenance via the raw market list.
+      2. `market_volume_exact`  — a unique market in the event whose volume
+         equals the record's, used for captures that persist market-level
+         volume (the legacy capture persists event-level volume instead, which
+         is why this cannot be the primary resolver).
+    """
+    catalog = load_market_catalog()
+    raw_index = load_raw_market_index()
+    aligned = _align_to_raw_index(markets, raw_index) if raw_index else {}
+
+    stats: Counter = Counter()
+    for idx, record in enumerate(markets):
+        event = catalog.get(str(record.get("event_id"))) or {}
+        event_markets = event.get("markets") or []
+        ident: dict = {
+            "resolver": None,
+            "market_id": None,
+            "market_question": None,
+            "event_title": event.get("event_title"),
+            "sports_market_type": None,
+            "market_volume_usd": None,
+            "scheduled_start_timestamp": None,
+            "is_h2h": None,
+            "unresolved_reason": None,
+        }
+
+        raw_row = aligned.get(idx)
+        catalog_row = None
+        if raw_row is not None:
+            ident["resolver"] = "ordered_capture_index"
+            ident["market_id"] = str(raw_row.get("market_id") or "")
+            ident["market_question"] = raw_row.get("question")
+            ident["event_title"] = raw_row.get("event_title") or ident["event_title"]
+            catalog_row = next(
+                (m for m in event_markets if m.get("market_id") == ident["market_id"]),
+                None,
+            )
+        else:
+            want = record.get("volume_usd")
+            candidates = [
+                m for m in event_markets
+                if want is not None
+                and abs((m.get("volume") or 0.0) - float(want))
+                <= 1e-6 * max(1.0, abs(m.get("volume") or 0.0))
+            ]
+            if len(candidates) == 1:
+                catalog_row = candidates[0]
+                ident["resolver"] = "market_volume_exact"
+                ident["market_id"] = catalog_row.get("market_id")
+                ident["market_question"] = catalog_row.get("question")
+            elif len(candidates) > 1:
+                ident["unresolved_reason"] = "ambiguous_volume_match"
+            elif not event_markets:
+                ident["unresolved_reason"] = "event_not_in_catalog"
+            else:
+                ident["unresolved_reason"] = "no_market_match"
+
+        if catalog_row is not None:
+            ident["sports_market_type"] = catalog_row.get("sports_market_type")
+            ident["market_volume_usd"] = catalog_row.get("volume")
+            ident["scheduled_start_timestamp"] = catalog_row.get("game_start_time")
+            if ident["market_question"] is None:
+                ident["market_question"] = catalog_row.get("question")
+
+        if ident["resolver"] is not None:
+            is_h2h, reason = _classify_h2h(
+                ident["market_question"], ident["event_title"],
+                ident["sports_market_type"],
+            )
+            ident["is_h2h"] = is_h2h
+            if is_h2h is None:
+                ident["unresolved_reason"] = reason
+
+        record["_market_identity"] = ident
+        stats[ident["resolver"] or f"unresolved:{ident['unresolved_reason']}"] += 1
+        if ident["is_h2h"] is True:
+            stats["labelled_h2h"] += 1
+        elif ident["is_h2h"] is False:
+            stats["labelled_non_h2h"] += 1
+
+    print(
+        f"Market identity: {stats['labelled_h2h']:,} head-to-head, "
+        f"{stats['labelled_non_h2h']:,} non-H2H (toss/side markets), "
+        f"{len(markets) - stats['labelled_h2h'] - stats['labelled_non_h2h']:,} unresolved"
+    )
+    for key, count in sorted(stats.items()):
+        if key.startswith("unresolved:"):
+            print(f"    {key}: {count}")
+    return stats
+
+
+def _market_id_sort_key(market_id: str | None) -> tuple[int, int, str]:
+    text = str(market_id or "")
+    if text.isdigit():
+        return (0, int(text), "")
+    return (1, 0, text)
+
+
+def selection_key(matched: dict) -> tuple:
+    """Outcome-blind tiebreak between head-to-head siblings of one fixture.
+
+    Highest market volume first, then lowest market id. Capture order is never
+    consulted, and neither is the resolved winner.
+    """
+    ident = matched["market"].get("_market_identity") or {}
+    volume = ident.get("market_volume_usd")
+    if volume is None:
+        volume = matched["market"].get("volume_usd") or 0.0
+    return (-float(volume), _market_id_sort_key(ident.get("market_id")))
+
+
+_UTC_OFFSET_SHORT = re.compile(r"([+-]\d{2})$")
+
+
+def _parse_ts(raw) -> datetime | None:
+    """Parse Gamma/CLOB timestamps as UTC. Returns None when unparseable.
+
+    Gamma writes `gameStartTime` as `YYYY-MM-DD HH:MM:SS+00` — a two-digit
+    offset that `fromisoformat` does not accept before 3.11 — while the
+    captures write `...Z`. Both are normalized here; a bare `.replace("+00",
+    "+00:00")` would corrupt an already-full `+00:00` offset.
+    """
+    if not raw:
+        return None
+    text = str(raw).strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    text = _UTC_OFFSET_SHORT.sub(r"\1:00", text)
+    try:
+        parsed = datetime.fromisoformat(text)
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def price_is_prematch(matched: dict) -> bool | None:
+    """True/False when both timestamps are known, else None (cannot judge)."""
+    ident = matched["market"].get("_market_identity") or {}
+    start = _parse_ts(ident.get("scheduled_start_timestamp"))
+    priced = _parse_ts(matched["market"].get("price_timestamp"))
+    if start is None or priced is None:
+        return None
+    return priced < start
 
 
 def load_cricsheet_index(match_dir: Path) -> dict:
@@ -350,58 +641,89 @@ def build_odds_entry(matched: dict) -> dict | None:
         },
         "source": "polymarket",
         "polymarket_event_slug": m.get("event_slug"),
+        # Capture-level volume, kept as-is because downstream `--min-volume`
+        # slices are defined against it. Market-level volume is reported
+        # separately under `market_selection`.
         "polymarket_volume_usd": m.get("volume_usd"),
         "tournament": m.get("tournament"),
     }
+    ident = m.get("_market_identity")
+    if ident:
+        entry["market_selection"] = {
+            "market_id": ident.get("market_id"),
+            "market_question": ident.get("market_question"),
+            "event_title": ident.get("event_title"),
+            "sports_market_type": ident.get("sports_market_type"),
+            "market_volume_usd": ident.get("market_volume_usd"),
+            "scheduled_start_timestamp": ident.get("scheduled_start_timestamp"),
+            "resolver": ident.get("resolver"),
+        }
     return entry
 
 
-def write_outputs(matched: list[dict], unmatched: list[dict]) -> None:
+def load_manifest_identities(path: Path) -> set[str]:
+    """Every identity string an existing odds manifest keys its fixtures by.
+
+    Used by `--restrict-to-manifest` to rebuild a frozen benchmark's own
+    fixtures under a new selection rule without re-deriving its membership.
+    """
+    with open(path) as f:
+        blob = json.load(f)
+    keys: set[str] = set()
+    for row in blob.get("matches", []):
+        for field in ("match_id", "cricsheet_id", "display_match_id"):
+            value = row.get(field)
+            if value:
+                keys.add(str(value))
+    return keys
+
+
+def _entry_identities(entry: dict) -> set[str]:
+    keys = {
+        str(entry[field])
+        for field in ("match_id", "cricsheet_id", "display_match_id")
+        if entry.get(field)
+    }
+    keys.add(build_display_match_id(
+        entry["date"], entry["team1"], entry["team2"], entry["venue"]))
+    return keys
+
+
+def write_outputs(
+    matched: list[dict],
+    unmatched: list[dict],
+    timestamp_guard: str = "report",
+    restrict_to: set[str] | None = None,
+) -> None:
     OUT_TEST_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Dedup by match_id. Polymarket runs each cricket fixture as two separate
-    # binary YES/NO markets ("Will Team1 win?" and "Will Team2 win?"), so the
-    # upstream extractor emits two records per fixture — one per binary market —
-    # each carrying its own `winner` label and its own `prematch_price_team*`
-    # orientation. Beyond the YES/NO split, the upstream "prematch" snapshots
-    # occasionally contain in-play or post-match prices (top-side probability
-    # near 1.0) — those are obviously not prematch even though they're labelled
-    # as such. Naive highest-volume tiebreak selects them and inverts the
-    # apparent edge on dozens of fixtures.
+    # Selecting one market per fixture. Each Gamma cricket event carries several
+    # binary markets (head-to-head winner, "Who wins the toss?", "Completed
+    # match?"), and the capture emits one bare record per market, so a fixture
+    # can arrive here several times over.
     #
-    # Tiebreak, in priority order:
-    #   1. plausible: max(prematch_price_team1, prematch_price_team2) <= 0.92
-    #      (rejects in-play snapshots — genuine prematch T20 favourites rarely
-    #      exceed this, so the cutoff trades a handful of lopsided legitimate
-    #      prematch markets for discarding clearly-contaminated ones)
-    #   2. `winner` matches the authoritative Cricsheet outcome
-    #   3. highest volume
-    #
-    # When both siblings are implausible we still keep the best-scoring one
-    # rather than dropping the fixture — log-loss from a noisy market price is
-    # better than losing the eval match entirely.
-    PLAUSIBLE_TOP_P = 0.92
-    best_by_match: dict[str, tuple[dict, dict]] = {}
+    # The rule is structural and outcome-blind:
+    #   1. keep only markets labelled head-to-head by `_classify_h2h`;
+    #   2. break ties on market volume, then on market id.
+    # A fixture with no surviving head-to-head market is DROPPED with a reason
+    # rather than falling back to a side market. The resolved winner is never
+    # consulted: doing so makes the benchmark a function of the outcome it is
+    # supposed to be scored against.
+    candidates_by_match: dict[str, list[tuple[dict, dict]]] = defaultdict(list)
+    dropped_fixtures: dict[str, dict] = {}
     winner_disagreements: list[dict] = []
     dup_dropped = 0
+    non_h2h_seen = 0
+    unresolved_seen = 0
+    non_prematch_selected: list[dict] = []
 
-    def score(m: dict) -> tuple[int, int, float]:
-        poly_winner = m["market"].get("winner")
-        mapped = normalize_team(poly_winner) if poly_winner else None
-        cric = m["cricsheet"]["winner"]
-        matches_cric = 1 if (mapped and cric and mapped == cric) else 0
-        p1 = m["market"].get("prematch_price_team1")
-        p2 = m["market"].get("prematch_price_team2")
-        if p1 is not None and p2 is not None:
-            plausible = 1 if max(p1, p2) <= PLAUSIBLE_TOP_P else 0
-        else:
-            plausible = 0
-        vol = m["market"].get("volume_usd") or 0
-        return (plausible, matches_cric, vol)
-
+    restricted_out = 0
     for m in matched:
         entry = build_odds_entry(m)
         if entry is None:
+            continue
+        if restrict_to is not None and not (_entry_identities(entry) & restrict_to):
+            restricted_out += 1
             continue
         poly_winner = m["market"].get("winner")
         mapped_winner = normalize_team(poly_winner) if poly_winner else None
@@ -415,13 +737,54 @@ def write_outputs(matched: list[dict], unmatched: list[dict]) -> None:
                 "event_slug": m["market"].get("event_slug"),
             })
         mid = entry["match_id"]
-        if mid in best_by_match:
-            prev_m, _ = best_by_match[mid]
-            if score(m) <= score(prev_m):
-                dup_dropped += 1
-                continue
-            dup_dropped += 1  # previous entry will be replaced
-        best_by_match[mid] = (m, entry)
+        ident = m["market"].get("_market_identity") or {}
+        if ident.get("is_h2h") is not True:
+            if ident.get("is_h2h") is False:
+                non_h2h_seen += 1
+                reason = "non_h2h_market"
+            else:
+                unresolved_seen += 1
+                reason = f"market_identity_unresolved:{ident.get('unresolved_reason')}"
+            dropped_fixtures.setdefault(mid, {
+                "match_id": mid,
+                "date": entry["date"],
+                "team1": entry["team1"],
+                "team2": entry["team2"],
+                "reason": reason,
+                "rejected_market_question": ident.get("market_question"),
+                "rejected_sports_market_type": ident.get("sports_market_type"),
+                "event_slug": m["market"].get("event_slug"),
+            })
+            continue
+        candidates_by_match[mid].append((m, entry))
+
+    best_by_match: dict[str, tuple[dict, dict]] = {}
+    for mid, options in candidates_by_match.items():
+        options.sort(key=lambda pair: selection_key(pair[0]))
+        best_by_match[mid] = options[0]
+        dup_dropped += len(options) - 1
+        dropped_fixtures.pop(mid, None)
+
+    if timestamp_guard != "off":
+        for mid, (m, entry) in list(best_by_match.items()):
+            if price_is_prematch(m) is False:
+                non_prematch_selected.append({
+                    "match_id": mid,
+                    "date": entry["date"],
+                    "price_timestamp": m["market"].get("price_timestamp"),
+                    "scheduled_start_timestamp": (
+                        m["market"]["_market_identity"].get("scheduled_start_timestamp")
+                    ),
+                })
+                if timestamp_guard == "enforce":
+                    del best_by_match[mid]
+                    dropped_fixtures[mid] = {
+                        "match_id": mid,
+                        "date": entry["date"],
+                        "team1": entry["team1"],
+                        "team2": entry["team2"],
+                        "reason": "price_not_strictly_prematch",
+                    }
 
     odds_entries: list[dict] = []
     copied = 0
@@ -452,6 +815,9 @@ def write_outputs(matched: list[dict], unmatched: list[dict]) -> None:
         "generated_at": datetime.utcnow().isoformat() + "Z",
         "match_identity": identity_contract(),
         "total_matches": len(odds_entries),
+        "winner_used_for_market_selection": False,
+        "selection_rule": selection_rule_block(timestamp_guard, dropped_fixtures,
+                                               non_prematch_selected),
         "filters": {
             "min_volume_usd": MIN_VOLUME_USD,
             "test_window_start": TEST_WINDOW_START.strftime("%Y-%m-%d"),
@@ -471,6 +837,10 @@ def write_outputs(matched: list[dict], unmatched: list[dict]) -> None:
         "total_unmatched": len(unmatched),
         "total_winner_disagreements_raw": len(winner_disagreements),
         "total_winner_disagreements_after_dedup": len(residual_disagreements),
+        "total_dropped_fixtures": len(dropped_fixtures),
+        "dropped_fixtures": sorted(dropped_fixtures.values(),
+                                   key=lambda d: (d["date"], d["match_id"])),
+        "non_prematch_selected_rows": non_prematch_selected,
         "unmatched": unmatched,
         "winner_disagreements_raw": winner_disagreements,
         "winner_disagreements_after_dedup": residual_disagreements,
@@ -482,22 +852,90 @@ def write_outputs(matched: list[dict], unmatched: list[dict]) -> None:
 
     print(f"\nOdds file:       {OUT_ODDS_PATH}  ({len(odds_entries):,} matches)")
     print(f"Test dir:        {OUT_TEST_DIR}  (+{copied} copied, {already_present} already present)")
-    print(f"Deduped by match_id: {dup_dropped} duplicate market(s) dropped")
+    print(f"H2H siblings deduped: {dup_dropped} extra head-to-head market(s) dropped")
+    print(f"Non-H2H records rejected: {non_h2h_seen}  "
+          f"(unresolved identity: {unresolved_seen})")
+    print(f"Fixtures DROPPED for lack of a head-to-head market: {len(dropped_fixtures)}")
+    for row in sorted(dropped_fixtures.values(), key=lambda d: (d["date"], d["match_id"]))[:20]:
+        print(f"    {row['date']}  {row['team1']} vs {row['team2']}  [{row['reason']}]")
+    print(f"Selected rows whose price is not strictly pre-match: "
+          f"{len(non_prematch_selected)}  (guard={timestamp_guard})")
     print(f"Unmatched report {OUT_UNMATCHED_PATH}  ({len(unmatched):,} unmatched, "
           f"{len(winner_disagreements):,} raw disagreements, "
           f"{len(residual_disagreements):,} residual after dedup)")
+
+
+def selection_rule_block(
+    timestamp_guard: str,
+    dropped_fixtures: dict[str, dict],
+    non_prematch_selected: list[dict],
+) -> dict:
+    """Provenance describing exactly how one market per fixture was chosen."""
+    reasons: Counter = Counter(d["reason"].split(":")[0] for d in dropped_fixtures.values())
+    return {
+        "version": SELECTION_RULE_VERSION,
+        "primary": (
+            "keep only the event's head-to-head market: Gamma "
+            f"sportsMarketType == '{MONEYLINE_TYPE}' when present, otherwise "
+            "market.question == event.title; where both signals exist they "
+            "must agree or the record is unresolved"
+        ),
+        "tiebreak": ["highest market volume_usd", "lowest market_id"],
+        "capture_order_used_for_tiebreak": False,
+        "winner_used_for_market_selection": False,
+        "price_magnitude_filter": None,
+        "timestamp_guard": timestamp_guard,
+        "low_liquidity_filter": True,
+        "min_volume_usd": MIN_VOLUME_USD,
+        "market_catalog": str(MARKET_CATALOG_PATH),
+        "raw_market_index": str(RAW_MARKET_INDEX_PATH),
+        "dropped_fixture_count": len(dropped_fixtures),
+        "dropped_fixture_reasons": dict(reasons),
+        "non_prematch_selected_count": len(non_prematch_selected),
+    }
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
+def add_output_arguments(parser: argparse.ArgumentParser) -> None:
+    """Output-path and guard flags shared with build_polymarket_odds_golden.py."""
+    parser.add_argument("--out-odds", type=Path, default=None,
+                        help="Write the odds file here instead of the default path.")
+    parser.add_argument("--out-test-dir", type=Path, default=None,
+                        help="Write copied Cricsheet JSONs here instead of the default dir.")
+    parser.add_argument("--out-unmatched", type=Path, default=None,
+                        help="Write the diagnostic report here instead of the default path.")
+    parser.add_argument("--timestamp-guard", choices=TIMESTAMP_GUARD_MODES,
+                        default="report",
+                        help="Handling of selected rows priced at/after the scheduled "
+                             "start: off | report (default) | enforce (drop them).")
+    parser.add_argument("--restrict-to-manifest", type=Path, default=None,
+                        help="Emit only fixtures already present in this odds "
+                             "manifest. Rebuilds a frozen benchmark's own rows "
+                             "under the current selection rule without "
+                             "re-deriving which fixtures belong to it.")
+
+
+def apply_output_overrides(args: argparse.Namespace) -> None:
+    global OUT_ODDS_PATH, OUT_TEST_DIR, OUT_UNMATCHED_PATH
+    if getattr(args, "out_odds", None):
+        OUT_ODDS_PATH = args.out_odds
+    if getattr(args, "out_test_dir", None):
+        OUT_TEST_DIR = args.out_test_dir
+    if getattr(args, "out_unmatched", None):
+        OUT_UNMATCHED_PATH = args.out_unmatched
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build Polymarket odds file by matching to Cricsheet")
     parser.add_argument("--dry-run", action="store_true", help="Report counts + sample, no writes")
     parser.add_argument("--verify-mapping", action="store_true",
                         help="Print Polymarket→Cricsheet team name diff and exit")
+    add_output_arguments(parser)
     args = parser.parse_args()
+    apply_output_overrides(args)
 
     if not POLYMARKET_PATH.exists():
         print(f"ERROR: Polymarket file not found at {POLYMARKET_PATH}", file=sys.stderr)
@@ -544,7 +982,12 @@ def main() -> None:
         print("\nDry run — no writes.")
         return
 
-    write_outputs(matched, unmatched)
+    restrict_to = (
+        load_manifest_identities(args.restrict_to_manifest)
+        if args.restrict_to_manifest else None
+    )
+    write_outputs(matched, unmatched, timestamp_guard=args.timestamp_guard,
+                  restrict_to=restrict_to)
 
 
 if __name__ == "__main__":

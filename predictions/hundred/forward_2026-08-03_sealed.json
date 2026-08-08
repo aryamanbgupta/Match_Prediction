@@ -1,0 +1,462 @@
+{
+  "fixtures": [
+    {
+      "date": "2026-08-03",
+      "declared_bet_primary_arm_pretoss": {
+        "price": 0.485,
+        "profit_if_win": 1.061855670103093,
+        "side": "Southern Brave"
+      },
+      "model_probabilities": {
+        "i7": {
+          "cut0801": {
+            "p_team1": 0.4654982388019562,
+            "p_team2": 0.5345017611980438,
+            "prediction_file": "predictions/hundred/2026-08-03_welsh_fire_southern_brave__i7__cut0801.json",
+            "state_freshness": "stale_override",
+            "toss_branch_probs": {
+              "team1_bats_first": 0.4646512269973755,
+              "team1_chases": 0.46634525060653687
+            },
+            "tracker_aux_match_count": 183,
+            "tracker_snapshot": "/Users/aryamangupta/CricML/Match_Prediction/data/hundred/tracker_snapshot_2026-08-01_aux_hundred_cut_v2.pkl"
+          },
+          "full0802": {
+            "p_team1": 0.4654982388019562,
+            "p_team2": 0.5345017611980438,
+            "prediction_file": "predictions/hundred/2026-08-03_welsh_fire_southern_brave__i7__full0802.json",
+            "state_freshness": "stale_override",
+            "toss_branch_probs": {
+              "team1_bats_first": 0.4646512269973755,
+              "team1_chases": 0.46634525060653687
+            },
+            "tracker_aux_match_count": 185,
+            "tracker_snapshot": "/Users/aryamangupta/CricML/Match_Prediction/data/hundred/tracker_snapshot_2026-08-02_aux_hundred_v2.pkl"
+          }
+        },
+        "swap": {
+          "cut0801": {
+            "p_team1": 0.4189397394657135,
+            "p_team2": 0.5810602605342865,
+            "prediction_file": "predictions/hundred/2026-08-03_welsh_fire_southern_brave__swap__cut0801.json",
+            "state_freshness": "stale_override",
+            "toss_branch_probs": {
+              "team1_bats_first": 0.41578829288482666,
+              "team1_chases": 0.42209118604660034
+            },
+            "tracker_aux_match_count": 183,
+            "tracker_snapshot": "/Users/aryamangupta/CricML/Match_Prediction/data/hundred/tracker_snapshot_2026-08-01_aux_hundred_cut_v2.pkl"
+          },
+          "full0802": {
+            "p_team1": 0.4189397394657135,
+            "p_team2": 0.5810602605342865,
+            "prediction_file": "predictions/hundred/2026-08-03_welsh_fire_southern_brave__swap__full0802.json",
+            "state_freshness": "stale_override",
+            "toss_branch_probs": {
+              "team1_bats_first": 0.41578829288482666,
+              "team1_chases": 0.42209118604660034
+            },
+            "tracker_aux_match_count": 185,
+            "tracker_snapshot": "/Users/aryamangupta/CricML/Match_Prediction/data/hundred/tracker_snapshot_2026-08-02_aux_hundred_v2.pkl"
+          }
+        }
+      },
+      "polymarket_slug": "crichundred-wel-sou-2026-08-03",
+      "quote": {
+        "event_volume_usd": 43319.897123999996,
+        "liquidity_usd": 182685.6587,
+        "market_volume_usd": 43137.018423999994,
+        "odds_status_at_pull": "in_progress",
+        "posttoss_prematch_price_timestamp": "2026-08-03T17:20:08+00:00",
+        "posttoss_prematch_prob_team1": 0.545,
+        "pretoss_lead_seconds": 4190,
+        "pretoss_price_timestamp": "2026-08-03T16:20:10+00:00",
+        "pretoss_prob_team1": 0.515,
+        "seed_liquidity_non_actionable": false
+      },
+      "scheduled_start_utc": "2026-08-03T17:30:00+00:00",
+      "slug": "2026-08-03_welsh_fire_southern_brave",
+      "team1": "Welsh Fire",
+      "team2": "Southern Brave",
+      "venue": "Sophia Gardens, Cardiff",
+      "xi_provenance": {
+        "comment": "The Hundred 2026, 19th match (Cricinfo id 1521249). XIs are the ACTUAL teamsheets from the ESPNcricinfo scorecard, read at 2026-08-03T19:33Z while the match was in progress (Southern Brave 115/8; Welsh Fire 54/1 chasing 116). Toss is deliberately withheld so predict_fixture averages both bat-first branches, matching the PRE-TOSS information set the bet is priced at.",
+        "fixture_file": "fixtures/hundred/2026-08-03_welsh_fire_southern_brave.json",
+        "note": "actual XI, ESPNcricinfo scorecard 1521249, read 2026-08-03T19:33Z",
+        "team1_lineup": [
+          "3d284ca3",
+          "a90e53ec",
+          "a343262c",
+          "ba5e1069",
+          "ff154ecd",
+          "f836b33d",
+          "eafe8a94",
+          "81c36ee9",
+          "4c5d73db",
+          "2f9d0389",
+          "679cd31e"
+        ],
+        "team2_lineup": [
+          "c834c290",
+          "1db6e336",
+          "1f84183a",
+          "d9273ee7",
+          "85b3fab2",
+          "bb351c23",
+          "d67d5f00",
+          "ffe699c0",
+          "5574750c",
+          "65b6943c",
+          "249d60c9"
+        ],
+        "toss_withheld": true
+      }
+    },
+    {
+      "date": "2026-08-04",
+      "declared_bet_primary_arm_pretoss": {
+        "bet": null,
+        "reason": "no pre-toss quote captured for this fixture"
+      },
+      "model_probabilities": {
+        "i7": {
+          "cut0801": {
+            "p_team1": 0.5724700689315796,
+            "p_team2": 0.4275299310684204,
+            "prediction_file": "predictions/hundred/2026-08-04_sunrisers_leeds_london_spirit__i7__cut0801.json",
+            "state_freshness": "stale_override",
+            "toss_branch_probs": {
+              "team1_bats_first": 0.5707162022590637,
+              "team1_chases": 0.5742239356040955
+            },
+            "tracker_aux_match_count": 183,
+            "tracker_snapshot": "/Users/aryamangupta/CricML/Match_Prediction/data/hundred/tracker_snapshot_2026-08-01_aux_hundred_cut_v2.pkl"
+          },
+          "full0802": {
+            "p_team1": 0.5724700689315796,
+            "p_team2": 0.4275299310684204,
+            "prediction_file": "predictions/hundred/2026-08-04_sunrisers_leeds_london_spirit__i7__full0802.json",
+            "state_freshness": "stale_override",
+            "toss_branch_probs": {
+              "team1_bats_first": 0.5707162022590637,
+              "team1_chases": 0.5742239356040955
+            },
+            "tracker_aux_match_count": 185,
+            "tracker_snapshot": "/Users/aryamangupta/CricML/Match_Prediction/data/hundred/tracker_snapshot_2026-08-02_aux_hundred_v2.pkl"
+          }
+        },
+        "swap": {
+          "cut0801": {
+            "p_team1": 0.5862423181533813,
+            "p_team2": 0.41375768184661865,
+            "prediction_file": "predictions/hundred/2026-08-04_sunrisers_leeds_london_spirit__swap__cut0801.json",
+            "state_freshness": "stale_override",
+            "toss_branch_probs": {
+              "team1_bats_first": 0.5852498412132263,
+              "team1_chases": 0.5872347950935364
+            },
+            "tracker_aux_match_count": 183,
+            "tracker_snapshot": "/Users/aryamangupta/CricML/Match_Prediction/data/hundred/tracker_snapshot_2026-08-01_aux_hundred_cut_v2.pkl"
+          },
+          "full0802": {
+            "p_team1": 0.5862423181533813,
+            "p_team2": 0.41375768184661865,
+            "prediction_file": "predictions/hundred/2026-08-04_sunrisers_leeds_london_spirit__swap__full0802.json",
+            "state_freshness": "stale_override",
+            "toss_branch_probs": {
+              "team1_bats_first": 0.5852498412132263,
+              "team1_chases": 0.5872347950935364
+            },
+            "tracker_aux_match_count": 185,
+            "tracker_snapshot": "/Users/aryamangupta/CricML/Match_Prediction/data/hundred/tracker_snapshot_2026-08-02_aux_hundred_v2.pkl"
+          }
+        }
+      },
+      "polymarket_slug": "crichundred-sun-lon-2026-08-04",
+      "quote": {
+        "event_volume_usd": 130.82613,
+        "liquidity_usd": 6684.8343,
+        "market_volume_usd": 130.82613,
+        "odds_status_at_pull": "upcoming",
+        "posttoss_prematch_price_timestamp": "2026-08-03T19:27:38.819969+00:00",
+        "posttoss_prematch_prob_team1": 0.555,
+        "pretoss_lead_seconds": null,
+        "pretoss_price_timestamp": null,
+        "pretoss_prob_team1": null,
+        "seed_liquidity_non_actionable": true
+      },
+      "scheduled_start_utc": "2026-08-04T17:30:00+00:00",
+      "slug": "2026-08-04_sunrisers_leeds_london_spirit",
+      "team1": "Sunrisers Leeds",
+      "team2": "London Spirit",
+      "venue": "Headingley, Leeds",
+      "xi_provenance": {
+        "comment": "The Hundred 2026. PROJECTED XIs: each side's most recent XI in data/hundred/season_2026_men_v2 (Sunrisers Leeds from 1521247 on 2026-08-02; London Spirit from 1521246 on 2026-08-01). Not confirmed teamsheets. Toss withheld -> both bat-first branches averaged.",
+        "fixture_file": "fixtures/hundred/2026-08-04_sunrisers_leeds_london_spirit.json",
+        "note": "projected XI: SL=1521247 (2026-08-02), LS=1521246 (2026-08-01)",
+        "team1_lineup": [
+          "3d8feaf8",
+          "e66732f8",
+          "922e1b19",
+          "4ae1755b",
+          "4b685e2d",
+          "961b8ff1",
+          "d48c0f40",
+          "cad40f5e",
+          "894b2d25",
+          "9eb1455b",
+          "abb7c76c"
+        ],
+        "team2_lineup": [
+          "60aa2db3",
+          "abb83e27",
+          "521595e7",
+          "50c6bc2b",
+          "844e79d1",
+          "9c643d7b",
+          "59559bc2",
+          "7f048519",
+          "7c7d63a2",
+          "350bb1b1",
+          "14f96089"
+        ],
+        "toss_withheld": true
+      }
+    },
+    {
+      "date": "2026-08-05",
+      "declared_bet_primary_arm_pretoss": {
+        "bet": null,
+        "reason": "no pre-toss quote captured for this fixture"
+      },
+      "model_probabilities": {
+        "i7": {
+          "cut0801": {
+            "p_team1": 0.5603331625461578,
+            "p_team2": 0.43966683745384216,
+            "prediction_file": "predictions/hundred/2026-08-05_manchester_super_giants_welsh_fire__i7__cut0801.json",
+            "state_freshness": "stale_override",
+            "toss_branch_probs": {
+              "team1_bats_first": 0.5585677623748779,
+              "team1_chases": 0.5620985627174377
+            },
+            "tracker_aux_match_count": 183,
+            "tracker_snapshot": "/Users/aryamangupta/CricML/Match_Prediction/data/hundred/tracker_snapshot_2026-08-01_aux_hundred_cut_v2.pkl"
+          },
+          "full0802": {
+            "p_team1": 0.538164496421814,
+            "p_team2": 0.46183550357818604,
+            "prediction_file": "predictions/hundred/2026-08-05_manchester_super_giants_welsh_fire__i7__full0802.json",
+            "state_freshness": "stale_override",
+            "toss_branch_probs": {
+              "team1_bats_first": 0.5363834500312805,
+              "team1_chases": 0.5399455428123474
+            },
+            "tracker_aux_match_count": 185,
+            "tracker_snapshot": "/Users/aryamangupta/CricML/Match_Prediction/data/hundred/tracker_snapshot_2026-08-02_aux_hundred_v2.pkl"
+          }
+        },
+        "swap": {
+          "cut0801": {
+            "p_team1": 0.6300101578235626,
+            "p_team2": 0.3699898421764374,
+            "prediction_file": "predictions/hundred/2026-08-05_manchester_super_giants_welsh_fire__swap__cut0801.json",
+            "state_freshness": "stale_override",
+            "toss_branch_probs": {
+              "team1_bats_first": 0.630045473575592,
+              "team1_chases": 0.6299748420715332
+            },
+            "tracker_aux_match_count": 183,
+            "tracker_snapshot": "/Users/aryamangupta/CricML/Match_Prediction/data/hundred/tracker_snapshot_2026-08-01_aux_hundred_cut_v2.pkl"
+          },
+          "full0802": {
+            "p_team1": 0.6068759858608246,
+            "p_team2": 0.3931240141391754,
+            "prediction_file": "predictions/hundred/2026-08-05_manchester_super_giants_welsh_fire__swap__full0802.json",
+            "state_freshness": "stale_override",
+            "toss_branch_probs": {
+              "team1_bats_first": 0.6069120764732361,
+              "team1_chases": 0.6068398952484131
+            },
+            "tracker_aux_match_count": 185,
+            "tracker_snapshot": "/Users/aryamangupta/CricML/Match_Prediction/data/hundred/tracker_snapshot_2026-08-02_aux_hundred_v2.pkl"
+          }
+        }
+      },
+      "polymarket_slug": "crichundred-man-wel-2026-08-05",
+      "quote": {
+        "event_volume_usd": null,
+        "liquidity_usd": 137.9708,
+        "market_volume_usd": null,
+        "odds_status_at_pull": "upcoming",
+        "posttoss_prematch_price_timestamp": "2026-08-03T19:27:38.910841+00:00",
+        "posttoss_prematch_prob_team1": 0.525,
+        "pretoss_lead_seconds": null,
+        "pretoss_price_timestamp": null,
+        "pretoss_prob_team1": null,
+        "seed_liquidity_non_actionable": true
+      },
+      "scheduled_start_utc": "2026-08-05T14:00:00+00:00",
+      "slug": "2026-08-05_manchester_super_giants_welsh_fire",
+      "team1": "Manchester Super Giants",
+      "team2": "Welsh Fire",
+      "venue": "Old Trafford, Manchester",
+      "xi_provenance": {
+        "comment": "The Hundred 2026. PROJECTED XIs: MSG from 1521248 (2026-08-02), Welsh Fire from 1521245 (2026-08-01). Not confirmed teamsheets. Toss withheld.",
+        "fixture_file": "fixtures/hundred/2026-08-05_manchester_super_giants_welsh_fire.json",
+        "note": "projected XI: MSG=1521248 (2026-08-02), WF=1521245 (2026-08-01)",
+        "team1_lineup": [
+          "4663bd23",
+          "6a26221c",
+          "99b75528",
+          "235c2bb6",
+          "6e6fb538",
+          "85dcb721",
+          "4a461c24",
+          "70d57519",
+          "efc04be7",
+          "1f1b4c89",
+          "78c12883"
+        ],
+        "team2_lineup": [
+          "3d284ca3",
+          "a343262c",
+          "ba5e1069",
+          "ff154ecd",
+          "f836b33d",
+          "86f84b37",
+          "eafe8a94",
+          "81c36ee9",
+          "4c5d73db",
+          "2f9d0389",
+          "679cd31e"
+        ],
+        "toss_withheld": true
+      }
+    },
+    {
+      "date": "2026-08-05",
+      "declared_bet_primary_arm_pretoss": {
+        "bet": null,
+        "reason": "no pre-toss quote captured for this fixture"
+      },
+      "model_probabilities": {
+        "i7": {
+          "cut0801": {
+            "p_team1": 0.5750426650047302,
+            "p_team2": 0.4249573349952698,
+            "prediction_file": "predictions/hundred/2026-08-05_trent_rockets_birmingham_phoenix__i7__cut0801.json",
+            "state_freshness": "stale_override",
+            "toss_branch_probs": {
+              "team1_bats_first": 0.573291540145874,
+              "team1_chases": 0.5767937898635864
+            },
+            "tracker_aux_match_count": 183,
+            "tracker_snapshot": "/Users/aryamangupta/CricML/Match_Prediction/data/hundred/tracker_snapshot_2026-08-01_aux_hundred_cut_v2.pkl"
+          },
+          "full0802": {
+            "p_team1": 0.5750426650047302,
+            "p_team2": 0.4249573349952698,
+            "prediction_file": "predictions/hundred/2026-08-05_trent_rockets_birmingham_phoenix__i7__full0802.json",
+            "state_freshness": "stale_override",
+            "toss_branch_probs": {
+              "team1_bats_first": 0.573291540145874,
+              "team1_chases": 0.5767937898635864
+            },
+            "tracker_aux_match_count": 185,
+            "tracker_snapshot": "/Users/aryamangupta/CricML/Match_Prediction/data/hundred/tracker_snapshot_2026-08-02_aux_hundred_v2.pkl"
+          }
+        },
+        "swap": {
+          "cut0801": {
+            "p_team1": 0.6391793787479401,
+            "p_team2": 0.36082062125205994,
+            "prediction_file": "predictions/hundred/2026-08-05_trent_rockets_birmingham_phoenix__swap__cut0801.json",
+            "state_freshness": "stale_override",
+            "toss_branch_probs": {
+              "team1_bats_first": 0.6359677314758301,
+              "team1_chases": 0.64239102602005
+            },
+            "tracker_aux_match_count": 183,
+            "tracker_snapshot": "/Users/aryamangupta/CricML/Match_Prediction/data/hundred/tracker_snapshot_2026-08-01_aux_hundred_cut_v2.pkl"
+          },
+          "full0802": {
+            "p_team1": 0.6391793787479401,
+            "p_team2": 0.36082062125205994,
+            "prediction_file": "predictions/hundred/2026-08-05_trent_rockets_birmingham_phoenix__swap__full0802.json",
+            "state_freshness": "stale_override",
+            "toss_branch_probs": {
+              "team1_bats_first": 0.6359677314758301,
+              "team1_chases": 0.64239102602005
+            },
+            "tracker_aux_match_count": 185,
+            "tracker_snapshot": "/Users/aryamangupta/CricML/Match_Prediction/data/hundred/tracker_snapshot_2026-08-02_aux_hundred_v2.pkl"
+          }
+        }
+      },
+      "polymarket_slug": "crichundred-tre-bir-2026-08-05",
+      "quote": {
+        "event_volume_usd": 8.474575,
+        "liquidity_usd": 2930.3849,
+        "market_volume_usd": 8.474575,
+        "odds_status_at_pull": "upcoming",
+        "posttoss_prematch_price_timestamp": "2026-08-03T19:27:38.999895+00:00",
+        "posttoss_prematch_prob_team1": 0.575,
+        "pretoss_lead_seconds": null,
+        "pretoss_price_timestamp": null,
+        "pretoss_prob_team1": null,
+        "seed_liquidity_non_actionable": true
+      },
+      "scheduled_start_utc": "2026-08-05T17:30:00+00:00",
+      "slug": "2026-08-05_trent_rockets_birmingham_phoenix",
+      "team1": "Trent Rockets",
+      "team2": "Birmingham Phoenix",
+      "venue": "Trent Bridge, Nottingham",
+      "xi_provenance": {
+        "comment": "The Hundred 2026. PROJECTED XIs: Trent Rockets from 1521247 (2026-08-02), Birmingham Phoenix from 1521245 (2026-08-01). Not confirmed teamsheets. Toss withheld.",
+        "fixture_file": "fixtures/hundred/2026-08-05_trent_rockets_birmingham_phoenix.json",
+        "note": "projected XI: TR=1521247 (2026-08-02), BP=1521245 (2026-08-01)",
+        "team1_lineup": [
+          "5f26f677",
+          "bf74b130",
+          "72918338",
+          "c16d4035",
+          "f1f99156",
+          "e4a0deae",
+          "06c2de82",
+          "e9987a94",
+          "f655d740",
+          "e84ac20c",
+          "e174dadd"
+        ],
+        "team2_lineup": [
+          "f2c936d7",
+          "4e18e961",
+          "2eca67f5",
+          "0ecb4de6",
+          "1c513d54",
+          "f0af99a7",
+          "2344bdd1",
+          "c5f40e35",
+          "1cfac535",
+          "0f6db197",
+          "e94d1dcd"
+        ],
+        "toss_withheld": true
+      }
+    }
+  ],
+  "n_unresolved": 4,
+  "odds_fetched_at": "2026-08-03T19:27:39.000032+00:00",
+  "odds_source": "data/hundred/polymarket_odds_2026_v2.json",
+  "predeclared_rule": "p_m > q -> 1 unit on team1 at price q; p_m < q -> 1 unit on team2 at price (1-q); skip on exact tie or missing quote. Flat stakes, no edge threshold. q is the PRE-TOSS quote (last trade strictly before scheduled start minus 60 minutes).",
+  "primary_arm": "i7 (models/xgb_match_i7), toss hidden",
+  "sealed_for": "The Hundred men's 2026 \u2014 unresolved fixtures as of the seal",
+  "secondary_arm": "swap (models/xgb_match_i7_swap_production) \u2014 DIAGNOSTIC ONLY",
+  "state": {
+    "cut0801": "tracker/aux state frozen at 2026-08-01 (data/hundred/tracker_snapshot_2026-08-01_aux_hundred_cut_v2.pkl)",
+    "full0802": "tracker/aux state through 2026-08-02 (data/hundred/tracker_snapshot_2026-08-02_aux_hundred_v2.pkl)",
+    "sqlite": "data/hundred/state/player_stats_cache_i7.sqlite (T20 only, through 2026-07-13; STALE for these fixtures, override used)"
+  },
+  "uncertainty_contract": "One tournament = one I3 tournament_time_block_v1 block, so NO confidence interval is reported. All results are DESCRIPTIVE. The only test shown is an exact Poisson-binomial tail on bet wins under the market's own per-bet probabilities, which is i.i.d.-optimistic."
+}

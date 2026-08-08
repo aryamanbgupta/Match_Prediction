@@ -84,3 +84,8 @@ data/xgb_match_data_v3_e4_unfrozen/
 # autoresearch v2 runtime files
 research/night.log
 research/STOP
+
+# Orchestrator digest: regenerated from research/IDEAS.md + research/results.tsv
+# by research/make_digest.py at the start of every loop iteration. Derived and
+# reproducible; the tracked sources are the durable record.
+research/digest.md

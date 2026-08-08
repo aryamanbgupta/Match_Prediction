@@ -15,6 +15,7 @@ Completes the promotion bundle whose machine-side legs are done:
   slice-matched market LL on both sharp golden slices (≥$50k 0.6538 vs
   0.6573; ≥$100k 0.6767 vs 0.6843) where legacy production trails
   (0.6685 / 0.6938). Descriptive; all ROI block CIs straddle zero.
+  **This leg is WITHDRAWN as of 2026-08-05 — see § "Why promote", reason 2.**
 - I19 (`research/reports/auto/I19.md`): coherent frame
   `data/xgb_match_data_i7_v2` — retrains reproduce the I17 arms at
   max |Δp| = 0 with byte-identical `model.pkl`; fixes the frozen frame's
@@ -37,20 +38,38 @@ retrain on the v2 frame is byte-identical, so "archived seed-29 arm" and
 
 ## Why promote (and the honest cost)
 
+> **Rationale narrowed 2026-08-05 (market-benchmark toss defect).** Reason 2
+> below is **withdrawn as promotion evidence**; reason 1 is untouched and is
+> sufficient on its own, so **the promotion itself is not invalidated** —
+> only its stated rationale is narrower. See
+> `reports/market_benchmark_toss_defect_20260805.md`.
+
 1. **The legacy line is operationally dead.** Its serving state ends
    2026-04-16 and cannot be regenerated; `predict_fixture.py` already fails
    the >14-day staleness gate for live fixtures. Only the i7 stack has a
    working fresh-state build path (Hundred operation, proven through
-   2026-07-13).
-2. **Golden slices favor the successor.** On the 124-match golden set the
-   swap-i7 arm beats the matched market LL on both sharp slices; the legacy
-   swap production model does not.
+   2026-07-13). **This is the operative reason, and it stands unchanged.**
+2. ~~**Golden slices favor the successor.**~~ **WITHDRAWN 2026-08-05.** The
+   I18 claim was swap-i7 0.6538 vs matched market 0.6573 (≥$50k) and 0.6767
+   vs 0.6843 (≥$100k) — margins of **0.0035 and 0.0076**. Those are smaller
+   than the measured seed-noise floor (0.007 LL) and smaller than the
+   **0.0085 / 0.0101** by which the corrected golden benchmark
+   (`data/golden/betting_odds_golden_v2.json`) improves the market line
+   itself, plus the corrected rebuild moves one fixture into both sharp
+   slices (75→76, 66→67). Nothing here survives as promotion evidence. It is
+   *not* a reversal into "the legacy arm wins" — both arms trailed the market
+   on the extended golden window already; the claim is simply too small to
+   assert in either direction.
 3. **Cost:** swap-i7 trails legacy on iteration ≥$50k LL by ~0.005–0.009
    (0.6262–0.6306 vs 0.6215) — inside I17's predeclared 0.02 blocking
    threshold, and partly an artifact of the legacy model having been
-   selected on that slice.
+   selected on that slice. (On the corrected benchmark the gap is the same
+   size: 0.6249 vs 0.6196 — model LL barely moves, because it is scored
+   against Cricsheet outcomes, not prices.)
 4. **No betting-edge claim transfers.** All ROI block CIs straddle zero on
-   both frames. A7 remains shadow-only, unchanged.
+   both frames — and on the corrected benchmark the point estimates fall to
+   +3.38% (≥$50k) and −5.19% (≥$100k) for this arm. A7 is now **withdrawn /
+   UNVALIDATED**, not merely shadow-only, pending re-derivation on v2 prices.
 
 ## Cutover steps (proposed order)
 

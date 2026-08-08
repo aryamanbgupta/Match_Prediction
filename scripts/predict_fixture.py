@@ -83,6 +83,12 @@ A7_ELO_BOUNDARY = 5.0
 A7_CLOSE_MINIMUM_EDGE = 0.0
 A7_MISMATCH_MINIMUM_EDGE = 0.10
 A7_MINIMUM_VOLUME_USD = 50_000.0
+# RETIRED 2026-08-07: the A7 rule was re-derived from scratch on v2 prices
+# under I3 tournament blocks and no grid cell clears the pre-committed bar —
+# the originally-landed cell (boundary 5, edge>10%) *hurts* on both slices.
+# The shadow decision is permanently suppressed; edge/market diagnostics are
+# still emitted. See reports/a7_m8_rederivation_v2_20260807.md.
+A7_POLICY_RETIRED = True
 VENUE_IDENTITY_LEGACY = "legacy"
 VENUE_IDENTITY_I7 = "i7"
 VENUE_IDENTITY_MODES = (VENUE_IDENTITY_LEGACY, VENUE_IDENTITY_I7)
@@ -879,6 +885,11 @@ def compute_bet(
 ) -> dict:
     """Apply the frozen A7 policy as a non-executable shadow decision.
 
+    RETIRED 2026-08-07 (`A7_POLICY_RETIRED`): the v2-price re-derivation
+    cleared no cell of the pre-committed bar, so `shadow_bet_placed` is
+    forced False and `policy_status` reports "retired". The edge/market
+    diagnostics below remain valid model-vs-market context.
+
     ``policy_scope_eligible`` is False for fixtures outside the predeclared
     A7 universe (male T20 winner markets served by the standard state pool).
     Out-of-scope fixtures — e.g. The Hundred, or anything served with
@@ -889,6 +900,7 @@ def compute_bet(
         return {
             "odds_provided": False,
             "policy_id": A7_POLICY_ID,
+            "policy_status": "retired" if A7_POLICY_RETIRED else "active",
             "mode": "shadow_only",
             "execution_authorized": False,
             "shadow_bet_placed": False,
@@ -901,6 +913,7 @@ def compute_bet(
         return {
             "odds_provided": False,
             "policy_id": A7_POLICY_ID,
+            "policy_status": "retired" if A7_POLICY_RETIRED else "active",
             "mode": "shadow_only",
             "execution_authorized": False,
             "shadow_bet_placed": False,
@@ -911,6 +924,7 @@ def compute_bet(
         return {
             "odds_provided": False,
             "policy_id": A7_POLICY_ID,
+            "policy_status": "retired" if A7_POLICY_RETIRED else "active",
             "mode": "shadow_only",
             "execution_authorized": False,
             "shadow_bet_placed": False,
@@ -980,9 +994,13 @@ def compute_bet(
         edge_qualified and liquidity_eligible and state_eligible
         and policy_scope_eligible
     )
+    if A7_POLICY_RETIRED:
+        suppression_reasons.append("policy_retired_20260807")
+        shadow_placed = False
     return {
         "odds_provided": True,
         "policy_id": A7_POLICY_ID,
+        "policy_status": "retired" if A7_POLICY_RETIRED else "active",
         "mode": "shadow_only",
         "economic_confirmation": "unconfirmed",
         "execution_authorized": False,
@@ -1355,7 +1373,12 @@ def main() -> int:
                 )
                 + (f"; {reasons}" if reasons else "")
             )
-        print("  Execution authorization: BLOCKED (economic edge unconfirmed)")
+        print(
+            "  A7 policy: RETIRED 2026-08-07 — re-derived on v2 prices, no "
+            "cell clears the pre-committed bar "
+            "(reports/a7_m8_rederivation_v2_20260807.md)"
+        )
+        print("  Execution authorization: BLOCKED (policy retired)")
     else:
         print("  (no valid Polymarket odds; no A7 shadow decision)")
 

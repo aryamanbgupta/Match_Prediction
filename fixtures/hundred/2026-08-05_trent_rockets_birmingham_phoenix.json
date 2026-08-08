@@ -1,0 +1,38 @@
+{
+  "_comment": "The Hundred 2026. PROJECTED XIs: Trent Rockets from 1521247 (2026-08-02), Birmingham Phoenix from 1521245 (2026-08-01). Not confirmed teamsheets. Toss withheld.",
+  "date": "2026-08-05",
+  "team1": "Trent Rockets",
+  "team2": "Birmingham Phoenix",
+  "venue": "Trent Bridge, Nottingham",
+  "team1_lineup": [
+    "5f26f677",
+    "bf74b130",
+    "72918338",
+    "c16d4035",
+    "f1f99156",
+    "e4a0deae",
+    "06c2de82",
+    "e9987a94",
+    "f655d740",
+    "e84ac20c",
+    "e174dadd"
+  ],
+  "team2_lineup": [
+    "f2c936d7",
+    "4e18e961",
+    "2eca67f5",
+    "0ecb4de6",
+    "1c513d54",
+    "f0af99a7",
+    "2344bdd1",
+    "c5f40e35",
+    "1cfac535",
+    "0f6db197",
+    "e94d1dcd"
+  ],
+  "_lineup_provenance": "projected XI: TR=1521247 (2026-08-02), BP=1521245 (2026-08-01)",
+  "competition_tier": "Vitality Blast",
+  "team_type": "club",
+  "toss_winner": null,
+  "toss_decision": null
+}

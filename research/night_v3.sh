@@ -118,6 +118,7 @@ if (( DRY_RUN )); then
   else
     echo "  iterations:        until time limit or STOP"
   fi
+  echo "  per-iteration prep: uv run python research/make_digest.py -> research/digest.md"
   echo "  command:           claude -p --model $ORCHESTRATOR_MODEL_VALUE --fallback-model $EXECUTOR_MODEL_VALUE --permission-mode auto -- <prompt>"
   echo "  side effects:      none"
   exit 0
@@ -170,6 +171,13 @@ LAST_RC=0
 while (( $(date +%s) < END )) && [[ ! -f research/STOP ]]; do
   i=$((i + 1))
   echo "=== v3 orch=$ORCHESTRATOR_MODEL_VALUE exec=$EXECUTOR_MODEL_VALUE iter=$i start $(date '+%F %T') ===" >> "$LOG_FILE"
+
+  # Regenerate the orchestrator's digest from the queue files before the
+  # iteration starts (LOOP_IMPROVEMENTS P1). Plain script, no model call. A
+  # failure here is not fatal: the prompt still permits reading the full files.
+  if ! uv run python research/make_digest.py >> "$LOG_FILE" 2>&1; then
+    echo "=== v3 iter=$i WARNING: make_digest.py failed; orchestrator falls back to full IDEAS.md/results.tsv ===" >> "$LOG_FILE"
+  fi
 
   # perl alarm is a portable timeout for macOS, which lacks GNU timeout.
   perl -e 'alarm shift; exec @ARGV' "$ITER_TIMEOUT_VALUE" \

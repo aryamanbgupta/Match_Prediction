@@ -1366,6 +1366,289 @@ logs given durable `.txt` twins; stale D4 marked SUPERSEDED by D15 in the
 queue; TODO gained the status snapshot + three open human decisions (D16
 ball-stack adoption, I14 V2 sourcing grade, D5 ruling).
 
+## The Hundred men's 2026 — predeclared betting backtest + sealed forward settle (2026-08-03 → 2026-08-05)
+
+**The 2026-07-27 "directional lean, no edge" verdict was retested with a
+betting rule instead of a log-loss table, on live 2026 fixtures, and it
+survives: no edge.** The primary arm returned **−2.80%** on the backtest
+slice with log loss **worse than a coin flip**, and the one sealed forward
+fixture it was allowed to bet **lost**. Combined flat ROI is +1.98% on 18
+bets — one tournament, one I3 block, **descriptive only, still no betting**.
+Full report: `reports/hundred_roi_backtest_2026-08-03.md` (§§ 1–9 as of
+2026-08-03, plus a 2026-08-05 settlement addendum appended below them; the
+original is preserved byte-for-byte).
+
+### The predeclared rule
+
+Fixed before any number was produced, never tuned, transcribed directly into
+`scripts/hundred_roi_eval.py::settle`:
+
+> For each fixture with a real market, flat **1 unit** on the side where model
+> `p` > Polymarket `p`, settled at the **PRE-TOSS** quote (last quote before
+> T−60min). Win profit `1/price − 1`, loss `−1`. **No edge threshold**, no
+> sizing rule, no liquidity gate. Skip only on an exact tie or a missing quote.
+
+Primary arm `models/xgb_match_i7` run toss-blind (`--hide-toss`); secondary
+`models/xgb_match_i7_swap_production` as a diagnostic second read, not a
+candidate selection.
+
+### Results — primary arm, pre-toss basis
+
+| slice | window | bets | wins | P&L (u) | flat ROI | model LL | market LL | coinflip |
+|---|---|---|---|---|---|---|---|---|
+| BACKTEST | played, 2026-07-22 → 08-01 | 15 | 7 | −0.420 | **−2.80%** | **0.7040** | 0.6857 | 0.6931 |
+| FORWARD | sealed 08-03, settled 08-05 | 3 | 2 | +0.777 | +25.89% | 0.6435 | 0.6447 | 0.6931 |
+| COMBINED | | 18 | 9 | +0.356 | **+1.98%** | 0.6939 | 0.6788 | 0.6931 |
+
+The load-bearing row is the backtest one: **on the 15 matched fixtures the
+model's probabilities are worse than the market's *and* worse than a coin.**
+Positive ROI coexisting with worse-than-coinflip log loss is variance, not
+skill. The swap arm reads better on money (18 bets, 10 wins, +2.342u,
+**+13.01%**) and no better on probabilities (LL 0.6932 vs market 0.6788); it
+differs from the primary on only 3 of 18 fixtures, and its sign test is
+P = 0.28 (i.i.d.-optimistic, so an upper bound on how impressive it is).
+
+### Why "no edge" is the robust reading, not a small-sample shrug
+
+Four independent diagnostics all point the same way, which is what makes the
+conclusion stronger than the n:
+
+1. **The compression failure mode reproduced on live fixtures.** Two thirds of
+   the primary arm's backtest bets (10/15) back the market *underdog* —
+   exactly what a model pinned near 0.5 must do when the market moves off 0.5
+   further than it does. On the settled combined slice those bets are 11 of 18
+   and return **−18.82%**, while the 7 bets that agree with the market
+   favourite return +34.67%. **Every positive unit in this study comes from
+   agreeing with the market.**
+2. **The min-edge ladder degrades monotonically** (backtest, pre-toss): 0pp
+   **−2.80%**, ≥2pp −1.96%, ≥5pp **−34.33%**, ≥10pp −100% at n = 1. Bigger
+   model/market disagreements are *more* wrong. Real information does the
+   opposite.
+3. **Volume-weighting flips the combined ROI negative on both arms** (i7
+   −2.04%, swap −4.02% on the settled slice; −0.99% / −2.99% before the
+   settled bet folded in). Every bet clears $50k, so this is not a liquidity
+   slice — the positive flat ROI simply lives in the thinnest of the thick
+   markets.
+4. **Compression itself is intact and matches the 2026-07-30 measurement:**
+   p ∈ [0.3729, 0.6214], mean |p−0.5| 0.0548, mean |p − market| 4.6pp.
+
+### The sealed forward set
+
+`predictions/hundred/forward_2026-08-03_sealed.json`, sha256
+`caecbe114b02dae0e8bc11e0dcbf91c145e446de7c3873000ed6259ac81746fd` — hash
+verified before and after settlement, unchanged. Sealed 2026-08-03 with
+tracker state frozen at 2026-08-01, settled 2026-08-05 from a winners-only
+results file. Nothing was re-predicted, refit, retuned or re-selected.
+
+Four fixtures were sealed; exactly one had a real market. **2026-08-03 Welsh
+Fire v Southern Brave**: model 0.4655 for Welsh Fire, market 0.515, rule bets
+**Southern Brave @ 0.485** ($43k volume) — **Welsh Fire won by 6 wickets,
+−1.000u**. It was a market-underdog bet, i.e. the § 6.1 failure mode again.
+The other three had seed liquidity only ($0–131 traded) and were deliberately
+*not* opportunistically settled at those placeholder prices.
+
+The uncomfortable shape: the model went **3/4 directionally** across the
+newly-resolved fixtures, and its single miss was the only one it was allowed
+to bet. At n = 4 that is a coincidence, not a pattern — but it is why the
+probability line moved up while the P&L line moved down.
+
+### Data and infra facts worth keeping
+
+- **Cricsheet now publishes the 2026 Hundred season.**
+  `data/hundred/season_2026_men_v2/` holds **19 real ball-by-ball men's
+  matches** (ids 1521231–1521249, 2026-07-21 → 08-03) and supersedes the 8
+  hand-transcribed info-only records in `data/hundred/season_2026_men/`
+  (retained, untouched). `data/hundred/polymarket_odds_2026_v2.json` (22
+  fixtures) is the odds file of record.
+- **Quote-time finding — generalizes well beyond the Hundred.** The last quote
+  strictly before scheduled start is **POST-toss**: the toss is called ~30 min
+  out. Measured on this set, the price moves a mean **3.5pp** (max 9.0pp)
+  between T−60min and T−10min, systematically against team1 (13 of 18
+  negative, mean signed −2.6pp). Every odds row now records
+  `pretoss_prob_team1` / `pretoss_price_timestamp` at T−60min, and the
+  headline uses the pre-toss basis so a **toss-blind model and the market
+  share an information set**. Post-toss settling is retained as a diagnostic
+  only, and it flatters the model (backtest −2.80% → +1.62%) purely because a
+  toss-blind model is being priced against a strictly better-informed line.
+- **Odds fetcher patched** (`scripts/fetch_hundred_polymarket.py`, defaults
+  unchanged — the legacy invocation reproduces the old file exactly). New
+  `--fixtures PATH` and `--start-mode {fixed,gamma}`. Under `gamma` it takes
+  scheduled start from Polymarket's own `gameStartTime` per fixture (starts
+  vary 13:30Z / 14:00Z / 17:00Z / 17:30Z — **the old hardcoded 17:00Z cutoff
+  was after the start of every early double-header**), selects the moneyline
+  market via the explicit `sportsMarketType == "moneyline"` field instead of a
+  question-suffix heuristic, and maps team → price by name via `clobTokenIds`
+  rather than positional ordering.
+- **The 2026-07-21 season opener was never listed on Polymarket** (all 84
+  events in Gamma series 12348 enumerated; earliest is 07-22), so the ceiling
+  on this study was 18 bettable fixtures, not 19.
+- New scripts: `scripts/hundred_roi_eval.py` (deterministic, no network;
+  joins predictions ↔ odds, applies the predeclared rule, emits the ledger and
+  every diagnostic above; optional `--forward-results` takes **winners only**,
+  so it structurally cannot alter a seal) and `scripts/seal_hundred_forward.py`.
+- Leakage checks passed twice: `--max-date 2026-08-01` and an aux pool
+  truncated to ≤ 2026-08-01 both reproduce the full-run probabilities
+  bit-identically, including on the fixtures the FORWARD slice depends on.
+
+### Statistical status, and what this does not change
+
+One tournament = one `tournament_time_block_v1` block (invariant 7), so
+**every number here is descriptive**: no confidence interval exists, none may
+be quoted, and nothing authorises execution. Adding the settled bet does not
+move it toward inference.
+
+The conclusion is unchanged from the 2026-07-27 adaptation work: on The
+Hundred the match model is a **directional lean with no demonstrated market
+edge — no betting.** The model still loses to the market on log loss
+(0.6939 vs 0.6788) and the market still out-picks it (66.7% vs 61.1%). Also
+unchanged: state is stale for the forward fixtures (SQLite stops 2026-07-13,
+so those ran 21–23 days behind under `--allow-stale-state`, with
+`predict_fixture` suppressing any betting recommendation), and
+`models/xgb_match_i7` remains the deliberate Hundred path — this is **not** a
+promotion route for it.
+
+*Correction to the 2026-07-30 backfill above:* that entry's "picks 63.5%
+directionally" was superseded the same day by the alias copy-fold rerun —
+the corrected historical figure is **61.0%** (97/159, i.i.d. p = 0.0034;
+season-block sign test p ≈ 0.03). `docs/OPERATIONS.md` § Operation 7 carried
+the stale 63.5% until 2026-08-05 and now carries 61.0%.
+
+## Market benchmark defect — the toss market was scored as the winner market (2026-08-05)
+
+**The project's central market-comparison headline was wrong, and the model
+does not beat the Polymarket line on log loss on the iteration set.** It never
+did; the line it was being compared against was, on the most informative
+fixtures, a coin flip. Full audit + per-fixture diff:
+`reports/market_benchmark_toss_defect_20260805.md`.
+
+### The defect
+
+Every Gamma cricket event carries several binary markets — the head-to-head
+winner market, `"… - Who wins the toss?"`, `"… - Completed match?"` — and the
+upstream prematch capture emits one bare record per market, persisting neither
+the market id nor the question. `scripts/build_polymarket_odds.py` therefore
+had to choose between look-alike siblings, and ranked them
+`(plausible, matches_cric, vol)` where `plausible = max(p1, p2) <= 0.92`.
+
+A toss is a coin flip, so it is always "plausible". A real winner market on a
+lopsided fixture prices above 0.92 and is not. Because `plausible` was the
+*first* tuple element it outranked everything, so **on exactly the fixtures
+where the market is most informative, the informative market was rejected and
+the coin flip was kept** — 23 of 261 iteration fixtures (8.8%), 19 of 170 at
+≥$50k, 16 of 110 at ≥$100k. Replaying the pre-fix tuple reproduces all 261
+shipped rows with 0 price mismatches, so the attribution is exact: 12 caused by
+the 0.92 cap, 5 by arbitrary capture-order tie-breaking.
+
+A **second, independent** defect: `matches_cric` (rank 2) preferred the sibling
+whose Polymarket resolution matched the Cricsheet winner — outcome-dependent
+benchmark construction, a contract violation in its own right. It never flipped
+a row by itself here (the cap decided first) and has been removed entirely.
+
+The fix makes selection structural and outcome-blind: market identity is
+re-attached from a Gamma `event → markets` catalog, the head-to-head market is
+required (`question == event.title`, with `sportsMarketType == "moneyline"`
+preferred and required to agree where both exist — 0 conflicts in 2,326
+records), ties break on market volume then market id, and fixtures with no
+head-to-head sibling are **dropped** rather than kept at a toss price. The
+price-magnitude cap is replaced by a `--timestamp-guard`, which finds nothing
+to drop: 0 of the 255 corrected rows are priced at or after scheduled start.
+
+### Corrected numbers
+
+Benchmarks of record are now `betting_odds_polymarket_v2.json`
+(261 → **255** fixtures: 17 prices corrected, 6 dropped) and
+`data/golden/betting_odds_golden_v2.json` (124 rows, one price changed). The
+shipped pre-fix files are left unmodified as evidence of what was shipped.
+Slice membership is unchanged on the iteration set (volume is event-level, so
+both siblings carry it); only the 6 drops move counts.
+
+The biggest movers are 2026 T20 World Cup mismatches that had been benchmarked
+as coin flips — India/USA **0.5100 → 0.9665**, India/Namibia
+**0.5250 → 0.9855**, England/Nepal **0.5050 → 0.9560**. The favourite won
+**16 of the 17** corrected fixtures.
+
+| arm | slice | n | model LL | market LL (was → is) | flat ROI (was → is) | corrected block CI |
+|---|---|---|---|---|---|---|
+| `xgb_match_i7_swap_production` (production) | ≥$50k | 170→168 | 0.6262→**0.6249** | 0.6482 → **0.5940** | +20.54% → **+3.38%** | [−14.63%, +37.06%] (18) |
+| `xgb_match_i7_swap_production` | ≥$100k | 110 | **0.5886** | 0.6224 → **0.5377** | +21.95% → **−5.19%** | [−28.73%, +27.50%] (11) |
+| `xgb_match_v3_m7_swap_production` (legacy) | ≥$50k | 170→168 | 0.6215→**0.6196** | 0.6482 → **0.5940** | +24.53% → **+7.40%** | [−7.65%, +34.82%] (18) |
+| `xgb_match_v3_m7_swap_production` | ≥$100k | 110 | **0.5796** | 0.6224 → **0.5377** | +26.60% → **−0.54%** | [−23.24%, +24.03%] (11) |
+
+Model LL barely moves — it is scored against Cricsheet outcomes and never
+touches a price. The entire swing is the benchmark repricing 16 heavy
+favourites out of coin-flip territory, which deletes the bets that were
+generating the return. **The model read as 0.022 ahead of the market at ≥$50k;
+it is 0.031 behind.** Golden is barely touched (its toss twins usually carry
+tiny market-level volume and die on the $1,000 floor); the corrected golden
+market LL improves 0.006–0.010, so both arms trail it by slightly more than
+recorded. Nothing on golden flips.
+
+### What survives, and what does not
+
+**Survives — verified, not assumed:**
+- **The sealed forward holdout, in full.** Built by a different script from a
+  different strict capture; re-verified structurally (it enforces
+  `question == event_title` and a strict pre-match timestamp itself, has no
+  price cap and no `matches_cric`), empirically (0 of 137 rows are toss/
+  non-H2H), and by live Gamma re-fetch of all 137 selected market ids
+  (`{'moneyline': 137}`, 0 violations). **M7 ≥$50k LL 0.6823 vs market 0.7445
+  vs ball-v7 0.7015 stands unchanged.** It even retains 7 legitimate rows
+  priced above 0.92 that the cap would have destroyed — the defect's harm seen
+  from the other side.
+- **Every model-vs-model comparison**, measured by re-scoring the paired arms
+  under both benchmarks: D12 ΔLL −0.0084 → −0.0086, I17 ΔLL −0.0159 → −0.0150;
+  both keep their sign and still clear the 0.007 seed-noise floor, ΔROI keeps
+  its sign. **The D12 and I17/I19 promotions stand and nobody should re-run
+  model selection.** Same for the M-phase ablations, the seed sweeps, and the
+  entire ball-level line (D16/D17/D18, props, in-play), which never reads this
+  file. The women's track has its own builders.
+- **The standing conclusion.** Every block CI straddled zero before and every
+  one straddles zero now: "no production betting edge is established" was
+  right, and is now right for a second and larger reason.
+
+**Retracted — policy, not just numbers:**
+- **A7 is WITHDRAWN and UNVALIDATED** (`research/reports/auto/A7.md`). A7 bets
+  only when edge > 10% on *mismatch* (lopsided) fixtures — exactly the
+  fixtures a toss market was substituted into. A recorded 0.50 on a true-0.95
+  favourite manufactures a ~45pp fake edge that clears the 10pp bar and then
+  settles at decimal odds ~2.0 instead of ~1.05, roughly **20× inflated**, on
+  fixtures the favourite won 16/17. A7's headline gain is the most likely pure
+  artifact in this repo. It must be re-derived from scratch on v2 prices
+  before any forward use.
+- **M8's edge-threshold-0 choice** (`reports/m8_sizing_rules_eval.md`) was
+  landed because it was "the only config where the ROI CI cleanly excludes 0"
+  — selected on the corrupt ROI surface, and on pre-I3 i.i.d. CIs. Needs
+  re-derivation. Flat 1-unit staking is the conservative default and is not
+  itself at risk.
+- **D12's Gate 2** was a paired ΔROI gate and is invalid. Gate 1 (paired ΔLL
+  on actual outcomes, better on 5/5 seeds) passed independently and does not
+  touch prices, so **D12's verdict survives on one leg** — state it that way.
+- **The I18/I19 "golden slices favor the successor" rationale**
+  (`docs/SWAP_I7_PROMOTION_CUTOVER_PLAN.md`, reason 2) is dropped: its
+  0.0035–0.0076 LL margins are below the 0.007 seed-noise floor and below the
+  0.0085–0.0101 by which the corrected golden benchmark moves the market line.
+  Reason 1 — the legacy serving line is operationally dead and its state
+  unregenerable — is untouched and sufficient alone, so **the I19 promotion is
+  not invalidated; only its stated rationale is narrower.**
+
+**Open question, cutting the other way:** Platt (M7) and E1 temperature
+sharpening were both discarded for *costing ROI* — measured on the corrupt
+surface, where the ROI they destroyed was partly fake edge on mispriced
+coin-flip fixtures. Recalibration may deserve a re-look. This is an open
+question, **not** a reversal.
+
+### Repo hygiene done at the same time
+
+The odds builders' *default* output paths pointed at the shipped files, so
+running the documented golden-refresh recipe without `--out-odds` would have
+silently overwritten the evidence of what was shipped. Defaults now point at
+the `_v2` paths (`scripts/build_polymarket_odds.py`,
+`scripts/build_polymarket_odds_golden.py`); the pre-fix files can no longer be
+clobbered by accident. `scripts/build_blast_odds.py` sets its own paths and is
+unaffected by that change — but it drives the same `base.write_outputs`, so the
+Blast odds file was built under the old rule and its ROI figures need a rebuild
+(tracked in TODO.md, warning noted in `reports/blast_golden_2026_eval.md`).
+
 ## What NOT To Do
 
 - Don't chase ball-level accuracy beyond ~60% — individual balls are inherently noisy.

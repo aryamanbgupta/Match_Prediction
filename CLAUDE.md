@@ -17,9 +17,11 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
    (`models/auto/i19/swap_seed29`, model.pkl byte-identical to the I18
    golden-audited `models/auto/i17/swap_seed29`). Evidence: D12 swap
    transfer confirmed on 5/5 paired seeds on the i7 frame (mean ≥$50k ΔLL
-   −0.0144, floor 0.007, `docs/I17_I7_SWAP_SUCCESSOR.md`); golden audit —
-   swap-i7 beats the slice-matched market LL on both sharp golden slices
-   where the legacy line trails (`research/reports/auto/I18.md`). It trails
+   −0.0144, floor 0.007, `docs/I17_I7_SWAP_SUCCESSOR.md`). **The I18 golden
+   "beats the matched market LL on both sharp slices" rationale is
+   WITHDRAWN** (2026-08-05): its margins were 0.0035–0.0076, below the 0.007
+   seed-noise floor and below the 0.0085–0.0101 by which the corrected
+   golden benchmark moves the market line itself. The swap-i7 arm trails
    the legacy line by ~0.005–0.009 LL on the iteration ≥$50k slice; the
    promotion rationale is operational — the legacy serving state ended
    2026-04-16 and is unregenerable, and only the i7 stack has a fresh-state
@@ -31,8 +33,14 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
    contract.
    M7 config: lr 0.05, colsample 0.9 (from the M7 sweep; prior config was
    over-aggressive). `predict_fixture.py` uses this model directly; raw
-   probabilities (no Platt — Platt over-corrects on this config and kills
-   iteration ROI). Per-fixture unfrozen rehydration semantics
+   probabilities (no Platt in serving — but the M7-era "Platt over-corrects
+   and kills iteration ROI" verdict was **re-examined on v2 prices
+   2026-08-07 and is UNSUPPORTED**: val-fit Platt on this artifact
+   *sharpens*, a=1.107, and is point-favorable on both LL and ROI on every
+   slice with all paired CIs straddling zero — the old rejection was a
+   corrupt-surface artifact. Recalibration is a legitimate future candidate
+   again; nothing positive is established and serving stays raw. See
+   `reports/p2_recalibration_v2_20260807.md`). Per-fixture unfrozen rehydration semantics
    (chronological tracker walk through pre-match date). Earlier baselines
    preserved for reference: `xgb_match_v2_clean`,
    `xgb_match_v2_clean_unfrozen`, `xgb_match_v3_baseline` (M1 monotone),
@@ -41,28 +49,59 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
    improvement deltas, and the explanation of why M3–M6 feature work
    dropped.
 
-   **Honest headline (iteration Polymarket eval; I3 blocks, updated
-   2026-07-30 for the swap model)**: ≥$50k raw LL **0.6215** (base M7
-   0.6299) vs slice-matched market 0.6482 — note the long-quoted 0.6267 is
-   the all-261 market LL, where the swap model scores 0.6178; flat ROI
-   **+24.53%** with tournament-block CI **[-1.98%, +46.37%]** across 19
-   competition blocks (base +21.90% [-10.48, +49.94]). ≥$100k: LL 0.5796,
-   ROI +26.60%, block CI [-17.21%, +45.42%] across 11 blocks. Golden audit
-   (descriptive, 5–6 blocks): beats matched market LL on both slices where
-   base does not. Adoption rests on D12's paired 5-seed evidence (ΔLL
-   −0.0092 and ΔROI +3.39pp, both better on 5/5 seeds), not on a CI-clean
-   ROI claim — block CIs still straddle zero everywhere, so no production
-   betting edge is established. A7 remains the predeclared forward betting
-   policy, with economic performance unconfirmed. See
-   `reports/i3_eval_statistics_hardening.md`.
+   **Honest headline (iteration Polymarket eval; RESTATED 2026-08-05 after a
+   confirmed benchmark defect — every earlier iteration market/ROI figure in
+   this repo is inflated)**: the odds builder shipped the event's *"Who wins
+   the toss?"* market instead of the head-to-head winner market on 23 of 261
+   fixtures, because it ranked candidates by a "max price ≤ 0.92 =
+   plausible" flag first — which rejects exactly the informative lopsided
+   markets and keeps the ~0.50 coin flip. **Benchmarks of record are now
+   `betting_odds_polymarket_v2.json`** (261 → **255** fixtures: 17 prices
+   corrected, all at ≥$50k; 6 dropped for having no head-to-head sibling)
+   **and `data/golden/betting_odds_golden_v2.json`** (124 rows, one fixture
+   changed). Restated for this model, ≥$50k (n 170→168): LL 0.6262→**0.6249**
+   vs slice-matched market 0.6482→**0.5940**, flat ROI +20.54%→**+3.38%**,
+   block CI **[−14.63%, +37.06%]** across 18 blocks. ≥$100k (n=110): LL
+   **0.5886** vs market 0.6224→**0.5377**, ROI +21.95%→**−5.19%**
+   [−28.73%, +27.50%] across 11 blocks. Legacy `xgb_match_v3_m7_swap_production`
+   moves the same way: ≥$50k LL 0.6196 vs 0.5940, ROI +24.53%→**+7.40%**
+   [−7.65%, +34.82%]; ≥$100k ROI +26.60%→**−0.54%**.
+   **The model does not beat the market on log loss anywhere on the
+   iteration set** — it read as 0.022 ahead at ≥$50k, it is 0.031 behind.
+   The apparent probability edge was the coin flip. Every block CI straddled
+   zero before and every one straddles zero now, so "no production betting
+   edge is established" stands, for a second and larger reason.
+   **Unaffected:** model-vs-model comparisons (paired ΔLL moves ≤0.0009 and
+   keeps its sign — D12 −0.0084→−0.0086, I17 −0.0159→−0.0150), so the D12
+   and I17/I19 promotions stand and **no model selection needs re-running**;
+   all model log losses, which never reference a market price; iteration
+   slice membership; the whole ball-level line. **A7 was re-derived on v2
+   prices 2026-08-07 and is RETIRED** (pre-registered protocol,
+   `reports/a7_m8_rederivation_v2_20260807.md`): no grid cell clears the
+   pre-committed bar, the originally-landed cell (5, 0.10) *hurts* on both
+   slices, and the mismatch-high-edge subset is CI-clean negative on the
+   legacy arm — the artifact diagnosis confirmed end to end;
+   `predict_fixture.py` suppresses the shadow decision permanently
+   (`policy_status: "retired"`). The M8 threshold sweep was re-derived in
+   the same report: no global threshold clears (ROI *degrades* as the
+   required edge rises on honest prices — the model's big disagreements
+   with a sharp market are model error), so **flat 1-unit at threshold 0
+   stands as the reporting default**, establishing no edge. Full audit:
+   `reports/market_benchmark_toss_defect_20260805.md`; block methodology
+   unchanged (`reports/i3_eval_statistics_hardening.md`).
 
-   **Frozen forward result (2026-07-23):** on the preregistered ≥$50k slice,
-   M7 LL is **0.6823** versus market 0.7445 and ball-v7 0.7015, so probability
-   confirmation passed. M7 A7 returned +96.72%, but its block interval is
-   [-3.29%, +623.85%] across only five betting blocks, so economic
-   confirmation failed. Removing the only two winners priced below 25% leaves
-   M7 LL 0.6654 versus market 0.6824 and M7 A7 ROI +20.04%. See
-   `reports/forward_evaluation_2026-06-01_2026-07-13.md`.
+   **Frozen forward result (2026-07-23) — CLEAN, and now the only
+   preregistered market comparison worth quoting.** The sealed forward set was
+   built by a different, strict extractor and was re-verified against the toss
+   defect structurally, empirically and by live Gamma re-fetch (all 137
+   selected markets are `moneyline`, 0 violations). On the preregistered ≥$50k
+   slice, M7 LL is **0.6823** versus market 0.7445 and ball-v7 0.7015, so
+   probability confirmation passed and **stands unchanged**. M7 A7 returned
+   +96.72%, but its block interval is [-3.29%, +623.85%] across only five
+   betting blocks, so economic confirmation failed on its own interval — and
+   that A7 number now also carries the withdrawal above. Removing the only two
+   winners priced below 25% leaves M7 LL 0.6654 versus market 0.6824 and M7 A7
+   ROI +20.04%. See `reports/forward_evaluation_2026-06-01_2026-07-13.md`.
 
    **Frozen vs unfrozen tracker semantics**: previous diagnostic claimed
    frozen-mode trackers (snapshot at val/test boundary, no within-test
@@ -76,20 +115,39 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
    like a live bookmaker) without leaning on an empirical artifact. See
    `reports/no_leakage_diagnostic_clean.md`.
 
-   **The Hundred (2026-07-27)**: the match model runs on 100-ball fixtures
-   via `--tracker-aux-dir` / `--team-aliases` / `--state-version`
-   (`docs/OPERATIONS.md` § "Operation 7"). After the 2026-07-30 alias
-   copy-fold fix and rerun, it picks the winner **61.0%** of the time over
-   159 historical Hundred matches (i.i.d. p = 0.0034; season-block sign
-   test p ≈ 0.03 — see the report's "Known limitations") but its
-   probabilities compress into 0.37–0.62 (mean |p−0.5| 0.036 vs 0.105 on a
-   401-match T20 control), so LL 0.6795 vs coinflip 0.6931, and it lands
-   within ~3pp of the Polymarket line on every 2026 fixture. **Directional
-   lean only — no edge, no betting.** The Hundred path deliberately uses
+   **The Hundred (2026-07-27; betting-tested 2026-08-05)**: the match model
+   runs on 100-ball fixtures via `--tracker-aux-dir` / `--team-aliases` /
+   `--state-version` (`docs/OPERATIONS.md` § "Operation 7"). After the
+   2026-07-30 alias copy-fold fix and rerun, it picks the winner **61.0%**
+   of the time over 159 historical Hundred matches (i.i.d. p = 0.0034;
+   season-block sign test p ≈ 0.03 — see the report's "Known limitations")
+   but its probabilities compress into 0.37–0.62 (mean |p−0.5| 0.036 vs
+   0.105 on a 401-match T20 control), so LL 0.6795 vs coinflip 0.6931, and
+   it lands within ~3pp of the Polymarket line on every 2026 fixture.
+   **A predeclared flat betting rule** (1 unit on the side where model p >
+   market p, pre-toss quote, no edge threshold) **was then backtested on the
+   2026 men's season and returned −2.80% over 15 bets, with model LL 0.7040
+   vs market 0.6857 vs coinflip 0.6931 — the probabilities lose to a coin on
+   that slice.** The underdog-compression failure mode reproduced on live
+   fixtures (two thirds of bets back the market underdog; ROI degrades
+   monotonically as the required edge rises). The sealed forward set settled
+   2026-08-05 at 3 bets / +25.89%, but its one bettable fixture **lost**;
+   combined 18 bets / **+1.98%**. One tournament = one I3 block, so all of
+   it is **descriptive only — directional lean, no edge, NO BETTING.** See
+   `reports/hundred_roi_backtest_2026-08-03.md` (plus its settlement
+   addendum) and `reports/hundred_2026_adaptation.md`. Data of record for
+   the Hundred is now `data/hundred/season_2026_men_v2/` (19 real cricsheet
+   men's 2026 matches, superseding the hand-transcribed
+   `season_2026_men/`) and `data/hundred/polymarket_odds_2026_v2.json`.
+   **Quote convention**: the last quote before scheduled start is
+   *post-toss* (the toss is called ~30 min out, worth a mean 3.5pp of price
+   movement), so odds rows also carry `pretoss_prob_team1` at T−60min and
+   every headline uses the pre-toss basis to keep a toss-blind model and the
+   market on one information set. The Hundred path deliberately uses
    `models/xgb_match_i7` with `--venue-identity-mode i7` and a matching
    canonical-venue cache. Frozen `xgb_match_v3_m7_production` remains
    available only through the temporary legacy replay contract; do not extend
-   that mode with Hundred state. See `reports/hundred_2026_adaptation.md`.
+   that mode with Hundred state.
 
    **Successor line (I17, 2026-07-30):** swap + M7 config trained on the
    I7 identity frame (`data/xgb_match_data_i7`) is the designated
@@ -196,14 +254,19 @@ priors (`prior_{pp,mid,death}_p*`) are written to `_meta` but the
 `phase_outcome_dist` feature group is NOT in v7's feature list — Phase 3
 ablation showed it regresses LL (collinear with is_powerplay/middle/death).
 
-Eval sets:
-- **Iteration set**: `data/polymarket_test/` + `betting_odds_polymarket.json`
-  (261 matches, 2025-07-01 → 2026-04-16). Used during model selection; not
+Eval sets (**odds files of record are the `_v2` ones since 2026-08-05** — the
+pre-v2 files carry the toss-market defect and are kept only as evidence of what
+was shipped; never score a new market comparison against them):
+- **Iteration set**: `data/polymarket_test_v2/` + `betting_odds_polymarket_v2.json`
+  (**255** matches, 2025-07-01 → 2026-04-16; superseding `data/polymarket_test/`
+  + `betting_odds_polymarket.json`, 261). Used during model selection; not
   strictly out-of-sample.
-- **Golden set** (2026-05-09; extended 2026-07-30): `data/golden/polymarket_test/` +
-  `data/golden/betting_odds_golden.json` (**124** matches, 2026-04-17 →
+- **Golden set** (2026-05-09; extended 2026-07-30): `data/golden/polymarket_test_v2/` +
+  `data/golden/betting_odds_golden_v2.json` (**124** matches, 2026-04-17 →
   2026-06-17; the original 55 rows are preserved verbatim and the 137
-  consumed forward fixtures are excluded). Truly out-of-sample — never
+  consumed forward fixtures are excluded; exactly one price changed under the
+  v2 rebuild, and its `total_matches: 55` header bug is fixed in v2).
+  Truly out-of-sample — never
   seen by training, validation, or selection. Extended-window audit
   (WC-heavy, market-sharpest slice): swap beats base everywhere but both
   trail the market on LL; see
@@ -294,7 +357,8 @@ uv run python scripts/sim_eval/blend_eval_json.py \
 for w in w0p00 w0p20 w0p50 w0p80 w1p00; do
   uv run python scripts/sim_eval/reslice_eval_json.py \
     --in eval_out/blend_a2_clean/hier_all_20260425_165622_${w}.json \
-    --odds betting_odds_polymarket.json \
+    --odds betting_odds_polymarket_v2.json \
+    --cluster-source-dir data/polymarket_test_v2 \
     --out-dir eval_out/blend_a2_clean/sliced
 done
 uv run python scripts/sim_eval/blend_report.py \
@@ -312,8 +376,11 @@ uv run python scripts/predict_fixture.py --fixture fixtures/<match>.json
 # cricsheet + rebuild data/live_state_i7 before a live fixture (OPERATIONS
 # § "Operation 6"). Legacy replay of the pre-I7 production family needs
 # explicit --venue-identity-mode legacy + the old model/state paths.
-# A7 output is ≥$50k, exact-policy, shadow-only, and never authorizes
-# execution. See docs/OPERATIONS.md § "Operation 6".
+# A7 is RETIRED (2026-08-07 v2-price re-derivation; see
+# reports/a7_m8_rederivation_v2_20260807.md): predict_fixture suppresses the
+# shadow decision (policy_status: "retired") and only emits edge/market
+# diagnostics, which are informational and never authorize anything.
+# See docs/OPERATIONS.md § "Operation 6".
 
 # === Golden eval refresh — i7 production line (one command) ===
 # Reproduces the I18 audit numbers for the current production model:
@@ -323,7 +390,9 @@ bash scripts/refresh_golden_i7.sh
 # === Golden eval refresh (after new polymarket capture + cricsheet refresh) ===
 # 1. Pull new T20 cricsheet JSONs from stat-generator (date >= 2026-04-17):
 uv run python scripts/extract_golden_cricsheet.py
-# 2. Build golden polymarket odds (set GOLDEN_POLYMARKET_PATH to latest file):
+# 2. Build golden polymarket odds (set GOLDEN_POLYMARKET_PATH to latest file).
+#    Since 2026-08-05 the builders DEFAULT to the _v2 output paths, so this can
+#    no longer clobber the shipped pre-fix evidence files:
 uv run python scripts/build_polymarket_odds_golden.py
 # 3. Re-materialize parquet (clean, no leakage):
 uv run python scripts/materialize_match_features.py \
@@ -341,7 +410,7 @@ uv run python scripts/sim_eval/blend_eval_json.py \
     --w 0.0 --out-dir data/golden/blended_clean_retrained
 uv run python scripts/sim_eval/reslice_eval_json.py \
     --in data/golden/blended_clean_retrained/golden_sim_envelope_w0p00.json \
-    --odds data/golden/betting_odds_golden.json \
+    --odds data/golden/betting_odds_golden_v2.json \
     --out-dir data/golden/sliced_clean_retrained
 # 5. Per-match audit:
 uv run python scripts/build_ipl_dashboard.py
