@@ -4,10 +4,11 @@ Slices val/test log-loss by player familiarity, runs linear probes on the
 learned embeddings, and prints the neighbor panel. Appends nothing to the
 kit — read-only over models/embeddings/{eval_kit,e1}.
 
-Usage:  uv run python scripts/embeddings_e1_analysis.py
+Usage:  uv run python scripts/embeddings_e1_analysis.py [--dir models/embeddings/e1]
 """
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -18,10 +19,12 @@ import pandas as pd
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from embeddings_e1 import E1Model, load_split, to_idx  # noqa: E402
+from embeddings_e1 import CTX_COLS, E1Model, load_split, make_ctx, to_idx  # noqa: E402
 
 KIT = Path("models/embeddings/eval_kit")
-E1 = Path("models/embeddings/e1")
+_ap = argparse.ArgumentParser()
+_ap.add_argument("--dir", type=Path, default=Path("models/embeddings/e1"))
+E1 = _ap.parse_args().dir
 
 EB_COLS = json.loads((KIT / "manifest.json").read_text())["eb_cols"]
 PANEL = json.loads((KIT / "manifest.json").read_text())["neighbor_panel"]
@@ -37,7 +40,9 @@ def main() -> None:
     bat_vocab = {p: i for i, p in enumerate(batters)}
     bowl_vocab = {p: i for i, p in enumerate(bowlers)}
     cfg = json.loads((E1 / "metrics.json").read_text())["config"]
-    model = E1Model(len(batters), len(bowlers), cfg["dim"], cfg["hidden"])
+    use_ctx = bool(cfg.get("context", False))
+    model = E1Model(len(batters), len(bowlers), cfg["dim"], cfg["hidden"],
+                    ctx_dim=4 if use_ctx else 0)
     model.load_state_dict(torch.load(E1 / "model.pt", map_location="cpu"))
     model.eval()
 
@@ -49,7 +54,7 @@ def main() -> None:
     print("=== Sliced log-loss (validation) ===", flush=True)
     val_full = pd.read_parquet("data/xgb_data_v3/cricket_data_v3_validation.parquet",
                                columns=["batter_id", "bowler_id", "ball_outcome"]
-                               + EB_COLS)
+                               + EB_COLS + (CTX_COLS if use_ctx else []))
     val_full["y"] = val_full["ball_outcome"].map(
         {0: 0, 1: 1, 2: 2, 4: 3, 6: 4, -1: 5}).astype(np.int64)
     y = val_full["y"].to_numpy()
@@ -58,13 +63,20 @@ def main() -> None:
     bi = to_idx(val_full["batter_id"], bat_vocab)
     wi = to_idx(val_full["bowler_id"], bowl_vocab)
     with torch.no_grad():
-        bw = torch.cat([model.batter_emb.weight,
-                        model.batter_emb.weight.mean(0, keepdim=True)])
-        ww = torch.cat([model.bowler_emb.weight,
-                        model.bowler_emb.weight.mean(0, keepdim=True)])
-        x = torch.cat([bw[np.where(bi < 0, len(batters), bi)],
-                       ww[np.where(wi < 0, len(bowlers), wi)]], dim=-1)
-        p_e1 = torch.softmax(model.mlp(x), -1).numpy()
+        # UNK = last table row. For E1 checkpoints (id_dropout 0) it was set
+        # to the mean at eval time; replicate that if the saved row is ~init.
+        if cfg.get("id_dropout", 0.0) == 0.0:
+            model.batter_emb.weight[len(batters)] = \
+                model.batter_emb.weight[:len(batters)].mean(0)
+            model.bowler_emb.weight[len(bowlers)] = \
+                model.bowler_emb.weight[:len(bowlers)].mean(0)
+        parts = [
+            model.batter_emb.weight[np.where(bi < 0, len(batters), bi)],
+            model.bowler_emb.weight[np.where(wi < 0, len(bowlers), wi)],
+        ]
+        if use_ctx:
+            parts.append(torch.tensor(make_ctx(val_full)))
+        p_e1 = torch.softmax(model.mlp(torch.cat(parts, dim=-1)), -1).numpy()
     p_b0b = clf_b0b.predict_proba(val_full[EB_COLS].to_numpy(np.float32))
     p_b0a = np.tile(prior, (len(y), 1))
 

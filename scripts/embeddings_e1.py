@@ -17,8 +17,23 @@ Explicit E1 choices (revisited at later rungs):
 
 Artifacts → models/embeddings/e1/. Golden is never read.
 
+E1.5 (learned backoff — the one-ingredient upgrade after E1's diagnosis):
+    --id-dropout p   During training, each ball's batter/bowler index is
+                     independently replaced by a trainable UNK index with
+                     probability p. The model is thereby forced to learn a
+                     genuine "generic player" representation, which is also
+                     used for players unseen in train at eval time.
+    --emb-wd w       Weight decay applied to the embedding tables only
+                     (MLP keeps 0.01). Pulls rare-player vectors toward
+                     zero — the origin becomes "no information", which the
+                     UNK/backoff makes meaningful.
+    With --id-dropout 0 (default) eval falls back to E1's mean-embedding
+    UNK, reproducing the original rung exactly.
+
 Usage:
     uv run python scripts/embeddings_e1.py [--dim 32] [--seed 42]
+    uv run python scripts/embeddings_e1.py --id-dropout 0.05 --emb-wd 0.1 \
+        --out models/embeddings/e15
 """
 from __future__ import annotations
 
@@ -37,29 +52,56 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 KIT = Path("models/embeddings/eval_kit")
 DATA = Path("data/xgb_data_v3")
-OUT = Path("models/embeddings/e1")
 
 CLASS_MAPPING = {0: 0, 1: 1, 2: 2, 4: 3, 6: 4, -1: 5}
 
 
+CTX_COLS = ["is_middle_overs", "is_death_overs", "wickets_in_hand",
+            "chase_target"]
+
+
 class E1Model(nn.Module):
-    def __init__(self, n_batters: int, n_bowlers: int, dim: int, hidden: int):
+    """Tables hold one extra row: the UNK index (last row of each table).
+
+    ctx_dim > 0 (rung E2+): match-state features are concatenated to the
+    player vectors BEFORE the MLP, so situational variance is absorbed by
+    the context pathway and the embeddings are pushed toward pure identity.
+    """
+
+    def __init__(self, n_batters: int, n_bowlers: int, dim: int, hidden: int,
+                 ctx_dim: int = 0):
         super().__init__()
-        self.batter_emb = nn.Embedding(n_batters, dim)
-        self.bowler_emb = nn.Embedding(n_bowlers, dim)
+        self.batter_emb = nn.Embedding(n_batters + 1, dim)
+        self.bowler_emb = nn.Embedding(n_bowlers + 1, dim)
+        self.ctx_dim = ctx_dim
         self.mlp = nn.Sequential(
-            nn.Linear(2 * dim, hidden), nn.ReLU(), nn.Linear(hidden, 6)
+            nn.Linear(2 * dim + ctx_dim, hidden), nn.ReLU(),
+            nn.Linear(hidden, 6)
         )
 
-    def forward(self, batter_idx, bowler_idx):
-        x = torch.cat([self.batter_emb(batter_idx),
-                       self.bowler_emb(bowler_idx)], dim=-1)
-        return self.mlp(x)
+    def forward(self, batter_idx, bowler_idx, ctx=None):
+        parts = [self.batter_emb(batter_idx), self.bowler_emb(bowler_idx)]
+        if self.ctx_dim:
+            parts.append(ctx)
+        return self.mlp(torch.cat(parts, dim=-1))
 
 
-def load_split(name: str) -> pd.DataFrame:
-    df = pd.read_parquet(DATA / f"cricket_data_v3_{name}.parquet",
-                         columns=["batter_id", "bowler_id", "ball_outcome"])
+def make_ctx(df: pd.DataFrame) -> np.ndarray:
+    """4 context features: phase (2 flags; PP = 00), wickets in hand /10,
+    second-innings flag (chase_target > 0)."""
+    return np.stack([
+        df["is_middle_overs"].to_numpy(np.float32),
+        df["is_death_overs"].to_numpy(np.float32),
+        df["wickets_in_hand"].to_numpy(np.float32) / 10.0,
+        (df["chase_target"].to_numpy(np.float32) > 0).astype(np.float32),
+    ], axis=1)
+
+
+def load_split(name: str, context: bool = False) -> pd.DataFrame:
+    cols = ["batter_id", "bowler_id", "ball_outcome"]
+    if context:
+        cols += CTX_COLS
+    df = pd.read_parquet(DATA / f"cricket_data_v3_{name}.parquet", columns=cols)
     df["y"] = df["ball_outcome"].map(CLASS_MAPPING).astype(np.int64)
     return df
 
@@ -78,7 +120,16 @@ def main() -> None:
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--patience", type=int, default=3)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--id-dropout", type=float, default=0.0,
+                    help="prob of replacing each player index with UNK "
+                         "during training (0 = E1 behavior)")
+    ap.add_argument("--emb-wd", type=float, default=0.01,
+                    help="weight decay on embedding tables (MLP stays 0.01)")
+    ap.add_argument("--context", action="store_true",
+                    help="rung E2: add phase/wickets/innings state inputs")
+    ap.add_argument("--out", type=Path, default=Path("models/embeddings/e1"))
     args = ap.parse_args()
+    OUT = args.out
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -88,7 +139,9 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
 
     print("loading splits...", flush=True)
-    train, val, test = load_split("train"), load_split("validation"), load_split("test")
+    train = load_split("train", args.context)
+    val = load_split("validation", args.context)
+    test = load_split("test", args.context)
     masks = np.load(KIT / "unseen_pair_masks.npz")
 
     batters = sorted(train["batter_id"].unique())
@@ -100,29 +153,44 @@ def main() -> None:
     Xb_tr = torch.tensor(to_idx(train["batter_id"], bat_vocab))
     Xw_tr = torch.tensor(to_idx(train["bowler_id"], bowl_vocab))
     y_tr = torch.tensor(train["y"].to_numpy())
+    ctx_dim = 4 if args.context else 0
+    Xc_tr = torch.tensor(make_ctx(train)) if args.context else None
 
-    model = E1Model(len(batters), len(bowlers), args.dim, args.hidden).to(device)
+    model = E1Model(len(batters), len(bowlers), args.dim, args.hidden,
+                    ctx_dim).to(device)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"params: {n_params:,}", flush=True)
-    opt = torch.optim.AdamW(model.parameters(), lr=args.lr)
+    opt = torch.optim.AdamW([
+        {"params": [model.batter_emb.weight, model.bowler_emb.weight],
+         "weight_decay": args.emb_wd},
+        {"params": model.mlp.parameters(), "weight_decay": 0.01},
+    ], lr=args.lr)
     loss_fn = nn.CrossEntropyLoss()
+    UNK_B, UNK_W = len(batters), len(bowlers)
 
     def eval_probs(df: pd.DataFrame) -> np.ndarray:
-        """Predict probs; unknown players get the mean embedding (UNK)."""
+        """Predict probs; unknown players map to the UNK row.
+
+        With id-dropout the UNK row is trained; without it (E1), the UNK
+        row is set to the mean embedding, reproducing E1's crutch.
+        """
         bi = to_idx(df["batter_id"], bat_vocab)
         wi = to_idx(df["bowler_id"], bowl_vocab)
         with torch.no_grad():
-            # temporarily append mean-embedding rows as UNK index
-            bat_mean = model.batter_emb.weight.mean(0, keepdim=True)
-            bowl_mean = model.bowler_emb.weight.mean(0, keepdim=True)
-            bat_w = torch.cat([model.batter_emb.weight, bat_mean])
-            bowl_w = torch.cat([model.bowler_emb.weight, bowl_mean])
-            bi = torch.tensor(np.where(bi < 0, len(batters), bi)).to(device)
-            wi = torch.tensor(np.where(wi < 0, len(bowlers), wi)).to(device)
+            if args.id_dropout == 0.0:
+                model.batter_emb.weight[UNK_B] = \
+                    model.batter_emb.weight[:UNK_B].mean(0)
+                model.bowler_emb.weight[UNK_W] = \
+                    model.bowler_emb.weight[:UNK_W].mean(0)
+            bi = torch.tensor(np.where(bi < 0, UNK_B, bi)).to(device)
+            wi = torch.tensor(np.where(wi < 0, UNK_W, wi)).to(device)
+            ctx = (torch.tensor(make_ctx(df)).to(device)
+                   if args.context else None)
             out = []
             for s in range(0, len(bi), 65536):
-                x = torch.cat([bat_w[bi[s:s+65536]], bowl_w[wi[s:s+65536]]], dim=-1)
-                out.append(torch.softmax(model.mlp(x), dim=-1).cpu().numpy())
+                c = ctx[s:s+65536] if ctx is not None else None
+                logits = model(bi[s:s+65536], wi[s:s+65536], c)
+                out.append(torch.softmax(logits, dim=-1).cpu().numpy())
         return np.concatenate(out)
 
     def ll(y: np.ndarray, probs: np.ndarray) -> float:
@@ -138,7 +206,14 @@ def main() -> None:
         for s in range(0, n, args.batch):
             idx = perm[s:s + args.batch]
             opt.zero_grad()
-            logits = model(Xb_tr[idx].to(device), Xw_tr[idx].to(device))
+            bi, wi = Xb_tr[idx], Xw_tr[idx]
+            if args.id_dropout > 0:
+                bi = torch.where(torch.rand(len(bi)) < args.id_dropout,
+                                 torch.tensor(UNK_B), bi)
+                wi = torch.where(torch.rand(len(wi)) < args.id_dropout,
+                                 torch.tensor(UNK_W), wi)
+            c = Xc_tr[idx].to(device) if args.context else None
+            logits = model(bi.to(device), wi.to(device), c)
             loss = loss_fn(logits, y_tr[idx].to(device))
             loss.backward()
             opt.step()
@@ -161,7 +236,9 @@ def main() -> None:
     model.eval()
 
     # --- Scoreboard ---------------------------------------------------------
-    metrics: dict = {"config": vars(args), "n_params": n_params,
+    metrics: dict = {"config": {k: (str(v) if isinstance(v, Path) else v)
+                                for k, v in vars(args).items()},
+                     "n_params": n_params,
                      "device": device, "best_epoch_val_ll": round(best_val, 4)}
     for name, df in [("validation", val), ("test", test)]:
         probs = eval_probs(df)
@@ -179,8 +256,10 @@ def main() -> None:
     np.savez_compressed(
         OUT / "embeddings.npz",
         batter_ids=np.array(batters), bowler_ids=np.array(bowlers),
-        batter_vecs=model.batter_emb.weight.detach().cpu().numpy(),
-        bowler_vecs=model.bowler_emb.weight.detach().cpu().numpy(),
+        batter_vecs=model.batter_emb.weight[:UNK_B].detach().cpu().numpy(),
+        bowler_vecs=model.bowler_emb.weight[:UNK_W].detach().cpu().numpy(),
+        batter_unk=model.batter_emb.weight[UNK_B].detach().cpu().numpy(),
+        bowler_unk=model.bowler_emb.weight[UNK_W].detach().cpu().numpy(),
     )
     torch.save(model.state_dict(), OUT / "model.pt")
     (OUT / "metrics.json").write_text(json.dumps(metrics, indent=2))
