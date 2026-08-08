@@ -101,17 +101,34 @@ class E1Model(nn.Module):
             # decay pulls rare-player offsets to zero -> pure EB anchor.
             self.batter_proj = nn.Linear(len(EB_BAT_COLS), dim)
             self.bowler_proj = nn.Linear(len(EB_BOWL_COLS), dim)
+        self.bat_season_emb = None
+        self.bowl_season_emb = None
         self.mlp = nn.Sequential(
             nn.Linear(2 * dim + ctx_dim, hidden), nn.ReLU(),
             nn.Linear(hidden, 6)
         )
 
-    def forward(self, batter_idx, bowler_idx, ctx=None, eb_b=None, eb_w=None):
+    def add_season_tables(self, n_bat_seasons: int, n_bowl_seasons: int,
+                          dim: int):
+        """E3: per-(player, season) offsets. padding_idx pins the UNK row
+        (eval-era seasons) to zero permanently."""
+        self.bat_season_emb = nn.Embedding(n_bat_seasons + 1, dim,
+                                           padding_idx=n_bat_seasons)
+        self.bowl_season_emb = nn.Embedding(n_bowl_seasons + 1, dim,
+                                            padding_idx=n_bowl_seasons)
+        nn.init.zeros_(self.bat_season_emb.weight)
+        nn.init.zeros_(self.bowl_season_emb.weight)
+
+    def forward(self, batter_idx, bowler_idx, ctx=None, eb_b=None, eb_w=None,
+                bs_idx=None, ws_idx=None):
         bvec = self.batter_emb(batter_idx)
         wvec = self.bowler_emb(bowler_idx)
         if self.eb_anchor:
             bvec = bvec + self.batter_proj(eb_b)
             wvec = wvec + self.bowler_proj(eb_w)
+        if self.bat_season_emb is not None:
+            bvec = bvec + self.bat_season_emb(bs_idx)
+            wvec = wvec + self.bowl_season_emb(ws_idx)
         parts = [bvec, wvec]
         if self.ctx_dim:
             parts.append(ctx)
@@ -139,7 +156,8 @@ def make_ctx(df: pd.DataFrame, venue: bool = False) -> np.ndarray:
 
 
 def load_split(name: str, context: bool = False,
-               anchor: bool = False, venue_ctx: bool = False) -> pd.DataFrame:
+               anchor: bool = False, venue_ctx: bool = False,
+               season: bool = False) -> pd.DataFrame:
     cols = ["batter_id", "bowler_id", "ball_outcome"]
     if context:
         cols += CTX_COLS
@@ -147,8 +165,12 @@ def load_split(name: str, context: bool = False,
         cols += EB_BAT_COLS + EB_BOWL_COLS
     if venue_ctx:
         cols += VENUE_COLS
+    if season:
+        cols += ["match_date"]
     df = pd.read_parquet(DATA / f"cricket_data_v3_{name}.parquet", columns=cols)
     df["y"] = df["ball_outcome"].map(CLASS_MAPPING).astype(np.int64)
+    if season:
+        df["year"] = pd.to_datetime(df["match_date"]).dt.year
     return df
 
 
@@ -179,6 +201,9 @@ def main() -> None:
     ap.add_argument("--venue-ctx", action="store_true",
                     help="append 6 venue outcome-dist features to context "
                          "(info parity with the B0b+ctx control)")
+    ap.add_argument("--season-offsets", action="store_true",
+                    help="rung E3: per-(player, season) offset tables; "
+                         "eval-era seasons pinned to zero via padding_idx")
     ap.add_argument("--out", type=Path, default=Path("models/embeddings/e1"))
     args = ap.parse_args()
     OUT = args.out
@@ -191,9 +216,12 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
 
     print("loading splits...", flush=True)
-    train = load_split("train", args.context, args.eb_anchor, args.venue_ctx)
-    val = load_split("validation", args.context, args.eb_anchor, args.venue_ctx)
-    test = load_split("test", args.context, args.eb_anchor, args.venue_ctx)
+    train = load_split("train", args.context, args.eb_anchor, args.venue_ctx,
+                       args.season_offsets)
+    val = load_split("validation", args.context, args.eb_anchor,
+                     args.venue_ctx, args.season_offsets)
+    test = load_split("test", args.context, args.eb_anchor, args.venue_ctx,
+                      args.season_offsets)
     masks = np.load(KIT / "unseen_pair_masks.npz")
 
     batters = sorted(train["batter_id"].unique())
@@ -213,17 +241,40 @@ def main() -> None:
     Xeb_w_tr = (torch.tensor(train[EB_BOWL_COLS].to_numpy(np.float32))
                 if args.eb_anchor else None)
 
+    bs_vocab = ws_vocab = None
+    Xbs_tr = Xws_tr = None
+    if args.season_offsets:
+        bs_pairs = sorted(set(zip(train["batter_id"], train["year"])))
+        ws_pairs = sorted(set(zip(train["bowler_id"], train["year"])))
+        bs_vocab = {p: i for i, p in enumerate(bs_pairs)}
+        ws_vocab = {p: i for i, p in enumerate(ws_pairs)}
+        print(f"season vocab: {len(bs_vocab)} batter-seasons, "
+              f"{len(ws_vocab)} bowler-seasons", flush=True)
+
+        def season_idx(df, vocab, pid_col, unk):
+            pairs = zip(df[pid_col], df["year"])
+            return torch.tensor(np.fromiter(
+                (vocab.get(p, unk) for p in pairs), dtype=np.int64,
+                count=len(df)))
+        Xbs_tr = season_idx(train, bs_vocab, "batter_id", len(bs_vocab))
+        Xws_tr = season_idx(train, ws_vocab, "bowler_id", len(ws_vocab))
+
     model = E1Model(len(batters), len(bowlers), args.dim, args.hidden,
-                    ctx_dim, args.eb_anchor).to(device)
+                    ctx_dim, args.eb_anchor)
+    if args.season_offsets:
+        model.add_season_tables(len(bs_vocab), len(ws_vocab), args.dim)
+    model = model.to(device)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"params: {n_params:,}", flush=True)
     other_params = list(model.mlp.parameters())
     if args.eb_anchor:
         other_params += list(model.batter_proj.parameters())
         other_params += list(model.bowler_proj.parameters())
+    emb_params = [model.batter_emb.weight, model.bowler_emb.weight]
+    if args.season_offsets:
+        emb_params += [model.bat_season_emb.weight, model.bowl_season_emb.weight]
     opt = torch.optim.AdamW([
-        {"params": [model.batter_emb.weight, model.bowler_emb.weight],
-         "weight_decay": args.emb_wd},
+        {"params": emb_params, "weight_decay": args.emb_wd},
         {"params": other_params, "weight_decay": 0.01},
     ], lr=args.lr)
     loss_fn = nn.CrossEntropyLoss()
@@ -251,6 +302,18 @@ def main() -> None:
                     if args.eb_anchor else None)
             eb_w = (torch.tensor(df[EB_BOWL_COLS].to_numpy(np.float32)).to(device)
                     if args.eb_anchor else None)
+            bs = ws = None
+            if args.season_offsets:
+                # eval rows: (player, year) pairs unseen in train -> UNK
+                # (zero row), i.e. anchored/career prediction only.
+                pairs_b = zip(df["batter_id"], df["year"])
+                bs = torch.tensor(np.fromiter(
+                    (bs_vocab.get(p, len(bs_vocab)) for p in pairs_b),
+                    dtype=np.int64, count=len(df))).to(device)
+                pairs_w = zip(df["bowler_id"], df["year"])
+                ws = torch.tensor(np.fromiter(
+                    (ws_vocab.get(p, len(ws_vocab)) for p in pairs_w),
+                    dtype=np.int64, count=len(df))).to(device)
             out = []
             for s in range(0, len(bi), 65536):
                 sl = slice(s, s + 65536)
@@ -258,7 +321,9 @@ def main() -> None:
                     bi[sl], wi[sl],
                     ctx[sl] if ctx is not None else None,
                     eb_b[sl] if eb_b is not None else None,
-                    eb_w[sl] if eb_w is not None else None)
+                    eb_w[sl] if eb_w is not None else None,
+                    bs[sl] if bs is not None else None,
+                    ws[sl] if ws is not None else None)
                 out.append(torch.softmax(logits, dim=-1).cpu().numpy())
         return np.concatenate(out)
 
@@ -284,7 +349,9 @@ def main() -> None:
             c = Xc_tr[idx].to(device) if args.context else None
             eb = Xeb_b_tr[idx].to(device) if args.eb_anchor else None
             ew = Xeb_w_tr[idx].to(device) if args.eb_anchor else None
-            logits = model(bi.to(device), wi.to(device), c, eb, ew)
+            bs = Xbs_tr[idx].to(device) if args.season_offsets else None
+            ws = Xws_tr[idx].to(device) if args.season_offsets else None
+            logits = model(bi.to(device), wi.to(device), c, eb, ew, bs, ws)
             loss = loss_fn(logits, y_tr[idx].to(device))
             loss.backward()
             opt.step()
@@ -359,12 +426,23 @@ def main() -> None:
                 anch = proj(torch.tensor(mean_eb.to_numpy(np.float32))
                             .to(device)).cpu().numpy()
                 vecs += anch
+    extra = {}
+    if args.season_offsets:
+        extra = {
+            "bat_season_keys": np.array([f"{p}|{y}" for p, y in bs_vocab]),
+            "bat_season_vecs": model.bat_season_emb.weight[:-1]
+                               .detach().cpu().numpy(),
+            "bowl_season_keys": np.array([f"{p}|{y}" for p, y in ws_vocab]),
+            "bowl_season_vecs": model.bowl_season_emb.weight[:-1]
+                                .detach().cpu().numpy(),
+        }
     np.savez_compressed(
         OUT / "embeddings.npz",
         batter_ids=np.array(batters), bowler_ids=np.array(bowlers),
         batter_vecs=bat_vecs, bowler_vecs=bowl_vecs,
         batter_unk=model.batter_emb.weight[UNK_B].detach().cpu().numpy(),
         bowler_unk=model.bowler_emb.weight[UNK_W].detach().cpu().numpy(),
+        **extra,
     )
     torch.save(model.state_dict(), OUT / "model.pt")
     (OUT / "metrics.json").write_text(json.dumps(metrics, indent=2))
