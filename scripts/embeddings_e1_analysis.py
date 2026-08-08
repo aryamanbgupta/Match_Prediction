@@ -34,6 +34,55 @@ def ll_vec(y, probs):
     return -np.log(np.clip(probs[np.arange(len(y)), y], 1e-15, 1.0))
 
 
+def run_probes_and_neighbors(emb, batters, bowlers):
+    probes = pd.read_parquet(KIT / "probe_labels.parquet")
+
+    print("\n=== Linear probes (players with >=200 balls in role) ===", flush=True)
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.model_selection import cross_val_score
+    bat_vecs, bowl_vecs = emb["batter_vecs"], emb["bowler_vecs"]
+    for role, vecs, ids, count_col, targets in [
+        ("batter", bat_vecs, batters, "train_balls_batting", ["bat_hand"]),
+        ("bowler", bowl_vecs, bowlers, "train_balls_bowling",
+         ["bowl_kind", "bowl_arm"]),
+    ]:
+        sub = probes.reindex(ids)
+        keep = (sub[count_col] >= 200).to_numpy()
+        for t in targets:
+            yy = sub[t].to_numpy()[keep]
+            ok = pd.notna(yy)
+            if ok.sum() < 50:
+                continue
+            X, yy2 = vecs[keep][ok], yy[ok]
+            acc = cross_val_score(LogisticRegression(max_iter=1000), X, yy2,
+                                  cv=5).mean()
+            base = pd.Series(yy2).value_counts(normalize=True).iloc[0]
+            print(f"  {role} -> {t}: probe acc {acc:.3f} "
+                  f"(majority {base:.3f}, n={ok.sum()})", flush=True)
+
+    print("\n=== Neighbor panel (cosine, >=500 balls in role) ===", flush=True)
+    enriched = pd.read_csv("data/all_players_enriched.csv")
+    id2name = {i: (n if isinstance(n, str) else str(i))
+               for i, n in zip(enriched["cricsheet_id"], enriched["unique_name"])}
+    for role, vecs, ids, count_col in [
+        ("batting", emb["batter_vecs"], batters, "train_balls_batting"),
+        ("bowling", emb["bowler_vecs"], bowlers, "train_balls_bowling"),
+    ]:
+        sub = probes.reindex(ids)
+        keep_idx = np.where((sub[count_col] >= 500).to_numpy())[0]
+        V = vecs[keep_idx]
+        V = V / np.linalg.norm(V, axis=1, keepdims=True)
+        kept_ids = [ids[i] for i in keep_idx]
+        pos = {p: i for i, p in enumerate(kept_ids)}
+        for name, pid in PANEL.items():
+            if pid not in pos:
+                continue
+            sims = V @ V[pos[pid]]
+            top = np.argsort(-sims)[1:7]
+            nbrs = ", ".join(id2name.get(kept_ids[i], kept_ids[i]) for i in top)
+            print(f"  [{role}] {name}: {nbrs}", flush=True)
+
+
 def main() -> None:
     emb = np.load(E1 / "embeddings.npz", allow_pickle=True)
     batters, bowlers = list(emb["batter_ids"]), list(emb["bowler_ids"])
@@ -41,10 +90,18 @@ def main() -> None:
     bowl_vocab = {p: i for i, p in enumerate(bowlers)}
     cfg = json.loads((E1 / "metrics.json").read_text())["config"]
     use_ctx = bool(cfg.get("context", False))
+    ctx_dim = (4 if use_ctx else 0) + (6 if cfg.get("venue_ctx") else 0)
     model = E1Model(len(batters), len(bowlers), cfg["dim"], cfg["hidden"],
-                    ctx_dim=4 if use_ctx else 0)
+                    ctx_dim=ctx_dim, eb_anchor=bool(cfg.get("eb_anchor")))
     model.load_state_dict(torch.load(E1 / "model.pt", map_location="cpu"))
     model.eval()
+    if cfg.get("eb_anchor"):
+        # Per-ball anchored predictions can't be reproduced from static
+        # vectors; the trainer's metrics.json carries the sliced LLs.
+        print("(eb-anchor run: sliced LL lives in metrics.json — "
+              "skipping to probes/neighbors)", flush=True)
+        run_probes_and_neighbors(emb, batters, bowlers)
+        return
 
     probes = pd.read_parquet(KIT / "probe_labels.parquet")
     clf_b0b = joblib.load(KIT / "b0b_logistic.joblib")
@@ -100,52 +157,7 @@ def main() -> None:
         print(f"{label:>18} {m.sum():>8,} {ll_e1[m].mean():>8.4f} "
               f"{ll_b0b[m].mean():>8.4f} {ll_b0a[m].mean():>8.4f}", flush=True)
 
-    # --- Probes -------------------------------------------------------------
-    print("\n=== Linear probes (players with >=200 balls in role) ===", flush=True)
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.model_selection import cross_val_score
-    bat_vecs, bowl_vecs = emb["batter_vecs"], emb["bowler_vecs"]
-    for role, vecs, ids, count_col, targets in [
-        ("batter", bat_vecs, batters, "train_balls_batting", ["bat_hand"]),
-        ("bowler", bowl_vecs, bowlers, "train_balls_bowling",
-         ["bowl_kind", "bowl_arm"]),
-    ]:
-        sub = probes.reindex(ids)
-        keep = (sub[count_col] >= 200).to_numpy()
-        for t in targets:
-            yy = sub[t].to_numpy()[keep]
-            ok = pd.notna(yy)
-            if ok.sum() < 50:
-                continue
-            X, yy2 = vecs[keep][ok], yy[ok]
-            acc = cross_val_score(LogisticRegression(max_iter=1000), X, yy2,
-                                  cv=5).mean()
-            base = pd.Series(yy2).value_counts(normalize=True).iloc[0]
-            print(f"  {role} -> {t}: probe acc {acc:.3f} "
-                  f"(majority {base:.3f}, n={ok.sum()})", flush=True)
-
-    # --- Neighbor panel -----------------------------------------------------
-    print("\n=== Neighbor panel (cosine, >=500 balls in role) ===", flush=True)
-    enriched = pd.read_csv("data/all_players_enriched.csv")
-    id2name = {i: (n if isinstance(n, str) else str(i))
-               for i, n in zip(enriched["cricsheet_id"], enriched["unique_name"])}
-    for role, vecs, ids, count_col in [
-        ("batting", emb["batter_vecs"], batters, "train_balls_batting"),
-        ("bowling", emb["bowler_vecs"], bowlers, "train_balls_bowling"),
-    ]:
-        sub = probes.reindex(ids)
-        keep_idx = np.where((sub[count_col] >= 500).to_numpy())[0]
-        V = vecs[keep_idx]
-        V = V / np.linalg.norm(V, axis=1, keepdims=True)
-        kept_ids = [ids[i] for i in keep_idx]
-        pos = {p: i for i, p in enumerate(kept_ids)}
-        for name, pid in PANEL.items():
-            if pid not in pos:
-                continue
-            sims = V @ V[pos[pid]]
-            top = np.argsort(-sims)[1:7]
-            nbrs = ", ".join(id2name.get(kept_ids[i], kept_ids[i]) for i in top)
-            print(f"  [{role}] {name}: {nbrs}", flush=True)
+    run_probes_and_neighbors(emb, batters, bowlers)
 
 
 if __name__ == "__main__":
