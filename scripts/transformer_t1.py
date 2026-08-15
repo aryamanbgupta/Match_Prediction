@@ -46,11 +46,19 @@ AUX_DIR = Path("models/embeddings/deepcrease_labels")
 AUX_TASKS = ["shot", "line", "length", "control"]
 
 
-def load_aux(split: str, n_rows: int, vocabs: dict | None):
+def load_aux(split: str, n_rows: int, vocabs: dict | None,
+             aux_dir: Path = AUX_DIR):
     """Per-row aux targets from the DeepCrease join; -1 = unlabeled.
     Vocabs are built from the train file and reused for val/test."""
-    lab = pd.read_parquet(AUX_DIR / f"{split}.parquet")
-    lab["control"] = lab["control"].fillna(-1).astype(int).astype(str)
+    lab = pd.read_parquet(aux_dir / f"{split}.parquet")
+    # Missing labels must stay missing until AFTER vocab construction:
+    # the old fillna(-1)-then-vocab order made "-1" (and the shot
+    # placeholder "-") real trainable classes that passed the tgt >= 0
+    # mask, so the control/shot heads trained on a fabricated "unlabeled"
+    # class. Mirrors run_xr_same_cohort._normalise_labels semantics.
+    lab["control"] = lab["control"].map(
+        lambda v: str(int(v)) if pd.notna(v) else np.nan)
+    lab["shot"] = lab["shot"].replace("-", np.nan)
     if vocabs is None:
         vocabs = {t: {v: i for i, v in enumerate(sorted(
             lab[t].dropna().unique()))} for t in AUX_TASKS}
