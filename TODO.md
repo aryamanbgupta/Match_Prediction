@@ -83,17 +83,51 @@ consolidation. IDs below reference that catalog.
   absent here):** fixed-seed prop-backtest A/B quantifying SIM1+SIM2+PROP3
   (can share one run with the BR2 gate re-check); regenerate any live
   sliced JSONs so they carry the new bootstrap-contract stamps.
-- [ ] **Phase 3 — remaining majors.** PIPE2 terminal snapshot + loud
-  out-of-list resolve; PIPE3 staleness guard reads `source_dirs_json`;
-  EV3 price-basis vs volume-basis provenance labels; SRV1 four-branch
-  pre-toss enumeration (⚠ moves pre-toss serving probs); PROP1 per-match
-  max-top-score corpus column + re-derive the E2 verdict; PROP4 D/L
-  flag/filter at settlement; ODDS1 fail-closed `evaluated_pools()` incl.
-  `_v2`; ODDS3 women's double-header disambiguation by scheduled start;
-  ODDS4 union-index dedupe; ODDS5 manifest-derived test dirs + staging
-  cleanup; BR1 sim_t1 venue-cache fix + audit through real `__init__`;
-  BR3 `engine_contract` written at generation only; BR4 `load_aux` vocab
-  before sentinel fill; BR5 test-pool mean.
+- [x] **Phase 3 — remaining majors (DONE 2026-08-14).**
+  - [x] PIPE2 terminal snapshot (build emits post-walk state @ last+1,
+        `terminal_snapshot_date` in `_meta`; backend warns once on
+        beyond-corpus as-of against a pre-fix cache) +
+        `test_terminal_snapshot.py`. ⚠ caches need a rebuild to benefit;
+        the i8 integration test's newest-row expectations updated.
+  - [x] PIPE3 provider staleness guard reads `_meta.source_dirs_json`
+        (legacy caches fall back to the men's corpus); verified against the
+        real v3 cache.
+  - [x] EV3 market-LL provenance split into price-basis (source eval JSON)
+        vs volume-basis (reslice odds file).
+  - [x] SRV1 four-branch (toss winner × decision) enumeration via testable
+        `toss_branches()`; batting-first is derived, never varied
+        independently. ⚠ moves pre-toss serving probs. Also fixed the
+        missing-decision default divergence (serve now matches training's
+        "bat" when the winner is known).
+  - [x] PROP1 corpus logs match-level top score (`venue_match` row idx 3,
+        cache bumped to `prop_fair_baseline_corpus_v3.pkl` so v2 pickles
+        fail loudly); spec re-pointed + `test_prop_fair_baseline_corpus.py`.
+        E2 verdict re-derivation still pending sim artifacts.
+  - [x] PROP4 D/L / no-result matches VOIDED at settlement, listed in the
+        report (no silent caps).
+  - [x] ODDS1 `evaluated_pools.require_pool_ids` (fail-closed, `_v2` dirs
+        included) wired into forward-holdout, golden merge, and golden
+        extraction guards.
+  - [x] ODDS3 women's same-day double-headers fail closed
+        (`same_day_doubleheader_ambiguous`) instead of guessing.
+  - [x] ODDS4 golden union index dedupes by cricsheet id.
+  - [x] ODDS5 test dirs reconciled to the manifest (stale strays removed
+        loudly); golden merge copies files before touching the manifest and
+        archives superseded `selection_rule` headers in
+        `selection_rule_history`.
+  - [x] BR1 — investigated and **WITHDRAWN**: `SameDayReplayStatsProvider`
+        subclasses `StatsProviderCache` (wrap is identity) and clears memos
+        on every mutation, so the claimed stale-venue mechanism never
+        fires. Hardened anyway: audit routes through `wrap_with_cache` +
+        identity assert; `test_replay_provider_cache_contract.py` pins the
+        invariants.
+  - [x] BR3 `engine_contract` verified (never backfilled) at
+        `--aggregate-only` and `--append-flipped`; extras runner default
+        config → v2.
+  - [x] BR4 `load_aux` builds vocabs before sentinel-filling; "-1"/"-"
+        can no longer become classes + `test_transformer_t1_load_aux.py`.
+  - [x] BR5 auction payload subtracts the test-pool mean (registered
+        unit); erratum appended to `XR_FUTURE_PLAYER_VALIDATION_V1.md`.
 - [ ] **Phase 3b — BR2 decision (blocks branch merge).** Either re-run
   G1/G3/G5 + a prop-backtest delta under the changed engine, or fence the
   three engine changes behind the T1 path. Compute-heavy → human call on

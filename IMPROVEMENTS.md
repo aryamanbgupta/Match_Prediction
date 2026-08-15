@@ -1850,13 +1850,20 @@ that produced the toss defect).
 
 ### MAJOR — active branch (T1 / XR)
 
-- **BR1 — served T1 sim memoizes venue features across same-day siblings;
-  the parity audit bypasses exactly that cache** (`sim_t1.py:234` →
-  `wrap_with_cache`; memo key `(venue, date, k)` at
-  `stats_provider.py:413–420`; audit constructs the wrapper without the cache,
-  `audit_t1_sim_parity.py:114–116`): second fixture at the same ground/day is
-  served the first fixture's pre-match venue dist; the 2.4e-7 parity claim
-  covers a path the PPC doesn't run.
+- **BR1 — ~~served T1 sim memoizes venue features across same-day
+  siblings~~ WITHDRAWN on re-verification (2026-08-14, same day): the
+  claimed mechanism does not fire.** `SameDayReplayStatsProvider`
+  deliberately subclasses `StatsProviderCache`, so `wrap_with_cache` at
+  `sim_t1.py:234` is the *identity* for it (idempotency check,
+  `stats_provider.py:529`) — no second, never-invalidated memo layer exists
+  — and its `begin_date`/`advance_match` call `clear_memo()`, which clears
+  `_venue_outcome_dist` (`stats_provider.py:521`), after every state
+  mutation. Same-day siblings therefore get fresh venue state. Residual
+  hardening applied: the parity audit now routes through the same
+  `wrap_with_cache` as serving and asserts identity
+  (`audit_t1_sim_parity.py`), and
+  `tests/test_replay_provider_cache_contract.py` pins the three interlocking
+  facts so a future cache change cannot silently re-open the hole.
 - **BR2 — uncommitted behavior changes to the shared production sim engine
   with no production-gate rerun** (`sim_v1_2.py`, 245-line diff): ball-119
   extras rule removed; first-over bowler-selection fix (real bug — lineup
@@ -2000,6 +2007,24 @@ fixed-seed before/after A/B is pending on a checkout with the production
 ball artifacts (this one lacks `models/xgb_i7_noweights_production/`), and
 can share a run with the BR2 engine-gate re-check. Old sliced JSONs predate
 the contract stamps; re-reslice before reading their `bootstrap_reliable`.
+
+Phase 3 landed the same day (see TODO.md for the itemized list): PIPE2
+terminal snapshots (+`terminal_snapshot_date` meta, legacy-cache warning),
+PIPE3 corpus-aware staleness guard, EV3 price/volume-basis provenance
+split, SRV1 four-branch pre-toss enumeration (`toss_branches()`), PROP1
+match-level baseline column (corpus cache → v3), PROP4 D/L voiding, ODDS1
+fail-closed `evaluated_pools`, ODDS3 double-header fail-close, ODDS4 union
+dedupe, ODDS5 manifest-reconciled test dirs + merge ordering +
+`selection_rule_history`, BR3 verify-not-backfill contracts, BR4 aux-vocab
+fix, BR5 test-pool mean (+ report erratum). **BR1 was withdrawn on
+re-verification** (see the amended entry above) and replaced with
+hardening + a contract-pinning test. Additional ⚠: SRV1 moves every
+pre-toss serving probability (including any future Hundred-style
+backtests); PIPE2 requires cache rebuilds to take effect; PROP1's E2
+verdict and the SIM/PROP A/B still need the full-artifact checkout. Suite
+after Phase 3: **319 passed / 10 skipped / 0 failed.** Still open: BR2
+(engine-gate rerun vs fencing — human call), Phase 4 consolidation,
+Phase 5 minors.
 
 ## What NOT To Do
 
