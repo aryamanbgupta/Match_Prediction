@@ -85,6 +85,15 @@ def _synthetic_inputs():
     return frame, ordered
 
 
+@pytest.mark.skipif(
+    not (
+        ROOT / "models" / "xgb_match_v3_m7_production" / "feature_columns.txt"
+    ).is_file()
+    or not (
+        ROOT / "data" / "forward_holdout" / "2026-06-01_2026-07-13"
+    ).is_dir(),
+    reason="legacy production artifacts / sealed holdout not on this checkout",
+)
 def test_actual_input_selection_loads_no_outcomes_and_exact_holdout():
     protocol = load_protocol(PROTOCOL_PATH)
     feature_path = (

@@ -131,6 +131,29 @@ def test_negative_age_budget_is_rejected():
         )
 
 
+def test_a7_retirement_suppresses_fully_qualified_fixture():
+    """A7 is RETIRED (2026-08-07): even a fixture that clears every gate
+    (edge, liquidity, state, scope) must never record a shadow bet, and the
+    decision must carry the retirement provenance."""
+    decision = compute_bet(
+        "A",
+        "B",
+        0.75,
+        {"A": 2.0, "B": 2.0},
+        top6_batting_elo_diff=0.0,
+        polymarket_volume_usd=100_000.0,
+        state_eligible=True,
+        policy_scope_eligible=True,
+    )
+    assert decision["policy_status"] == "retired"
+    assert decision["edge_qualified"] is True          # diagnostics still run
+    assert decision["shadow_bet_placed"] is False      # but never place
+    assert decision["shadow_bet_team"] is None
+    assert decision["suppression_reasons"] == ["policy_retired_20260807"]
+    assert decision["execution_authorized"] is False
+    assert decision["bet_placed"] is False
+
+
 def test_a7_close_fixture_uses_strictly_positive_edge_and_normalized_market():
     decision = compute_bet(
         "A",
@@ -146,14 +169,19 @@ def test_a7_close_fixture_uses_strictly_positive_edge_and_normalized_market():
     )
     assert decision["elo_regime"] == "close"
     assert decision["edge_threshold_pp"] == 0.0
-    assert decision["shadow_bet_placed"] is True
-    assert decision["shadow_bet_team"] == "A"
+    # Post-retirement: the qualification diagnostic survives, the bet does
+    # not. p(A)=0.55 vs normalized market ~0.4615 clears the close-regime
+    # strictly-positive bar.
+    assert decision["edge_qualified"] is True
+    assert decision["shadow_bet_placed"] is False
+    assert decision["shadow_bet_team"] is None
+    assert decision["suppression_reasons"] == ["policy_retired_20260807"]
     assert decision["execution_authorized"] is False
     assert decision["bet_team"] is None
 
 
 @pytest.mark.parametrize(
-    ("model_probability", "expected_placed"),
+    ("model_probability", "expected_qualified"),
     [
         (0.60, False),
         (0.600001, True),
@@ -161,7 +189,7 @@ def test_a7_close_fixture_uses_strictly_positive_edge_and_normalized_market():
 )
 def test_a7_mismatch_requires_edge_strictly_above_ten_points(
     model_probability: float,
-    expected_placed: bool,
+    expected_qualified: bool,
 ):
     decision = compute_bet(
         "A",
@@ -173,7 +201,11 @@ def test_a7_mismatch_requires_edge_strictly_above_ten_points(
     )
     assert decision["elo_regime"] == "mismatch"
     assert decision["edge_threshold_pp"] == 10.0
-    assert decision["shadow_bet_placed"] is expected_placed
+    # The strict > 10pp boundary survives as a diagnostic; retirement means
+    # neither side of it ever places a shadow bet.
+    assert decision["edge_qualified"] is expected_qualified
+    assert decision["shadow_bet_placed"] is False
+    assert "policy_retired_20260807" in decision["suppression_reasons"]
 
 
 def test_a7_requires_primary_liquidity_and_fresh_state():
@@ -187,7 +219,8 @@ def test_a7_requires_primary_liquidity_and_fresh_state():
     )
     assert low_volume["shadow_bet_placed"] is False
     assert low_volume["suppression_reasons"] == [
-        "below_minimum_liquidity"
+        "below_minimum_liquidity",
+        "policy_retired_20260807",
     ]
 
     stale = compute_bet(
@@ -200,7 +233,10 @@ def test_a7_requires_primary_liquidity_and_fresh_state():
         state_eligible=False,
     )
     assert stale["shadow_bet_placed"] is False
-    assert stale["suppression_reasons"] == ["state_not_fresh"]
+    assert stale["suppression_reasons"] == [
+        "state_not_fresh",
+        "policy_retired_20260807",
+    ]
 
 
 def test_a7_missing_volume_or_elo_suppresses_shadow_candidate():
@@ -214,6 +250,7 @@ def test_a7_missing_volume_or_elo_suppresses_shadow_candidate():
     assert decision["suppression_reasons"] == [
         "missing_top6_batting_elo_diff",
         "missing_liquidity",
+        "policy_retired_20260807",
     ]
 
 
@@ -399,4 +436,9 @@ def test_a7_out_of_scope_competition_is_suppressed():
         polymarket_volume_usd=100_000.0,
         state_eligible=True,
     )
-    assert in_scope["shadow_bet_placed"] is True
+    # In-scope differs from out-of-scope only in the scope reason; the bet
+    # itself stays suppressed by retirement.
+    assert in_scope["policy_scope_eligible"] is True
+    assert in_scope["edge_qualified"] is True
+    assert in_scope["shadow_bet_placed"] is False
+    assert in_scope["suppression_reasons"] == ["policy_retired_20260807"]

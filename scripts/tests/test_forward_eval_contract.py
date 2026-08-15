@@ -27,13 +27,23 @@ PROTOCOL = (
     ROOT / "evaluation" / "forward_protocol_2026-06-01_2026-07-13.yaml"
 )
 
+# preflight() re-verifies the sealed holdout on disk before anything else,
+# so these tests can only run on a checkout that carries the sealed set.
+HOLDOUT_DIR = ROOT / "data" / "forward_holdout" / "2026-06-01_2026-07-13"
+requires_sealed_holdout = pytest.mark.skipif(
+    not HOLDOUT_DIR.is_dir(),
+    reason="sealed forward holdout not present on this checkout",
+)
 
+
+@requires_sealed_holdout
 def test_consumed_preflight_fails_closed_after_source_drift():
     assert load_protocol(PROTOCOL)["status"] == "FROZEN"
     with pytest.raises(RuntimeError, match="artifact hash mismatch"):
         preflight(PROTOCOL)
 
 
+@requires_sealed_holdout
 def test_require_frozen_fails_closed_on_draft(tmp_path, monkeypatch):
     protocol = load_protocol(PROTOCOL)
     protocol["status"] = "DRAFT"
@@ -75,6 +85,7 @@ def test_protocol_paths_cannot_escape_repository():
         repo_path("../outside")
 
 
+@requires_sealed_holdout
 def test_tampered_fingerprint_is_rejected(tmp_path: Path):
     tampered = tmp_path / "protocol.yaml"
     text = PROTOCOL.read_text().replace(

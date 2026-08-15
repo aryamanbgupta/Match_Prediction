@@ -37,6 +37,12 @@ MODEL_PATHS = {
     'matchup_encoder_path': 'models/xgb_v3/matchup_encoder_v3.pkl',
 }
 
+pytestmark = pytest.mark.skipif(
+    not Path(MODEL_PATHS['model_path']).is_file()
+    or not Path('data/betting_test').is_dir(),
+    reason="legacy v3 ball artifacts / betting_test data not on this checkout",
+)
+
 
 def banner(msg):
     print(f"\n--- {msg} ---")

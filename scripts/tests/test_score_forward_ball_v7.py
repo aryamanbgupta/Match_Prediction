@@ -208,6 +208,10 @@ def test_winner_probability_postprocess_matches_landed_evaluator():
         postprocess_winner_probabilities(0.4, 0.4, 0.1)
 
 
+@pytest.mark.skipif(
+    not (ROOT / "data" / "forward_holdout" / "2026-06-01_2026-07-13").is_dir(),
+    reason="sealed forward holdout not present on this checkout",
+)
 def test_actual_context_is_complete_and_version_ordered():
     protocol = load_protocol(PROTOCOL_PATH)
     batches = load_context_batches(protocol)
