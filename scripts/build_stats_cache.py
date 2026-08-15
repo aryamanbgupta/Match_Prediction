@@ -32,7 +32,7 @@ import sqlite3
 import sys
 import time
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
@@ -724,6 +724,7 @@ def build(
     conn.execute("BEGIN")
 
     snapshotted_dates: set = set()
+    last_date_str: str = ""
     intra_idx_by_date: Dict[str, int] = defaultdict(int)
     n_matches = 0
     source_json_mtime_max = 0.0
@@ -747,6 +748,7 @@ def build(
     )
     for match_id, json_text, match_date in match_iterator:
         date_str = match_date.strftime('%Y-%m-%d')
+        last_date_str = date_str  # chronological walk → ends at the max date
         data = _json.loads(json_text)
         meta = extract_match_metadata(data)
         k_factor = meta['k_factor']
@@ -844,6 +846,25 @@ def build(
             dt = time.time() - t_start
             print(f"  [{n_matches}] matches in {dt:.0f}s "
                   f"({n_matches / dt:.1f} match/s)", flush=True)
+
+    # Terminal snapshot (2026-08-14 review, PIPE2). Snapshots are emitted
+    # before each date's first match, so the newest snapshot EXCLUDED the
+    # final corpus date's matches: any as-of past corpus end floored to it
+    # and silently lost the freshest day from career/ELO/venue state, while
+    # the match-log getters (strict-before bisect over real dates) still
+    # included that day — one feature row, two information sets, exactly on
+    # the live serving path. One extra snapshot dated the day AFTER the
+    # last corpus date restores strictly-before-date semantics for every
+    # as-of. The sentinel date carries no match-log rows.
+    terminal_snapshot_date = ""
+    if last_date_str:
+        terminal_snapshot_date = (
+            datetime.strptime(last_date_str, '%Y-%m-%d') + timedelta(days=1)
+        ).strftime('%Y-%m-%d')
+        date_id = _intern(date_ids, terminal_snapshot_date)
+        emit_snapshot(deep_copy_stats(stats, venue, elo), date_id)
+        print(f"  terminal snapshot @ {terminal_snapshot_date} "
+              f"(post-walk state through {last_date_str})", flush=True)
 
     flush_all()
 
@@ -946,6 +967,7 @@ def build(
         ('source_json_mtime_max', f"{source_json_mtime_max:.6f}"),
         ('source_json_file_count', str(len(source_files))),
         ('source_match_count', str(n_matches)),
+        ('terminal_snapshot_date', terminal_snapshot_date),
         ('gender_filter', str(gender or 'all')),
         ('num_players', str(len(player_ids))),
         ('num_venues', str(len(venue_ids))),

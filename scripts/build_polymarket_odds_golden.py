@@ -83,18 +83,34 @@ def _union_cricsheet_index() -> dict:
     golden_index = base.load_cricsheet_index(GOLDEN_CRICSHEET_DIR)
 
     merged: dict[str, list[dict]] = defaultdict(list)
+    seen_ids: set[str] = set()
     for d, entries in live_index.items():
-        merged[d].extend(entries)
+        for entry in entries:
+            merged[d].append(entry)
+            seen_ids.add(entry["cricsheet_id"])
     added_dates = 0
     added_entries = 0
+    dup_skipped = 0
     for d, entries in golden_index.items():
-        if d not in merged:
+        fresh = []
+        for entry in entries:
+            # Dedupe by Cricsheet id: once a routine refresh extends
+            # data/t20s_json past the golden cutoff, the same match exists
+            # in both pools. Without this, the joiner sees 2 identical hits,
+            # drops the fixture to multiple_cricsheet_matches, and
+            # previously-matched golden fixtures silently vanish.
+            if entry["cricsheet_id"] in seen_ids:
+                dup_skipped += 1
+                continue
+            seen_ids.add(entry["cricsheet_id"])
+            fresh.append(entry)
+        if fresh and d not in merged:
             added_dates += 1
-        merged[d].extend(entries)
-        added_entries += len(entries)
+        merged[d].extend(fresh)
+        added_entries += len(fresh)
     print(f"  union: {sum(len(v) for v in merged.values()):,} entries across "
           f"{len(merged):,} dates  (golden contributed +{added_entries} entries, "
-          f"+{added_dates} new dates)")
+          f"+{added_dates} new dates; {dup_skipped} duplicate id(s) skipped)")
     return merged
 
 
@@ -116,14 +132,18 @@ def _merge_staging_into_golden(staging: Path) -> None:
     have = {key(m) for m in existing["matches"]}
     # Only the 137 EVALUATED forward fixtures are consumed; the forward
     # context pool is shared state and its fixtures are golden-eligible.
-    forward_owned: set[str] = set()
     fwd_test = (
         REPO_ROOT / "data" / "forward_holdout" / "2026-06-01_2026-07-13"
         / "polymarket_test"
     )
-    if fwd_test.is_dir():
-        forward_owned = {p.stem for p in fwd_test.glob("*.json")}
+    # Fail closed: this guard exists so golden can never absorb a consumed
+    # forward fixture. When the sealed dir is absent the check would
+    # silently pass on an empty set — refuse instead.
+    from evaluated_pools import require_pool_ids
+    forward_owned, _ = require_pool_ids(
+        [fwd_test], "golden merge forward-ownership guard")
 
+    pre_merge_count = len(existing["matches"])
     appended = 0
     for m in staged["matches"]:
         k = key(m)
@@ -139,20 +159,40 @@ def _merge_staging_into_golden(staging: Path) -> None:
         have.add(k)
         appended += 1
 
-    # The header must describe the merged file, not the pre-merge one: earlier
-    # merges left `total_matches` frozen at the original row count.
-    existing["total_matches"] = len(existing["matches"])
-    existing["selection_rule"] = staged.get("selection_rule")
-    existing["winner_used_for_market_selection"] = staged.get(
-        "winner_used_for_market_selection", False
-    )
-    GOLDEN_OUT_ODDS.write_text(json.dumps(existing, indent=2))
+    # Copy the test-dir files BEFORE touching the manifest so a copy failure
+    # cannot leave a manifest that references fixtures with no files
+    # (previously the manifest was written first and a missing test dir
+    # crashed the merge half-applied).
+    GOLDEN_OUT_TEST_DIR.mkdir(parents=True, exist_ok=True)
     copied = 0
     for p in sorted((staging / "polymarket_test").glob("*.json")):
         dest = GOLDEN_OUT_TEST_DIR / p.name
         if not dest.exists():
             shutil.copy2(p, dest)
             copied += 1
+
+    # The header must describe the merged file, not the pre-merge one:
+    # earlier merges left `total_matches` frozen at the original row count.
+    # Per-run provenance (selection_rule carries run-specific counts like
+    # dropped_fixture_count) only describes the latest staged rows, so the
+    # superseded header is archived instead of silently overwritten.
+    existing["total_matches"] = len(existing["matches"])
+    existing.setdefault("selection_rule_history", []).append({
+        "generated_at": existing.get("generated_at"),
+        "total_matches_at_the_time": pre_merge_count,
+        "selection_rule": existing.get("selection_rule"),
+    })
+    existing["selection_rule"] = staged.get("selection_rule")
+    existing["selection_rule_scope"] = (
+        "latest merge's staged rows only; earlier rows' provenance is in "
+        "selection_rule_history"
+    )
+    existing["winner_used_for_market_selection"] = staged.get(
+        "winner_used_for_market_selection", False
+    )
+    if staged.get("generated_at"):
+        existing["generated_at"] = staged["generated_at"]
+    GOLDEN_OUT_ODDS.write_text(json.dumps(existing, indent=2))
     print(f"\n  merged into {GOLDEN_OUT_ODDS.name}: +{appended} manifest "
           f"rows, +{copied} polymarket_test files "
           "(existing rows preserved verbatim)")

@@ -659,8 +659,13 @@ def compute_features(fixture: dict,
     # the real toss (materializer defaults the rare missing case to True,
     # the old inference default was False). 2026-07-16 review I1.
     toss_winner = fixture.get("toss_winner")
-    toss_decision = fixture.get("toss_decision") or "field"
     toss_known = toss_winner in (team1, team2)
+    # A KNOWN winner with a missing decision defaults to "bat", matching the
+    # materializer's convention (train/serve parity, 2026-08-14 review).
+    # With an unknown toss the value is a placeholder — the four-branch
+    # enumeration in main() overrides all three toss features.
+    toss_decision = fixture.get("toss_decision") or (
+        "bat" if toss_known else "field")
     if toss_winner == team1:
         team1_batting_first = (toss_decision == "bat")
     elif toss_winner == team2:
@@ -1038,6 +1043,29 @@ def compute_bet(
     }
 
 
+def toss_branches(record: dict) -> "dict[str, dict]":
+    """Four internally consistent (toss winner × decision) branches for a
+    pre-toss fixture. The winner bats first iff they chose to bat, so
+    team1_batting_first is DERIVED, never varied independently: the I1
+    two-branch average pinned toss_winner_is_team1=0 / toss_decision_bat=0,
+    a combination that deterministically implies team1 bats first in every
+    training row — its chase branch was off-manifold, and every pre-toss
+    fixture asserted "team2 won the toss" (2026-08-14 review, SRV1)."""
+    branches: dict[str, dict] = {}
+    for tw_is_team1 in (1, 0):
+        for decision_bat in (1, 0):
+            branch = dict(record)
+            branch["toss_winner_is_team1"] = tw_is_team1
+            branch["toss_decision_bat"] = decision_bat
+            branch["team1_batting_first"] = int(tw_is_team1 == decision_bat)
+            label = (
+                f"{'team1' if tw_is_team1 else 'team2'}_wins_toss_"
+                f"{'bats' if decision_bat else 'fields'}"
+            )
+            branches[label] = branch
+    return branches
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--fixture", type=Path, required=True,
@@ -1255,28 +1283,29 @@ def main() -> int:
             elo_update_version=args.elo_update_version,
         )
     else:
-        # Unknown toss: predict both bat-first branches and average
-        # (2026-07-16 review I1 — removes the fixed team1-chasing default,
-        # which was a systematic train/serve skew on every pre-toss fixture).
-        branch = dict(record)
-        branch["team1_batting_first"] = 1
-        p_bat, debug = apply_encoders_and_predict(
-            branch,
-            args.model_dir,
-            identity_mode=args.venue_identity_mode,
-            elo_update_version=args.elo_update_version,
-        )
-        branch["team1_batting_first"] = 0
-        p_chase, _ = apply_encoders_and_predict(
-            branch,
-            args.model_dir,
-            identity_mode=args.venue_identity_mode,
-            elo_update_version=args.elo_update_version,
-        )
-        p_team1 = 0.5 * (p_bat + p_chase)
-        toss_branch_probs = {"team1_bats_first": p_bat, "team1_chases": p_chase}
-        print(f"  (toss unknown — averaged bat-first branches: "
-              f"{p_bat*100:.1f}% / {p_chase*100:.1f}%)")
+        # Unknown toss: enumerate the four internally consistent
+        # (toss winner × decision) branches and average — see
+        # toss_branches() for why two bat-first branches were not enough.
+        # The toss is a fair coin; pre-toss decision propensity is unknown,
+        # so branches are equally weighted and reported individually.
+        branch_probs = {}
+        debug = None
+        for label, branch in toss_branches(record).items():
+            p_branch, branch_debug = apply_encoders_and_predict(
+                branch,
+                args.model_dir,
+                identity_mode=args.venue_identity_mode,
+                elo_update_version=args.elo_update_version,
+            )
+            if debug is None:
+                debug = branch_debug
+            branch_probs[label] = p_branch
+        p_team1 = sum(branch_probs.values()) / len(branch_probs)
+        toss_branch_probs = branch_probs
+        print("  (toss unknown — averaged four toss-winner x decision "
+              "branches: "
+              + ", ".join(f"{k} {v*100:.1f}%"
+                          for k, v in branch_probs.items()) + ")")
     p_team2 = 1.0 - p_team1
 
     # A7 was predeclared for male T20 winner markets on the standard state

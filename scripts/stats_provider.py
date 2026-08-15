@@ -13,6 +13,7 @@ Usage:
     # Returns: {'avg': 31.4, 'sr': 140.2}
 """
 
+import json
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional
@@ -126,10 +127,24 @@ class StatsProvider:
 
         # Staleness: fail loudly rather than silently serving old stats.
         # `source_json_mtime_max` is written by build_stats_cache.py;
-        # compare against live JSON corpus mtime.
-        json_dir = cache_root.parent / 'data' / 't20s_json'
-        if 'source_json_mtime_max' in meta and json_dir.exists():
-            json_files = list(json_dir.glob('*.json'))
+        # compare against the corpus the cache was ACTUALLY built from
+        # (`source_dirs_json` in _meta). The old hardcoded data/t20s_json
+        # comparison silently passed for women's/i5/aux caches after their
+        # own corpus changed, and spuriously refused other-corpus caches
+        # after a men's refresh (2026-08-14 review, PIPE3).
+        if 'source_json_mtime_max' in meta:
+            recorded_dirs = meta.get('source_dirs_json')
+            if recorded_dirs:
+                source_dirs = [Path(p) for p in json.loads(recorded_dirs)]
+            else:
+                # Pre-source_dirs_json caches: legacy men's-corpus fallback.
+                source_dirs = [cache_root.parent / 'data' / 't20s_json']
+            json_files = [
+                p
+                for source_dir in source_dirs
+                if source_dir.exists()
+                for p in source_dir.glob('*.json')
+            ]
             if json_files:
                 live_mtime = max(p.stat().st_mtime for p in json_files)
                 sqlite_src_mtime = float(
@@ -139,7 +154,8 @@ class StatsProvider:
                         f"SQLite cache is stale:\n"
                         f"  {sqlite_path} built from JSONs @ "
                         f"{sqlite_src_mtime}\n"
-                        f"  {json_dir} current max mtime = {live_mtime}\n"
+                        f"  {[str(d) for d in source_dirs]} current max "
+                        f"mtime = {live_mtime}\n"
                         f"Rebuild with: "
                         f"uv run python scripts/build_stats_cache.py"
                     )

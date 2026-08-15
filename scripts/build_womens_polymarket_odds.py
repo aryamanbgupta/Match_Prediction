@@ -180,8 +180,24 @@ def build(args: argparse.Namespace) -> dict:
     near_misses: list[dict] = []
     winner_conflicts: list[dict] = []
 
+    # Same-day double-headers with the same team pair are unresolvable from
+    # this side of the join: Cricsheet fixtures carry no start time to align
+    # against the market's scheduled_start_timestamp, so any assignment
+    # would be a guess that can attach leg 1's price to leg 2. Both men's
+    # builders fail closed on exactly this ambiguity — do the same here
+    # instead of letting the lexicographically-first fixture take the
+    # highest-volume market (2026-08-14 review, ODDS3).
+    fixture_pair_counts = Counter(
+        (f["match_date"], pair_key(f["team1"], f["team2"])) for f in fixtures
+    )
+
     for fixture in sorted(fixtures, key=lambda f: (f["match_date"], f["match_id"])):
         key = pair_key(fixture["team1"], fixture["team2"])
+        if fixture_pair_counts[(fixture["match_date"], key)] > 1:
+            unmatched_fixtures.append(
+                {**fixture, "unmatched_reason": "same_day_doubleheader_ambiguous"}
+            )
+            continue
         same_day = [
             m
             for m in by_date.get(fixture["match_date"], [])
@@ -376,6 +392,7 @@ def build(args: argparse.Namespace) -> dict:
                 "split": f["split"],
                 "date": f["match_date"],
                 "fixture": f"{f['team1']} vs {f['team2']}",
+                "reason": f.get("unmatched_reason", "no_market_candidate"),
             }
             for f in unmatched_fixtures
         ],

@@ -803,6 +803,7 @@ def write_outputs(
     odds_entries: list[dict] = []
     copied = 0
     already_present = 0
+    manifest_file_names: set[str] = set()
     residual_disagreements: list[dict] = []
     for mid, (m, entry) in best_by_match.items():
         odds_entries.append(entry)
@@ -817,12 +818,26 @@ def write_outputs(
                 "event_slug": m["market"].get("event_slug"),
             })
         src = Path(m["cricsheet"]["path"])
+        manifest_file_names.add(src.name)
         dst = OUT_TEST_DIR / src.name
         if dst.exists():
             already_present += 1
         else:
             shutil.copy2(src, dst)
             copied += 1
+
+    # Reconcile the test dir to exactly the manifest's fixture set
+    # (2026-08-14 review, ODDS5): the dir used to be append-only, so
+    # fixtures dropped by a rebuild persisted and dir-iterating consumers
+    # (run_sim_eval / prop_backtest --test-dir) scored matches with no odds
+    # row. The dir is manifest-derived by definition; remove strays loudly.
+    stale_removed = 0
+    for existing_file in sorted(OUT_TEST_DIR.glob("*.json")):
+        if existing_file.name not in manifest_file_names:
+            print(f"  removing stale test-dir fixture not in manifest: "
+                  f"{existing_file.name}")
+            existing_file.unlink()
+            stale_removed += 1
 
     output = {
         "source": "polymarket",
@@ -865,7 +880,8 @@ def write_outputs(
     tmp.replace(OUT_UNMATCHED_PATH)
 
     print(f"\nOdds file:       {OUT_ODDS_PATH}  ({len(odds_entries):,} matches)")
-    print(f"Test dir:        {OUT_TEST_DIR}  (+{copied} copied, {already_present} already present)")
+    print(f"Test dir:        {OUT_TEST_DIR}  (+{copied} copied, "
+          f"{already_present} already present, {stale_removed} stale removed)")
     print(f"H2H siblings deduped: {dup_dropped} extra head-to-head market(s) dropped")
     print(f"Non-H2H records rejected: {non_h2h_seen}  "
           f"(unresolved identity: {unresolved_seen})")

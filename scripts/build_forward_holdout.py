@@ -61,10 +61,17 @@ REQUIRED_SELECTION_CONTRACT = {
     "deduplicated_by_fixture": False,
     "winner_used_for_market_selection": False,
 }
+# Every pool whose fixtures a new sealed holdout must not absorb. The _v2
+# dirs are the eval sets of record since 2026-08-05; the pre-fix dirs stay
+# listed because their fixtures were evaluated/shipped all the same.
+# Enumeration is FAIL-CLOSED (evaluated_pools.require_pool_ids): a missing
+# pool raises instead of silently contributing zero fixtures.
 EXISTING_EVALUATED_DIRS = (
     ROOT / "data" / "t20s_json",
     ROOT / "data" / "polymarket_test",
+    ROOT / "data" / "polymarket_test_v2",
     ROOT / "data" / "golden" / "polymarket_test",
+    ROOT / "data" / "golden" / "polymarket_test_v2",
     ROOT / "data" / "golden_blast" / "polymarket_test",
 )
 _WOMENS_MARKERS = re.compile(
@@ -362,12 +369,16 @@ def load_cricsheet_archives(
 
 
 def existing_evaluated_ids() -> tuple[set[str], dict[str, int]]:
-    found: set[str] = set()
-    counts: dict[str, int] = {}
-    for directory in EXISTING_EVALUATED_DIRS:
-        ids = {path.stem for path in directory.glob("*.json")}
-        found.update(ids)
-        counts[str(directory.relative_to(ROOT))] = len(ids)
+    from evaluated_pools import require_pool_ids
+
+    found, raw_counts = require_pool_ids(
+        EXISTING_EVALUATED_DIRS,
+        "forward-holdout overlap guard",
+    )
+    counts = {
+        str(Path(directory).relative_to(ROOT)): count
+        for directory, count in raw_counts.items()
+    }
     return found, counts
 
 

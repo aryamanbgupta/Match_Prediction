@@ -954,10 +954,25 @@ def main():
     print(f"Running prop backtest on {len(files)} matches × {args.n_sims} sims")
 
     detail = []
+    voided = []
     overall_start = time.time()
     for i, fp in enumerate(files):
         with open(fp) as f:
             data = json.load(f)
+        # Void handling (2026-08-14 review, PROP4): a D/L-shortened or
+        # no-result match settles truncated actuals against a sim that
+        # always plays 20 overs, where a real book voids or re-lines.
+        # Nothing upstream enforces test-set curation, so enforce it here.
+        outcome = (data.get("info", {}) or {}).get("outcome", {}) or {}
+        void_reason = None
+        if outcome.get("method"):
+            void_reason = f"outcome.method={outcome['method']}"
+        elif str(outcome.get("result", "")).lower() == "no result":
+            void_reason = "outcome.result=no result"
+        if void_reason:
+            voided.append({"cricsheet_id": fp.stem, "reason": void_reason})
+            print(f"  [{i+1}/{len(files)}] VOID ({void_reason}): {fp.name}")
+            continue
         match_id, state = loader._create_match_state(
             data,
             cricsheet_id=fp.stem,
@@ -992,7 +1007,9 @@ def main():
             f"({elapsed:.1f}s)"
         )
 
-    print(f"\nDone in {time.time() - overall_start:.1f}s")
+    print(f"\nDone in {time.time() - overall_start:.1f}s"
+          + (f"  ({len(voided)} match(es) VOIDED — D/L / no-result)"
+             if voided else ""))
 
     # Persist detail.
     Path(args.detail_out).parent.mkdir(parents=True, exist_ok=True)
@@ -1042,6 +1059,16 @@ def main():
         f"Test set: `{args.test_dir}` | Model: `{args.model_path}`"
     )
     lines.append("")
+    if voided:
+        # No silent caps: report exactly which matches were excluded.
+        lines.append(
+            f"**Voided (not settled): {len(voided)}** — D/L-shortened or "
+            "no-result matches settle truncated actuals against a "
+            "full-20-over sim where a real book voids or re-lines."
+        )
+        for row in voided:
+            lines.append(f"- `{row['cricsheet_id']}` ({row['reason']})")
+        lines.append("")
 
     # Binary props.
     lines.append("## Binary props")

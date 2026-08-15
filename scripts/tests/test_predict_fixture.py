@@ -131,6 +131,30 @@ def test_negative_age_budget_is_rejected():
         )
 
 
+def test_toss_branches_are_internally_consistent():
+    """SRV1 (2026-08-14 review): pre-toss branch enumeration must respect
+    the training-manifold identity — the toss winner bats first iff they
+    chose to bat — and cover all four (winner × decision) combinations."""
+    from predict_fixture import toss_branches
+
+    record = {"some_feature": 1.25, "toss_winner_is_team1": 0,
+              "toss_decision_bat": 0, "team1_batting_first": 0}
+    branches = toss_branches(record)
+    assert len(branches) == 4
+    combos = set()
+    for label, branch in branches.items():
+        tw = branch["toss_winner_is_team1"]
+        bat = branch["toss_decision_bat"]
+        combos.add((tw, bat))
+        assert branch["team1_batting_first"] == int(tw == bat), \
+            f"{label}: batting-first must be derived from winner × decision"
+        assert branch["some_feature"] == 1.25, "base features must carry over"
+    assert combos == {(1, 1), (1, 0), (0, 1), (0, 0)}
+    # The average of the four batting-first values is 0.5 — matching the
+    # true pre-toss marginal P(team1 bats first).
+    assert sum(b["team1_batting_first"] for b in branches.values()) == 2
+
+
 def test_a7_retirement_suppresses_fully_qualified_fixture():
     """A7 is RETIRED (2026-08-07): even a fixture that clears every gate
     (edge, liquidity, state, scope) must never record a shadow bet, and the

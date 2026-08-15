@@ -157,12 +157,26 @@ def _build_grid(
                     "source": "fallback constant (v2 odds, audit 2026-08-05)",
                 }
             else:
+                # Provenance (2026-08-14 review, EV3): market_prob rows are
+                # frozen into the SOURCE eval JSON at generation; reslice's
+                # --odds file only sets slice membership. Labeling the
+                # prices with the reslice odds filename asserted the wrong
+                # basis (e.g. v1 prices labeled v2 after a re-reslice).
+                summary = data["summary"]
                 market[slice_tag] = {
                     "market_ll": market_ll,
                     "n_priced": n_priced,
-                    "source": Path(
-                        data["summary"].get("reslice_odds") or path
+                    "price_basis": Path(
+                        summary.get("reslice_source") or path
                     ).name,
+                    "volume_basis": (
+                        Path(summary["reslice_odds"]).name
+                        if summary.get("reslice_odds") else None
+                    ),
+                    "source": (
+                        "prices from the source eval JSON "
+                        f"({Path(summary.get('reslice_source') or path).name})"
+                    ),
                 }
     return grid
 
@@ -329,7 +343,10 @@ def render_markdown(sliced_dir: Path, direct_json: Path) -> str:
         if mk:
             out.append(
                 f"Market LL on this slice: **{mk['market_ll']:.4f}** "
-                f"(n priced = {mk['n_priced']}, source: {mk['source']})\n"
+                f"(n priced = {mk['n_priced']}, source: {mk['source']}"
+                + (f", volume slicing: {mk['volume_basis']}"
+                   if mk.get('volume_basis') else "")
+                + ")\n"
             )
         out.append("| w | LL | LL 95% CI | Flat ROI | ROI 95% CI | Win rate | Bets |")
         out.append("|---|---|---|---|---|---|---|")

@@ -59,7 +59,10 @@ from identity_maps import canonicalize_venue
 
 REPO = Path(__file__).resolve().parents[2]
 SOURCE_DIR = REPO / "data" / "t20s_json"
-CACHE = REPO / "models" / "prop_fair_baseline_corpus_v2.pkl"
+# v3 (2026-08-14, PROP1): venue_match rows gained match_top_score; a v2
+# pickle's 3-tuples would IndexError on the new spec, so the filename is
+# the schema version — old pickles cannot be silently misread.
+CACHE = REPO / "models" / "prop_fair_baseline_corpus_v3.pkl"
 
 BOWLER_KINDS = {"bowled", "caught", "lbw", "stumped", "caught and bowled",
                 "hit wicket"}
@@ -84,7 +87,8 @@ def build_corpus_logs(source_dir: Path) -> dict:
     venue_inn = defaultdict(list)    # venue -> [(date, total, pp, top_score,
                                      #            first_wkt_runs, first_over,
                                      #            team_fours)]
-    venue_match = defaultdict(list)  # venue -> [(date, match_sixes, max_over)]
+    # venue -> [(date, match_sixes, max_over, match_top_score)]
+    venue_match = defaultdict(list)
     pos_top = []                     # [(date, appearance_pos_of_top_scorer)]
 
     files = sorted(source_dir.glob("*.json"))
@@ -107,6 +111,7 @@ def build_corpus_logs(source_dir: Path) -> dict:
         innings = j.get("innings", [])[:2]
         match_sixes = 0
         match_max_over = 0
+        match_top_score = 0
         for inn in innings:
             batters = {}
             appear = []
@@ -153,6 +158,7 @@ def build_corpus_logs(source_dir: Path) -> dict:
                 first_wkt_runs = total
             team_fours = sum(v["fours"] for v in batters.values())
             top_score = max(v["runs"] for v in batters.values())
+            match_top_score = max(match_top_score, top_score)
             top_name = max(batters, key=lambda b: batters[b]["runs"])
             pos_top.append((date, appear.index(top_name) + 1))
             for b, v in batters.items():
@@ -173,7 +179,8 @@ def build_corpus_logs(source_dir: Path) -> dict:
                         (date, balls_by_bowler[bw], wkts_by_bowler[bw]))
             venue_inn[venue].append((date, total, pp, top_score,
                                      first_wkt_runs, first_over, team_fours))
-        venue_match[venue].append((date, match_sixes, match_max_over))
+        venue_match[venue].append(
+            (date, match_sixes, match_max_over, match_top_score))
         n_used += 1
 
     def _sortlog(d):
@@ -437,7 +444,12 @@ def baseline_rows(detail: list, asof: AsOf) -> dict:
             "team_total_fours_mae": ("venue_inn", lambda row: row[6]),
             "team_total_sixes_mae": ("venue_match", lambda row: row[1] / 2.0),
             "team_first_over_mae": ("venue_inn", lambda row: row[5]),
-            "highest_individual_mae": ("venue_inn", lambda row: row[3]),
+            # Match-level target (max over both innings) needs a match-level
+            # baseline: the old per-innings top-score mean was structurally
+            # low by E[max of two] - E[one], inflating baseline MAE and
+            # flattering the sim (2026-08-14 review, PROP1 — the E2 "sim
+            # adds skill" verdict for this family must be re-derived).
+            "highest_individual_mae": ("venue_match", lambda row: row[3]),
         }
         for fam, spec in mae_v.items():
             rows = obs.get(fam, [])

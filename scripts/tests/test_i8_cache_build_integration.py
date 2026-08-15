@@ -81,10 +81,13 @@ def test_schema_v5_builder_persists_phase_and_h2h_counts(tmp_path: Path):
 
     with sqlite3.connect(output) as conn:
         meta = dict(conn.execute("SELECT key, value FROM _meta"))
-        h2h = conn.execute(
+        # Since the 2026-08-14 PIPE2 fix the newest date_id row is the
+        # TERMINAL snapshot (post-walk state, both matches); the pre-match
+        # snapshot of the final date sits one date_id earlier.
+        h2h_rows = conn.execute(
             "SELECT balls,c0,c1,c2,c4,c6,cw FROM h2h "
-            "ORDER BY date_id DESC LIMIT 1"
-        ).fetchone()
+            "ORDER BY date_id DESC LIMIT 2"
+        ).fetchall()
         batter_phase = conn.execute(
             "SELECT phase,c0,c1,c2,c4,c6,cw FROM batting_phase "
             "ORDER BY date_id DESC LIMIT 1"
@@ -96,9 +99,11 @@ def test_schema_v5_builder_persists_phase_and_h2h_counts(tmp_path: Path):
 
     assert meta["schema_version"] == "5"
     assert meta["features"] == "v5"
-    assert h2h == (1, 0, 1, 0, 0, 0, 0)
-    assert batter_phase == (0, 0, 1, 0, 0, 0, 0)
-    assert bowler_phase == (0, 0, 1, 0, 0, 0, 0)
+    assert meta["terminal_snapshot_date"] == "2026-01-03"
+    assert h2h_rows[0] == (2, 0, 2, 0, 0, 0, 0)   # terminal: both matches
+    assert h2h_rows[1] == (1, 0, 1, 0, 0, 0, 0)   # pre-match of 2026-01-02
+    assert batter_phase == (0, 0, 2, 0, 0, 0, 0)
+    assert bowler_phase == (0, 0, 2, 0, 0, 0, 0)
 
     provider = StatsProvider(
         str(tmp_path),

@@ -56,10 +56,15 @@ def main() -> int:
     GOLDEN_POOL.mkdir(parents=True, exist_ok=True)
     local_existing = {p.name for p in LOCAL_POOL.glob("*.json")}
     golden_existing = {p.name for p in GOLDEN_POOL.glob("*.json")}
-    excluded_names: set[str] = set()
-    for pool in EXCLUDED_POOL_DIRS:
-        if pool.is_dir():
-            excluded_names |= {p.name for p in pool.glob("*.json")}
+    # Fail closed (2026-08-14 review, ODDS1): a missing excluded pool used
+    # to contribute zero names silently, letting golden re-absorb consumed
+    # forward/blast fixtures on a light checkout.
+    from evaluated_pools import require_pool_ids
+    excluded_names, _ = require_pool_ids(
+        EXCLUDED_POOL_DIRS,
+        "golden extraction exclusion guard",
+        use_name=True,
+    )
 
     print(f"Local pool size:  {len(local_existing):,}")
     print(f"Golden pool size: {len(golden_existing):,}")

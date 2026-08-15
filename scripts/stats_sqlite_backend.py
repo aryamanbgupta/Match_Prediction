@@ -472,6 +472,13 @@ class _SQLiteBackend:
             self.schema_version = int(meta.get("schema_version", -1))
         except (TypeError, ValueError):
             self.schema_version = -1
+        # Caches built after 2026-08-14 carry a terminal snapshot (state
+        # AFTER the last corpus date's matches, dated last+1). Older caches
+        # floor beyond-corpus as-of dates to a snapshot that excludes the
+        # final day — warn once per instance when that happens (PIPE2).
+        self._has_terminal_snapshot = bool(
+            meta.get('terminal_snapshot_date'))
+        self._warned_beyond_corpus = False
         # Fall back to a flat uniform prior if the DB predates v4; keeps
         # the backend usable in migration windows. Real rebuilds always
         # write the six prior_p* rows from build_stats_cache.
@@ -520,6 +527,22 @@ class _SQLiteBackend:
     def _resolve_date_id(self, as_of_date) -> int:
         """Largest date_id whose date ≤ as_of_date, or -1 if none."""
         target = self._norm_date(as_of_date)
+        if (
+            not self._has_terminal_snapshot
+            and not self._warned_beyond_corpus
+            and self._date_strs
+            and target > self._date_strs[-1]
+        ):
+            self._warned_beyond_corpus = True
+            print(
+                f"WARNING: as-of {target} is beyond this cache's last "
+                f"snapshot date {self._date_strs[-1]} and the cache "
+                "predates terminal snapshots (2026-08-14): served "
+                "career/ELO/venue state EXCLUDES the final corpus date's "
+                "matches while match-log recent form includes them — "
+                "rebuild the cache to close the gap.",
+                flush=True,
+            )
         idx = bisect.bisect_right(self._date_strs, target)
         return idx - 1
 
