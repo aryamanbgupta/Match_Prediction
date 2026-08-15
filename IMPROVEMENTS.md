@@ -2044,6 +2044,51 @@ after Phase 3: **319 passed / 10 skipped / 0 failed.** Still open: BR2
 (engine-gate rerun vs fencing — human call), Phase 4 consolidation,
 Phase 5 minors.
 
+### T1 implementation review (2026-08-14, follow-up to the branch review)
+
+A focused deep review of the T1 model/serving implementation
+(`transformer_t1.py`, `sim_t1.py`, `run_t1_ablation.py` + upstream
+contracts), scoped to exclude what the first review already verified.
+
+**MAJOR (FIXED same day, fix rides with the branch merge):** serving had a
+second, unaudited EB-count path. `OnlineT1OutcomeDists` picks its base
+counts by attribute sniffing: the PPC runners pass a
+`SameDayReplayStatsProvider` (the branch the 2.4e-7 parity audit
+certifies), but the documented market-eval runner (`run_sim_eval_t1.py` →
+plain `StatsProvider`) silently selected a fallback that reads
+date-snapshot SQLite counts — which EXCLUDE earlier same-day matches,
+diverging from training features on multi-fixture days (the audit itself
+replayed 183 same-day context fixtures to reach parity; invariant #6 says
+date-only SQLite queries are insufficient for ball sim). The already-FAILED
+T4 market run used exactly this branch. The constructor now FAILS CLOSED on
+the snapshot path unless `T1_ALLOW_SNAPSHOT_COUNTS=1`
+(`tests/test_sim_t1_snapshot_guard.py` pins it; both live UNCOMMITTED with
+the branch's `sim_t1.py`, which is where the class lives). Proper fix
+queued: promote `get_t1_outcome_counts` to a first-class provider API or
+make `run_sim_eval_t1` construct the replay provider, then delete the
+private `_provider`/`_batting_counts` reach-through.
+
+**Minors (recorded, left to the branch owner):** ablation gate applied to
+the seed+match CI while the YAML registers the match-clustered CI (verdict
+identical on the shipped run — both cross zero — but align text or code
+before a rerun); validation columns are checkpoint-selection-biased vs the
+logistic control (test split clean; read val ΔLL as selection-tuned);
+printed `train_ll` includes aux CE under `--aux`; `load_state_dict(None)`
+crash if val LL is NaN from epoch 0; super-over rows land in the
+"powerplay" slice mask (~30 rows); dead/defensive code in `sim_t1.py`
+(bare `except` on `required_run_rate`, test-only `_fill_outcome_dists`
+fallback, unused `runner_max_seq_len`) and `transformer_t1.py` (unused
+`import math`, unused `df` param). Perf note: `predict_next_ball` re-runs
+the full O(L²) forward every ball — the dominant PPC cost; prefix caching
+is the obvious win.
+
+**Verified clean (no action):** loss masking + LL denominators exactly
+match the baseline's rows; normalization constants identical train↔serve
+(pinned by tests + the row-level audit); five seeds genuinely independent;
+online EB overlay's extras counting matches the legacy training path
+exactly; one-predict-one-update engine contract sound; softmax sampling
+un-tempered; no batch-statistic or y-derived leakage in any arm.
+
 ## What NOT To Do
 
 - Don't chase ball-level accuracy beyond ~60% — individual balls are inherently noisy.

@@ -149,6 +149,16 @@ consolidation. IDs below reference that catalog.
         run must happen there.
   - [ ] Run the gates on the full checkout → human reviews numbers + the
         engine diff → merge → restate numbers everywhere.
+- [ ] **T1 follow-ups (from the 2026-08-14 implementation review; details
+  in IMPROVEMENTS.md):** promote `get_t1_outcome_counts` to a first-class
+  provider API (or make `run_sim_eval_t1` build a
+  `SameDayReplayStatsProvider`) and delete the private reach-through — the
+  interim fail-closed guard + `tests/test_sim_t1_snapshot_guard.py` ride
+  UNCOMMITTED with the branch's `sim_t1.py`; align the ablation gate CI
+  (code: seed+match) with the registered YAML text (match-clustered)
+  before any rerun; prefix-cache `predict_next_ball` (currently O(L²)
+  re-forward per ball — dominant PPC cost); minor trainer/serving
+  hygiene items listed in the review record.
 - [ ] **Backlog: model free hits.** After a NO_BALL the next delivery is a
   free hit — only run-outs can dismiss. The sim currently samples wickets
   at the full rate there (~0.5–1% of one delivery's wicket mass per
