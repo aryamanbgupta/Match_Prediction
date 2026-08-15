@@ -364,30 +364,7 @@ def selection_key(matched: dict) -> tuple:
     return (-float(volume), _market_id_sort_key(ident.get("market_id")))
 
 
-_UTC_OFFSET_SHORT = re.compile(r"([+-]\d{2})$")
-
-
-def _parse_ts(raw) -> datetime | None:
-    """Parse Gamma/CLOB timestamps as UTC. Returns None when unparseable.
-
-    Gamma writes `gameStartTime` as `YYYY-MM-DD HH:MM:SS+00` — a two-digit
-    offset that `fromisoformat` does not accept before 3.11 — while the
-    captures write `...Z`. Both are normalized here; a bare `.replace("+00",
-    "+00:00")` would corrupt an already-full `+00:00` offset.
-    """
-    if not raw:
-        return None
-    text = str(raw).strip()
-    if text.endswith("Z"):
-        text = text[:-1] + "+00:00"
-    text = _UTC_OFFSET_SHORT.sub(r"\1:00", text)
-    try:
-        parsed = datetime.fromisoformat(text)
-    except (TypeError, ValueError):
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+from market_common import parse_market_timestamp as _parse_ts  # noqa: E402
 
 
 def price_is_prematch(matched: dict) -> bool | None:
@@ -619,7 +596,16 @@ def build_odds_entry(matched: dict) -> dict | None:
         return None  # unreachable — match() already verified set equality
 
     def _dec(price: float) -> float:
-        return round(1.0 / price, 4) if price and price > 0 else 0.0
+        # A price outside (0, 1) has no decimal-odds representation:
+        # emitting 0.0 poisons every downstream 1/odds consumer. Fail
+        # closed — the forward builder has always enforced this bound.
+        value = float(price) if price is not None else 0.0
+        if not (0.0 < value < 1.0):
+            raise ValueError(
+                f"implied probability {price!r} outside (0, 1); refusing "
+                "to emit decimal odds for an unpriceable row"
+            )
+        return round(1.0 / value, 4)
 
     venue = cric["venue"]
     identity = new_match_identity(

@@ -36,6 +36,11 @@ from sim_v1_2 import (  # noqa: E402
     XGBoostModelV2,
 )
 from sim_eval.loaders import TestMatchLoader  # noqa: E402
+from sim_eval.prop_fair_baselines import BOWLER_KINDS  # noqa: E402
+
+# Retirements are not dismissals: they end neither the partnership nor the
+# batter's innings for settlement purposes.
+_NOT_OUT_KINDS = {"retired hurt", "retired not out"}
 from stats_provider import StatsProvider  # noqa: E402
 from player_metadata import PlayerMetadataProvider  # noqa: E402
 
@@ -330,13 +335,18 @@ def compute_actuals(data: dict) -> dict:
                 if "wickets" in d:
                     for w in d["wickets"]:
                         kind = (w.get("kind") or "").lower()
-                        if kind != "run out":
+                        # Bowler credit uses the same BOWLER_KINDS set as
+                        # the fair-baseline corpus and the sim's D15 split
+                        # — "kind != run out" also credited retired
+                        # hurt/out and obstructing-the-field, none of
+                        # which are bowler dismissals (2026-08-14 review).
+                        if kind in BOWLER_KINDS:
                             bowler_wkts[bowler] += 1
-                            if first_wkt_runs is None:
-                                first_wkt_runs = team_runs[bt]
-                        elif first_wkt_runs is None:
-                            # Even run-out counts toward "first wicket"
-                            # for runs-before-first-wicket prop.
+                        # Runs-before-first-wicket settles on any actual
+                        # dismissal (run out included); a retirement is
+                        # not out and does not end the partnership.
+                        if (kind not in _NOT_OUT_KINDS
+                                and first_wkt_runs is None):
                             first_wkt_runs = team_runs[bt]
 
         team_first_over_runs[bt] = first_over
@@ -360,21 +370,26 @@ def compute_actuals(data: dict) -> dict:
         fixed_team_to_bowlers[opposing] |= bowlers
     team_to_bowlers = fixed_team_to_bowlers
 
-    # Identify per-team top batter / top bowler.
+    # Identify per-team top batter / top bowler. Iterate SORTED names:
+    # exact ties on the full key used to resolve by set iteration order,
+    # which is hash-randomized per process — non-reproducible detail JSONs
+    # (2026-08-14 review). Ties now break alphabetically.
     top_batter_per_team: Dict[str, str] = {}
     for team, batters in team_to_batters.items():
         if not batters:
             continue
         top_batter_per_team[team] = max(
-            batters, key=lambda b: (batter_runs.get(b, 0), batter_balls.get(b, 0))
+            sorted(batters),
+            key=lambda b: (batter_runs.get(b, 0), batter_balls.get(b, 0))
         )
     top_bowler_per_team: Dict[str, str] = {}
     for team, bowlers in team_to_bowlers.items():
         if not bowlers:
             continue
-        # DK rule: most wickets, tiebreak fewest runs conceded.
+        # DK rule: most wickets, tiebreak fewest runs conceded; exact ties
+        # break alphabetically (sorted iteration — reproducibility).
         top_bowler_per_team[team] = max(
-            bowlers,
+            sorted(bowlers),
             key=lambda b: (bowler_wkts.get(b, 0), -bowler_runs_conceded.get(b, 0)),
         )
 
@@ -639,14 +654,7 @@ def build_observations(match_id: str, sim_agg: dict, actuals: dict) -> dict:
         })
 
     # ---- Bowler wickets: P(>=1), P(>=2), P(>=3) ----
-    # Need bowler-name → team mapping from actuals.
-    bowler_team: Dict[str, str] = {}
-    for team in actuals.get("teams", []):
-        # team_to_bowlers was flipped in compute_actuals; we don't have it
-        # in actuals dict, so reverse via bowler_wkts which is only populated
-        # for bowlers (i.e. the opposing-team players).
-        pass
-    # Easier: enumerate sim bowlers; we have (team, idx) → name via lineup.
+    # Enumerate sim bowlers; we have (team, idx) → name via lineup.
     for (team, idx), wkts_list in sim_agg["bowler_wkts"].items():
         if not wkts_list:
             continue

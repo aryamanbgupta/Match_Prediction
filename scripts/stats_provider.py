@@ -562,5 +562,5 @@ if __name__ == "__main__":
     print(f"  Strike Rate: {batting_stats['sr']:.2f}")
 
     print(f"\nCache metadata:")
-    for key, value in provider.metadata.items():
+    for key, value in provider._backend.get_meta().items():
         print(f"  {key}: {value}")

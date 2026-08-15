@@ -83,3 +83,30 @@ def test_regulation_only_match_is_unchanged():
     actuals = compute_actuals(match)
     assert actuals["is_tie"] == 1
     assert actuals["team_runs"] == {"A": 12, "B": 12}
+
+
+def test_dismissal_kinds_follow_settlement_conventions():
+    """Bowler credit uses BOWLER_KINDS (retired hurt / obstructing the
+    field are NOT bowler wickets); runs-before-first-wicket settles on any
+    actual dismissal (run out included) but not on a retirement."""
+    def _wicket_delivery(batter, bowler, runs, kind):
+        d = _delivery(batter, bowler, runs)
+        d["wickets"] = [{"kind": kind, "player_out": batter}]
+        return d
+
+    match = {"innings": [{
+        "team": "A",
+        "overs": [{"over": 0, "deliveries": [
+            _delivery("A1", "B1", 1),           # 1 run
+            _wicket_delivery("A1", "B1", 1, "retired hurt"),   # 2 runs
+            _wicket_delivery("A2", "B1", 0, "run out"),        # first wicket
+            _wicket_delivery("A3", "B1", 0, "bowled"),
+            _delivery("A4", "B1", 4),
+        ]}],
+    }]}
+    actuals = compute_actuals(match)
+    assert actuals["bowler_wkts"]["B1"] == 1, \
+        "only the bowled dismissal is bowler-credited"
+    assert actuals["team_first_wicket_runs"]["A"] == 2, \
+        "first wicket = the run out at 2 team runs; the retirement at 2 " \
+        "runs is not out and must not settle the prop"

@@ -176,8 +176,16 @@ def main():
     )
     lines.append("|---|---:|---:|---:|---:|---:|---:|---|")
     for fam in families:
-        l_match = left_rows.get(fam, {})
-        r_match = right_rows.get(fam, {})
+        # Restrict EVERY column to the intersection of match ids: the
+        # point columns used to cover each file's full rows while the
+        # Δ/CI covered only shared matches, so a partial rerun silently
+        # produced a table whose columns describe different populations
+        # (2026-08-14 review).
+        shared_ids = set(left_rows.get(fam, {})) & set(right_rows.get(fam, {}))
+        l_match = {mid: rows for mid, rows in left_rows.get(fam, {}).items()
+                   if mid in shared_ids}
+        r_match = {mid: rows for mid, rows in right_rows.get(fam, {}).items()
+                   if mid in shared_ids}
         all_l = [r for rs in l_match.values() for r in rs]
         all_r = [r for rs in r_match.values() for r in rs]
         if not all_l or not all_r:
@@ -220,8 +228,12 @@ def main():
     )
     lines.append("|---|---:|---:|---:|---:|---:|---|")
     for fam in families:
-        l_match = left_rows.get(fam, {})
-        r_match = right_rows.get(fam, {})
+        # Same intersection rule as the binary table (see above).
+        shared_ids = set(left_rows.get(fam, {})) & set(right_rows.get(fam, {}))
+        l_match = {mid: rows for mid, rows in left_rows.get(fam, {}).items()
+                   if mid in shared_ids}
+        r_match = {mid: rows for mid, rows in right_rows.get(fam, {}).items()
+                   if mid in shared_ids}
         all_l = [r for rs in l_match.values() for r in rs]
         all_r = [r for rs in r_match.values() for r in rs]
         if not all_l or not all_r:

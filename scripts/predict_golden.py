@@ -22,13 +22,18 @@ from sklearn.metrics import brier_score_loss, log_loss
 
 def main() -> int:
     ap = argparse.ArgumentParser()
+    # Defaults follow the production of record (post 2026-07-31 promotion);
+    # the pre-2026-08-14 defaults scored the long-retired v2_frozen model
+    # against a legacy-identity frame with no contract check at all.
     ap.add_argument("--model-dir", type=Path,
-                    default=Path("models/xgb_match_v2_frozen"))
+                    default=Path("models/xgb_match_i7_swap_production"))
     ap.add_argument("--parquet", type=Path,
-                    default=Path("data/xgb_match_data_v2_golden/golden_test.parquet"))
-    ap.add_argument("--out-json", type=Path,
-                    default=Path("models/xgb_match_v2_frozen/golden_predictions.json"))
+                    default=Path("data/xgb_match_data_i7_v2/golden_test.parquet"))
+    ap.add_argument("--out-json", type=Path, default=None,
+                    help="Default: <model-dir>/golden_predictions.json")
     args = ap.parse_args()
+    if args.out_json is None:
+        args.out_json = args.model_dir / "golden_predictions.json"
 
     if not args.parquet.exists():
         print(f"ERROR: parquet not found: {args.parquet}")
@@ -37,6 +42,31 @@ def main() -> int:
         if not (args.model_dir / f).exists():
             print(f"ERROR: missing {args.model_dir / f}")
             return 1
+
+    # Venue-identity contract: scoring an i7 model against a legacy frame
+    # (or vice versa) produces a plausible-looking golden LL on mismatched
+    # state. Both artifacts stamp venue_identity.json when built under the
+    # I7 contract; compare when either side declares one.
+    model_identity_path = args.model_dir / "venue_identity.json"
+    frame_identity_path = args.parquet.parent / "venue_identity.json"
+    model_identity = (
+        json.loads(model_identity_path.read_text())
+        if model_identity_path.exists() else None
+    )
+    frame_identity = (
+        json.loads(frame_identity_path.read_text())
+        if frame_identity_path.exists() else None
+    )
+    if model_identity != frame_identity:
+        print("ERROR: venue-identity contract mismatch between model and "
+              f"frame:\n  model ({model_identity_path}): {model_identity}\n"
+              f"  frame ({frame_identity_path}): {frame_identity}\n"
+              "Score the model against a frame built under the same "
+              "identity contract.")
+        return 1
+    if model_identity is None:
+        print("  WARN: neither model nor frame declares a venue-identity "
+              "contract (legacy pair) — proceeding unchecked.")
 
     model = joblib.load(args.model_dir / "model.pkl")
     encoders = joblib.load(args.model_dir / "encoders.pkl")

@@ -346,6 +346,7 @@ def _expected_outcome_features(
     venue: str,
     temp_stats, temp_venue, prior,
     top_n: int = 6, k_player: float = 30.0, k_venue: float = 200.0,
+    metadata=None,
 ) -> Dict[str, float]:
     """Return ~15 outcome-dist match features (M2, 2026-05-10).
 
@@ -369,11 +370,30 @@ def _expected_outcome_features(
             return 0.5, 0.5
         return pace / total, spin / total
 
-    def _lhb_rhb_share(lhb: int, top: int) -> Tuple[float, float]:
-        if top <= 0:
-            return 0.0, 1.0
-        share = lhb / top
-        return min(max(share, 0.0), 1.0), 1.0 - min(max(share, 0.0), 1.0)
+    def _lhb_rhb_share(lineup: List[str], fallback_lhb: int) -> Tuple[float, float]:
+        """LHB share among the TOP-6 batters, per the documented spec.
+
+        The old version divided the FULL-XI left-hander count by 6 and
+        clipped at 1.0 — a team with 5 LHB spread through the XI but 1 in
+        the top six read as 0.83 instead of ~0.17 (2026-08-14 review).
+        Without metadata (legacy callers) it falls back to a full-XI share
+        with a consistent denominator.
+        """
+        if metadata is not None:
+            top = lineup[:top_n]
+            if not top:
+                return 0.0, 1.0
+            lhb_top = sum(
+                1 for pid in top
+                if metadata.get_player_metadata(pid).get("batter_hand")
+                == "left"
+            )
+            share = lhb_top / len(top)
+        else:
+            if not lineup:
+                return 0.0, 1.0
+            share = min(max(fallback_lhb / len(lineup), 0.0), 1.0)
+        return share, 1.0 - share
 
     def _agg_batters(lineup: List[str], opp_pace_share: float,
                       opp_spin_share: float) -> Tuple[float, float, float]:
@@ -405,8 +425,8 @@ def _expected_outcome_features(
 
     t2_pace_share, t2_spin_share = _pace_spin_share(t2_pace, t2_spin)
     t1_pace_share, t1_spin_share = _pace_spin_share(t1_pace, t1_spin)
-    t2_lhb_share, t2_rhb_share = _lhb_rhb_share(t2_lhb, top_n)
-    t1_lhb_share, t1_rhb_share = _lhb_rhb_share(t1_lhb, top_n)
+    t2_lhb_share, t2_rhb_share = _lhb_rhb_share(team2_lineup, t2_lhb)
+    t1_lhb_share, t1_rhb_share = _lhb_rhb_share(team1_lineup, t1_lhb)
 
     t1_b_p4, t1_b_p6, t1_b_pw = _agg_batters(team1_lineup, t2_pace_share, t2_spin_share)
     t2_b_p4, t2_b_p6, t2_b_pw = _agg_batters(team2_lineup, t1_pace_share, t1_spin_share)
@@ -1149,6 +1169,7 @@ def materialize(
                     t2_pace_pre, t2_spin_pre, t2_lhb_pre,
                     venue, temp_stats, temp_venue, prior,
                     k_player=k_player, k_venue=k_venue,
+                    metadata=metadata,
                 )
                 rolling_features = _rolling_form_features(
                     t1_ids, t2_ids, temp_stats,

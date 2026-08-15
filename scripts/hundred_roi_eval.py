@@ -78,7 +78,16 @@ def load_odds(path: Path, aliases: dict[str, str]) -> tuple[dict, dict]:
     for row in payload["matches"]:
         if row.get("cricsheet_match_id"):
             by_id[str(row["cricsheet_match_id"])] = row
-        by_key[team_key(row["date"], row["team1"], row["team2"], aliases)] = row
+        key = team_key(row["date"], row["team1"], row["team2"], aliases)
+        # A same-day rematch would silently keep only the last row, and a
+        # prediction lacking a match_id could join the wrong leg's quote.
+        if key in by_key:
+            raise RuntimeError(
+                f"duplicate (date, team-pair) odds rows for {key}; "
+                "key-based joins are ambiguous — add cricsheet_match_id "
+                "to both rows"
+            )
+        by_key[key] = row
     return by_id, by_key
 
 

@@ -382,8 +382,12 @@ class MatchState:
                 idx != self.non_striker_idx):
                 return idx
         
-        # This shouldn't happen in a valid game
-        return 10  # Last player
+        # Reached on EVERY all-out: the 10th-wicket update() replaces the
+        # striker before is_innings_over() ends the innings, so this
+        # placeholder is load-bearing (verified by test_sim_t1_parity —
+        # raising here breaks the all-out transition). The index is never
+        # used to bat: the innings loop terminates first.
+        return len(self.batting_lineup.players) - 1
     
     def is_innings_over(self) -> bool:
         """Check if current innings is complete"""
@@ -1829,6 +1833,11 @@ class XGBoostModelV2(PredictionModel):
         return outcome_probs
 
 class XGBoostModel(PredictionModel):
+    """DEPRECATED (2026-08-14 review): never instantiated anywhere in the
+    repo — its 9-feature contract and bare-except encoder fallback predate
+    every current artifact. Kept importable for archived scripts only; use
+    XGBoostModelV2."""
+
     def __init__(self, model_path: str, batter_encoder_path: str, bowler_encoder_path: str):
         import joblib
         self.model = joblib.load(model_path)
@@ -2263,8 +2272,10 @@ class LSTMModelV1(PredictionModel):
                 'last_30_balls_runs': 0,
                 'balls_since_boundary': 0,
                 'last_10_dots': 0,
-                'dot_percentage_recent': 0.5,
-                'boundary_percentage_recent': 0.15,
+                # Training emits 0 for both cold-start recent-form features
+                # (parsing_v2); 0.5/0.15 was wrapper drift (2026-08-14).
+                'dot_percentage_recent': 0.0,
+                'boundary_percentage_recent': 0.0,
             }
 
         current_innings_mask = current_innings_history[:, 0] == state.innings
@@ -2277,8 +2288,10 @@ class LSTMModelV1(PredictionModel):
                 'last_30_balls_runs': 0,
                 'balls_since_boundary': 0,
                 'last_10_dots': 0,
-                'dot_percentage_recent': 0.5,
-                'boundary_percentage_recent': 0.15,
+                # Training emits 0 for both cold-start recent-form features
+                # (parsing_v2); 0.5/0.15 was wrapper drift (2026-08-14).
+                'dot_percentage_recent': 0.0,
+                'boundary_percentage_recent': 0.0,
             }
 
         runs_history = innings_history[:, 3]
@@ -2712,7 +2725,7 @@ class MLPModelV1(PredictionModel):
             return {
                 'last_5_balls_runs': 0, 'last_10_balls_runs': 0, 'last_30_balls_runs': 0,
                 'balls_since_boundary': 0, 'last_10_dots': 0,
-                'dot_percentage_recent': 0.5, 'boundary_percentage_recent': 0.15,
+                'dot_percentage_recent': 0.0, 'boundary_percentage_recent': 0.0,
             }
 
         current_innings_history = state.history[:state.history_idx]
@@ -2723,7 +2736,7 @@ class MLPModelV1(PredictionModel):
             return {
                 'last_5_balls_runs': 0, 'last_10_balls_runs': 0, 'last_30_balls_runs': 0,
                 'balls_since_boundary': 0, 'last_10_dots': 0,
-                'dot_percentage_recent': 0.5, 'boundary_percentage_recent': 0.15,
+                'dot_percentage_recent': 0.0, 'boundary_percentage_recent': 0.0,
             }
 
         runs_history = innings_history[:, 3]
@@ -3155,7 +3168,7 @@ class MLPModelV2(PredictionModel):
             return {
                 'last_5_balls_runs': 0, 'last_10_balls_runs': 0, 'last_30_balls_runs': 0,
                 'balls_since_boundary': 0, 'last_10_dots': 0,
-                'dot_percentage_recent': 0.5, 'boundary_percentage_recent': 0.15,
+                'dot_percentage_recent': 0.0, 'boundary_percentage_recent': 0.0,
             }
 
         current_innings_history = state.history[:state.history_idx]
@@ -3166,7 +3179,7 @@ class MLPModelV2(PredictionModel):
             return {
                 'last_5_balls_runs': 0, 'last_10_balls_runs': 0, 'last_30_balls_runs': 0,
                 'balls_since_boundary': 0, 'last_10_dots': 0,
-                'dot_percentage_recent': 0.5, 'boundary_percentage_recent': 0.15,
+                'dot_percentage_recent': 0.0, 'boundary_percentage_recent': 0.0,
             }
 
         runs_history = innings_history[:, 3]
@@ -3653,8 +3666,10 @@ class TransformerModelV1(PredictionModel):
                 'last_30_balls_runs': 0,
                 'balls_since_boundary': 0,
                 'last_10_dots': 0,
-                'dot_percentage_recent': 0.5,
-                'boundary_percentage_recent': 0.15,
+                # Training emits 0 for both cold-start recent-form features
+                # (parsing_v2); 0.5/0.15 was wrapper drift (2026-08-14).
+                'dot_percentage_recent': 0.0,
+                'boundary_percentage_recent': 0.0,
             }
 
         current_innings_mask = current_innings_history[:, 0] == state.innings
@@ -3667,8 +3682,10 @@ class TransformerModelV1(PredictionModel):
                 'last_30_balls_runs': 0,
                 'balls_since_boundary': 0,
                 'last_10_dots': 0,
-                'dot_percentage_recent': 0.5,
-                'boundary_percentage_recent': 0.15,
+                # Training emits 0 for both cold-start recent-form features
+                # (parsing_v2); 0.5/0.15 was wrapper drift (2026-08-14).
+                'dot_percentage_recent': 0.0,
+                'boundary_percentage_recent': 0.0,
             }
 
         runs_history = innings_history[:, 3]
@@ -4190,12 +4207,21 @@ class SimulationEngine:
         team2_score = int(state.runs[1]) 
         team2_wickets = int(state.wickets[1])
         
+        # Margin convention: the side batting FIRST wins by runs, the side
+        # chasing wins by wickets — the old strings hardcoded "team1 batted
+        # first" and printed nonsense whenever team2 did (2026-08-14
+        # review; cosmetic — no consumer beyond __main__ demos).
+        team1_batted_first = state.batting_first == state.team1
         if team1_score > team2_score:
             winner = state.team1
-            margin = f"{team1_score - team2_score} runs"
+            margin = (f"{team1_score - team2_score} runs"
+                      if team1_batted_first
+                      else f"{10 - team1_wickets} wickets")
         elif team2_score > team1_score:
             winner = state.team2
-            margin = f"{10 - team2_wickets} wickets"
+            margin = (f"{10 - team2_wickets} wickets"
+                      if team1_batted_first
+                      else f"{team2_score - team1_score} runs")
         else:
             winner = "Tie"
             margin = "Tied"
@@ -4390,9 +4416,16 @@ class SimulationEngine:
         
         # Create tasks
         tasks = []
+        # random_seed=None must still give every worker a DISTINCT stream:
+        # under a fork start method all workers inherit the parent's RNG
+        # state and would produce correlated/identical matches (2026-08-14
+        # review; latent — current harnesses always pass a seed).
+        base_seed = (
+            config.random_seed if config.random_seed is not None
+            else random.randrange(2 ** 31)
+        )
         for i in range(config.n_simulations):
-            seed = (config.random_seed + i) if config.random_seed is not None else None
-            tasks.append((initial_state, f"sim_{i}", seed))
+            tasks.append((initial_state, f"sim_{i}", base_seed + i))
         
         # Run in parallel
         with Pool(n_workers) as pool:

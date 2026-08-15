@@ -132,12 +132,53 @@ consolidation. IDs below reference that catalog.
   G1/G3/G5 + a prop-backtest delta under the changed engine, or fence the
   three engine changes behind the T1 path. Compute-heavy → human call on
   which.
-- [ ] **Phase 4 — structural consolidation** (IMPROVEMENTS.md simplification
-  plan, in order): shared match-record builder + parity test; one sim feature
-  assembler; one cache-staleness module; one cricsheet settlement module; one
-  market-join module; betting math into `eval_statistics.py` + delete
-  Kelly/EV/Sharpe layer; `research_common.py`; dead-weight sweep.
-- [ ] **Phase 5 — minors sweep** (per-subsystem lists in the catalog).
+- [~] **Phase 4 — structural consolidation (first pass DONE 2026-08-14).**
+  - [x] **Train/serve parity harness** (`test_train_serve_parity.py`):
+        synthetic corpus → materialize → re-serve through
+        `compute_features` → per-feature equality on all ~47 shared keys.
+        The SRV1 drift class now fails by feature name. (The shared-
+        record-builder refactor itself remains optional follow-up.)
+  - [x] Staleness gap-closers instead of the grand 4-way merge:
+        `sqlite_up_to_date` + `_check_sqlite_cache` now check
+        `gender_filter` and a new `metadata_csv_sha256` _meta stamp
+        (⚠ first run after this change rebuilds caches once to acquire
+        the stamp); `materialize_features` verifies its `--source-dir`
+        against the cache's `source_dirs_json`.
+  - [x] `market_common.parse_market_timestamp` — one timestamp parser;
+        forward builder's "+00"-corrupting + naive-as-localtime copy
+        deleted.
+  - [x] Kelly/EV/Sharpe layer KEPT (experiment_tracker, run_experiment's
+        summary parser, envelope schema and dashboards consume it — the
+        catalog's "delete" was too aggressive) but its wrong numbers
+        fixed: Kelly ROI now divides by amount STAKED; Sharpe is per-bet
+        (no √n). ⚠ both numbers change on the next run.
+  - [x] Fail-closed eval joins: unknown `actual_winner` / `team1` raises
+        in LL/Brier/PnL instead of phantom-0.5 / lost-stake; one-sided
+        books return {} in the odds loader; zero-match summary no longer
+        crashes.
+  - [x] Deprecation quarantine: `transformer_v1.py` (no-padding-mask
+        warning) and `XGBoostModel` v1 docstrings; dead-code sweep
+        (stats_provider demo, dead store, prop stub loop, `_ou_hit`).
+  - Remaining (next round): one sim feature assembler (five NN blocks);
+    unify `evaluate_all{,_with_calibration}`; table-drive run_sim_eval
+    loaders; cricsheet settlement module; `research_common.py`.
+- [~] **Phase 5 — minors sweep (majority DONE 2026-08-14).** Fixed:
+  compare_selector intersection populations; prop dismissal-kind
+  conventions (BOWLER_KINDS + retirements don't settle first-wicket);
+  deterministic top-batter/bowler tie-breaks; per-match report links;
+  serving order-contract assert; competition tiers carried into the live
+  snapshot; degraded-prediction flag on unseen categories;
+  `predict_golden` production defaults + identity-contract check;
+  `_swap_frame` half-pair fail-close; `_lhb_rhb_share` top-6 semantics;
+  stale frozen-tracker comment; sim margin strings, NN cold-start
+  defaults (0.5/0.15 → training's 0), fork-safe sim seeding;
+  `max_drawdown` from flat equity; decimal-odds (0,1) guard; Hundred
+  dup-key fail-close. Reverted after the T1 parity suite caught it:
+  `get_next_batsman_idx` fail-loud (the sentinel is load-bearing on
+  every all-out — kept with an accurate comment). Still open: free-hit
+  modeling (rules-gap decision), sim-vs-settlement economy basis note,
+  XR hardcoded seeds/Ns (live in branch-owned scripts), `pos_top`
+  docstring.
 
 ## Status snapshot + next steps (2026-08-01)
 

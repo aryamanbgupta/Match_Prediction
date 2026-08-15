@@ -140,8 +140,6 @@ def build_corpus_logs(source_dir: Path) -> dict:
                     elif r == 6:
                         batters[b]["sixes"] += 1
                         match_sixes += 1
-                    if r == 4:
-                        pass
                     for w in d.get("wickets", []):
                         if first_wkt_runs is None:
                             first_wkt_runs = total

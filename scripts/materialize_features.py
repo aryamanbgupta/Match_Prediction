@@ -183,6 +183,20 @@ def materialize(
         expected=elo_update_version,
         context="SQLite stats cache",
     )
+    # Corpus membership (2026-08-14 review): walking one corpus while
+    # rehydrating from a cache built on another silently produces rows
+    # whose "pre-match state" comes from a different match universe.
+    recorded_sources = cache_meta.get("source_dirs_json")
+    requested_sources = json.dumps(
+        [str(Path(source_dir).resolve())], separators=(",", ":"))
+    if recorded_sources and recorded_sources != requested_sources:
+        raise RuntimeError(
+            "SQLite cache was built from a different corpus than the one "
+            f"being walked:\n  cache:     {recorded_sources}\n"
+            f"  requested: {requested_sources}\n"
+            "Rebuild the cache from this corpus (or pass the matching "
+            "--source-dir)."
+        )
     prior = provider._backend._prior
     # Phase 3: per-phase priors loaded from SQLite _meta. On pre-Phase-3
     # caches, _phase_priors collapses to {phase: π} for every phase, so

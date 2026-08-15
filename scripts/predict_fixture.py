@@ -225,8 +225,17 @@ def build_tracker_snapshot(
         venue = resolve_venue_identity(info.get("venue"), identity_mode)
         t1, t2 = teams
         t1_won = winner == t1
-        form.update(t1, match_date, t1_won)
-        form.update(t2, match_date, not t1_won)
+        # Carry the competition tier like the materializer does: a tier-less
+        # record makes get_competition_win_rate silently return its neutral
+        # prior, so any future M4-style feature would be real at training
+        # and neutral at serving (2026-08-14 review).
+        event = info.get("event") or {}
+        event_name = event.get("name") if isinstance(event, dict) else ""
+        ctx = classify_match_context(
+            event_name or "", info.get("team_type", "club"), teams)
+        tier = ctx["competition_tier"]
+        form.update(t1, match_date, t1_won, competition_tier=tier)
+        form.update(t2, match_date, not t1_won, competition_tier=tier)
         h2h.update(t1, t2, match_date, winner)
         home.update(t1, venue, match_date)
         home.update(t2, venue, match_date)
@@ -718,8 +727,9 @@ def compute_features(fixture: dict,
     t2_top6_bat, t2_bot5_bow = _split_elo(team2_lineup, elo_tracker)
 
     # Phase A2 trackers (form, H2H, home). Query with the actual fixture
-    # date — the trackers' internal records are frozen at 2025-06-30,
-    # but the date controls the lookup window for is_home (730d window).
+    # date — the live snapshot walks the FULL corpus (its coverage is the
+    # snapshot's `as_of`, not any diagnostic freeze date), and the date
+    # controls the lookup window for is_home (730d window).
     t1_form, _ = form.get_last_n_win_rate(team1, match_date)
     t2_form, _ = form.get_last_n_win_rate(team2, match_date)
     h2h_rate, h2h_n = h2h.get_h2h(team1, team2, match_date, k=2.0)
@@ -865,6 +875,10 @@ def apply_encoders_and_predict(record: dict,
         encoded_col = f"{col}_id_encoded" if col == "venue" else f"{col}_encoded"
         known = set(le.classes_)
         if df[col].iloc[0] not in known:
+            # The fallback injects a REAL entity's learned identity (the
+            # alphabetically-first encoder class), not a neutral value —
+            # the prediction is degraded, and the flag below must surface
+            # in the output, not just in a scroll-by warning.
             fallback = le.classes_[0]
             encoder_warnings.append(
                 f"unseen {col}={df[col].iloc[0]!r}; falling back to {fallback!r}")
@@ -873,6 +887,8 @@ def apply_encoders_and_predict(record: dict,
 
     proba = float(model.predict_proba(df[feat_cols])[0, 1])
     return proba, {"encoder_warnings": encoder_warnings,
+                   "prediction_degraded_by_unseen_categories": bool(
+                       encoder_warnings),
                    "feature_columns": feat_cols,
                    "feature_row": {c: (float(df[c].iloc[0]) if c not in ('venue','competition_tier') else df[c].iloc[0]) for c in feat_cols}}
 
@@ -1254,6 +1270,10 @@ def main() -> int:
     provider = StatsProvider(
         str(args.state_dir),
         version=args.state_version,
+        # Invariant #5: serving must assert the same same-day-order
+        # contract the materializer does — a live-state cache rebuilt under
+        # a different ordering previously served with only a warning.
+        require_order_contract=True,
         required_elo_update_version=args.elo_update_version,
     )
     metadata = PlayerMetadataProvider(str(REPO / "data" / "all_players_enriched.csv"))

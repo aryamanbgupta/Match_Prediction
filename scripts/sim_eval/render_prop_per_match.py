@@ -43,20 +43,6 @@ def _hit(rows: List[dict]) -> bool:
     return bool(sim_top.get("y", 0))
 
 
-def _ou_hit(rows: List[dict]) -> bool:
-    """For O/U families: was the sim's higher-confidence side correct?
-
-    Sim picks OVER if p>0.5, UNDER otherwise. Correct if y matches direction."""
-    if not rows:
-        return False
-    # Aggregate over all rows in this family for this match.
-    correct = sum(
-        1 for r in rows
-        if (r["p"] > 0.5) == bool(r["y"])
-    )
-    return correct == len(rows)
-
-
 def render_match(match_obs: dict) -> str:
     mid = match_obs["match_id"]
     display_mid = match_obs.get("display_match_id") or mid
@@ -221,8 +207,12 @@ def render_index(all_matches: List[dict]) -> str:
         )
         runs = d["obs"].get("innings_runs_ou_170_5", [])
         runs_correct = sum(1 for r in runs if (r["p"] > 0.5) == bool(r["y"]))
+        # Link target must match the SANITIZED filename the per-match pages
+        # are written under — legacy display ids contain commas and produced
+        # dead links (2026-08-14 review).
+        link_name = re.sub(r"[^A-Za-z0-9._\-]", "_", mid)
         L.append(
-            f"| [{display_mid}]({mid}.md) | {tb_hits}/{len(tb)} | "
+            f"| [{display_mid}]({link_name}.md) | {tb_hits}/{len(tb)} | "
             f"{bw_hits}/{len(bw)} | {runs_correct}/{len(runs)} |"
         )
     L.append("")

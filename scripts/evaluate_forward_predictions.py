@@ -517,7 +517,10 @@ def betting_summary(
             running += pnl
             cumulative.append(running)
         peak = []
-        running_peak = cumulative[0]
+        # Drawdown measures from FLAT equity (0), not from the first bet's
+        # result: a ledger opening with losses previously understated it
+        # (pnls [-1,-1] reported 1 instead of 2). 2026-08-14 review.
+        running_peak = 0.0
         for value in cumulative:
             running_peak = max(running_peak, value)
             peak.append(running_peak)

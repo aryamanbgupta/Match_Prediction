@@ -264,6 +264,18 @@ def _check_sqlite_cache(config: dict) -> bool:
         for key, value in alias_contract.items()
     ):
         return False
+    # Gender + player-metadata provenance (2026-08-14 review): the CSV
+    # decides vs-type/vs-hand cell assignment INSIDE the cache, and a
+    # wrong-gender cache under the right filename previously passed.
+    want_gender = str(
+        config.get("data", {}).get("gender_filter", "male") or "all")
+    if meta.get("gender_filter") != want_gender:
+        return False
+    metadata_csv = PROJECT_ROOT / "data" / "all_players_enriched.csv"
+    if metadata_csv.is_file():
+        if meta.get("metadata_csv_sha256") != _sha256_file(metadata_csv):
+            return False
+
     prior_source = config.get("data", {}).get("prior_source_sqlite")
     if prior_source:
         source_path = Path(prior_source)

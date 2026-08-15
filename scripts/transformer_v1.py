@@ -2,6 +2,12 @@
 """
 Transformer Model Training for Cricket Ball Prediction
 
+SUPERSEDED (2026-08-14): the T1 line (scripts/transformer_t1.py) is a
+clean rewrite — this script is retained for archived-experiment
+reproduction only. Do NOT imitate its sequence handling in new work: its
+left-padding scheme has NO key-padding mask (padded zero-tokens are
+attendable keys) and the MLX path duplicates the whole training loop.
+
 Uses FULL INNINGS CONTEXT (up to 120 balls) instead of sliding window.
 Key differentiator from LSTM: can attend to entire innings history.
 

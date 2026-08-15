@@ -123,14 +123,12 @@ def sha256_file(path: Path) -> str:
 
 
 def parse_ts(raw: str | None) -> datetime | None:
-    if not raw:
-        return None
-    try:
-        return datetime.fromisoformat(
-            str(raw).replace("+00", "+00:00").replace("Z", "+00:00")
-        ).astimezone(timezone.utc)
-    except (TypeError, ValueError):
-        return None
+    # One shared implementation (market_common): this local copy used a bare
+    # "+00" replace that corrupts full "+00:00" offsets into "+00:00:00"
+    # (rejecting whole pulls wholesale if the extractor ever emits full
+    # offsets) and read naive timestamps as LOCAL time via astimezone.
+    from market_common import parse_market_timestamp
+    return parse_market_timestamp(raw)
 
 
 def canonical_team(name: str | None) -> str:

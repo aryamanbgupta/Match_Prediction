@@ -210,7 +210,18 @@ def _swap_frame(df: pd.DataFrame) -> pd.DataFrame:
             "_SWAP_* mapping before augmenting this schema")
     sw = df.copy()
     for a, b in _SWAP_PAIRS:
-        if a in df.columns and b in df.columns:
+        in_a, in_b = a in df.columns, b in df.columns
+        if in_a != in_b:
+            # The coverage guard above marks BOTH names of a pair covered,
+            # so a hand-trimmed frame carrying only one twin used to slip
+            # through and keep team1's value under a flipped label — a
+            # label-leak-shaped asymmetry (2026-08-14 review).
+            raise ValueError(
+                f"swap-augment: column pair ({a!r}, {b!r}) is only half "
+                "present — a one-sided swap would keep the un-swapped "
+                "value under a flipped label; drop or restore its twin"
+            )
+        if in_a and in_b:
             sw[a] = df[b].to_numpy()
             sw[b] = df[a].to_numpy()
     for c in _SWAP_NEGATE:

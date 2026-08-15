@@ -698,8 +698,17 @@ class MatchLevelEvaluator:
         if not actual_winner:
             return np.nan
 
-        # Get predicted probability for the team that actually won
-        p_predicted = sim_prob.get(actual_winner, 0.5)
+        # Fail closed on team-name join defects (2026-08-14 review): a
+        # winner spelled differently from the simulated teams used to score
+        # a phantom 0.5 here, None in the blend path, and a lost stake in
+        # the P&L path — three different answers to the same defect.
+        if actual_winner not in sim_prob:
+            raise RuntimeError(
+                f"actual winner {actual_winner!r} is not a simulated team "
+                f"{sorted(sim_prob)}; refusing to score a phantom 0.5 — "
+                "fix the team-name join (aliases/spelling)"
+            )
+        p_predicted = sim_prob[actual_winner]
 
         # Clip to avoid log(0)
         p_predicted = np.clip(p_predicted, 1e-15, 1 - 1e-15)
@@ -721,8 +730,12 @@ class MatchLevelEvaluator:
         if not actual_winner:
             return np.nan
 
-        # Get predicted probability for team1
-        p_team1 = sim_prob.get(team1, 0.5)
+        if team1 not in sim_prob:
+            raise RuntimeError(
+                f"team1 {team1!r} is not a simulated team "
+                f"{sorted(sim_prob)}; refusing to score a phantom 0.5"
+            )
+        p_team1 = sim_prob[team1]
 
         # Actual outcome: 1 if team1 won, 0 if team1 lost
         actual = 1.0 if actual_winner == team1 else 0.0
@@ -754,7 +767,13 @@ class MatchLevelEvaluator:
         """
         if not actual_winner or not edge or not market_odds:
             return None
-        
+        if actual_winner not in edge:
+            raise RuntimeError(
+                f"actual winner {actual_winner!r} is not among the edged "
+                f"teams {sorted(edge)}; a differently-spelled winner would "
+                "silently settle the bet as lost — fix the team-name join"
+            )
+
         # Find team with highest positive edge
         best_team = None
         best_edge = 0.0
@@ -905,8 +924,11 @@ class MatchLevelEvaluator:
         if std_return == 0:
             return 0.0
 
-        # Sharpe ratio (not annualized since we don't have time units)
-        sharpe = mean_return / std_return * np.sqrt(len(returns))
+        # Per-bet Sharpe (mean/std of per-bet returns, no time units).
+        # The old * sqrt(n) factor made this a t-statistic that grew with
+        # sample size, silently favoring bigger slices in comparisons
+        # (2026-08-14 review).
+        sharpe = mean_return / std_return
 
         return sharpe
 
@@ -1067,9 +1089,11 @@ class MatchLevelEvaluator:
         full_kelly_pnl = 0.0
         full_kelly_wins = 0
         full_kelly_bets = 0
+        full_kelly_staked = 0.0
         fractional_kelly_pnl = 0.0
         fractional_kelly_wins = 0
         fractional_kelly_bets = 0
+        fractional_kelly_staked = 0.0
         flat_returns = []
         flat_clusters = []
         full_kelly_returns = []
@@ -1083,14 +1107,19 @@ class MatchLevelEvaluator:
             if result.full_kelly_pnl is not None:
                 full_kelly_pnl += result.full_kelly_pnl
                 full_kelly_bets += 1
+                full_kelly_staked += float(result.full_kelly_fraction or 0.0)
                 full_kelly_returns.append(result.full_kelly_pnl)
                 if result.full_kelly_pnl > 0:
                     full_kelly_wins += 1
 
-            # Track Fractional Kelly metrics
+            # Track Fractional Kelly metrics (stake = 0.25 x full fraction,
+            # matching the per-match computation)
             if result.fractional_kelly_pnl is not None:
                 fractional_kelly_pnl += result.fractional_kelly_pnl
                 fractional_kelly_bets += 1
+                fractional_kelly_staked += (
+                    0.25 * float(result.full_kelly_fraction or 0.0)
+                )
                 fractional_kelly_returns.append(result.fractional_kelly_pnl)
                 if result.fractional_kelly_pnl > 0:
                     fractional_kelly_wins += 1
@@ -1105,10 +1134,17 @@ class MatchLevelEvaluator:
                     )
                 )
 
-        # Calculate Kelly ROIs and win rates
-        full_kelly_roi = (full_kelly_pnl / full_kelly_bets * 100) if full_kelly_bets > 0 else 0.0
+        # Kelly ROI = P&L / amount STAKED. The old /bets denominator mixed
+        # bankroll-fraction P&L with a bet count, weighting a 0.02-stake and
+        # a 0.60-stake bet equally and printing a number that is not a
+        # return on anything (2026-08-14 review).
+        full_kelly_roi = (
+            full_kelly_pnl / full_kelly_staked * 100
+        ) if full_kelly_staked > 0 else 0.0
         full_kelly_win_rate = (full_kelly_wins / full_kelly_bets) if full_kelly_bets > 0 else 0.0
-        fractional_kelly_roi = (fractional_kelly_pnl / fractional_kelly_bets * 100) if fractional_kelly_bets > 0 else 0.0
+        fractional_kelly_roi = (
+            fractional_kelly_pnl / fractional_kelly_staked * 100
+        ) if fractional_kelly_staked > 0 else 0.0
         fractional_kelly_win_rate = (fractional_kelly_wins / fractional_kelly_bets) if fractional_kelly_bets > 0 else 0.0
 
         # Calculate Sharpe ratios
@@ -1233,7 +1269,12 @@ def print_evaluation_summary(results: OverallEvaluationResults):
     
     print(f"\nMatches evaluated: {results.n_matches}")
     print(f"Total simulation time: {results.total_simulation_time:.1f}s")
-    print(f"Average time per match: {results.total_simulation_time/results.n_matches:.1f}s")
+    if results.n_matches:
+        print(f"Average time per match: "
+              f"{results.total_simulation_time / results.n_matches:.1f}s")
+    else:
+        print("Average time per match: n/a (0 matches evaluated — check "
+              "the odds join / --min-volume filter)")
     
     print(f"\n--- Performance Metrics ---")
     if not np.isnan(results.avg_log_loss_ci_low):

@@ -403,6 +403,58 @@ def test_aggregate_counts_zero_pnl_win_as_bet():
 
 
 # --------------------------------------------------------------------------
+# D2. 2026-08-14 review fixes: fail-closed joins + corrected diagnostics
+# --------------------------------------------------------------------------
+
+def test_unknown_winner_fails_closed_not_phantom_half():
+    """A winner spelled differently from the simulated teams used to score
+    a silent 0.5 in LL, None in blend, and a LOST STAKE in P&L — three
+    answers to one join defect. All three must now raise."""
+    ev = _evaluator()
+    sim = {"Royal Challengers Bengaluru": 0.7, "Mumbai Indians": 0.3}
+    with np.testing.assert_raises(RuntimeError):
+        ev._calculate_log_loss(sim, "Royal Challengers Bangalore",
+                               "Royal Challengers Bengaluru",
+                               "Mumbai Indians")
+    with np.testing.assert_raises(RuntimeError):
+        ev._calculate_realized_pnl(
+            {"Royal Challengers Bengaluru": 0.2, "Mumbai Indians": -0.2},
+            {"Royal Challengers Bengaluru": 2.0, "Mumbai Indians": 2.0},
+            "Royal Challengers Bangalore")
+    # Null winner (no result) keeps the NaN / None paths.
+    assert math.isnan(ev._calculate_log_loss(sim, None, "x", "y"))
+    assert ev._calculate_realized_pnl({}, {}, None) is None
+
+
+def test_sharpe_is_per_bet_not_a_t_statistic():
+    """Same per-bet mean/std at different n must give the same Sharpe —
+    the old * sqrt(n) factor grew with sample size."""
+    ev = _evaluator()
+    short = [1.0, -1.0] * 5
+    long = [1.0, -1.0] * 50
+    assert abs(ev._calculate_sharpe_ratio(short)
+               - ev._calculate_sharpe_ratio(long)) < 1e-9
+
+
+def test_kelly_roi_is_return_on_amount_staked():
+    """P&L divided by summed stake fractions, not by bet count: a 0.5-stake
+    win at evens (+0.5) and a 0.1-stake loss (-0.1) is +0.4 on 0.6 staked
+    = +66.67%, not +20%."""
+    ev = _evaluator()
+    results = [
+        _mk_result("k1", realized_pnl=1.0,
+                   full_kelly_fraction=0.5, full_kelly_pnl=0.5,
+                   fractional_kelly_pnl=0.125),
+        _mk_result("k2", actual_winner="B", realized_pnl=-1.0,
+                   full_kelly_fraction=0.1, full_kelly_pnl=-0.1,
+                   fractional_kelly_pnl=-0.025),
+    ]
+    agg = ev._aggregate_results(results, 0.0)
+    assert abs(agg.full_kelly_roi - (0.4 / 0.6 * 100)) < 1e-9
+    assert abs(agg.fractional_kelly_roi - (0.1 / 0.15 * 100)) < 1e-9
+
+
+# --------------------------------------------------------------------------
 # E. reslice path — min-volume boundaries + summary math
 # --------------------------------------------------------------------------
 

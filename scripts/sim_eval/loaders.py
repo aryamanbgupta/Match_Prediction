@@ -316,13 +316,20 @@ class BettingOddsLoader:
         
         if not implied:
             return {}
-        
+
+        # A one-sided book (only one team's odds parsed) must fail closed:
+        # margin removal would normalize the surviving side to exactly 1.0
+        # and the "market" would score ~0 loss whenever that team won
+        # (2026-08-14 review).
+        if len(implied) < len(odds):
+            return {}
+
         # Remove bookmaker margin if requested
         if remove_margin:
             total = sum(implied.values())
             if total > 0:
                 implied = {team: prob / total for team, prob in implied.items()}
-        
+
         return implied
     
     @staticmethod

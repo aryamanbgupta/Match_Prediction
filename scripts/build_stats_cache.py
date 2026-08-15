@@ -334,12 +334,17 @@ def sqlite_up_to_date(
     delivery_semantics: str = LEGACY_DELIVERY_SEMANTICS,
     schema_version: int = SCHEMA_VERSION,
     elo_update_version: str = BASELINE_ELO_UPDATE_VERSION,
+    gender: str | None = None,
+    metadata_csv: Path | None = None,
 ) -> bool:
     """Return True if the existing SQLite is current vs the JSON corpus.
 
     Guards: schema_version == current, source_json_mtime_max >=
-    max(JSON mtime). Matches the staleness pattern at
-    stats_provider.py:692-702.
+    max(JSON mtime), plus (2026-08-14 review) gender_filter and the
+    player-metadata CSV sha — the CSV decides which vs-type/vs-hand cell
+    every ball lands in INSIDE the cache, so a re-enriched CSV must
+    invalidate it. Pass gender=None / metadata_csv=None to skip a
+    dimension (legacy callers).
     """
     normalized_dirs = _normalize_source_dirs(source_dirs)
     if not out_path.exists():
@@ -377,6 +382,16 @@ def sqlite_up_to_date(
         return False
     if meta.get("source_dirs_json") != _source_paths_json(normalized_dirs):
         return False
+    if gender is not None and meta.get("gender_filter") != str(gender or "all"):
+        return False
+    if metadata_csv is not None:
+        resolved_csv = Path(metadata_csv)
+        if not resolved_csv.is_file():
+            return False
+        # Caches built before this key exist are treated as stale once, so
+        # they acquire the provenance on rebuild.
+        if meta.get("metadata_csv_sha256") != _sha256_file(resolved_csv):
+            return False
 
     try:
         source_mtime_at_build = float(meta.get("source_json_mtime_max", 0))
@@ -727,7 +742,6 @@ def build(
     last_date_str: str = ""
     intra_idx_by_date: Dict[str, int] = defaultdict(int)
     n_matches = 0
-    source_json_mtime_max = 0.0
 
     # Phase 3: per-phase outcome-count totals across all innings.
     # Σ over phases ≡ Σ overall cX (per-innings conservation guarantee in
@@ -969,6 +983,8 @@ def build(
         ('source_match_count', str(n_matches)),
         ('terminal_snapshot_date', terminal_snapshot_date),
         ('gender_filter', str(gender or 'all')),
+        ('metadata_csv_path', str(metadata_path)),
+        ('metadata_csv_sha256', _sha256_file(Path(metadata_path))),
         ('num_players', str(len(player_ids))),
         ('num_venues', str(len(venue_ids))),
         ('num_dates', str(len(date_ids))),
@@ -1122,6 +1138,11 @@ def main() -> int:
         delivery_semantics=args.delivery_semantics,
         schema_version=args.schema_version,
         elo_update_version=args.elo_update_version,
+        gender=gender or "all",
+        metadata_csv=(
+            args.metadata_csv
+            or args.source_dir.parent / "all_players_enriched.csv"
+        ),
     ):
         print(f"{args.out} is current (schema_version={args.schema_version}, "
               f"same_day_order={SAME_DAY_ORDER_VERSION}, "

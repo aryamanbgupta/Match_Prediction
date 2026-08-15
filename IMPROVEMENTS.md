@@ -2008,6 +2008,24 @@ ball artifacts (this one lacks `models/xgb_i7_noweights_production/`), and
 can share a run with the BR2 engine-gate re-check. Old sliced JSONs predate
 the contract stamps; re-reslice before reading their `bootstrap_reliable`.
 
+Phases 4 (first pass) and 5 (majority) also landed 2026-08-14 — see
+TODO.md for the item-level record. Highlights: the **train/serve parity
+harness** (`scripts/tests/test_train_serve_parity.py`) now materializes a
+synthetic corpus and re-serves it through `compute_features`, asserting
+per-feature equality on all ~47 shared keys — the SRV1 drift class fails
+by feature name from now on; staleness checks gained `gender_filter` +
+`metadata_csv_sha256` dimensions (⚠ one-time cache rebuild to acquire the
+stamp); `market_common.parse_market_timestamp` is the single timestamp
+parser; eval joins fail closed on unknown team names; Kelly ROI and
+Sharpe now compute what their labels claim (⚠ both numbers change; the
+layer itself was KEPT — experiment_tracker/run_experiment/envelope/
+dashboards consume it, so the catalog's "delete ~300 lines" was too
+aggressive). One Phase-5 fix was reverted by the branch's own T1 parity
+suite: `get_next_batsman_idx`'s sentinel is load-bearing on every all-out
+(the 10th-wicket update replaces the striker before `is_innings_over`
+fires) — retained with an accurate comment. Suite after phases 4/5:
+**325 passed / 10 skipped / 0 failed.**
+
 Phase 3 landed the same day (see TODO.md for the itemized list): PIPE2
 terminal snapshots (+`terminal_snapshot_date` meta, legacy-cache warning),
 PIPE3 corpus-aware staleness guard, EV3 price/volume-basis provenance
