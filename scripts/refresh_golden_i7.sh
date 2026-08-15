@@ -12,7 +12,7 @@
 #       --out models/auto/i18/golden_envelope.json     # see I18.md
 #   uv run python scripts/auto/i18_stamp_envelope.py \
 #       --envelope models/auto/i18/golden_envelope.json \
-#       --test-dir data/golden/polymarket_test \
+#       --test-dir data/golden/polymarket_test_v2 \
 #       --out models/auto/i18/golden_envelope_cricsheet.json
 #
 # Usage (from repo root):
@@ -22,7 +22,9 @@ set -euo pipefail
 MODEL_DIR="${1:-models/xgb_match_i7_swap_production}"
 FRAME="${2:-data/xgb_match_data_i7_v2/golden_test.parquet}"
 ENVELOPE="models/auto/i18/golden_envelope_cricsheet.json"
-ODDS="data/golden/betting_odds_golden.json"
+# _v2 = benchmark of record since 2026-08-05 (the pre-fix file carries the
+# toss-market defect and has been removed from working checkouts).
+ODDS="data/golden/betting_odds_golden_v2.json"
 OUT="eval_out/golden_i7_refresh"
 
 for f in "$ENVELOPE" "$ODDS" "$FRAME"; do

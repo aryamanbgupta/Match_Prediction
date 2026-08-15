@@ -256,6 +256,11 @@ def main() -> None:
 
     if args.merge_into_existing:
         staging = GOLDEN_DIR / "_staging_refresh"
+        # Stale staging from a previous run must not leak into this merge:
+        # _merge_staging_into_golden copies every staged *.json, so leftovers
+        # staged under different inputs would be silently absorbed.
+        if staging.exists():
+            shutil.rmtree(staging)
         (staging / "polymarket_test").mkdir(parents=True, exist_ok=True)
         base.OUT_ODDS_PATH = staging / "betting_odds_golden_new.json"
         base.OUT_TEST_DIR = staging / "polymarket_test"

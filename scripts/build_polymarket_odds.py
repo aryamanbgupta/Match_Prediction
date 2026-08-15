@@ -71,6 +71,10 @@ CRICSHEET_DIR = REPO_ROOT / "data" / "t20s_json"
 OUT_ODDS_PATH = REPO_ROOT / "betting_odds_polymarket_v2.json"
 OUT_TEST_DIR = REPO_ROOT / "data" / "polymarket_test_v2"
 OUT_UNMATCHED_PATH = REPO_ROOT / "data" / "polymarket_build_unmatched_v2.json"
+# The _v2 defaults above are themselves the benchmarks of record, so
+# write_outputs refuses to replace an existing manifest unless this is set
+# (via --overwrite-existing-odds). Mirrors the women's builder's guard.
+ALLOW_ODDS_OVERWRITE = False
 
 # Gamma snapshot of every event id referenced by the prematch captures, and the
 # ordered market list the legacy capture iterated over. Both are regenerable;
@@ -695,6 +699,16 @@ def write_outputs(
     timestamp_guard: str = "report",
     restrict_to: set[str] | None = None,
 ) -> None:
+    # The default output path IS the benchmark of record (2026-08-14 review,
+    # ODDS2): a bare rerun must not silently replace it. Refuse before any
+    # side effect (test-dir copies included); opt in explicitly.
+    if OUT_ODDS_PATH.exists() and not ALLOW_ODDS_OVERWRITE:
+        raise SystemExit(
+            f"refusing to overwrite existing odds manifest {OUT_ODDS_PATH}; "
+            "pass --overwrite-existing-odds to replace it (golden builder: "
+            "prefer --merge-into-existing, which keeps existing rows "
+            "verbatim)."
+        )
     OUT_TEST_DIR.mkdir(parents=True, exist_ok=True)
 
     # Selecting one market per fixture. Each Gamma cricket event carries several
@@ -916,16 +930,22 @@ def add_output_arguments(parser: argparse.ArgumentParser) -> None:
                              "manifest. Rebuilds a frozen benchmark's own rows "
                              "under the current selection rule without "
                              "re-deriving which fixtures belong to it.")
+    parser.add_argument("--overwrite-existing-odds", action="store_true",
+                        help="Allow replacing an existing odds manifest at the "
+                             "output path. Off by default so a bare rerun "
+                             "cannot clobber the benchmark of record.")
 
 
 def apply_output_overrides(args: argparse.Namespace) -> None:
-    global OUT_ODDS_PATH, OUT_TEST_DIR, OUT_UNMATCHED_PATH
+    global OUT_ODDS_PATH, OUT_TEST_DIR, OUT_UNMATCHED_PATH, ALLOW_ODDS_OVERWRITE
     if getattr(args, "out_odds", None):
         OUT_ODDS_PATH = args.out_odds
     if getattr(args, "out_test_dir", None):
         OUT_TEST_DIR = args.out_test_dir
     if getattr(args, "out_unmatched", None):
         OUT_UNMATCHED_PATH = args.out_unmatched
+    if getattr(args, "overwrite_existing_odds", False):
+        ALLOW_ODDS_OVERWRITE = True
 
 
 def main() -> None:

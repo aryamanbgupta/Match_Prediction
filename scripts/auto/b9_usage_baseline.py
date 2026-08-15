@@ -49,6 +49,7 @@ import argparse
 import importlib.util
 import json
 import pickle
+import re
 import sys
 from bisect import bisect_left
 from collections import defaultdict
@@ -178,6 +179,31 @@ class AsOfUsage:
         return exp_balls * rate
 
 
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _row_date(match_row: dict) -> str:
+    """As-of date for a detail-JSON match row.
+
+    Post-I15 detail JSONs carry numeric Cricsheet ids in `match_id`
+    ("1443556"), so `match_id[:10]` is NOT a date — bisecting on it returns
+    zero history and every as-of price silently collapses to the cold-start
+    prior. Use the date-prefixed display id and fail loudly otherwise.
+    """
+    mid = match_row["match_id"]
+    display_mid = match_row.get("display_match_id") or mid
+    date = str(display_mid)[:10]
+    if not _DATE_RE.match(date):
+        raise ValueError(
+            f"cannot derive an as-of date for match {mid!r} "
+            f"(display_match_id={match_row.get('display_match_id')!r}); "
+            "regenerate the detail JSON with display_match_id or add a "
+            "date field — silently proceeding would price every row at "
+            "the cold-start prior."
+        )
+    return date
+
+
 # ------------------------------------------------------------ paired rows
 def build_markets(detail: list, asof_pfb, asof_use: AsOfUsage,
                   k_u: float, k_w: float) -> list[dict]:
@@ -185,7 +211,7 @@ def build_markets(detail: list, asof_pfb, asof_use: AsOfUsage,
     markets = []
     for m in detail:
         mid = m["match_id"]
-        date = mid[:10]
+        date = _row_date(m)
         rows = m["obs"].get("top_bowler", [])
         for team in sorted({r["team"] for r in rows}):
             trows = [r for r in rows if r["team"] == team]
@@ -197,7 +223,7 @@ def build_markets(detail: list, asof_pfb, asof_use: AsOfUsage,
             assert u.sum() > 0
             u = u / u.sum()
             markets.append({
-                "mid": mid, "team": team,
+                "mid": mid, "team": team, "date": date,
                 "rows": [{"name": r["name"], "p_sim": float(r["p"]),
                           "p_career": float(pc), "p_usage": float(pu),
                           "y": int(r["y"])}
@@ -210,7 +236,7 @@ def flat_rows(markets):
     out = []
     for mk in markets:
         for r in mk["rows"]:
-            out.append({"mid": mk["mid"], **r})
+            out.append({"mid": mk["mid"], "date": mk["date"], **r})
     return out
 
 
@@ -303,13 +329,12 @@ def main():
     ap.add_argument("--json-out", type=Path,
                     default=REPO / "models/auto/b9/usage_numbers.json")
     ap.add_argument("--rebuild-corpus", action="store_true")
+    ap.add_argument(
+        "--corpus-only", action="store_true",
+        help="Build/load usage_corpus.pkl and exit without requiring the "
+             "B9 detail or E2 fair-baseline artifacts.",
+    )
     args = ap.parse_args()
-
-    pfb = _load_pfb()
-    assert pfb.CACHE.exists(), "E2 corpus cache missing"
-    logs = pickle.load(open(pfb.CACHE, "rb"))
-    asof_pfb = pfb.AsOf(logs)
-    print(f"E2 corpus cache loaded: {pfb.CACHE.name}")
 
     CORPUS_CACHE.parent.mkdir(parents=True, exist_ok=True)
     if CORPUS_CACHE.exists() and not args.rebuild_corpus:
@@ -319,6 +344,16 @@ def main():
         corpus = build_usage_corpus(SOURCE_DIR)
         pickle.dump(corpus, open(CORPUS_CACHE, "wb"))
         print(f"usage corpus cached -> {CORPUS_CACHE}")
+    if args.corpus_only:
+        print(f"corpus-only complete: {len(corpus['player']):,} players")
+        return
+
+    pfb = _load_pfb()
+    assert pfb.CACHE.exists(), "E2 corpus cache missing"
+    logs = pickle.load(open(pfb.CACHE, "rb"))
+    asof_pfb = pfb.AsOf(logs)
+    print(f"E2 corpus cache loaded: {pfb.CACHE.name}")
+
     asof_use = AsOfUsage(corpus)
 
     detail = json.load(open(args.detail))
@@ -390,10 +425,10 @@ def main():
 
     # ---------- zero-career-wicket diagnostic, split by appearance history
     zc = [r for r in rows
-          if asof_pfb.career_wickets(r["name"], r["mid"][:10]) == 0]
+          if asof_pfb.career_wickets(r["name"], r["date"]) == 0]
     true_deb, seen_nw = [], []
     for r in zc:
-        n, b, w = asof_use.player_sums(r["name"], r["mid"][:10])
+        n, b, w = asof_use.player_sums(r["name"], r["date"])
         (true_deb if n == 0 else seen_nw).append(r)
 
     def _grp(rr):

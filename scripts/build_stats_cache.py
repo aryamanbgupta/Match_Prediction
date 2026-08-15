@@ -1107,6 +1107,23 @@ def main() -> int:
               f"elo_update_version={args.elo_update_version}, "
               "source membership/mtime covered). Skipping rebuild. "
               "Use --force-rebuild to override.")
+        # sqlite_up_to_date does not inspect prior provenance, so the freeze
+        # must still run on the skip path: if the prior-source cache was
+        # rebuilt since this cache's last freeze, skipping here would leave
+        # stale priors baked in forever (the callers' provenance checks miss,
+        # re-invoke this script, and hit this same skip again — no self-heal).
+        # The freeze is idempotent and cheap relative to a rebuild.
+        if args.prior_source_sqlite:
+            provenance = freeze_priors_from_sqlite(
+                args.out,
+                args.prior_source_sqlite,
+            )
+            print(
+                "  re-froze global/phase priors from "
+                f"{provenance['prior_source_sqlite']} "
+                f"({provenance['prior_source_sha256'][:12]}...)",
+                flush=True,
+            )
         return 0
 
     build(source_dirs, args.out, gender=gender,

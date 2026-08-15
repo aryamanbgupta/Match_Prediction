@@ -1179,10 +1179,16 @@ class T20Rules:
         runs = self.process_ball(state, outcome, dismissal=dismissal,
                                  team_runs=team_runs)
         
-        # Select new bowler if over just ended (and not end of innings)
-        if state.balls % 6 == 0 and state.balls > 0 and not state.is_innings_over():
+        # Select new bowler if over just ended (and not end of innings).
+        # WIDE / NO_BALL do not advance `balls`, so without the extras guard
+        # this re-fires after an over-leading extra and swaps the bowler
+        # mid-over (the I5 branch above has always carried the guard).
+        if (outcome not in (Outcome.WIDE, Outcome.NO_BALL)
+                and state.balls % 6 == 0
+                and state.balls > 0
+                and not state.is_innings_over()):
             state.bowler_idx = self.select_next_bowler(state)
-        
+
         return outcome, runs
 
 # Prediction Models
@@ -1353,6 +1359,10 @@ class XGBoostModelV2(PredictionModel):
         # per-call pandas dtype introspection (the 57% hot spot profiled on
         # 2026-04-18). float64 matches training-time dtype (parquet default).
         self._feat_buf = np.zeros(len(self.feature_columns), dtype=np.float64)
+        # One-shot guard: warn on the first extract_features call if any
+        # trained column is absent from the produced dict (the B1
+        # venue_encoded / is_toss_winner zero-fill bug class).
+        self._feature_coverage_checked = False
         if hasattr(self.model, 'n_features_in_'):
             assert self.model.n_features_in_ == len(self.feature_columns), (
                 f"Feature count mismatch: model expects {self.model.n_features_in_}, "
@@ -1644,6 +1654,13 @@ class XGBoostModelV2(PredictionModel):
         features['match_importance'] = state.match_importance
         features['is_international'] = state.is_international
         features['competition_tier'] = state.competition_tier
+        # Training semantics (parsing_v2): toss winner == this innings'
+        # batting team; missing toss ('unknown'/'') scores 0 on both sides.
+        features['is_toss_winner'] = (
+            1 if state.toss_winner and state.toss_winner == state.batting_team
+            else 0
+        )
+        features['is_batting_first'] = 1 if state.innings == 1 else 0
 
         # Fill preallocated numpy row in training-time column order.
         buf = self._feat_buf
@@ -1652,6 +1669,19 @@ class XGBoostModelV2(PredictionModel):
             val = features.get(col)
             if val is not None:
                 buf[i] = val
+        if not self._feature_coverage_checked:
+            self._feature_coverage_checked = True
+            never_produced = [
+                col for col in self.feature_columns if col not in features
+            ]
+            if never_produced:
+                warnings.warn(
+                    "XGBoostModelV2: trained feature column(s) never "
+                    "produced by extract_features and silently zero-filled "
+                    f"(train/serve skew): {never_produced}",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
         return buf
 
     def _extract_momentum_features(self, state: MatchState) -> dict:

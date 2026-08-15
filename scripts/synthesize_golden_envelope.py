@@ -2,7 +2,7 @@
 blend_eval_json.py can be reused at w=0 (sim contribution mathematically
 dropped).
 
-For each fixture in betting_odds_golden.json we emit a per-match record
+For each fixture in betting_odds_golden_v2.json we emit a per-match record
 matching the schema MatchEvaluationResult.to_dict() produces — but with
 `simulated_prob` set to a 50/50 placeholder. At w=0 the blender computes
 logit(P_final) = 0*logit(P_sim) + 1*logit(P_direct), so the placeholder
@@ -36,8 +36,11 @@ def implied_probs(odds: dict, source: str) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
+    # _v2 = benchmark of record since 2026-08-05. Envelope prices FREEZE at
+    # synthesis (reslice's --odds only filters by volume, it never reprices),
+    # so building from the defective pre-v2 file cannot be repaired later.
     ap.add_argument("--odds", type=Path,
-                    default=Path("data/golden/betting_odds_golden.json"))
+                    default=Path("data/golden/betting_odds_golden_v2.json"))
     ap.add_argument("--out", type=Path,
                     default=Path("data/golden/golden_sim_envelope.json"))
     args = ap.parse_args()

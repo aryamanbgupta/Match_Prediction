@@ -260,6 +260,13 @@ def compute_actuals(data: dict) -> dict:
 
     teams_seen = []
     for inn in data.get("innings", []):
+        # Super overs arrive as extra innings objects restarting at over 0:
+        # counting them overwrites PP/first-over/first-wicket actuals,
+        # inflates totals, and settles genuinely tied matches as non-ties.
+        # Regulation play only — matching the sim (exactly 2 innings) and
+        # the fair-baseline corpus (innings[:2]).
+        if inn.get("super_over"):
+            continue
         bt = inn["team"]
         if bt not in teams_seen:
             teams_seen.append(bt)
