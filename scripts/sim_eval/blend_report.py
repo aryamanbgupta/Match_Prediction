@@ -263,8 +263,18 @@ def _gate_check(grid: Dict[str, Dict[float, dict]],
     mk = market.get(target) or {}
     bar = mk.get("market_ll", MARKET_LL_FALLBACK[target])
     ll_winners = [w for w, s in sub.items() if s["avg_log_loss"] < bar]
+    # Invariant #7: a ROI CI only supports a claim when the block bootstrap
+    # met its contract (>=10 real tournament blocks, no pair-block fallback).
+    # Summaries without the flag (pre-2026-08-14 reslices) count as
+    # unreliable — fail closed, re-reslice to qualify.
     roi_winners = [w for w, s in sub.items()
-                   if s["flat_betting_roi_ci_low"] > 0]
+                   if s["flat_betting_roi_ci_low"] > 0
+                   and s.get("bootstrap_reliable")]
+    descriptive_only = sorted(
+        w for w, s in sub.items()
+        if s["flat_betting_roi_ci_low"] > 0
+        and not s.get("bootstrap_reliable")
+    )
     return {
         "market_ll": bar,
         "market_ll_basis": (
@@ -274,6 +284,7 @@ def _gate_check(grid: Dict[str, Dict[float, dict]],
         ),
         "ll_clears_market": ll_winners,
         "roi_ci_excludes_zero": roi_winners,
+        "roi_ci_positive_but_descriptive_only": descriptive_only,
         "both_clear": sorted(set(ll_winners) & set(roi_winners)),
     }
 
@@ -297,8 +308,11 @@ def render_markdown(sliced_dir: Path, direct_json: Path) -> str:
                f"always-favorite flat ROI {ALWAYS_FAVORITE_ROI_PCT:+.2f}%, "
                f"slice-matched market LL: {market_bits}. Market LL is "
                "recomputed per slice from the sliced eval JSON's own "
-               "`market_prob` rows, so it follows the odds file that reslice "
-               "consumed (see "
+               "`market_prob` rows — i.e. the prices baked into the SOURCE "
+               "eval JSON at generation time. Reslice's --odds file only "
+               "sets slice membership (volume); it does NOT reprice rows, so "
+               "an eval JSON generated on pre-v2 odds keeps pre-v2 prices "
+               "regardless of the odds file passed at reslice (see "
                "`reports/market_benchmark_toss_defect_20260805.md` — the old "
                "hardcoded 0.6267 is retracted).\n")
 
@@ -370,7 +384,14 @@ def render_markdown(sliced_dir: Path, direct_json: Path) -> str:
     out.append(f"Required: model LL < market LL ({g['market_ll']:.4f}; "
                f"{g['market_ll_basis']}) AND flat-ROI CI excludes zero.")
     out.append(f"- LL < market: clears at w = {g['ll_clears_market'] or 'none'}")
-    out.append(f"- ROI CI excludes 0: clears at w = {g['roi_ci_excludes_zero'] or 'none'}")
+    out.append(f"- ROI CI excludes 0 (reliable blocks only): clears at "
+               f"w = {g['roi_ci_excludes_zero'] or 'none'}")
+    if g["roi_ci_positive_but_descriptive_only"]:
+        out.append(
+            f"- ROI CI positive but DESCRIPTIVE ONLY (<10 tournament blocks "
+            f"or pair-block fallback — does not count): "
+            f"w = {g['roi_ci_positive_but_descriptive_only']}"
+        )
     out.append(f"- BOTH conditions: w = {g['both_clear'] or 'none'}")
 
     # Per-match decomposition.

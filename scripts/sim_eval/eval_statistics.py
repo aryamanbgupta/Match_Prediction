@@ -20,6 +20,11 @@ from identity_maps import canonicalize_venue
 
 
 BOOTSTRAP_CONTRACT_VERSION = "tournament_time_block_v1"
+# Stamped instead of BOOTSTRAP_CONTRACT_VERSION whenever any row's block came
+# from fallback_competition_cluster (team-pair/singleton) rather than a real
+# tournament block — those inflate the block count, so a CI produced under
+# this stamp must never be read as contract-conforming.
+BOOTSTRAP_CONTRACT_FALLBACK = "tournament_time_block_v1_fallback_pair_blocks"
 DEFAULT_BOOTSTRAP_SEED = 42
 DEFAULT_BOOTSTRAP_RESAMPLES = 10_000
 MAX_EVENT_GAP_DAYS = 120
@@ -170,15 +175,19 @@ def load_competition_clusters(source_dir: Path | str) -> dict[str, str]:
     return lookup
 
 
-def cluster_id_for_record(
+def cluster_id_with_resolution(
     record: Any,
     cluster_lookup: Optional[Mapping[str, str]] = None,
-) -> str:
+) -> tuple[str, str]:
+    """Return (cluster_id, resolution) where resolution is one of
+    "stamped" (record carries its own competition_cluster_id),
+    "lookup" (resolved through the corpus lookup), or
+    "fallback" (team-pair/singleton block — NOT a tournament block)."""
     explicit = _field(record, "competition_cluster_id")
     if explicit is None:
         explicit = _field(record, "cluster_id")
     if explicit:
-        return str(explicit)
+        return str(explicit), "stamped"
     identity_keys = [
         str(value) for value in (
             _field(record, "match_id"),
@@ -198,8 +207,15 @@ def cluster_id_for_record(
                         "assigned through it — re-key the eval artifact "
                         "with Cricsheet primary IDs"
                     )
-                return cluster
-    return fallback_competition_cluster(record)
+                return cluster, "lookup"
+    return fallback_competition_cluster(record), "fallback"
+
+
+def cluster_id_for_record(
+    record: Any,
+    cluster_lookup: Optional[Mapping[str, str]] = None,
+) -> str:
+    return cluster_id_with_resolution(record, cluster_lookup)[0]
 
 
 def flat_bet_team(

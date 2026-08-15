@@ -71,6 +71,28 @@ def create_example_odds_file():
     print("Created example_betting_odds.json")
 
 
+def _model_load_failed(model_name: str, error: Exception, allow_dummy: bool):
+    """Fail closed on model-load errors (2026-08-14 review, EV4).
+
+    The old behavior downgraded to DummyModel after one scroll-by print and
+    saved a normal-looking results JSON — a corrupt pickle or version
+    mismatch could log a coin-flip model's LL/ROI as a real verdict. Demo
+    behavior is opt-in via --allow-dummy.
+    """
+    if allow_dummy:
+        print(f"Error loading {model_name} model: {error}")
+        print("--allow-dummy set: continuing with DummyModel (DEMO ONLY — "
+              "results are coin-flip, not the named model)")
+        from sim_v1_2 import DummyModel
+        return DummyModel()
+    raise SystemExit(
+        f"Error loading {model_name} model: {error}\n"
+        "Refusing to continue: a DummyModel fallback would silently score a "
+        "coin-flip model under the requested model_type. Fix the artifact "
+        "or pass --allow-dummy for demo behavior."
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description='Evaluate cricket match predictions against betting odds')
     parser.add_argument('--test-dir', type=str, default='data/test_matches',
@@ -127,10 +149,17 @@ def main():
     )
     parser.add_argument('--ball-diagnostics', action='store_true',
                        help='Run ball-level ECE diagnostics (read-only, no correction)')
-    parser.add_argument('--save-calibrator', type=str, default=None,
-                       help='Save fitted match-level calibrator to PATH for reuse')
-    parser.add_argument('--load-calibrator', type=str, default=None,
-                       help='Load pre-fitted match-level calibrator from PATH')
+    # --save-calibrator / --load-calibrator were REMOVED 2026-08-14: the
+    # load path was never read (passing it silently fitted a fresh LOOCV
+    # calibrator on the eval set's own outcomes — fit-on-test behind a flag
+    # promising the opposite), and the save path could never fire (the
+    # results object never carries a calibrator). Fit calibrators on
+    # validation explicitly if ever needed; see IMPROVEMENTS.md EV2.
+    parser.add_argument('--allow-dummy', action='store_true',
+                       help='On model-load failure, continue with DummyModel '
+                            '(DEMO ONLY). Default: fail closed — a silent '
+                            'dummy downgrade scores a coin-flip model under '
+                            'the real model_type.')
     parser.add_argument('--bowler-selector', choices=['empirical', 'random'],
                        default='empirical',
                        help='Bowler selection strategy. Default = empirical (phase-aware).')
@@ -257,10 +286,7 @@ def main():
             )
             print("✓ LSTM model loaded successfully")
         except Exception as e:
-            print(f"Error loading LSTM model: {e}")
-            print("Using dummy model for demonstration")
-            from sim_v1_2 import DummyModel
-            model = DummyModel()
+            model = _model_load_failed('LSTM', e, args.allow_dummy)
     elif args.model_type == 'mlp':
         print(f"\nLoading MLP model...")
         try:
@@ -277,10 +303,7 @@ def main():
             )
             print("✓ MLP model loaded successfully")
         except Exception as e:
-            print(f"Error loading MLP model: {e}")
-            print("Using dummy model for demonstration")
-            from sim_v1_2 import DummyModel
-            model = DummyModel()
+            model = _model_load_failed('MLP', e, args.allow_dummy)
     elif args.model_type == 'mlp_v2':
         print(f"\nLoading MLP v2 model with embeddings...")
         try:
@@ -298,10 +321,7 @@ def main():
             )
             print("✓ MLP v2 model loaded successfully")
         except Exception as e:
-            print(f"Error loading MLP v2 model: {e}")
-            print("Using dummy model for demonstration")
-            from sim_v1_2 import DummyModel
-            model = DummyModel()
+            model = _model_load_failed('MLP v2', e, args.allow_dummy)
     elif args.model_type == 'transformer':
         backend = "MLX (unified memory)" if args.mlx else "PyTorch"
         print(f"\nLoading Transformer model ({backend})...")
@@ -323,10 +343,7 @@ def main():
             )
             print(f"✓ Transformer model loaded successfully ({backend}, 120-ball context)")
         except Exception as e:
-            print(f"Error loading Transformer model: {e}")
-            print("Using dummy model for demonstration")
-            from sim_v1_2 import DummyModel
-            model = DummyModel()
+            model = _model_load_failed('Transformer', e, args.allow_dummy)
     elif args.model_type == 'llm':
         print(f"\nLoading LLM model (Qwen 1.5-1.8B with LoRA)...")
         print("NOTE: LLM model requires GPU for reasonable inference speed.")
@@ -399,10 +416,7 @@ def main():
             )
             print(f"✓ XGBoost model loaded successfully ({args.model_version})")
         except Exception as e:
-            print(f"Error loading model: {e}")
-            print("Using dummy model for demonstration")
-            from sim_v1_2 import DummyModel
-            model = DummyModel()
+            model = _model_load_failed('XGBoost', e, args.allow_dummy)
 
     # Create simulation engine
     if args.bowler_selector == 'empirical':
@@ -455,16 +469,15 @@ def main():
     )
     
     # Run evaluation (with or without match-level calibration)
-    if args.calibrate or args.load_calibrator:
+    if args.calibrate:
         print(f"\nMatch-level calibration: {args.calibration_method} (LOOCV)")
+        print("NOTE: LOOCV fits on this eval set's own outcomes — LL is a "
+              "diagnostic; the ROI fields have temporal look-ahead and are "
+              "NOT a valid betting backtest.")
         results = evaluator.evaluate_all_with_calibration(
             matches, odds_lookup,
             calibration_method=args.calibration_method
         )
-        # Save calibrator if requested
-        if args.save_calibrator and hasattr(results, '_calibrator'):
-            results._calibrator.save(args.save_calibrator)
-            print(f"Calibrator saved to {args.save_calibrator}")
     else:
         results = evaluator.evaluate_all(matches, odds_lookup)
 

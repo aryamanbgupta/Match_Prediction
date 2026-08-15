@@ -228,6 +228,7 @@ def blend(sim_json: dict, direct_preds: dict, w: float) -> dict:
     out_matches = []
     n_blended = 0
     n_passthrough = 0
+    passthrough_ids = []
     # id(direct entry) -> sim match_id. Two sim rows resolving the same
     # direct row means a doubleheader is sharing one legacy display alias;
     # blending both against a single prediction must fail closed.
@@ -266,9 +267,25 @@ def blend(sim_json: dict, direct_preds: dict, w: float) -> dict:
                 n_blended += 1
             else:
                 n_passthrough += 1
+                passthrough_ids.append(str(mid))
         else:
             out_matches.append(_blend_match(m, None, w))
             n_passthrough += 1
+            passthrough_ids.append(str(mid))
+
+    # A synthetic envelope's sim_prob is a 50/50 placeholder by construction:
+    # "passing the sim through" on a join miss would score the placeholder as
+    # a real model probability (diluting LL toward coinflip, corrupting
+    # edge/PnL for that match) with only an unasserted count as evidence.
+    envelope_for = (sim_json.get("summary") or {}).get("envelope_for")
+    if envelope_for and n_passthrough:
+        raise RuntimeError(
+            f"sim JSON is a synthetic envelope ({envelope_for!r}) and "
+            f"{n_passthrough} match(es) found no aligned direct prediction: "
+            f"{passthrough_ids[:10]}{'...' if n_passthrough > 10 else ''} — "
+            "passthrough would score the 50/50 placeholder as the model. "
+            "Fix the direct-prediction join (team names / match IDs)."
+        )
 
     # Fresh summary stub — caller is expected to feed the result through
     # reslice_eval_json.py for the real bootstrap CIs.

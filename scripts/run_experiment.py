@@ -490,10 +490,13 @@ def build_eval_cmd(config: dict) -> list:
         ])
     if eval_config.get("ball_diagnostics"):
         cmd.append("--ball-diagnostics")
-    if eval_config.get("save_calibrator"):
-        cmd.extend(["--save-calibrator", eval_config["save_calibrator"]])
-    if eval_config.get("load_calibrator"):
-        cmd.extend(["--load-calibrator", eval_config["load_calibrator"]])
+    if eval_config.get("save_calibrator") or eval_config.get("load_calibrator"):
+        raise ValueError(
+            "eval.save_calibrator / eval.load_calibrator were removed "
+            "2026-08-14: --load-calibrator never loaded (it silently fitted "
+            "LOOCV on the eval set) and --save-calibrator never saved. "
+            "Remove the keys from the config; see IMPROVEMENTS.md EV2."
+        )
 
     return cmd
 

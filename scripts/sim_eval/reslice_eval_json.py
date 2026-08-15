@@ -43,12 +43,14 @@ from match_identity import (  # noqa: E402
     build_compatibility_alias_lookup,
 )
 from sim_eval.eval_statistics import (  # noqa: E402
+    BOOTSTRAP_CONTRACT_FALLBACK,
     BOOTSTRAP_CONTRACT_VERSION,
     DEFAULT_BOOTSTRAP_RESAMPLES,
     DEFAULT_BOOTSTRAP_SEED,
     MIN_RECOMMENDED_CLUSTERS,
     bootstrap_mean_ci,
     cluster_id_for_record,
+    cluster_id_with_resolution,
     count_unique_clusters,
     flat_bet_team,
     flat_bet_won,
@@ -233,7 +235,7 @@ def reslice(eval_json_path: str, odds_json_path: str,
     feat_lookup = _load_feature_lookup(feature_parquet)
     predicate = _slice_predicate(slice_name, mismatch_thresh, close_thresh)
     if cluster_source_dir is None:
-        default_cluster_source = PROJECT_ROOT / "data" / "polymarket_test"
+        default_cluster_source = PROJECT_ROOT / "data" / "polymarket_test_v2"
         cluster_source_dir = (
             default_cluster_source if default_cluster_source.is_dir() else None
         )
@@ -249,6 +251,7 @@ def reslice(eval_json_path: str, odds_json_path: str,
         match["match_id"] = canonicalize_match_id(match["match_id"])
         matches.append(match)
     kept_matches = []
+    cluster_resolution = {"stamped": 0, "lookup": 0, "fallback": 0}
     for match in matches:
         if min_volume is not None:
             vol = _lookup_for_match(vol_by_id, match)
@@ -261,11 +264,29 @@ def reslice(eval_json_path: str, odds_json_path: str,
         enriched = dict(match)
         enriched["bet_placed"] = bet_team is not None
         enriched["bet_team"] = bet_team
-        enriched["competition_cluster_id"] = cluster_id_for_record(
+        cluster_id, resolution = cluster_id_with_resolution(
             match,
             cluster_lookup,
         )
+        enriched["competition_cluster_id"] = cluster_id
+        cluster_resolution[resolution] += 1
         kept_matches.append(enriched)
+
+    # Team-pair fallback blocks are NOT tournament blocks: they inflate the
+    # block count and would let a <10-block slice masquerade as reliable.
+    # Any fallback row demotes the contract stamp and the reliability flag.
+    fallback_rows = cluster_resolution["fallback"]
+    if fallback_rows:
+        print(
+            f"  WARNING: {fallback_rows}/{len(kept_matches)} rows have no "
+            "tournament cluster (cluster source: "
+            f"{cluster_source_dir if cluster_source_dir else 'NONE'}) and "
+            "fell back to team-pair blocks. The block bootstrap does NOT "
+            "meet the tournament_time_block_v1 contract on this slice; its "
+            "CI is descriptive only. Pass --cluster-source-dir pointing at "
+            "the Cricsheet corpus that produced these matches.",
+            file=sys.stderr,
+        )
 
     def _is_valid_ll(m):
         ll = m.get('log_loss')
@@ -337,20 +358,36 @@ def reslice(eval_json_path: str, odds_json_path: str,
         'mismatch_threshold': mismatch_thresh if slice_name == "mismatch" else None,
         'close_threshold':    close_thresh if slice_name == "close" else None,
         'stratify_by':    stratify_by,
-        'bootstrap_contract': BOOTSTRAP_CONTRACT_VERSION,
+        'bootstrap_contract': (
+            BOOTSTRAP_CONTRACT_VERSION if fallback_rows == 0
+            else BOOTSTRAP_CONTRACT_FALLBACK
+        ),
         'bootstrap_seed': DEFAULT_BOOTSTRAP_SEED,
         'bootstrap_resamples': n_resamples,
         'n_bootstrap_clusters': count_unique_clusters(roi_clusters),
         'bootstrap_reliable': (
-            count_unique_clusters(roi_clusters)
+            fallback_rows == 0
+            and count_unique_clusters(roi_clusters)
             >= MIN_RECOMMENDED_CLUSTERS
+        ),
+        'bootstrap_unreliable_reason': (
+            None if (
+                fallback_rows == 0
+                and count_unique_clusters(roi_clusters)
+                >= MIN_RECOMMENDED_CLUSTERS
+            )
+            else (
+                'fallback_pair_blocks' if fallback_rows
+                else 'fewer_than_10_clusters'
+            )
         ),
         'cluster_source_dir': (
             str(Path(cluster_source_dir).resolve())
             if cluster_source_dir is not None else None
         ),
-        'cluster_metadata_coverage': sum(
-            match['match_id'] in cluster_lookup for match in kept_matches
+        'cluster_resolution': cluster_resolution,
+        'cluster_metadata_coverage': (
+            cluster_resolution["stamped"] + cluster_resolution["lookup"]
         ),
         'n_matches_in_source': len(matches),
         'n_matches_evaluated': len(kept_matches),
@@ -405,8 +442,10 @@ def main():
         default=None,
         help=(
             'Cricsheet JSON directory used for tournament/tour-season block '
-            'labels. Defaults to data/polymarket_test when present; unmatched '
-            'rows use team-pair-season blocks.'
+            'labels. Defaults to data/polymarket_test_v2 when present. '
+            'Unmatched rows fall back to team-pair-season blocks, which '
+            'demotes the bootstrap contract stamp and marks the CI '
+            'descriptive-only.'
         ),
     )
     parser.add_argument('--min-volume', type=int, action="append", default=None,
@@ -452,7 +491,8 @@ def main():
             f"({s['n_bootstrap_clusters']} bet clusters)"
         )
         if not s["bootstrap_reliable"]:
-            print("  WARNING: fewer than 10 clusters; CI is descriptive only")
+            reason = s.get("bootstrap_unreliable_reason") or "unreliable"
+            print(f"  WARNING: CI is descriptive only ({reason})")
         print(f"  → {out_path}")
 
 

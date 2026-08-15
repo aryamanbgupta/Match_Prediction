@@ -96,9 +96,10 @@ def test_bootstrap_empty_and_zero_resamples_return_nan():
     assert _isnan_pair(ev._bootstrap_ci([1.0, 2.0], n_resamples=0)), \
         "n_resamples=0 must give (nan, nan)"
     assert _isnan_pair(rs._bootstrap_ci([])), "reslice: empty must give (nan, nan)"
-    # NOTE (divergence, not a gate bug): the reslice copy has NO n<=0 guard —
-    # rs._bootstrap_ci(values, n=0) would np.quantile an empty array. The
-    # evaluator guards it. Documented here; do not call reslice with n<=0.
+    # Both wrappers delegate to eval_statistics.bootstrap_mean_ci, which
+    # guards n_resamples <= 0 — assert the reslice side stays guarded too.
+    assert _isnan_pair(rs._bootstrap_ci([1.0, 2.0], n=0)), \
+        "reslice: n=0 must give (nan, nan), not np.quantile of empty"
 
 
 def test_bootstrap_reproducible_at_seed_42():
@@ -497,6 +498,109 @@ def test_reslice_counts_zero_pnl_win_as_bet():
         assert rows["m_c"]["competition_cluster_id"]
 
 
+# --------------------------------------------------------------------------
+# E2. Invariant #7 — pair-block fallback must demote the bootstrap contract
+# --------------------------------------------------------------------------
+
+def _write_clustered_fixture(tmp: Path, n_clusters: int):
+    """Eval JSON whose rows carry their own competition_cluster_id (one row
+    per cluster), plus an odds file granting each row >= $50k volume."""
+    matches = []
+    odds = []
+    for i in range(n_clusters):
+        mid = f"cl_{i}"
+        matches.append({
+            "match_id": mid, "log_loss": 0.6, "brier_score": 0.2,
+            "realized_pnl": 0.5 if i % 2 == 0 else -1.0,
+            "bet_placed": True, "bet_team": "A", "actual_winner": "A",
+            "competition_cluster_id": f"event:League{i}|block_start:2026-01-01",
+        })
+        odds.append({"match_id": mid, "polymarket_volume_usd": 60_000})
+    eval_json = tmp / "eval.json"
+    odds_json = tmp / "odds.json"
+    eval_json.write_text(json.dumps({"matches": matches}))
+    odds_json.write_text(json.dumps({"matches": odds}))
+    return str(eval_json), str(odds_json)
+
+
+def test_reslice_fallback_blocks_demote_contract_and_reliability():
+    """Rows with no cluster metadata land in team-pair fallback blocks; the
+    summary must say so loudly instead of stamping the real contract (the
+    pre-2026-08-14 behavior silently reported tournament_time_block_v1 with
+    bootstrap_reliable computed from the inflated pair-block count)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        ep, op = _write_reslice_fixture(Path(tmp))
+        out = rs.reslice(ep, op, min_volume=None)
+        s = out["summary"]
+        assert s["cluster_resolution"] == {
+            "stamped": 0, "lookup": 0, "fallback": 5,
+        }
+        assert s["bootstrap_contract"] == \
+            "tournament_time_block_v1_fallback_pair_blocks"
+        assert s["bootstrap_reliable"] is False
+        assert s["bootstrap_unreliable_reason"] == "fallback_pair_blocks"
+        assert s["cluster_metadata_coverage"] == 0
+
+
+def test_reslice_stamped_clusters_keep_contract_when_enough_blocks():
+    with tempfile.TemporaryDirectory() as tmp:
+        ep, op = _write_clustered_fixture(Path(tmp), n_clusters=12)
+        out = rs.reslice(ep, op, min_volume=50_000)
+        s = out["summary"]
+        assert s["cluster_resolution"]["stamped"] == 12
+        assert s["cluster_resolution"]["fallback"] == 0
+        assert s["bootstrap_contract"] == "tournament_time_block_v1"
+        assert s["n_bootstrap_clusters"] == 12
+        assert s["bootstrap_reliable"] is True
+        assert s["bootstrap_unreliable_reason"] is None
+        assert s["cluster_metadata_coverage"] == 12
+
+
+def test_reslice_few_stamped_clusters_stay_descriptive():
+    """<10 real blocks keeps the honest contract stamp but must not read
+    as reliable."""
+    with tempfile.TemporaryDirectory() as tmp:
+        ep, op = _write_clustered_fixture(Path(tmp), n_clusters=4)
+        out = rs.reslice(ep, op, min_volume=50_000)
+        s = out["summary"]
+        assert s["bootstrap_contract"] == "tournament_time_block_v1"
+        assert s["bootstrap_reliable"] is False
+        assert s["bootstrap_unreliable_reason"] == "fewer_than_10_clusters"
+
+
+def test_gate_requires_reliable_bootstrap_for_roi_leg():
+    """Invariant #7 at the gate: a positive ROI CI on an unreliable
+    bootstrap must not clear the gate's ROI condition."""
+    from sim_eval import blend_report as br
+
+    def _summary(ll, ci_low, reliable):
+        return {
+            "avg_log_loss": ll,
+            "flat_betting_roi_ci_low": ci_low,
+            "bootstrap_reliable": reliable,
+        }
+
+    grid = {"min_volume_50000": {
+        0.0: _summary(0.55, 2.0, True),    # clears both, reliably
+        0.5: _summary(0.55, 2.0, False),   # positive CI but descriptive
+        1.0: _summary(0.70, -1.0, True),   # clears neither
+    }}
+    market = {"min_volume_50000": {"market_ll": 0.60, "n_priced": 3}}
+    g = br._gate_check(grid, market)
+    assert g["roi_ci_excludes_zero"] == [0.0]
+    assert g["roi_ci_positive_but_descriptive_only"] == [0.5]
+    assert g["both_clear"] == [0.0]
+
+    # Legacy sliced JSONs without the flag fail closed on the ROI leg.
+    legacy = {"min_volume_50000": {
+        0.0: {"avg_log_loss": 0.55, "flat_betting_roi_ci_low": 2.0},
+    }}
+    g2 = br._gate_check(legacy, market)
+    assert g2["roi_ci_excludes_zero"] == []
+    assert g2["roi_ci_positive_but_descriptive_only"] == [0.0]
+    assert g2["both_clear"] == []
+
+
 def test_a7_summary_counts_zero_return_win_without_pnl_sentinel():
     summary = a7._summarize(
         pnls=[0.0, -1.0],
@@ -642,6 +746,21 @@ def test_blend_passthrough_missing_direct_preserves_metrics_and_adds_contract():
     # team-pair fallback overrides reslice's event-time block lookup and
     # silently degrades the I3 bootstrap (observed: 134 clusters vs 19).
     assert "competition_cluster_id" not in passthrough
+
+
+def test_blend_envelope_passthrough_fails_closed():
+    """SRV4 (2026-08-14 review): a synthetic envelope's sim_prob is a 50/50
+    placeholder — a join miss must raise, not silently score the placeholder
+    as the model in the w=0 golden flow."""
+    sim_json, direct = _blend_fixture()
+    sim_json.setdefault("summary", {})["envelope_for"] = \
+        "golden direct-only eval (w=0 blend)"
+    with np.testing.assert_raises(RuntimeError):
+        bl.blend(sim_json, direct, w=0.0)
+    # Non-envelope sim JSONs keep the documented passthrough behavior.
+    del sim_json["summary"]["envelope_for"]
+    out = bl.blend(sim_json, direct, w=0.0)
+    assert out["summary"]["n_matches_passthrough"] >= 1
 
 
 def test_blend_recomputed_metrics_match_evaluator_formulas():
