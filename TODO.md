@@ -147,8 +147,23 @@ consolidation. IDs below reference that catalog.
         paired delta, and G5 coverage. This light checkout lacks the
         production ball artifacts and `data/polymarket_test_v2`, so the
         run must happen there.
-  - [ ] Run the gates on the full checkout → human reviews numbers + the
-        engine diff → merge → restate numbers everywhere.
+  - [~] **G5 ran 2026-08-14 on this checkout** (test dir reconstructed
+        manifest-derived from the tracked v2 benchmark; usage prior fresh,
+        built 2026-08-11 from the full corpus): **89.7% overall — marginal
+        FAIL vs the ≥90% bar** (2025: 90.5%, 2026: 89.3%; misses are
+        associate-nation debutants — Ghazanfar, etc.). Engine-INDEPENDENT
+        (no sim involved), so not a BR2 regression — but this is the
+        FIRST G5 on the corrected v2 set; the original pass predates the
+        2026-08-05 benchmark correction. Treat as a standing observation
+        for the gate review: either the bar needs an associate-aware
+        reading or the usage prior needs a debutant fallback.
+  - [ ] G1 + prop A/B still need `models/xgb_i7_noweights_production/` and
+        the recorded pre-fix prop detail JSON — neither exists on this
+        machine (disk + archive + git searched; the Mac mini's sessions
+        are offline). Run `bash scripts/run_br2_gates.sh <detail.json>`
+        where the artifacts live, or copy them here.
+  - [ ] Human reviews gate numbers + the engine diff → merge → restate
+        numbers everywhere.
 - [ ] **T1 follow-ups (from the 2026-08-14 implementation review; details
   in IMPROVEMENTS.md):** promote `get_t1_outcome_counts` to a first-class
   provider API (or make `run_sim_eval_t1` build a
