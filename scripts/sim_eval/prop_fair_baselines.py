@@ -64,8 +64,13 @@ SOURCE_DIR = REPO / "data" / "t20s_json"
 # the schema version — old pickles cannot be silently misread.
 CACHE = REPO / "models" / "prop_fair_baseline_corpus_v3.pkl"
 
-BOWLER_KINDS = {"bowled", "caught", "lbw", "stumped", "caught and bowled",
-                "hit wicket"}
+# Re-exported from the shared conventions module (2026-08-14): existing
+# `from sim_eval.prop_fair_baselines import BOWLER_KINDS` imports keep
+# working, but the definition lives in exactly one place.
+from sim_eval.settlement_common import (  # noqa: E402,F401
+    BOWLER_KINDS,
+    regulation_innings,
+)
 BASELINE_VERSION = "e2-v2-usage-top-bowler"
 K_PLAYER = 20.0
 K_VENUE = 20.0
@@ -108,7 +113,7 @@ def build_corpus_logs(source_dir: Path) -> dict:
         teams = info.get("teams") or []
         players = info.get("players") or {}
         venue = canonicalize_venue(info.get("venue"), fallback="?")
-        innings = j.get("innings", [])[:2]
+        innings = regulation_innings(j)
         match_sixes = 0
         match_max_over = 0
         match_top_score = 0

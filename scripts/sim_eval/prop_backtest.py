@@ -36,11 +36,14 @@ from sim_v1_2 import (  # noqa: E402
     XGBoostModelV2,
 )
 from sim_eval.loaders import TestMatchLoader  # noqa: E402
-from sim_eval.prop_fair_baselines import BOWLER_KINDS  # noqa: E402
-
-# Retirements are not dismissals: they end neither the partnership nor the
-# batter's innings for settlement purposes.
-_NOT_OUT_KINDS = {"retired hurt", "retired not out"}
+from sim_eval.settlement_common import (  # noqa: E402
+    BOWLER_KINDS,
+    NOT_OUT_KINDS as _NOT_OUT_KINDS,
+    bowler_conceded,
+    counts_as_ball_faced,
+    is_legal_delivery,
+    regulation_innings,
+)
 from stats_provider import StatsProvider  # noqa: E402
 from player_metadata import PlayerMetadataProvider  # noqa: E402
 
@@ -264,14 +267,10 @@ def compute_actuals(data: dict) -> dict:
     team_to_bowlers: Dict[str, set] = defaultdict(set)
 
     teams_seen = []
-    for inn in data.get("innings", []):
-        # Super overs arrive as extra innings objects restarting at over 0:
-        # counting them overwrites PP/first-over/first-wicket actuals,
-        # inflates totals, and settles genuinely tied matches as non-ties.
-        # Regulation play only — matching the sim (exactly 2 innings) and
-        # the fair-baseline corpus (innings[:2]).
-        if inn.get("super_over"):
-            continue
+    # Regulation play only (settlement_common): super overs corrupt
+    # per-innings actuals and tie detection; the sim simulates exactly two
+    # innings and the fair-baseline corpus uses the same filter.
+    for inn in regulation_innings(data):
         bt = inn["team"]
         if bt not in teams_seen:
             teams_seen.append(bt)
@@ -312,10 +311,8 @@ def compute_actuals(data: dict) -> dict:
                     batter_fours[batter] += 1
                 elif runs_batter == 6:
                     batter_sixes[batter] += 1
-                # Balls faced excludes wides (DK convention -- and matches
-                # cricsheet semantics).
                 extras = d.get("extras", {}) or {}
-                if "wides" not in extras:
+                if counts_as_ball_faced(extras):
                     batter_balls[batter] += 1
 
                 bowler = d["bowler"]
@@ -324,13 +321,8 @@ def compute_actuals(data: dict) -> dict:
                 bowler_runs_conceded.setdefault(bowler, 0)
                 bowler_wkts.setdefault(bowler, 0)
                 bowler_legal_balls.setdefault(bowler, 0)
-                # Conceded runs = batter runs + wides + no-balls (charged to bowler);
-                # byes / leg-byes are NOT charged. Use simple: runs_total minus
-                # bye/legbye extras.
-                non_bowler_extras = (extras.get("byes", 0) or 0) + (extras.get("legbyes", 0) or 0)
-                bowler_runs_conceded[bowler] += runs_total - non_bowler_extras
-                # Legal balls (excludes wides/no-balls) for bowler economy.
-                if "wides" not in extras and "noballs" not in extras:
+                bowler_runs_conceded[bowler] += bowler_conceded(d)
+                if is_legal_delivery(extras):
                     bowler_legal_balls[bowler] += 1
                 if "wickets" in d:
                     for w in d["wickets"]:

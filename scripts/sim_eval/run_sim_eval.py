@@ -155,6 +155,11 @@ def main():
     # promising the opposite), and the save path could never fire (the
     # results object never carries a calibrator). Fit calibrators on
     # validation explicitly if ever needed; see IMPROVEMENTS.md EV2.
+    parser.add_argument('--allow-stateful-wrapper', action='store_true',
+                       help='Run the LSTM/Transformer/LLM wrappers despite '
+                            'the engine never resetting their sequence '
+                            'state (results are contaminated across '
+                            'innings/sims/matches — diagnostic only).')
     parser.add_argument('--allow-dummy', action='store_true',
                        help='On model-load failure, continue with DummyModel '
                             '(DEMO ONLY). Default: fail closed — a silent '
@@ -265,6 +270,21 @@ def main():
             print(f"\nWarning: Validation data not found at {_ball_cal_data_path}")
             print("Ball-level calibration/diagnostics disabled. Use --ball-calibrate-data to specify path.")
             _ball_cal_data_path = None
+
+    # SIM4 (2026-08-14 review): the engine never calls the sequence-reset
+    # hooks, so the LSTM/Transformer/LLM wrappers accumulate history across
+    # innings, simulations, and matches — any numbers produced through them
+    # are contaminated. Refuse unless the caller explicitly opts in.
+    stateful_wrappers = {'lstm', 'transformer', 'llm'}
+    if (args.model_type in stateful_wrappers
+            and not args.allow_stateful_wrapper):
+        raise SystemExit(
+            f"model_type {args.model_type!r} keeps per-ball sequence state "
+            "that SimulationEngine never resets (innings-1 tail leaks into "
+            "innings 2; sim i inherits sim i-1's buffer; state carries "
+            "across matches). Results through this path are contaminated. "
+            "Pass --allow-stateful-wrapper to run anyway (diagnostic only)."
+        )
 
     # Load model and encoders
     if args.model_type == 'lstm':

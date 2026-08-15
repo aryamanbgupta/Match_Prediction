@@ -128,10 +128,35 @@ consolidation. IDs below reference that catalog.
         can no longer become classes + `test_transformer_t1_load_aux.py`.
   - [x] BR5 auction payload subtracts the test-pool mean (registered
         unit); erratum appended to `XR_FUTURE_PLAYER_VALIDATION_V1.md`.
-- [ ] **Phase 3b — BR2 decision (blocks branch merge).** Either re-run
-  G1/G3/G5 + a prop-backtest delta under the changed engine, or fence the
-  three engine changes behind the T1 path. Compute-heavy → human call on
-  which.
+- [~] **Phase 3b — BR2 (decision made 2026-08-14: re-run the gates, review,
+  then merge).** Prepared:
+  - [x] **Ball-119 rule removal VERIFIED SAFE.** The rule dates from the
+        first "working simulation" commit, commented "(simplified)". It
+        never guaranteed termination (extras don't advance `balls` at ANY
+        position — the re-bowl loop was always probabilistically bounded
+        on balls 0–118 too), the history buffer auto-extends, and the rule
+        actively distorted results: a sampled final-ball wide was forced
+        to a DOT, deleting real runs including chase-WINNING wides in tied
+        finishes. Pinned by `scripts/tests/test_ball119_removal.py`
+        (UNCOMMITTED — merge it together with the sim_v1_2 engine hunks;
+        it fails under the old rule by design).
+  - [x] Gate runbook ready: `bash scripts/run_br2_gates.sh
+        <recorded_detail.json>` on the full checkout runs the prop A/B
+        (covers the engine changes AND the committed SIM1/SIM2/PROP3
+        fixes in one run), G1 winner-LL parity, G3 via the top_batter
+        paired delta, and G5 coverage. This light checkout lacks the
+        production ball artifacts and `data/polymarket_test_v2`, so the
+        run must happen there.
+  - [ ] Run the gates on the full checkout → human reviews numbers + the
+        engine diff → merge → restate numbers everywhere.
+- [ ] **Backlog: model free hits.** After a NO_BALL the next delivery is a
+  free hit — only run-outs can dismiss. The sim currently samples wickets
+  at the full rate there (~0.5–1% of one delivery's wicket mass per
+  innings). Needs a `free_hit_pending` flag on MatchState, a wicket→
+  run-out-only (or wicket-suppressed) rule in `is_legal_outcome`/the
+  dismissal draw, and a small calibration check that team-total and
+  bowler-wicket props move as expected. Decision 2026-08-14: model it
+  (backlog), not a documented-gap acceptance.
 - [~] **Phase 4 — structural consolidation (first pass DONE 2026-08-14).**
   - [x] **Train/serve parity harness** (`test_train_serve_parity.py`):
         synthetic corpus → materialize → re-serve through
