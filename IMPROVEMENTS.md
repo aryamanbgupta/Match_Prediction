@@ -1649,6 +1649,358 @@ unaffected by that change — but it drives the same `base.write_outputs`, so th
 Blast odds file was built under the old rule and its ROI figures need a rebuild
 (tracked in TODO.md, warning noted in `reports/blast_golden_2026_eval.md`).
 
+## Full-repo code & integrity review (2026-08-14, branch `embeddings-ladder`)
+
+Eight parallel deep reviews (~35k lines read end-to-end: sim engine, feature
+pipeline, match model + serving, eval/backtest framework, prop stack, odds
+builders + sealed sets, T1 branch, XR/embeddings scripts), findings marked
+CONFIRMED only when the full mechanism was traced through call sites; the top
+ten additionally re-verified against source by hand. Known/documented issues
+(toss defect, A7 retirement, superseded i.i.d. CIs) were excluded by
+instruction. Line numbers reference the 2026-08-14 working tree.
+Remediation plan + status: TODO.md § "Code & integrity review remediation".
+
+**Verdict.** The core science is sound — no training-time leakage found
+anywhere. Verified clean under adversarial reading: temporal integrity
+(feature reads strictly precede tracker mutations; snapshots first-write-wins
+strictly-before-date; frozen/live parity harness agrees), same-day ordering at
+every walk, the 6-class outcome mapping in all six `class_to_outcome` dicts,
+the I3 bootstrap's resampling math (blocks resampled whole, bets placed once
+from outcome-blind edges outside the loop), T1's causal mask + target shift,
+the swap augmentation's full column classification + involution assert, the
+sealed-forward hash/outcome-free/write-once guards end-to-end, prop as-of
+discipline (strictly-before-date, same-day-blind, consistent with the cache),
+and all 379 shipped v2 odds rows (pre-start quotes, implied probs sum to 1).
+The defects concentrate in two shapes: **silent fallbacks** in a codebase
+whose philosophy is fail-closed, and **drift between hand-mirrored copies**
+of the same logic (~⅔ of confirmed bugs are the second kind — the same class
+that produced the toss defect).
+
+### CRITICAL
+
+- **CR1 — reslice's cluster fallback defeats the I3 block contract while
+  stamping its name** (`sim_eval/reslice_eval_json.py:235–244`,
+  `eval_statistics.py:78–92`). With `--cluster-source-dir` omitted, the
+  default is the superseded `data/polymarket_test` (absent in this checkout),
+  the lookup is silently `{}`, every row falls to per-team-pair fallback
+  blocks, and a slice that should be <10 blocks → "descriptive only"
+  (invariant #7) instead reports 30–130 blocks, a narrow ROI CI,
+  `bootstrap_reliable: true`, and `bootstrap_contract:
+  tournament_time_block_v1`. CLAUDE.md's golden-refresh recipe step 4 triggers
+  it; reslice emits no warning (run_sim_eval.py:441 warns loudly on the same
+  condition). Compounded by EV1.
+
+### MAJOR — eval/backtest framework
+
+- **EV1 — gate ignores `bootstrap_reliable`** (`blend_report.py:264–267`):
+  a <10-block slice whose CI clears zero prints a machine-readable green
+  light; with CR1, on inflated block counts too.
+- **EV2 — `--load-calibrator` never loads** (`run_sim_eval.py:458–467`): the
+  path is read nowhere; the flag routes into LOOCV fit **on the eval set's own
+  outcomes** — fit-on-test behind a flag promising the opposite.
+  `--save-calibrator` is dead (results dataclass never carries `_calibrator`).
+  Note the LOOCV path's ROI has look-ahead by construction (bet decisions use
+  a calibrator trained on later outcomes) — diagnostic only.
+- **EV3 — market-LL provenance mislabel** (`blend_report.py:160–166` +
+  `reslice_eval_json.py:260–268`): reslice uses `--odds` for volume only;
+  prices/PnL are copied from the source eval JSON, yet the report prints the
+  reslice odds filename as `source` — reslicing a pre-2026-08-05 JSON against
+  v2 odds reports v1 prices labeled v2.
+- **EV4 — model-load failure downgrades to `DummyModel` and writes a normal
+  results JSON** (`run_sim_eval.py:401–405`, pattern ×5): a corrupt pickle or
+  version mismatch yields a full eval of a coin-flip model saved with
+  `model_type: xgboost` and no marker.
+
+### MAJOR — simulation engine (`sim_v1_2.py`)
+
+- **SIM1 — wide/no-ball on an over's first delivery triggers mid-over bowler
+  replacement** (`:1386–1388`; correct guard exists in the I5 branch
+  `:1331–1335` — drift, not design). `balls` advances only on legal
+  deliveries, so the over-end condition re-fires after a leading extra and
+  redraws the bowler; ~0.4–1.5 swaps/simulated match. Corrupts per-bowler
+  attribution feeding bowler-economy/wicket/`top_bowler` props and the
+  `unique_bowlers` diagnostic (roster gate is ±0.5). Found independently by
+  two reviewers; the d14/d15 unit harnesses replicate the unguarded condition.
+- **SIM2 — production sim zero-fills two trained features**
+  (`is_toss_winner`, `is_batting_first`; fill loop `:1852–1859`, both keys
+  absent from `XGBoostModelV2.extract_features`). Every innings-1 simulated
+  ball scores with `inning_idx=1, is_batting_first=0` — a combination absent
+  from training. Same mechanism as the documented B1 `venue_encoded` bug;
+  non-production wrappers set these keys (drift proof). Both computable from
+  state.
+- **SIM3 — sim bowling cards omit wide/no-ball runs; prop actuals charge them
+  to the bowler** (`:4504–4515` vs `prop_backtest.py:315–320`): systematic
+  ~0.1–0.3 rpo downward bias on the sim side of `bowler_economy_ou_*`. The
+  correct per-delivery charge exists (`state.last_bowler_runs`, consumed by
+  the I5 branch); the legacy branch ignores it.
+- **SIM4 — engine never resets stateful wrappers** (`reset_sequence`/
+  `reset_match_state`: zero call sites): LSTM/Transformer/LLM history leaks
+  across innings, sims, and matches; LLM per-ball trackers never update and
+  its `bowler_runs_conceded` keys collide across teams. Production XGB path
+  is stateless/unaffected; any historical neural-arm sim-eval numbers via
+  `run_sim_eval.py` are contaminated. T1's wrapper works around it explicitly.
+
+### MAJOR — feature pipeline & caches
+
+- **PIPE1 — prior freeze skipped on the cache-is-current fast path**
+  (`build_stats_cache.py:1097–1127`): `sqlite_up_to_date` returns before
+  `freeze_priors_from_sqlite` and never checks prior provenance, while
+  `run_experiment._check_sqlite_cache` (`:267–280`) does → a prior-source
+  mismatch loops miss→no-op→materialize-with-stale-priors forever, silently
+  (live via the i8 config). Sealed-forward flow is safe (calls `build()`
+  directly).
+- **PIPE2 — no terminal snapshot after the last corpus date**
+  (`build_stats_cache.py:755–760`; readers `stats_sqlite_backend.py:520–524`
+  vs `:1179–1191`): an as-of past corpus end floors to a snapshot written
+  *before* the final date's matches (career/ELO/venue lose the freshest day)
+  while the match-log recent-form getters *include* those matches — one
+  feature row, two information sets. Hits exactly the live serving path;
+  staleness+inconsistency, not lookahead.
+- **PIPE3 — provider staleness guard hardcodes `data/t20s_json`**
+  (`stats_provider.py:130–145`) despite `_meta.source_dirs_json` existing:
+  women's caches silently stale after their corpus updates; other-corpus
+  caches can spuriously refuse to open.
+
+### MAJOR — match model & serving
+
+- **SRV1 — pre-toss branch averaging scores half its average off-manifold**
+  (`predict_fixture.py:661–669, 1257–1277`): the I1 fix branches
+  `team1_batting_first ∈ {1,0}` but pins `toss_winner_is_team1=0` +
+  `toss_decision_bat=0`, a combination that deterministically implies team1
+  bats first in every training row — the chase branch never occurs in
+  training, and every pre-toss fixture asserts "team2 won the toss". Affects
+  all pre-toss serving incl. the Hundred backtest headlines. Fix: enumerate
+  the four (toss winner × decision) branches.
+- **SRV2 — serving guard-rail tests permanently red** (5/18 failures in
+  `scripts/tests/test_predict_fixture.py`, reproduced): stale A7-era asserts;
+  the suppression itself is correct (failures prove it fires), but the suite
+  now guards nothing.
+- **SRV3 — golden refresh entry points default to the withdrawn v1 odds file,
+  which no longer exists** (`refresh_golden_i7.sh:25`,
+  `synthesize_golden_envelope.py:40`): the refresh of record fails at its
+  existence check; regenerating v1 to unblock would bake defective prices into
+  the envelope — and reslicing with v2 odds does NOT fix them (odds file is
+  volume-only there; prices freeze at synthesis).
+- **SRV4 — blend join miss silently scores the 50/50 envelope placeholder as
+  the model** (`blend_eval_json.py:131–134` + envelope `sim_prob = 0.5/0.5`):
+  a team-name mismatch in the w=0 golden flow dilutes golden LL toward
+  coinflip, guarded only by an unasserted `n_matches_passthrough`.
+
+### MAJOR — prop backtest stack
+
+- **PROP1 — `highest_individual_mae` baseline predicts a per-innings top
+  score against a match-level (max-of-both-innings) target**
+  (`prop_fair_baselines.py:440` vs `prop_backtest.py:583–589`): the bar is
+  systematically low by several runs; one of only two E2 "✅ sim adds skill"
+  verdicts (margin −1.96) rests on it and could shrink or flip.
+- **PROP2 — `b9_usage_baseline.py` parses dates from `match_id[:10]`**
+  (`:188, :402, :405`): post-I15 numeric cricsheet ids bisect before every
+  date string → every as-of query returns empty history; both baselines
+  silently collapse to cold-start priors. The only guard (B4-reproduction
+  assert) is skipped when `models/auto/b4/` is absent (it is). The shipped
+  B9/I13 result predates the identity switch and is unaffected;
+  `prop_fair_baselines.py` uses `display_match_id` correctly.
+- **PROP3 — super-over innings settle as regular innings**
+  (`prop_backtest.py:262, 335–344`): per-innings actuals (PP runs, first
+  over, first wicket, max over) are *overwritten* by super-over values;
+  totals *accumulate* super-over runs; `is_tie` compares totals including the
+  super over so every genuinely tied match settles as not-a-tie (`p_tie`
+  positives destroyed). Sim + fair-baseline corpus both use exactly 2
+  innings → one-sided asymmetry (~0.7% of matches, ≈2 per 261-match eval).
+- **PROP4 — no void/push handling for D/L-shortened or abandoned matches**
+  (settlement path `:951–976`; no `outcome.method` filter anywhere in
+  `sim_eval/`): truncated actuals settle O/U lines a book would void,
+  against a sim that always plays 20 overs. (PLAUSIBLE severity — depends on
+  test-set curation, which is not enforced in code.)
+
+### MAJOR — odds builders & sealed sets
+
+- **ODDS1 — "never absorb evaluated fixtures" seals are dir-existence-
+  dependent and miss the `_v2` pools of record**
+  (`build_forward_holdout.py:64–69, 364–371`;
+  `build_polymarket_odds_golden.py:124–125`;
+  `extract_golden_cricsheet.py:60–62`): `glob` on a missing dir contributes
+  zero fixtures with no error; in the current checkout the overlap guard's
+  entire effective coverage is `data/t20s_json`, while the integrity report
+  still asserts zero overlap.
+- **ODDS2 — plain default runs of both men's builders overwrite the
+  benchmarks of record** (`build_polymarket_odds_golden.py:48, 266–268`;
+  `build_polymarket_odds.py:71, 830–833`): the 2026-08-05 hygiene pass
+  protected the pre-fix *evidence* files but aimed the unconditional atomic
+  replace at the *current* `_v2` benchmarks; `--merge-into-existing` is
+  opt-in, so the documented bare invocation replaces the 124-row golden file
+  with a fresh ~55-row build. The women's builder refuses without
+  `--overwrite`; the men's never adopted it.
+- **ODDS3 — women's builder guesses market assignment for same-day
+  double-headers** (`build_womens_polymarket_odds.py:183–196`):
+  lexicographically-first fixture takes the highest-volume market;
+  `scheduled_start_timestamp` is emitted but never consulted; leg-1 price can
+  attach to leg 2. Both men's builders fail closed on this exact ambiguity.
+- **ODDS4 — golden union index never dedupes** (`_union_cricsheet_index`,
+  `build_polymarket_odds_golden.py:85–94`): the moment a cricsheet refresh
+  extends `data/t20s_json` past 2026-04-17, duplicated matches produce 2
+  identical join hits → `multiple_cricsheet_matches` → previously-matched
+  golden fixtures silently vanish from rebuilds.
+- **ODDS5 — test dirs append-only, never reconciled with the manifest;
+  golden staging dir reused uncleaned** (`build_polymarket_odds.py:805–810`;
+  `build_polymarket_odds_golden.py:151–155, 258–259`): dropped fixtures
+  persist in dirs downstream consumers iterate; the merge copies stale staged
+  files and crashes half-applied if the golden test dir is absent (it is) —
+  after the odds manifest was already written.
+
+### MAJOR — active branch (T1 / XR)
+
+- **BR1 — served T1 sim memoizes venue features across same-day siblings;
+  the parity audit bypasses exactly that cache** (`sim_t1.py:234` →
+  `wrap_with_cache`; memo key `(venue, date, k)` at
+  `stats_provider.py:413–420`; audit constructs the wrapper without the cache,
+  `audit_t1_sim_parity.py:114–116`): second fixture at the same ground/day is
+  served the first fixture's pre-match venue dist; the 2.4e-7 parity claim
+  covers a path the PPC doesn't run.
+- **BR2 — uncommitted behavior changes to the shared production sim engine
+  with no production-gate rerun** (`sim_v1_2.py`, 245-line diff): ball-119
+  extras rule removed; first-over bowler-selection fix (real bug — lineup
+  index 0 bowled over 0 of every innings); `_league_share` rewritten (old
+  version could read same-year future matches — a genuine as-of leak, fix is
+  right). But D16/D17/D18 promotion evidence, E2/I13 verdicts, and G1/G3/G5
+  selector gates were measured on the pre-fix engine; bowler-attribution
+  props plausibly move. Re-run gates or fence the changes before merge.
+- **BR3 — `--aggregate-only` backfills `engine_contract` onto stored raws**
+  (`run_t1_sim_extras_ppc.py:236–239`, `run_t1_sim_roster_ppc.py:237–240`):
+  aggregation rewrites the raw to claim the corrected engine regardless of
+  what produced it — the comparability gate can be stamped after the fact.
+  Provenance must be written at generation, verified at aggregation.
+- **BR4 — `load_aux` turns missing labels into real trainable classes**
+  (`transformer_t1.py:54–64`; found independently ×2): `fillna(-1)` runs
+  before vocab construction, so "-1" (and shot placeholder "-") become vocab
+  classes passing the `tgt >= 0` mask — control/shot aux heads train/score on
+  a fabricated class. Taints T1.5 aux accuracies (already-negative verdict,
+  bounded); inert while `--aux` is off.
+- **BR5 — XR auction payload's headline column uses the validation-pool mean
+  where config + report say test-pool mean**
+  (`run_xr_future_player_validation.py:277, 336–337`): constant offset,
+  ranking unaffected, gate FAILED anyway — but the locked artifact's stated
+  unit is wrong.
+
+### MINOR (compact; file refs in the review)
+
+- *Eval*: unknown `actual_winner` → silent 0.5 in the evaluator while
+  blend/market paths exclude the row (three denominators; a differently
+  spelled winning team scores as a lost bet, `match_evaluator.py:702, 778`);
+  Kelly "ROI" divides by bet count not stake (`:1109`); "Sharpe" is a
+  √n-scaled t-stat (`:909`); zero-match eval crashes pre-save (`:1236`);
+  one-sided books normalize to implied prob 1.0 (`loaders.py:321`);
+  `cluster_metadata_coverage` checks 1 of 3 join keys
+  (`reslice_eval_json.py:352`); stale fixed-guard comment
+  (`test_eval_math.py:99`); blend w-sweep clip asymmetry at endpoints.
+- *Sim*: margin string assumes team1 batted first (`:4367`, no consumers);
+  free hits unmodeled; NN cold-start momentum defaults (0.5/0.15) vs
+  training's 0; `random_seed=None` + fork duplicates worker RNG streams
+  (latent); `get_next_batsman_idx` silent index-10 fallback.
+- *Pipeline*: `sqlite_up_to_date` ignores `gender_filter`; player-metadata
+  CSV outside every staleness contract (drives pace/hand cell assignment
+  inside the cache); `materialize_features` never checks `--source-dir`
+  against cache corpus; `run_experiment` forwards `data.source_dir` to the
+  trainer but not to cache/parquet builds (currently inert).
+- *Serving*: same-day-order contract not asserted at serve
+  (`predict_fixture.py:1226`, one-kwarg fix); live snapshot drops competition
+  tiers (latent M4 skew); `_lhb_rhb_share` divides full-XI count by 6;
+  swap mirror fabricates a toss winner on missing-toss rows; missing
+  toss-decision default "bat" (train) vs "field" (serve); `predict_golden.py`
+  validates nothing + retired-artifact defaults; `_swap_frame` silently skips
+  half-present pairs; unseen venues encode as the alphabetically-first real
+  venue; stale "frozen at 2025-06-30" comment.
+- *Props*: retired-hurt/obstructing dismissals credited to the bowler in
+  actuals only; top-batter ties resolved by set iteration order
+  (non-reproducible); sim economy denominator counts folded-extras
+  deliveries vs legal-ball settlement basis; `compare_selector_eval` headline
+  columns vs CI on different match populations; per-match index links break
+  on legacy ids; fair-baseline corpus pickles unversioned; `pos_top` prior
+  conflates appearance position with lineup slot; dead-code cluster.
+- *Odds/forward*: forward builder reintroduces the `"+00"` timestamp bug its
+  sibling fixed (fail-closed); merge overwrites file-level `selection_rule`
+  provenance; `selection_key` mixes market- and event-level volume;
+  `polymarket_volume_usd` is event-level in iteration/golden but market-level
+  in forward/women's (the "≥$50k" slice is a different filter across
+  benchmarks quoted side by side); `max_drawdown` omits flat start; 0.0
+  decimal odds emittable (shipped files clean); no timezone tolerance in the
+  legacy join; Hundred odds index overwrites same-day duplicates.
+- *Branch*: extras-delta CI bootstraps innings i.i.d. (ignores match
+  clustering); extras runner default `--config` points at superseded v1;
+  new first-over guard can misfire on reconstructed in-play states; XR
+  same-cohort validation gate computed on the early-stopping split (test leg
+  clean, claim survives); eval-cohort vocab filter selects on realized labels
+  (0 rows dropped today — needs a loud assert); label `row_idx` joins trusted
+  not fail-closed; "strictly later" windows match-order-strict not
+  date-strict; future-pool survivorship (paired gate unaffected); hardcoded
+  seed counts/gate Ns; `embeddings_e1.eval_probs` mutates weights during eval
+  + duplicate full-split inference.
+
+### The drift meta-pattern → simplification plan (ranked by bug-surface removed)
+
+Duplicate families found, each already responsible for ≥1 confirmed bug:
+I5-vs-legacy over-end guards (→SIM1); materializer vs `compute_features`
+(→SRV1); four staleness checkers each blind to a dimension another checks
+(→PIPE1/PIPE3 + gender/CSV minors); three cricsheet settlement parsers
+(→PROP3/PROP5-minor); three odds builders' aliases/timestamps/tiebreaks
+(→ODDS "+00" and sibling divergences); five sim feature-assembly blocks
+(→SIM2 + cold-start minor); blend's mirrored betting math (→0.5-vs-None
+divergence); 6× `_reject_sealed`, 4× same-day replay loops, 5× provenance
+builders.
+
+1. Shared match-record builder + serving/training parity test (kills SRV1
+   class).
+2. One sim feature assembler + init-time coverage assertion (kills SIM2/B1
+   class).
+3. One cache-staleness contract module (kills PIPE1/PIPE3/gender/CSV class;
+   ~250→~60 lines).
+4. One cricsheet settlement module with explicit conventions (kills
+   PROP3/dismissal-kind class).
+5. One market-join module: aliases, timestamps, decimal conversion,
+   outcome-blind tiebreak, winner-integrity (kills the toss-defect-cousin
+   class).
+6. Betting math into `eval_statistics.py`; delete blend's mirrors + the
+   unconsumed Kelly/EV/Sharpe layer (~300 lines, numbers wrong anyway).
+7. `research_common.py`: `reject_sealed`, sha256, provenance-at-generation,
+   one same-day replay driver.
+8. Dead-weight sweep: `XGBoostModel` v1 + `transformer_v1.py` → archive;
+   unify `evaluate_all{,_with_calibration}`; table-drive run_sim_eval model
+   loading; per-reviewer dead-code lists.
+
+### Remediation log (same day, 2026-08-14)
+
+Phases 0–2 of the TODO.md plan landed the same day, every fix with a
+red→green regression test where testable, full suite green after each phase
+(**310 passed / 10 skipped / 0 failed**; the 10 skips are explicit
+artifact-absent guards, not silent misses). Fixed: **CR1** (+ new
+`cluster_id_with_resolution`; fallback runs stamp
+`tournament_time_block_v1_fallback_pair_blocks`, force
+`bootstrap_reliable: false` with a reason, and warn on stderr; default
+cluster corpus → `_v2`), **EV1** (gate requires `bootstrap_reliable`;
+missing flag fails closed; descriptive-only positives reported separately),
+**EV2** (flags removed; run_experiment rejects the config keys; LOOCV path
+labeled diagnostic-only), **EV4** (fail-closed loads, `--allow-dummy`
+opt-in), **SIM1** (extras guard on over-end selection), **SIM2** (toss
+features emitted + one-shot coverage warning for unproduced trained
+columns), **PIPE1** (freeze on the skip path), **SRV2** (tests assert
+retirement semantics), **SRV3** (`_v2` defaults), **SRV4** (envelope
+passthrough raises), **PROP2** (fail-loud `_row_date` from
+`display_match_id`), **PROP3** (super-over innings excluded from
+settlement), **ODDS2** (+ stale `_staging_refresh` cleared on merge — the
+staging half of ODDS5). New tests: `test_sim_over_boundary.py`,
+`test_build_stats_cache_skip_freeze.py`, `test_odds_builder_guards.py`,
+`test_prop_actuals_super_over.py`, plus additions to `test_eval_math.py`
+and `test_predict_fixture.py`.
+
+**Number-moving fixes, re-measure before quoting:** SIM1/SIM2 change every
+simulated match (bowler attribution; two features un-zeroed) and PROP3
+changes prop actuals (`p_tie` most), so the next prop backtest will NOT
+reproduce D15/D16-era prop rows — that is the fix, not a regression. The
+fixed-seed before/after A/B is pending on a checkout with the production
+ball artifacts (this one lacks `models/xgb_i7_noweights_production/`), and
+can share a run with the BR2 engine-gate re-check. Old sliced JSONs predate
+the contract stamps; re-reslice before reading their `bootstrap_reliable`.
+
 ## What NOT To Do
 
 - Don't chase ball-level accuracy beyond ~60% — individual balls are inherently noisy.

@@ -23,6 +23,88 @@
 > `reports/i3_eval_statistics_hardening.md`. The new forward holdout is
 > sealed and remains unscored.
 
+## Code & integrity review remediation (2026-08-14) — ACTIVE
+
+Fixing the findings from the full-repo review (catalog with file:line refs:
+IMPROVEMENTS.md § "Full-repo code & integrity review (2026-08-14)"). Order:
+critical first, then smallest-diff/highest-blast-radius, then structural
+consolidation. IDs below reference that catalog.
+
+**Validation protocol (every fix):**
+1. Regression test first (red → green) wherever the bug is testable; tests
+   live next to the existing suites (`scripts/tests/`, `tests/`).
+2. Full `uv run pytest scripts/tests/ tests/` green before and after each
+   phase (Phase 0 exists to make "green" meaningful again).
+3. Behavior-affecting sim/eval fixes get a fixed-seed before/after A/B on a
+   small match sample; deltas recorded in IMPROVEMENTS.md. Numbers moving
+   where the bug fired is expected; anywhere else is a stop-and-investigate.
+4. Frozen evidence files are never touched; program.md's "never modify
+   scripts/sim_eval/" rule is for the unattended loop — these are interactive
+   integrity fixes, but each eval-framework change is re-baselined (rerun one
+   reference reslice and record which reported numbers move and why).
+
+- [x] **Phase 0 — restore the guard rails (DONE 2026-08-14).** SRV2: the 5
+  stale-red `test_predict_fixture.py` tests now assert A7-retirement
+  semantics (+ a new retirement-contract test); the 9 artifact-dependent
+  failures/errors (sealed holdout, legacy v3/m7 artifacts) are explicit
+  skips with reasons. Suite baseline: 310 passed / 10 skipped / 0 failed.
+- [x] **Phase 1 — critical (DONE 2026-08-14).** CR1+EV1: reslice now
+  resolves every row's cluster as stamped/lookup/fallback
+  (`eval_statistics.cluster_id_with_resolution`), defaults the corpus to
+  `data/polymarket_test_v2`, stamps
+  `tournament_time_block_v1_fallback_pair_blocks` + forces
+  `bootstrap_reliable: false` (+`bootstrap_unreliable_reason`) whenever any
+  row fell back, warns loudly on stderr, and fixes the coverage counter;
+  `blend_report._gate_check` requires `bootstrap_reliable` on the ROI leg
+  (missing flag = fail closed) and reports positive-but-descriptive CIs
+  separately. Regression tests in `test_eval_math.py`.
+- [x] **Phase 2 — quick wins, high blast radius (DONE 2026-08-14).**
+  - [x] SIM1 mid-over bowler guard + `test_sim_over_boundary.py`.
+  - [x] SIM2 `is_toss_winner`/`is_batting_first` emitted + one-shot
+        coverage warning on unproduced trained columns. ⚠ moves sim numbers.
+  - [x] PIPE1 prior freeze on the skip path +
+        `test_build_stats_cache_skip_freeze.py`.
+  - [x] SRV3 golden-refresh defaults → `_v2` (script header + envelope
+        docstring note that envelope prices freeze at synthesis).
+  - [x] ODDS2 `write_outputs` refuses existing manifests without
+        `--overwrite-existing-odds` (fires before any side effect); golden
+        merge clears stale `_staging_refresh` first;
+        `test_odds_builder_guards.py`.
+  - [x] PROP2 b9 dates from `display_match_id`, fail-loud `_row_date`.
+  - [x] PROP3 super-over innings skipped in `compute_actuals` +
+        `test_prop_actuals_super_over.py`. ⚠ moves prop actuals (esp.
+        `p_tie`).
+  - [x] EV2 `--load-calibrator`/`--save-calibrator` removed; run_experiment
+        rejects the config keys; LOOCV output labeled diagnostic-only.
+  - [x] EV4 model-load failure exits non-zero; DummyModel behind
+        `--allow-dummy` (all five loader sites).
+  - [x] SRV4 blend raises on passthrough for synthetic envelopes.
+- [ ] **Phase 2 follow-up (needs the full checkout — model artifacts are
+  absent here):** fixed-seed prop-backtest A/B quantifying SIM1+SIM2+PROP3
+  (can share one run with the BR2 gate re-check); regenerate any live
+  sliced JSONs so they carry the new bootstrap-contract stamps.
+- [ ] **Phase 3 — remaining majors.** PIPE2 terminal snapshot + loud
+  out-of-list resolve; PIPE3 staleness guard reads `source_dirs_json`;
+  EV3 price-basis vs volume-basis provenance labels; SRV1 four-branch
+  pre-toss enumeration (⚠ moves pre-toss serving probs); PROP1 per-match
+  max-top-score corpus column + re-derive the E2 verdict; PROP4 D/L
+  flag/filter at settlement; ODDS1 fail-closed `evaluated_pools()` incl.
+  `_v2`; ODDS3 women's double-header disambiguation by scheduled start;
+  ODDS4 union-index dedupe; ODDS5 manifest-derived test dirs + staging
+  cleanup; BR1 sim_t1 venue-cache fix + audit through real `__init__`;
+  BR3 `engine_contract` written at generation only; BR4 `load_aux` vocab
+  before sentinel fill; BR5 test-pool mean.
+- [ ] **Phase 3b — BR2 decision (blocks branch merge).** Either re-run
+  G1/G3/G5 + a prop-backtest delta under the changed engine, or fence the
+  three engine changes behind the T1 path. Compute-heavy → human call on
+  which.
+- [ ] **Phase 4 — structural consolidation** (IMPROVEMENTS.md simplification
+  plan, in order): shared match-record builder + parity test; one sim feature
+  assembler; one cache-staleness module; one cricsheet settlement module; one
+  market-join module; betting math into `eval_statistics.py` + delete
+  Kelly/EV/Sharpe layer; `research_common.py`; dead-weight sweep.
+- [ ] **Phase 5 — minors sweep** (per-subsystem lists in the catalog).
+
 ## Status snapshot + next steps (2026-08-01)
 
 Post-review synthesis of the 2026-07-31 overnight run (`auto-20260731`), the
