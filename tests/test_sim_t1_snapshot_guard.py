@@ -1,11 +1,12 @@
-"""Pins the T1 snapshot-count guard (2026-08-14 implementation review).
+"""Pins the T1 live-count requirement (2026-08-14 review; hardened 2026-08-22).
 
 The T1 parity audit certifies only the live same-day replay count path.
 `OnlineT1OutcomeDists` used to fall back SILENTLY to date-snapshot SQLite
-counts (which exclude earlier same-day matches) whenever the provider
-lacked `get_t1_outcome_counts` — the path `run_sim_eval_t1.py`'s plain
-StatsProvider selects. That fallback must now fail closed unless
-explicitly overridden.
+counts (which exclude earlier same-day matches) whenever the provider lacked
+`get_t1_outcome_counts` — the path `run_sim_eval_t1.py`'s plain StatsProvider
+selected. That runner now builds a `SameDayReplayStatsProvider`, and the
+snapshot fallback (with its `T1_ALLOW_SNAPSHOT_COUNTS` override) is deleted:
+a provider without live counts is refused unconditionally.
 """
 
 import sys
@@ -29,32 +30,17 @@ class _LiveProvider:
         return (1 / 6,) * 6
 
 
-class _StubBackend:
-    _prior = (1 / 6,) * 6
-
-    def _ensure_conn(self):
-        pass
-
-
 class _SnapshotOnlyProvider:
     """A plain provider without live same-day counts."""
 
-    _backend = _StubBackend()
 
-
-def test_snapshot_count_path_fails_closed(monkeypatch):
-    monkeypatch.delenv("T1_ALLOW_SNAPSHOT_COUNTS", raising=False)
+def test_snapshot_provider_is_refused_unconditionally(monkeypatch):
+    # The old escape hatch must stay dead: the env var no longer exists.
+    monkeypatch.setenv("T1_ALLOW_SNAPSHOT_COUNTS", "1")
     with pytest.raises(RuntimeError, match="parity audit"):
         OnlineT1OutcomeDists(_SnapshotOnlyProvider(), metadata=None)
 
 
-def test_snapshot_count_path_needs_explicit_override(monkeypatch):
-    monkeypatch.setenv("T1_ALLOW_SNAPSHOT_COUNTS", "1")
-    dists = OnlineT1OutcomeDists(_SnapshotOnlyProvider(), metadata=None)
-    assert dists.live_counts is False
-
-
-def test_live_count_path_constructs_without_override(monkeypatch):
-    monkeypatch.delenv("T1_ALLOW_SNAPSHOT_COUNTS", raising=False)
+def test_live_count_provider_constructs():
     dists = OnlineT1OutcomeDists(_LiveProvider(), metadata=None)
-    assert dists.live_counts is True
+    assert dists.provider.get_t1_outcome_prior() == (1 / 6,) * 6

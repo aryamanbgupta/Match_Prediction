@@ -29,6 +29,7 @@ T1_EXTRAS_GRAFT_PATH opts into a B18 `extras_graft_v1.json` sidecar.
 from __future__ import annotations
 
 import json
+import math
 import os
 import sys
 from collections import defaultdict
@@ -97,33 +98,21 @@ class OnlineT1OutcomeDists:
     def __init__(self, provider, metadata):
         self.provider = provider
         self.metadata = metadata
-        self.live_counts = hasattr(provider, "get_t1_outcome_counts")
-        # The 2.4e-7 parity audit certifies ONLY the live-counts branch (a
-        # SameDayReplayStatsProvider). The fallback reads date-snapshot
-        # SQLite counts that EXCLUDE earlier same-day matches, so serving
-        # features diverge from training on multi-fixture days — and
-        # run_sim_eval_t1's plain StatsProvider used to select it silently
-        # (2026-08-14 review). Fail closed unless explicitly overridden.
-        if (not self.live_counts
-                and os.environ.get("T1_ALLOW_SNAPSHOT_COUNTS") != "1"):
+        # The 2.4e-7 parity audit certifies ONLY the live same-day count
+        # path (a SameDayReplayStatsProvider). The old fallback read
+        # date-snapshot SQLite counts that EXCLUDE earlier same-day matches,
+        # so serving features diverged from training on multi-fixture days;
+        # its last consumer (run_sim_eval_t1's plain StatsProvider) now
+        # builds a replay provider, so the fallback is deleted outright.
+        if not hasattr(provider, "get_t1_outcome_counts"):
             raise RuntimeError(
-                "OnlineT1OutcomeDists got a provider without live same-day "
-                "counts (get_t1_outcome_counts): this snapshot-count path "
-                "is NOT covered by the T1 parity audit and diverges from "
+                "OnlineT1OutcomeDists requires a provider with live "
+                "same-day counts (get_t1_outcome_counts): snapshot counts "
+                "are NOT covered by the T1 parity audit and diverge from "
                 "training features on multi-fixture days. Serve through a "
-                "SameDayReplayStatsProvider (see run_t1_sim_ppc.py), or "
-                "set T1_ALLOW_SNAPSHOT_COUNTS=1 for a diagnostic run."
+                "SameDayReplayStatsProvider (see run_t1_sim_ppc.py or "
+                "run_sim_eval_t1.py)."
             )
-        raw = provider
-        while hasattr(raw, "_provider"):
-            raw = raw._provider
-        self.backend = getattr(raw, "_backend", raw)
-        if self.live_counts:
-            self.prior = None
-        else:
-            self.backend._ensure_conn()
-            self.prior = tuple(float(x) for x in self.backend._prior)
-        self._base_cache = {}
         self._state = None
         self._processed = 0
         self._local_batter = defaultdict(self._zeros)
@@ -187,29 +176,10 @@ class OnlineT1OutcomeDists:
         self._processed = state.history_idx
 
     def _base(self, kind: str, entity: str, date, cell=None):
-        if self.live_counts:
-            return np.asarray(
-                self.provider.get_t1_outcome_counts(
-                    kind, entity, date, cell=cell),
-                dtype=np.int64,
-            )
-        key = (kind, entity, str(date), cell)
-        cached = self._base_cache.get(key)
-        if cached is not None:
-            return cached
-        if kind == "batter":
-            value = self.backend._batting_counts(entity, date)
-        elif kind == "bowler":
-            value = self.backend._bowling_counts(entity, date)
-        elif kind == "batter_type":
-            value = self.backend._batting_vs_type_counts(entity, cell, date)
-        elif kind == "bowler_hand":
-            value = self.backend._bowling_vs_hand_counts(entity, cell, date)
-        else:
-            raise ValueError(f"unknown T1 count kind: {kind}")
-        out = np.asarray(value, dtype=np.int64)
-        self._base_cache[key] = out
-        return out
+        return np.asarray(
+            self.provider.get_t1_outcome_counts(kind, entity, date, cell=cell),
+            dtype=np.int64,
+        )
 
     @staticmethod
     def _named(prefix: str, values):
@@ -220,10 +190,7 @@ class OnlineT1OutcomeDists:
                  k_player: float = K_PLAYER, k_venue: float = K_VENUE):
         self._sync(state)
         date = state.match_date
-        prior = (
-            tuple(self.provider.get_t1_outcome_prior())
-            if self.live_counts else self.prior
-        )
+        prior = tuple(self.provider.get_t1_outcome_prior())
         batter_counts = (
             self._base("batter", batter_id, date)
             + self._local_batter[batter_id]
@@ -349,18 +316,31 @@ class TransformerT1SimModel(PredictionModel):
         # produced it. Desync now fails closed; fabricating missing historical
         # features from the last known token silently changes the model input.
         self._cache = self._empty_cache()
+        # Opt-in O(L) incremental forward (vs the default full re-forward,
+        # whose innings cost is quadratic in deliveries). Kept opt-in because
+        # the certified PPC raws were produced with the full re-forward and
+        # the incremental path differs at float epsilon (equivalence pinned
+        # by tests/test_sim_t1_prefix_cache.py).
+        self.prefix_cache_enabled = (
+            os.environ.get("T1_SIM_PREFIX_CACHE") == "1"
+            and self.arm in ("full", "no_history"))
         print(f"TransformerT1SimModel loaded from {mdir} "
               f"({sum(p.numel() for p in self.model.parameters()):,} params; "
               f"arm={self.arm}; device={self.device}; "
               f"context_capacity={self.max_seq_len}; "
+              f"prefix_cache={'ON' if self.prefix_cache_enabled else 'off'}; "
               f"delivery_semantics={self.delivery_semantics})")
         if self.extras_graft is not None:
             print(self.extras_graft.banner())
             print(f"  sidecar: {self.extras_graft.source}")
 
+    # Bare __new__ instances (focused tests) see the class default.
+    prefix_cache_enabled = False
+
     @staticmethod
     def _empty_cache():
-        return {"state": None, "innings": None, "feats": [], "prev": []}
+        return {"state": None, "innings": None, "feats": [], "prev": [],
+                "kv": None, "kv_len": 0}
 
     @classmethod
     def for_feature_audit(cls, provider, metadata):
@@ -488,12 +468,74 @@ class TransformerT1SimModel(PredictionModel):
         d["no_ball"] = 0.01
         return d
 
+    def _incremental_last_hidden(self, feats, prev):
+        """Advance the per-innings prefix cache by one token; return the new
+        token's final hidden state.
+
+        Exact-math equivalent of the full causal re-forward's last position:
+        under the causal mask, position t attends only to positions <= t at
+        every layer, so earlier per-layer key/value projections never change
+        once computed. The fused full forward differs only at float epsilon
+        (pinned by tests/test_sim_t1_prefix_cache.py). Dropout is inactive
+        (eval mode); the encoder is norm_first with ReLU feed-forward and no
+        terminal norm, which this mirrors term by term.
+        """
+        c = self._cache
+        n = len(feats)
+        if c.get("kv") is None:
+            c["kv"] = [{"k": [], "v": []} for _ in self.model.encoder.layers]
+            c["kv_len"] = 0
+        if c["kv_len"] != n - 1:
+            raise RuntimeError(
+                f"T1 prefix-cache desynchronization: cached={c['kv_len']}, "
+                f"sequence={n}. Refusing to guess the missing tokens.")
+        position = n - 1
+        prev_token = BOS if self.arm == "no_history" else int(prev[-1])
+        token = (
+            self.model.feat_proj(
+                torch.tensor(feats[-1], device=self.device))
+            + self.model.out_emb(
+                torch.tensor(prev_token, device=self.device))
+            + self.model.pos_emb(
+                torch.tensor(position, device=self.device))
+        )
+        x = token
+        for layer, kv in zip(self.model.encoder.layers, c["kv"]):
+            attn = layer.self_attn
+            h = layer.norm1(x)
+            qkv = torch.nn.functional.linear(
+                h, attn.in_proj_weight, attn.in_proj_bias)
+            q, k, v = qkv.chunk(3, dim=-1)
+            heads = attn.num_heads
+            head_dim = q.shape[-1] // heads
+            kv["k"].append(k.view(heads, head_dim))
+            kv["v"].append(v.view(heads, head_dim))
+            keys = torch.stack(kv["k"], dim=1)      # [H, t, hd]
+            values = torch.stack(kv["v"], dim=1)
+            scores = (keys @ q.view(heads, head_dim, 1)).squeeze(-1)
+            weights = torch.softmax(scores / math.sqrt(head_dim), dim=-1)
+            context = (weights.unsqueeze(1) @ values).squeeze(1)  # [H, hd]
+            x = x + torch.nn.functional.linear(
+                context.reshape(-1), attn.out_proj.weight,
+                attn.out_proj.bias)
+            hidden = layer.norm2(x)
+            x = x + layer.linear2(
+                torch.nn.functional.relu(layer.linear1(hidden)))
+        c["kv_len"] = n
+        return x
+
     def predict_next_ball(self, state):
         cur = self._ball_features(state)
         if self.arm == "mlp":
             feats, prev = [cur], [BOS]
         else:
             feats, prev = self._sequence_inputs(state, cur)
+            if self.prefix_cache_enabled:
+                with torch.no_grad():
+                    hidden = self._incremental_last_hidden(feats, prev)
+                    probs = torch.softmax(
+                        self.model.head(hidden), dim=-1).cpu().numpy()
+                return self._compose_delivery_probs(probs)
         with torch.no_grad():
             ft = torch.tensor(np.stack(feats)[None, :, :],
                               device=self.device)
