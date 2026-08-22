@@ -1,0 +1,85 @@
+experiment:
+  name: xr_same_cohort_v1
+  registered: 2026-08-12
+  purpose: >-
+    Measure staged realized-information value on one DeepCrease-labeled cohort
+    with identical six-class heads and parameter counts. Convert class
+    probabilities to expected team runs and wicket probability; do not call
+    any arm a pre-ball predictor once it consumes realized delivery, shot, or
+    contact information.
+  forbidden_data: [data/golden, forward_holdout]
+
+data:
+  directory: data/xgb_data_v3
+  labels: models/embeddings/deepcrease_labels
+  splits: [train, validation, test]
+  base_feature_contract: transformer_t1.build_features
+  selection: complete train-vocabulary line, length, shot, and control labels
+  target: six-class inclusive_total_runs_v1 ball_outcome
+  run_unit_mapping: train-cohort mean team_runs conditional on target class
+  contact_proxy: >-
+    DeepCrease control: whether the ball was hit with clean contact; there is
+    no separate contact column in the available source.
+
+arms:
+  order: [context, delivery, shot, contact]
+  fixed_input_width: true
+  interpretation:
+    context: 50 causal pre-ball features; all realized-information slots zero
+    delivery: context plus realized line and length
+    shot: delivery plus realized shot type
+    contact: shot plus realized binary control/clean-contact label
+
+training:
+  device: cpu
+  seeds: [7, 13, 29, 42, 101]
+  hidden_width: 128
+  residual_blocks: 2
+  dropout: 0.1
+  batch: 1024
+  epochs: 30
+  learning_rate: 0.0003
+  weight_decay: 0.01
+  patience: 4
+
+statistics:
+  cluster: match_id
+  bootstrap_repetitions: 2000
+  bootstrap_seed: 29
+  report:
+    - six_class_log_loss
+    - multiclass_brier
+    - expected_runs_mae
+    - expected_runs_rmse
+    - expected_runs_bias
+    - expected_runs_calibration
+    - wicket_log_loss
+    - wicket_brier
+    - wicket_calibration
+    - paired_stage_deltas
+    - seed_mean_and_sd
+    - label_coverage
+  process_metrics:
+    delivery_value: xR_delivery - xR_context
+    shot_selection_value: xR_shot - xR_delivery
+    contact_value: xR_contact - xR_shot
+    execution_residual: actual_team_runs - xR_shot
+
+outputs:
+  directory: models/embeddings/xr_same_cohort_v1
+  report: research/reports/embeddings/XR_SAME_COHORT_V1.md
+  save_row_aligned_probabilities: true
+  checksum_inputs: true
+  write_environment_metadata: true
+
+claim_gate:
+  delivery_information_requires:
+    - delivery beats context on validation and test six-class log loss
+    - paired seed-and-match 95% CI is below zero
+    - direction is stable in at least 4 of 5 seeds
+  xR_label_requires:
+    - values are reported in expected team runs using the frozen train mapping
+    - wicket probability is reported separately as xW
+  predictive_value: >-
+    Not established here: delivery, shot, and contact arms use realized
+    post-ball information. Future-value validation is a separate experiment.

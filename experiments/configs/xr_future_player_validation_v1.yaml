@@ -1,0 +1,69 @@
+experiment:
+  name: xr_future_player_validation_v1
+  registered: 2026-08-12
+  purpose: >-
+    Test whether the realized shot-stage xR process metric improves strictly
+    future batter run-rate prediction at fixed prior sample sizes. Lock the
+    decision payload to a luck-adjusted auction shortlist before inspecting
+    results. This experiment uses ordinary validation/test rows only and must
+    never read golden or forward-holdout data.
+  predecessor: experiments/configs/xr_same_cohort_v1.yaml
+  forbidden_data: [data/golden, forward_holdout]
+
+data:
+  directory: data/xgb_data_v3
+  process_directory: models/embeddings/xr_same_cohort_v1
+  splits: [validation, test]
+  player_column: batter_id
+  date_column: match_date
+  match_key: innings_id_without_innings_prefix
+  target: team_runs_per_delivery
+  prediction_horizon: 100
+  minimum_future_deliveries: 100
+  sample_sizes: [50, 100, 250, 500, 1000]
+
+metrics:
+  primary: player_equal_weight_future_mae
+  secondary:
+    - delivery_weighted_future_mae
+    - player_spearman
+    - player_cluster_bootstrap_ci
+    - residual_persistence
+  bootstrap_repetitions: 5000
+  bootstrap_seed: 29
+
+estimators:
+  raw: prior_actual_mean
+  eb:
+    definition: shrink prior actual mean to validation-pool mean
+    tune_k_on: validation_only
+    k_grid: [10, 25, 50, 100, 200, 400, 800, 1600]
+  raa:
+    definition: context_expected_mean_plus_shrunk_actual_minus_context_residual
+    tune_k_on: validation_only
+  delta:
+    definition: shot_expected_mean_plus_shrunk_actual-minus-shot residual
+    tune_k_on: validation_only
+  xr:
+    definition: prior shot-stage expected-runs mean
+
+decision_payload:
+  name: luck_adjusted_auction_shortlist_v1
+  unit: expected team runs per 100 deliveries above the test-pool mean
+  ranking_metric: delta_estimate
+  eligibility: at least 250 prior and 100 future labeled deliveries
+  uncertainty: player-cluster bootstrap comparison and future-error audit
+  caveat: internal DeepCrease-derived output; not releasable without provenance
+
+claim_gate:
+  promote_process_metric_only_if:
+    - delta beats EB on test at N=100 or N=250
+    - paired player-bootstrap 95 percent CI is below zero
+    - direction is non-worse at both N=100 and N=250
+  otherwise: retain as descriptive internal process measurement
+
+outputs:
+  summary: research/reports/embeddings/artifacts/xr_future_player_validation_v1_summary.json
+  report: research/reports/embeddings/XR_FUTURE_PLAYER_VALIDATION_V1.md
+  player_payload: models/embeddings/xr_future_player_validation_v1/player_payload_test.csv
+
