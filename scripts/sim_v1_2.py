@@ -277,6 +277,12 @@ class MatchState:
     # Tracking: (team_idx, player_idx) -> value
     bowler_balls: Dict[Tuple[int, int], int] = field(default_factory=dict)
     batsman_stats: Dict[Tuple[int, int], Tuple[int, int]] = field(default_factory=dict)
+    # Optional learned/empirical bowling policy state. A roster is sampled
+    # once per bowling team per simulated match and then copied with the state.
+    active_bowler_rosters: Dict[int, Tuple[int, ...]] = field(
+        default_factory=dict)
+    active_bowler_quotas: Dict[int, Tuple[int, ...]] = field(
+        default_factory=dict)
 
     # D15: dismissal type of the ball just applied by update() —
     # None (no wicket) / 'bowler' / 'runout_striker' / 'runout_nonstriker'.
@@ -589,7 +595,12 @@ class MatchState:
         new_state.history_idx = self.history_idx
         new_state.bowler_balls = self.bowler_balls.copy()
         new_state.batsman_stats = self.batsman_stats.copy()
+        new_state.active_bowler_rosters = self.active_bowler_rosters.copy()
+        new_state.active_bowler_quotas = self.active_bowler_quotas.copy()
         new_state.last_dismissal = self.last_dismissal  # D15
+        new_state.last_batter_runs = self.last_batter_runs
+        new_state.last_bowler_runs = self.last_bowler_runs
+        new_state.last_is_legal = self.last_is_legal
         new_state.partnership_runs = self.partnership_runs  # NEW
         new_state.toss_winner = self.toss_winner
         new_state.chose_to_bat = self.chose_to_bat
@@ -706,6 +717,7 @@ class EmpiricalBowlerSelector(BowlerSelector):
         self.usage_path = usage_path
         self.k = k
         self._cumulative_cache: Dict[int, Dict[str, Dict[str, int]]] = {}
+        self._league_share_cache: Dict[int, Dict[str, float]] = {}
         # B10 (opt-in): activated only when the usage payload carries a
         # `b10_asof_usage` key. With the production prior this stays None and
         # every code path below is identical to the pre-B10 selector.
@@ -715,6 +727,15 @@ class EmpiricalBowlerSelector(BowlerSelector):
         self._b10_weight_cache: Dict[Tuple, List[float]] = {}
         self._b10_relax_cache: Dict[Tuple, bool] = {}
         self.b10_relaxation_triggers: int = 0
+
+    @property
+    def empirical_usage_active(self) -> bool:
+        """True when the opt-in B10 as-of usage policy is loaded and active.
+
+        Public replacement for reaching into ``_ensure_b10``/``_b10`` from
+        PPC runners; resolving the payload lazily on first read."""
+        self._ensure_b10()
+        return self._b10 is not None
 
     def _ensure_b10(self) -> None:
         """Lazily resolve the B10 as-of accessor (no-op after first call)."""
@@ -771,21 +792,37 @@ class EmpiricalBowlerSelector(BowlerSelector):
         return cumulative
 
     def _league_share(self, year: int) -> Dict[str, float]:
-        """Phase shares for a given year (falls back to global if missing)."""
+        """League phase shares from complete years strictly before `year`.
+
+        The old lookup preferred the current-year aggregate, which can
+        contain matches later than the fixture date. Player usage was already
+        strict-as-of; the shrinkage prior must obey the same causal contract.
+        """
+        cached = self._league_share_cache.get(year)
+        if cached is not None:
+            return cached
         payload = self._load()
         by_year = payload.get("by_year_league", {})
-        # Try year, then year-1 (last full year), then global.
-        for y in (year, year - 1):
-            entry = by_year.get(str(y))
-            if entry and entry.get("total_balls", 0) > 0:
-                return {
-                    "pp": entry["pp_share"],
-                    "mid": entry["mid_share"],
-                    "death": entry["death_share"],
-                }
-        glob = payload["global_league"]
-        return {"pp": glob["pp_share"], "mid": glob["mid_share"],
-                "death": glob["death_share"]}
+        phase_balls = {"pp": 0.0, "mid": 0.0, "death": 0.0}
+        total = 0.0
+        for y_str, entry in by_year.items():
+            if int(y_str) >= year:
+                continue
+            n = float(entry.get("total_balls", 0.0))
+            if n <= 0:
+                continue
+            total += n
+            for phase in phase_balls:
+                phase_balls[phase] += n * float(entry[f"{phase}_share"])
+        if total > 0:
+            out = {phase: balls / total
+                   for phase, balls in phase_balls.items()}
+        else:
+            # Causal cold-start prior from the T20 phase boundaries: 6/10/4
+            # overs. This branch is only relevant before the first corpus year.
+            out = {"pp": 0.30, "mid": 0.50, "death": 0.20}
+        self._league_share_cache[year] = out
+        return out
 
     def _b10_share_weights(
         self,
@@ -919,6 +956,199 @@ class EmpiricalBowlerSelector(BowlerSelector):
         return available[-1]
 
 
+class RosterEmpiricalBowlerSelector(EmpiricalBowlerSelector):
+    """Empirical phase selector with a causal latent bowling unit.
+
+    The base selector gives every XI member non-zero probability each over,
+    which makes nearly eight distinct players bowl in a typical full innings.
+    This arm first samples an intended roster size from long regulation innings
+    in complete years before the fixture, then samples that many XI members
+    without replacement using the same causal phase-usage weights. Over-level
+    selection remains the unmodified empirical B10 policy within that roster.
+
+    PRECONDITION: the roster and its 20-over quota are sampled at the first
+    over of a full regulation innings. Entering mid-innings (in-play states,
+    curtailed matches) is unsupported — the quota schedule assumes all 20
+    overs remain — and fails closed at the first selection.
+    """
+
+    def __init__(self, usage_path: str = "models/bowler_phase_usage.json",
+                 roster_path: str = "models/bowler_roster_policy.json",
+                 k: int = 30):
+        super().__init__(usage_path=usage_path, k=k)
+        self.roster_path = roster_path
+        self._roster_payload: Optional[Dict] = None
+        self._roster_count_cache: Dict[int, Dict[int, int]] = {}
+
+    def _load_roster(self) -> Dict:
+        if self._roster_payload is None:
+            with open(self.roster_path) as handle:
+                self._roster_payload = json.load(handle)
+            if (self._roster_payload.get("policy")
+                    != "causal_intended_bowling_roster_size_v1"):
+                raise ValueError(
+                    f"unsupported bowler roster policy: {self.roster_path}")
+            print("Causal latent bowling-roster policy ACTIVE "
+                  f"({self.roster_path})")
+        return self._roster_payload
+
+    def _roster_counts(self, year: int) -> Dict[int, int]:
+        cached = self._roster_count_cache.get(year)
+        if cached is not None:
+            return cached
+        payload = self._load_roster()
+        counts: Dict[int, int] = {}
+        for year_text, year_counts in payload.get("by_year", {}).items():
+            if int(year_text) >= year:
+                continue
+            for size_text, count in year_counts.items():
+                size = min(11, max(5, int(size_text)))
+                counts[size] = counts.get(size, 0) + int(count)
+        if not counts:
+            counts = {int(size): int(count) for size, count in
+                      payload["cold_start_counts"].items()}
+        self._roster_count_cache[year] = counts
+        return counts
+
+    @staticmethod
+    def _weighted_choice(indices: List[int], weights: List[float]) -> int:
+        total = sum(weights)
+        if total <= 0:
+            return random.choice(indices)
+        draw, upto = random.random() * total, 0.0
+        for index, weight in zip(indices, weights):
+            upto += weight
+            if draw <= upto:
+                return index
+        return indices[-1]
+
+    def _sample_roster(self, state: MatchState) -> Tuple[Tuple[int, ...],
+                                                         Tuple[int, ...]]:
+        self._ensure_b10()
+        year = state.match_date.year if state.match_date else 9999
+        counts = self._roster_counts(year)
+        sizes, size_weights = zip(*sorted(counts.items()))
+        size = self._weighted_choice(list(sizes), list(size_weights))
+        players = state.bowling_lineup.players
+        size = min(int(size), len(players))
+        as_of = self._as_of(year)
+        league = self._league_share(year)
+        indices = list(range(len(players)))
+        blended = np.zeros(len(players), dtype=float)
+        date = (state.match_date.date().isoformat()
+                if state.match_date is not None else None)
+        for phase in ("pp", "mid", "death"):
+            alpha = self.k * league[phase]
+            if self._b10 is not None and date is not None:
+                relaxed = self._b10_is_relaxed(
+                    state, as_of, phase, alpha, date,
+                    tuple(player.player_id for player in players))
+                weights = self._b10_share_weights(
+                    players, indices, as_of, phase, alpha, date,
+                    force_legacy=relaxed)
+            else:
+                weights = [
+                    float(as_of.get(player.player_id, {}).get(phase, 0))
+                    + alpha for player in players
+                ]
+            blended += np.asarray(weights, dtype=float)
+
+        remaining = indices.copy()
+        remaining_weights = blended.tolist()
+        selected = []
+        for _ in range(size):
+            choice = self._weighted_choice(remaining, remaining_weights)
+            position = remaining.index(choice)
+            selected.append(choice)
+            remaining.pop(position)
+            remaining_weights.pop(position)
+        roster = tuple(sorted(selected))
+
+        # Allocate a full-innings over budget before the innings starts. This
+        # prevents a random over sampler from exhausting four players early
+        # and leaving the fifth (the previous bowler) as the only option.
+        base_quota, extra = divmod(20, len(roster))
+        quota = {index: base_quota for index in roster}
+        extra_candidates = list(roster)
+        extra_weights = [float(blended[index]) for index in extra_candidates]
+        for _ in range(extra):
+            choice = self._weighted_choice(extra_candidates, extra_weights)
+            position = extra_candidates.index(choice)
+            quota[choice] += 1
+            extra_candidates.pop(position)
+            extra_weights.pop(position)
+        quota_vector = tuple(quota.get(index, 0)
+                             for index in range(len(players)))
+        if sum(quota_vector) != 20 or max(quota_vector) > 4:
+            raise RuntimeError(f"invalid latent bowling quotas: {quota_vector}")
+        return roster, quota_vector
+
+    @staticmethod
+    def _schedule_feasible_candidates(
+        state: MatchState,
+        available: List[int],
+        quota: Tuple[int, ...],
+    ) -> List[int]:
+        """Candidates that leave a no-consecutive full-innings schedule.
+
+        For the remaining multiset of over assignments, the largest count may
+        not exceed every-other position. The bowler just chosen is forbidden
+        in the first future position, so its bound is one slot tighter.
+        """
+        completed_overs = state.balls // 6
+        future_overs = 19 - completed_overs
+        used = {
+            index: state.bowler_balls.get(
+                (state.bowling_team_idx, index), 0) // 6
+            for index in range(len(quota))
+        }
+        feasible = []
+        for candidate in available:
+            remaining = [max(quota[index] - used[index], 0)
+                         for index in range(len(quota))]
+            if remaining[candidate] <= 0:
+                continue
+            remaining[candidate] -= 1
+            if sum(remaining) != future_overs:
+                continue
+            if remaining[candidate] > future_overs // 2:
+                continue
+            other_max = max(
+                (value for index, value in enumerate(remaining)
+                 if index != candidate), default=0)
+            if other_max > (future_overs + 1) // 2:
+                continue
+            feasible.append(candidate)
+        return feasible
+
+    def select_bowler(self, state: MatchState, available: List[int]) -> int:
+        team_index = state.bowling_team_idx
+        roster = state.active_bowler_rosters.get(team_index)
+        if roster is None:
+            if state.balls != 0:
+                raise ValueError(
+                    "RosterEmpiricalBowlerSelector must sample its roster at "
+                    f"the first over; first selection arrived at "
+                    f"balls={state.balls}. Mid-innings entry is unsupported "
+                    "because the 20-over quota schedule assumes a full "
+                    "regulation innings."
+                )
+            roster, quota = self._sample_roster(state)
+            state.active_bowler_rosters[team_index] = roster
+            state.active_bowler_quotas[team_index] = quota
+        quota = state.active_bowler_quotas[team_index]
+        active_available = [index for index in available if index in roster]
+        active_available = self._schedule_feasible_candidates(
+            state, active_available, quota)
+        if not active_available:
+            raise ValueError(
+                "latent bowling roster has no schedule-feasible bowler: "
+                f"balls={state.balls}, team={team_index}, roster={roster}, "
+                f"quota={quota}, available={available}, "
+                f"bowler_balls={state.bowler_balls}")
+        return super().select_bowler(state, active_available)
+
+
 # T20 Rules
 class T20Rules:
     """Enforces T20 cricket rules and match flow"""
@@ -948,10 +1178,6 @@ class T20Rules:
         """Check if outcome is legal in current state"""
         # Can't get wicket if already 10 down
         if outcome == Outcome.WICKET and state.wickets[state.current_team_idx] >= 10:
-            return False
-        
-        # Last ball of innings can't be wide/no-ball (simplified)
-        if state.balls == 119 and outcome in [Outcome.WIDE, Outcome.NO_BALL]:
             return False
         
         return True
@@ -4244,6 +4470,13 @@ class SimulationEngine:
         balls = []
         batting_card = {}
         bowling_card = {}
+
+        # The first over must go through the configured policy just like every
+        # later over. MatchState.bowler_idx defaults to zero for serialization
+        # compatibility; using it directly silently made the first player in
+        # batting order (often an opener/non-bowler) bowl over 0.
+        if state.balls == 0 and not state.current_over:
+            state.bowler_idx = self.rules.select_next_bowler(state)
         
         start_runs = int(state.runs[state.current_team_idx])
         start_wickets = int(state.wickets[state.current_team_idx])

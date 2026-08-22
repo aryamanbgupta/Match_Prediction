@@ -1,0 +1,54 @@
+experiment:
+  name: t1_sim_extras_graft_ppc_v2
+  registered: 2026-08-12
+  purpose: >-
+    Re-aggregate the isolated B18 arm against a corrected-engine flat-extras
+    comparator after discovering that the prior engine bypassed the configured
+    selector for every first over. Both arms use the same first-over selector
+    contract, match IDs, checkpoint, chronology, B10 policy, 200 draws, and
+    seed; only extras rates/run laws differ.
+  predecessor: experiments/configs/t1_sim_extras_graft_ppc_v1.yaml
+  forbidden_data: [data/golden, forward_holdout]
+
+data:
+  # Supplies the frozen 24 match IDs when --flat-only is creating baseline_raw.
+  # The aggregate step below reads baseline_raw, so the two roles must be
+  # separate to make a clean-room rerun possible.
+  selection_raw: models/embeddings/t1_sim_ppc_v1/raw.json
+  baseline_raw: models/embeddings/t1_sim_flat_corrected_ppc_v1/raw.json
+  match_dir: data/t1_eval
+  context_dir: data/t20s_json
+  odds: betting_odds_polymarket_v2.json
+  stats_version: v3
+  player_metadata: data/all_players_enriched.csv
+
+model:
+  checkpoint: models/embeddings/t1
+  device: cpu
+  delivery_semantics: inclusive_total_runs_v1
+  extras_graft: models/auto/b18/extras_graft_v1.json
+  ball_calibration: none
+  match_calibration: none
+
+simulation:
+  bowler_selector: empirical_b10
+  bowler_usage: models/bowler_phase_usage.json
+  n_sims: 200
+  random_seed: 42
+  parallel: false
+  engine_contract: first_over_selector_v1
+
+statistics:
+  cluster: match
+  bootstrap_repetitions: 5000
+  bootstrap_seed: 29
+  primary:
+    - extras events per innings moves within 1.0 of actual
+    - first-innings total bias and MAE improve versus corrected flat baseline
+  context:
+    - raw winner log loss and Brier
+    - innings and phase posterior means
+
+outputs:
+  raw: models/embeddings/t1_sim_extras_graft_ppc_v1/raw.json
+  summary: research/reports/embeddings/artifacts/t1_sim_extras_graft_ppc_v2_summary.json

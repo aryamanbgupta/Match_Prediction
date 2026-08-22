@@ -75,13 +75,23 @@ class TestMatchLoader:
         print(f"Successfully loaded {len(matches)} matches")
         return matches
     
+    def create_match_state(
+        self,
+        data: dict,
+        cricsheet_id: Optional[str] = None,
+    ) -> Tuple[Optional[str], Optional[MatchState]]:
+        """Public pre-match state constructor for external replay/audit
+        callers (the T1 PPC runners and parity audit). Same contract as the
+        internal loader path."""
+        return self._create_match_state(data, cricsheet_id=cricsheet_id)
+
     def _create_match_state(
         self,
         data: dict,
         cricsheet_id: Optional[str] = None,
     ) -> Tuple[Optional[str], Optional[MatchState]]:
         """Create initial MatchState from match JSON
-        
+
         Design decisions:
         - Only extract initial conditions (teams, venue, toss)
         - Use player registry to map names to IDs

@@ -1,0 +1,49 @@
+experiment:
+  name: t1_sim_roster_bowling_ppc_v1
+  registered: 2026-08-12
+  purpose: >-
+    Isolate a causal latent bowling-unit policy after the B10 selector used
+    7.5-7.9 distinct bowlers versus 6.0-6.1 observed. Reuse the exact B18 PPC
+    cohort, checkpoint, chronology, extras law, draws, and seed.
+  forbidden_data: [data/golden, forward_holdout]
+
+data:
+  baseline_raw: models/embeddings/t1_sim_extras_graft_ppc_v1/raw.json
+  match_dir: data/t1_eval
+  context_dir: data/t20s_json
+  stats_version: v3
+  player_metadata: data/all_players_enriched.csv
+
+model:
+  checkpoint: models/embeddings/t1
+  device: cpu
+  delivery_semantics: inclusive_total_runs_v1
+  extras_graft: models/auto/b18/extras_graft_v1.json
+  ball_calibration: none
+  match_calibration: none
+
+simulation:
+  bowler_selector: empirical_b10_with_causal_latent_roster
+  bowler_usage: models/bowler_phase_usage.json
+  bowler_roster_policy: models/bowler_roster_policy.json
+  n_sims: 200
+  symmetry_sims: 20
+  random_seed: 42
+  parallel: false
+  arms: [actual_order, flipped_order, storage_label_swap]
+
+statistics:
+  cluster: match
+  bootstrap_repetitions: 5000
+  bootstrap_seed: 29
+  primary:
+    - mean unique-bowler count within 0.5 of actual in each innings
+    - exact storage-label symmetry
+    - paired batting-order effect is compatible with the ordinary-test descriptive reference
+  guards:
+    - first-innings score MAE does not worsen by more than 2 runs
+    - winner log-loss paired interval does not show a clean regression
+
+outputs:
+  raw: models/embeddings/t1_sim_roster_bowling_ppc_v1/raw.json
+  summary: research/reports/embeddings/artifacts/t1_sim_roster_bowling_ppc_v1_summary.json

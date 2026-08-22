@@ -1,0 +1,78 @@
+experiment:
+  name: t1_sim_ppc_v1
+  registered: 2026-08-11
+  purpose: >-
+    Diagnose the first-innings rollout bias after enforcing exact T1 feature,
+    chronology, bowling-selection, cache and delivery contracts. This is a
+    structural posterior-predictive diagnostic, not a promotion evaluation.
+  forbidden_data: [data/golden, forward_holdout]
+
+data:
+  match_dir: data/t1_eval
+  context_dir: data/t20s_json
+  odds: betting_odds_polymarket_v2.json
+  stats_version: v3
+  player_metadata: data/all_players_enriched.csv
+  ordinary_test_only: true
+
+model:
+  checkpoint: models/embeddings/t1
+  device: cpu
+  delivery_semantics: inclusive_total_runs_v1
+  extras: production_flat_1pct_each
+  ball_calibration: none
+  match_calibration: none
+
+simulation:
+  bowler_selector: empirical_b10
+  bowler_usage: models/bowler_phase_usage.json
+  n_sims_per_arm: 200
+  symmetry_sims: 20
+  random_seed: 42
+  parallel: false
+
+cohort:
+  selection_seed: 29
+  strata:
+    first_batting_market_underdog:
+      range: [0.0, 0.45]
+      n: 8
+    first_batting_market_balanced:
+      range: [0.45, 0.55]
+      n: 8
+    first_batting_market_favorite:
+      range: [0.55, 1.01]
+      n: 8
+  selection_rule: >-
+    Within each pre-match market-probability stratum, sort by
+    sha256("29:<cricsheet_id>") and take the first n. Outcomes are not used.
+
+arms:
+  actual_order: observed team bats first
+  flipped_order: same teams and lineups, other team bats first
+  label_swap: swap team1/team2 storage labels while preserving who bats first
+
+statistics:
+  cluster: match
+  bootstrap_repetitions: 5000
+  bootstrap_seed: 29
+  raw_outputs_required: true
+  posterior_predictive:
+    - first-innings total bias, MAE and P10-P90 coverage
+    - innings and phase run rates
+    - wickets, deliveries and empirical extras rate
+    - raw winner log loss, Brier and reliability
+    - paired same-team batting-first versus chasing probability
+    - exact team-label symmetry
+
+claim_gate:
+  structural_pass_requires:
+    - 50-feature replay parity already passes at tolerance 1e-6
+    - empirical B10 bowler selector is active
+    - team-label symmetry has zero mismatches
+    - no unexplained material first-batting advantage after team-held-fixed flip
+  calibration_forbidden_until_pass: true
+
+outputs:
+  raw: models/embeddings/t1_sim_ppc_v1/raw.json
+  summary: research/reports/embeddings/artifacts/t1_sim_ppc_v1_summary.json

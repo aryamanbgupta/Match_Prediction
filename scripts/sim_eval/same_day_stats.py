@@ -425,6 +425,44 @@ class _TrackerStatsView:
         self._require_ready()
         return self._base_provider.get_phase_outcome_dist(balls_bowled)
 
+    def get_t1_outcome_prior(self):
+        """Raw six-class prior for the simulator's causal local overlay."""
+        self._require_ready()
+        return tuple(self._prior)
+
+    def get_t1_outcome_counts(
+        self, kind: str, player_id, as_of_date, cell: Optional[int] = None
+    ):
+        """Raw pre-ball counts from the rehydrated same-day tracker.
+
+        This narrow interface lets T1 add within-simulation deliveries on top
+        without reverse-engineering counts from already-shrunk probabilities.
+        """
+        self._require_date(as_of_date)
+        keys = ("c0", "c1", "c2", "c4", "c6", "cw")
+        player_id = str(player_id)
+        # Read WITHOUT indexing the tracker defaultdicts: a plain [] lookup
+        # inserts a zero row into replay state (which advance_match then
+        # deep-copies), turning this accessor into a writer. An absent
+        # player reads as all-zero counts either way.
+        if kind in ("batter_type", "bowler_hand") and cell is None:
+            raise ValueError(f"kind {kind!r} requires a cell")
+        if kind == "batter":
+            row = self._stats.batting_stats.get(player_id)
+        elif kind == "bowler":
+            row = self._stats.bowling_stats.get(player_id)
+        elif kind == "batter_type":
+            label = "pace" if int(cell) == 0 else "spin"
+            row = self._stats.batting_vs_type.get(player_id, {}).get(label)
+        elif kind == "bowler_hand":
+            label = "left" if int(cell) == 0 else "right"
+            row = self._stats.bowling_vs_hand.get(player_id, {}).get(label)
+        else:
+            raise ValueError(f"unknown T1 count kind: {kind}")
+        if row is None:
+            return (0, 0, 0, 0, 0, 0)
+        return tuple(int(row[key]) for key in keys)
+
     def get_all_stats(self, batter_id, bowler_id, as_of_date):
         batting = self.get_batting_stats(batter_id, as_of_date)
         bowling = self.get_bowling_stats(bowler_id, as_of_date)
