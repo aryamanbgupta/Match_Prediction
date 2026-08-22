@@ -330,6 +330,11 @@ def summarize(config: dict, output: Path, config_path: Path,
         split_result["sequence_comparisons"] = comparisons
         full_result = split_result["arms"].get("full")
         gate_checks = {}
+        # Registered gate estimator (decision 2026-08-22): the seed-mean+match
+        # CI — a comparison must clear zero net of BOTH match resampling and
+        # seed noise. The registered YAML's shorthand "match-clustered" is
+        # read as this joint interval; the v1 verdict is estimator-robust
+        # (full_vs_mlp straddles zero on the match-only CI too, both splits).
         if full_result:
             gate_checks["full_vs_logistic"] = bool(
                 full_result["mean_delta_ll_seed_match_ci95"][1] < 0
@@ -339,6 +344,7 @@ def summarize(config: dict, output: Path, config_path: Path,
                     values["delta_ll_seed_match_ci95"][1] < 0
                     and values["direction_better_seeds"] >= 4)
         split_result["claim_gate"] = {
+            "estimator": "seed_mean_match_ci95",
             "checks": gate_checks,
             "passes": bool(gate_checks and all(gate_checks.values())),
         }

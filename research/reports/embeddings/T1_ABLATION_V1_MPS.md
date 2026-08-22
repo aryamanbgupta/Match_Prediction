@@ -5,14 +5,20 @@ seeds `{7,13,29,42,101}` · validation early stopping · paired two-level
 bootstrap over training seeds and complete matches (2,000 repetitions, seed
 29) · no sealed golden or forward holdout read.
 
-> **Estimator note (2026-08-21).** Every "seed+match" CI in this report is
-> the **seed-mean** estimator: seeds resampled with replacement and averaged,
-> targeting the across-seed mean. It is narrower than the xR reports'
-> seed-draw estimator (one seed per replicate), which additionally carries
-> single-seed variance — the two are not comparable across reports. The
-> registered YAML's gate text says "match-clustered"; the gate as computed
-> used this seed-mean+match CI (stricter about seed noise). Align the wording
-> before any rerun (tracked in TODO.md).
+> **Estimator note (2026-08-21; resolved 2026-08-22).** Every "seed+match"
+> CI in this report is the **seed-mean** estimator: seeds resampled with
+> replacement and averaged, targeting the across-seed mean. It is narrower
+> than the xR reports' seed-draw estimator (one seed per replicate), which
+> additionally carries single-seed variance — the two are not comparable
+> across reports. **Gate-estimator decision (2026-08-22):** the registered
+> gate reads the seed-mean+match CI — a comparison must clear zero net of
+> both match resampling and seed noise; the YAML's shorthand
+> "match-clustered" is read as this joint interval, and the runner now
+> stamps `claim_gate.estimator` accordingly. The v1 verdict is
+> **estimator-robust**: full_vs_mlp straddles zero on the plain
+> match-clustered CI too (validation [−0.001598, +0.000044]; test
+> [−0.001061, +0.000327]), so the sequence-gate FAIL does not depend on the
+> estimator choice.
 
 ## Claim status: NONLINEAR CURRENT-STATE GAIN SUPPORTED; SEQUENCE GATE FAILED
 
