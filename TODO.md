@@ -169,7 +169,7 @@ consolidation. IDs below reference that catalog.
         where the artifacts live, or copy them here.
   - [ ] Human reviews gate numbers + the engine diff → merge → restate
         numbers everywhere.
-- [ ] **T1 follow-ups (from the 2026-08-14 implementation review; details
+- [~] **T1 follow-ups (from the 2026-08-14 implementation review; details
   in IMPROVEMENTS.md).** Landed 2026-08-21: the fail-closed snapshot guard
   + `tests/test_sim_t1_snapshot_guard.py` are committed;
   `TransformerT1SimModel.for_feature_audit()` replaces the `__new__`
@@ -178,15 +178,27 @@ consolidation. IDs below reference that catalog.
   reaches from the PPC runners; the two seed bootstrap estimators are
   unified in `scripts/registered_experiment.py` and relabeled
   (seed-mean+match vs seed-draw+match) in code, reports, and the report
-  index. Still open: `run_sim_eval_t1` should build a
-  `SameDayReplayStatsProvider` (the diagnostic snapshot reach-through in
-  `OnlineT1OutcomeDists._base` survives behind
-  `T1_ALLOW_SNAPSHOT_COUNTS=1`); the ablation gate itself still evaluates
-  the seed-mean+match CI where the registered YAML text says
-  "match-clustered" — pick one and restate before any rerun;
-  prefix-cache `predict_next_ball` (currently O(L²) re-forward per ball —
-  dominant PPC cost); minor trainer/serving hygiene items listed in the
-  review record.
+  index. Landed 2026-08-22:
+  - `run_sim_eval_t1` now builds a `SameDayReplayStatsProvider` and drives
+    the full begin/lock/advance lifecycle chronologically
+    (`_T1ReplayEvaluator`; ordering pinned by
+    `tests/test_run_sim_eval_t1_lifecycle.py`; `--t1-context-dir` supplies
+    the same-day corpus; `--parallel`/`--calibrate` refused). The snapshot
+    reach-through in `OnlineT1OutcomeDists` and its
+    `T1_ALLOW_SNAPSHOT_COUNTS` escape hatch are DELETED — non-replay
+    providers are refused unconditionally.
+  - Ablation gate estimator RESOLVED: the registered gate is the
+    seed-mean+match CI (`claim_gate.estimator` stamped by the runner); the
+    YAML's "match-clustered" shorthand reads as that joint interval, and
+    the v1 FAIL is estimator-robust (full_vs_mlp straddles zero on the
+    plain match CI too — see the MPS report's estimator note).
+  - `predict_next_ball` prefix cache implemented (per-layer K/V, O(1) per
+    ball) — **opt-in via `T1_SIM_PREFIX_CACHE=1`** because certified PPC
+    raws used the full re-forward; step-exact equivalence at float epsilon
+    pinned by `tests/test_sim_t1_prefix_cache.py`. Turn it on for future
+    PPC runs and record the flag in provenance.
+  Still open: minor trainer/serving hygiene items listed in the review
+  record.
 - [ ] **Backlog: model free hits.** After a NO_BALL the next delivery is a
   free hit — only run-outs can dismiss. The sim currently samples wickets
   at the full rate there (~0.5–1% of one delivery's wicket mass per
@@ -238,10 +250,15 @@ consolidation. IDs below reference that catalog.
   `max_drawdown` from flat equity; decimal-odds (0,1) guard; Hundred
   dup-key fail-close. Reverted after the T1 parity suite caught it:
   `get_next_batsman_idx` fail-loud (the sentinel is load-bearing on
-  every all-out — kept with an accurate comment). Still open: free-hit
-  modeling (rules-gap decision), sim-vs-settlement economy basis note,
-  XR hardcoded seeds/Ns (live in branch-owned scripts), `pos_top`
-  docstring.
+  every all-out — kept with an accurate comment). Closed 2026-08-22:
+  sim-vs-settlement economy basis note (documented at the
+  `bowler_economy_ou_*` computation in `prop_backtest.py` — sim reads
+  ~0.1–0.3 rpo LOW; the fix is an engine bowling-card change +
+  re-baseline, deliberately not taken before the BR2 gate run) and the
+  `pos_top` appearance-position docstring. Still open: free-hit modeling
+  (deferred until the BR2 gates settle so the engine-change review stays
+  one reviewable unit), XR hardcoded seeds/Ns (live in branch-owned
+  scripts).
 
 ## Status snapshot + next steps (2026-08-01)
 

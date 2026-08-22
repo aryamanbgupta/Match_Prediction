@@ -715,6 +715,16 @@ def build_observations(match_id: str, sim_agg: dict, actuals: dict) -> dict:
             obs["first_wicket_runs_ou_30_5"].append(row)
 
     # ---- Bowler economy O/U (per bowler who actually bowled) ----
+    # BASIS NOTE (2026-08-22; review item "sim-vs-settlement economy basis"):
+    # both sides divide by LEGAL balls, but the numerators differ under the
+    # production inclusive_total_runs_v1 semantics. The sim bowling card
+    # books each legal delivery's TOTAL team runs (folded byes/leg-byes
+    # included) and skips explicit wide/no-ball events entirely
+    # (sim_v1_2.py legacy branch ~:4582), while settlement charges
+    # wides/no-balls to the bowler and excludes byes/leg-byes. Net measured
+    # bias: sim economy reads ~0.1-0.3 rpo LOW. Fixing it means changing
+    # the engine's bowling-card branch and re-baselining — not adjusting
+    # here; read bowler_economy_ou_* with that bias in mind.
     for (team, idx), runs_list in sim_agg["bowler_runs"].items():
         balls_list = sim_agg["bowler_balls"].get((team, idx), [])
         if not runs_list or not balls_list:

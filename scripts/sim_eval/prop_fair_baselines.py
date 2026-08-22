@@ -308,6 +308,14 @@ class AsOf:
         return expected_balls * wicket_rate
 
     def pos_top_prior(self, date, pos) -> float:
+        """Prior P(the innings' top scorer batted at APPEARANCE position).
+
+        ``pos`` is the 1-based order of first appearance in the innings
+        (the corpus logs ``appear.index(top_name) + 1``), NOT the announced
+        lineup slot — a promoted pinch-hitter counts at the position they
+        actually walked in. Markets quoted on lineup slots need an explicit
+        mapping before using this prior.
+        """
         sel = self._before(self.logs["pos_top"], date)
         if not sel:
             return 1.0 / 11
