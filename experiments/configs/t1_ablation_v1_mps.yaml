@@ -1,0 +1,77 @@
+experiment:
+  name: t1_ablation_v1_mps
+  registered: 2026-08-11
+  purpose: >-
+    Full single-device realization of the exact-information T1 ablation.
+    Estimate the incremental value of nonlinear token capacity, the shifted
+    previous-ball outcome, cross-token attention, and outcome history using
+    the identical 50 pre-ball features.
+  predecessor: experiments/configs/t1_ablation_v1.yaml
+  forbidden_data:
+    - data/golden
+    - forward holdouts
+
+data:
+  directory: data/xgb_data_v3
+  eval_kit: models/embeddings/eval_kit
+  splits: [train, validation, test]
+  feature_contract: transformer_t1.build_features
+  n_features: 50
+
+arms:
+  baseline: logistic
+  neural: [mlp, no_attention, no_history, full]
+  interpretation:
+    logistic: scaled converged multinomial linear control
+    mlp: capacity-matched residual MLP over the current 50-feature token only
+    no_attention: current token plus shifted previous outcome; no token mixing
+    no_history: causal attention over pre-ball feature states; all outcomes BOS-masked
+    full: causal attention over pre-ball states plus shifted outcomes
+
+training:
+  device: mps
+  seeds: [7, 13, 29, 42, 101]
+  dmodel: 128
+  layers: 2
+  heads: 4
+  batch: 128
+  epochs: 30
+  learning_rate: 0.0003
+  patience: 3
+  logistic:
+    solver: lbfgs
+    max_iter: 1000
+    tolerance: 1.0e-7
+    C: 1.0
+
+statistics:
+  cluster: match_id
+  bootstrap_repetitions: 2000
+  bootstrap_seed: 29
+  reference: logistic
+  report_seed_mean_and_sd: true
+  slices:
+    - all
+    - thin_pair_under_200_train_balls
+    - powerplay
+    - middle
+    - death
+    - innings_1
+    - innings_2
+  calibration: [multiclass_brier, confidence_ece_15]
+
+outputs:
+  directory: models/embeddings/t1_ablation_v1_mps
+  save_row_aligned_probabilities: true
+  checksum_inputs: true
+  write_environment_metadata: true
+
+claim_gate:
+  sequence_gain_requires:
+    - full beats logistic with paired match-clustered 95% CI below zero
+    - full beats mlp with paired match-clustered 95% CI below zero
+    - full beats no_attention with paired match-clustered 95% CI below zero
+    - full beats no_history with paired match-clustered 95% CI below zero
+    - direction is stable across at least 4 of 5 seeds
+  otherwise: retain promising-pilot or supported-negative status
+

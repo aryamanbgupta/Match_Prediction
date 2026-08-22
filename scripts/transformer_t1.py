@@ -11,9 +11,10 @@ Token t = Linear(pre-ball features_t) + Embedding(outcome_{t-1})
   the ball. Outcomes enter only as history (BOS at t=0): the same causal
   discipline as the tracker pipeline, enforced by the shift + causal mask.
 
-Scoreboard: per-ball LL on the frozen eval kit (targets: linear control
-1.4508 val / production XGBoost 1.4253 test), plus the same unseen-pair
-and frequency-bucket slices. Calibration/simulation metrics come at T4.
+Scoreboard: per-ball LL on the frozen eval kit (the registered, converged
+exact-feature logistic is 1.4433 validation / 1.4340 test), plus unseen-pair,
+frequency-bucket and calibration diagnostics. Match simulation remains a
+separate downstream gate.
 
 Usage:
     uv run python scripts/transformer_t1.py [--dmodel 128] [--layers 2]
@@ -71,10 +72,11 @@ def load_aux(split: str, n_rows: int, vocabs: dict | None,
     return out, vocabs
 
 
-def load_split(name: str) -> pd.DataFrame:
+def load_split(name: str, data_dir: Path = DATA) -> pd.DataFrame:
     cols = (["innings_id", "batter_id", "bowler_id", "ball_outcome"]
             + EB_BAT_COLS + EB_BOWL_COLS + VENUE_COLS + CTX_COLS + STATE_COLS)
-    df = pd.read_parquet(DATA / f"cricket_data_v3_{name}.parquet", columns=cols)
+    df = pd.read_parquet(
+        data_dir / f"cricket_data_v3_{name}.parquet", columns=cols)
     df["y"] = df["ball_outcome"].map(CLASS_MAPPING).astype(np.int64)
     return df
 
@@ -97,28 +99,71 @@ def build_innings(df: pd.DataFrame):
     return list(df.groupby("innings_id", sort=False).indices.values())
 
 
+class TokenMLPBlock(nn.Module):
+    """Residual token-local feed-forward block with no sequence inputs."""
+
+    def __init__(self, dmodel: int):
+        super().__init__()
+        self.norm = nn.LayerNorm(dmodel)
+        self.linear1 = nn.Linear(dmodel, 2 * dmodel)
+        self.linear2 = nn.Linear(2 * dmodel, dmodel)
+        self.dropout = nn.Dropout(0.1)
+
+    def forward(self, value):
+        hidden = nn.functional.gelu(self.linear1(self.norm(value)))
+        return value + self.dropout(self.linear2(self.dropout(hidden)))
+
+
 class T1Model(nn.Module):
     def __init__(self, n_feats: int, dmodel: int, layers: int, heads: int,
-                 aux_sizes: dict | None = None):
+                 aux_sizes: dict | None = None, arm: str = "full"):
         super().__init__()
+        if arm not in {"full", "mlp", "no_attention", "no_history"}:
+            raise ValueError(f"unknown T1 ablation arm: {arm}")
+        self.arm = arm
         self.feat_proj = nn.Linear(n_feats, dmodel)
-        self.out_emb = nn.Embedding(7, dmodel)  # 6 classes + BOS
-        self.pos_emb = nn.Embedding(200, dmodel)
-        layer = nn.TransformerEncoderLayer(
-            d_model=dmodel, nhead=heads, dim_feedforward=2 * dmodel,
-            dropout=0.1, batch_first=True, norm_first=True)
-        self.encoder = nn.TransformerEncoder(layer, num_layers=layers)
+        if arm == "mlp":
+            # Two token-local FF blocks per transformer layer approximately
+            # match the full arm's parameter budget without sequence access.
+            self.token_mlp = nn.Sequential(*[
+                TokenMLPBlock(dmodel) for _ in range(2 * layers)])
+        else:
+            self.out_emb = nn.Embedding(7, dmodel)  # 6 classes + BOS
+            self.pos_emb = nn.Embedding(200, dmodel)
+            layer = nn.TransformerEncoderLayer(
+                d_model=dmodel, nhead=heads, dim_feedforward=2 * dmodel,
+                dropout=0.1, batch_first=True, norm_first=True)
+            self.encoder = nn.TransformerEncoder(layer, num_layers=layers)
         self.head = nn.Linear(dmodel, 6)
         self.aux_heads = nn.ModuleDict(
             {t: nn.Linear(dmodel, n) for t, n in (aux_sizes or {}).items()})
 
     def forward(self, feats, prev_y, pad_mask):
         L = feats.shape[1]
+        if self.arm == "mlp":
+            h = self.token_mlp(self.feat_proj(feats))
+            aux = {t: hd(h) for t, hd in self.aux_heads.items()}
+            return self.head(h), aux
+
         pos = torch.arange(L, device=feats.device)
+        if self.arm == "no_history":
+            prev_y = torch.full_like(prev_y, BOS)
         x = self.feat_proj(feats) + self.out_emb(prev_y) + self.pos_emb(pos)
-        causal = torch.triu(
-            torch.full((L, L), float("-inf"), device=feats.device), diagonal=1)
-        h = self.encoder(x, mask=causal, src_key_padding_mask=pad_mask)
+        if self.arm == "no_attention":
+            # Preserve the transformer's parameters and token pathway while
+            # preventing all cross-token mixing. Each token can still use its
+            # immediately preceding outcome via the causally shifted input.
+            attn_mask = ~torch.eye(L, dtype=torch.bool, device=feats.device)
+        else:
+            attn_mask = torch.triu(
+                torch.ones((L, L), dtype=torch.bool, device=feats.device),
+                diagonal=1)
+        # In the diagonal arm, padding cannot mix into real tokens. Passing a
+        # key-padding mask would leave each padded query with no legal key and
+        # produce NaNs, so padded outputs are simply computed and discarded.
+        key_padding = None if self.arm == "no_attention" else pad_mask
+        h = self.encoder(x, mask=attn_mask,
+                         src_key_padding_mask=key_padding)
         aux = {t: hd(h) for t, hd in self.aux_heads.items()}
         return self.head(h), aux
 
@@ -144,6 +189,25 @@ def collate(idx_lists, feats, y, device, aux=None):
             {t: torch.tensor(v).to(device) for t, v in ax.items()})
 
 
+def calibration_metrics(probs: np.ndarray, y: np.ndarray,
+                        n_bins: int = 15) -> dict:
+    """Multiclass Brier and confidence ECE with fixed-width bins."""
+    onehot = np.eye(probs.shape[1], dtype=np.float32)[y]
+    brier = np.square(probs - onehot).sum(axis=1).mean()
+    confidence = probs.max(axis=1)
+    correct = probs.argmax(axis=1) == y
+    edges = np.linspace(0.0, 1.0, n_bins + 1)
+    ece = 0.0
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        selected = (confidence >= lo) & (
+            confidence < hi if hi < 1.0 else confidence <= hi)
+        if selected.any():
+            ece += selected.mean() * abs(
+                confidence[selected].mean() - correct[selected].mean())
+    return {"brier": round(float(brier), 6),
+            "confidence_ece_15": round(float(ece), 6)}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dmodel", type=int, default=128)
@@ -154,22 +218,42 @@ def main() -> None:
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--patience", type=int, default=3)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--device", choices=["auto", "cpu", "mps", "cuda"],
+                    default="auto")
+    ap.add_argument("--arm", choices=["full", "mlp", "no_attention",
+                                      "no_history"], default="full")
     ap.add_argument("--aux", action="store_true",
                     help="T1.5: multi-task heads on DeepCrease "
                          "shot/line/length/control labels")
     ap.add_argument("--aux-weight", type=float, default=0.2)
+    ap.add_argument("--data-dir", type=Path, default=DATA)
+    ap.add_argument("--kit-dir", type=Path, default=KIT)
+    ap.add_argument("--aux-dir", type=Path, default=AUX_DIR)
+    ap.add_argument("--save-predictions", action="store_true",
+                    help="write row-aligned probabilities for paired audits")
     ap.add_argument("--out", type=Path, default=Path("models/embeddings/t1"))
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
-    device = ("mps" if torch.backends.mps.is_available()
-              else "cuda" if torch.cuda.is_available() else "cpu")
+    if args.device == "auto":
+        device = ("mps" if torch.backends.mps.is_available()
+                  else "cuda" if torch.cuda.is_available() else "cpu")
+    else:
+        device = args.device
+        if device == "mps" and not torch.backends.mps.is_available():
+            raise RuntimeError("--device mps requested but MPS is unavailable")
+        if device == "cuda" and not torch.cuda.is_available():
+            raise RuntimeError("--device cuda requested but CUDA is unavailable")
     print(f"device={device}", flush=True)
     args.out.mkdir(parents=True, exist_ok=True)
 
     print("loading splits...", flush=True)
-    train, val, test = load_split("train"), load_split("validation"), load_split("test")
+    train, val, test = (
+        load_split("train", args.data_dir),
+        load_split("validation", args.data_dir),
+        load_split("test", args.data_dir),
+    )
     F_tr, F_va, F_te = (build_features(d) for d in (train, val, test))
     y_tr, y_va, y_te = (d["y"].to_numpy() for d in (train, val, test))
     inn_tr, inn_va, inn_te = (build_innings(d) for d in (train, val, test))
@@ -180,14 +264,14 @@ def main() -> None:
     aux_sizes = None
     vocabs = None
     if args.aux:
-        aux_tr, vocabs = load_aux("train", len(train), None)
-        aux_va, _ = load_aux("validation", len(val), vocabs)
-        aux_te, _ = load_aux("test", len(test), vocabs)
+        aux_tr, vocabs = load_aux("train", len(train), None, args.aux_dir)
+        aux_va, _ = load_aux("validation", len(val), vocabs, args.aux_dir)
+        aux_te, _ = load_aux("test", len(test), vocabs, args.aux_dir)
         aux_sizes = {t: len(v) for t, v in vocabs.items()}
         print(f"aux tasks: {aux_sizes}", flush=True)
 
     model = T1Model(F_tr.shape[1], args.dmodel, args.layers, args.heads,
-                    aux_sizes).to(device)
+                    aux_sizes, arm=args.arm).to(device)
     print(f"params: {sum(p.numel() for p in model.parameters()):,}", flush=True)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
     loss_fn = nn.CrossEntropyLoss(reduction="none")
@@ -256,8 +340,8 @@ def main() -> None:
     model.load_state_dict(best_state)
 
     # --- Scoreboard ---------------------------------------------------------
-    masks = np.load(KIT / "unseen_pair_masks.npz")
-    probes_df = pd.read_parquet(KIT / "probe_labels.parquet")
+    masks = np.load(args.kit_dir / "unseen_pair_masks.npz")
+    probes_df = pd.read_parquet(args.kit_dir / "probe_labels.parquet")
     metrics = {"config": {k: (str(v) if isinstance(v, Path) else v)
                           for k, v in vars(args).items()},
                "n_params": sum(p.numel() for p in model.parameters()),
@@ -272,6 +356,13 @@ def main() -> None:
         m = masks[name]
         metrics[f"{name}_ll"] = round(mean_ll, 4)
         metrics[f"{name}_ll_unseen_pairs"] = round(float(ll_vec[m].mean()), 4)
+        metrics[f"{name}_calibration"] = calibration_metrics(probs, y)
+        if args.save_predictions:
+            np.savez_compressed(
+                args.out / f"predictions_{name}.npz",
+                probs=probs, y=y,
+                innings_id=np.asarray(
+                    df["innings_id"].astype(str).tolist(), dtype=str))
         if name == "validation":
             bc = df["batter_id"].map(probes_df["train_balls_batting"]).fillna(0)
             wc = df["bowler_id"].map(probes_df["train_balls_bowling"]).fillna(0)
