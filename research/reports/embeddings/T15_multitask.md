@@ -1,10 +1,10 @@
 # T1.5 — multi-task with DeepCrease style targets: rung report
 
-2026-08-08 · scripts/transformer_t1.py --aux (heads: shot 24-class, line 5,
+2026-08-08 · scripts/transformer_t1.py --aux (artifact vocab: shot 33-class, line 5,
 length 6, control 3; weight 0.2) · labels: scripts/deepcrease_join.py
 (394k/50k/74k train/val/test balls, 100% runs-agreement on join)
 
-## Verdict: FAILED at this configuration (two informative negatives)
+## Claim status: SUPPORTED NEGATIVE at this single configuration
 
 **1. Multi-task hurt the main objective**: val 1.4440 / test 1.4348 vs
 T1's 1.4372 / 1.4288 (−0.007, above noise floor). At 299k params with
@@ -42,11 +42,11 @@ ceiling.
 | T1.5 multi-task | 1.4440 |
 | production XGBoost (test 1.4253) | — |
 
-Paper arc: (1) identity saturated by shrunk marginals [E-ladder];
-(2) style identifiable (AUC 0.74–0.81) but orthogonal to outcomes
-[discriminability]; (3) innings history is the real frontier [T1];
-(4) style targets need staged conditioning, motivating the annotated/
-commentary data layer [T1.5].
+Session interpretation: (1) the tested identity ladder loses to shrunk
+marginals; (2) raw outcome signatures are separable under a preliminary,
+non-grouped protocol; (3) the T1 architecture is promising but its history
+effect is not yet isolated; (4) this auxiliary configuration does not improve
+the main task and motivates a controlled staged-conditioning test.
 
 ## Next session queue
 

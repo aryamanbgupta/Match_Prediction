@@ -4,7 +4,7 @@
 `--eb-anchor --context --venue-ctx --season-offsets` · probe:
 scripts/embeddings_e3_probe.py
 
-## E3 — verdict: FAILED
+## E3 — claim status: SUPPORTED NEGATIVE for the tested seasonal-offset model
 
 Per-ball LL (expected ~flat since eval-era seasons are pinned to zero):
 val 1.4651 / test 1.4557 — actually slightly WORSE than E4+venue
@@ -34,7 +34,7 @@ far less skill information than simple averages.
 |---|---|---|---|
 | B0a prior | — | 1.4920 | baseline |
 | E1 pure IDs | embeddings | 1.4879 | FAILED |
-| E1.5 | learned UNK + emb decay | 1.4838 | LANDED (fixed its target) |
+| E1.5 | learned UNK + emb decay | 1.4838 | MECHANISM SUPPORTED |
 | E2 | + match state | 1.4625 | TABLED (control deflated it) |
 | B0b EB logistic | — | 1.4691 | baseline |
 | **B0b+ctx linear control** | — | **1.4508** | **best identity-based model** |
@@ -47,11 +47,10 @@ far less skill information than simple averages.
 1. **T20's churn makes generalization the central problem**: 59%/70% of
    val/test balls are unseen batter–bowler pairs; 13%/23% involve a
    player absent from training entirely.
-2. **EB-shrunk marginals + linear model saturate per-ball identity
-   information.** No embedding variant — pure, regularized, context-
-   deconfounded, EB-anchored, season-aware, wider — beats multinomial
-   logistic at equal information. The outcome surface given shrunk
-   marginals is essentially linear.
+2. **EB-shrunk marginals + a linear model beat every tested identity model.**
+   Pure, regularized, context-deconfounded, EB-anchored, season-aware, and
+   wider variants all lose at equal information. This establishes the tested
+   ladder's negative; it does not prove a universal identity-information bound.
 3. **Point-estimate player vectors learned from outcome prediction are
    information-poor**: probes at chance for handedness/type/arm; a scalar
    career average beats them 2:1 at next-season prediction.
@@ -64,12 +63,11 @@ far less skill information than simple averages.
 
 ## Where the information frontier actually is
 
-Everything unexplored points one direction: **within-innings sequence
-context** — what no EB marginal, no static vector, and no state snapshot
-captures. That is the T-ladder's hypothesis (design doc, Phase 2), now
-with unusually strong baselines to beat and a clean negative to motivate
-it. Downstream ΔLL test (design step 4) is expected null given probes;
-deprioritized in favor of T1.
+The next registered hypothesis is **within-innings sequence context** — what
+no EB marginal or static vector captures. It must be separated from richer
+current-state inputs with a same-information non-sequential control; the
+original T1 report did not yet provide that isolation. Downstream embedding
+ΔLL remains untested rather than established null.
 
 ## Not done / honest gaps
 
