@@ -137,9 +137,14 @@ consolidation. IDs below reference that catalog.
         on balls 0–118 too), the history buffer auto-extends, and the rule
         actively distorted results: a sampled final-ball wide was forced
         to a DOT, deleting real runs including chase-WINNING wides in tied
-        finishes. Pinned by `scripts/tests/test_ball119_removal.py`
-        (UNCOMMITTED — merge it together with the sim_v1_2 engine hunks;
-        it fails under the old rule by design).
+        finishes. Pinned by `tests/test_ball119_removal.py` (committed
+        2026-08-21 with the sim_v1_2 engine hunks; CI-collected; it fails
+        under the old rule by design).
+        ⚠ Reminder for the gate review: the branch's three engine-behavior
+        changes (ball-119 removal, first-over selector routing, causal
+        `_league_share`) shift every seeded RNG stream — no pre-branch
+        seeded benchmark (incl. the 73f9c4e G5 number) reproduces against
+        this tree until the BR2 gate run re-baselines them.
   - [x] Gate runbook ready: `bash scripts/run_br2_gates.sh
         <recorded_detail.json>` on the full checkout runs the prop A/B
         (covers the engine changes AND the committed SIM1/SIM2/PROP3
@@ -165,15 +170,23 @@ consolidation. IDs below reference that catalog.
   - [ ] Human reviews gate numbers + the engine diff → merge → restate
         numbers everywhere.
 - [ ] **T1 follow-ups (from the 2026-08-14 implementation review; details
-  in IMPROVEMENTS.md):** promote `get_t1_outcome_counts` to a first-class
-  provider API (or make `run_sim_eval_t1` build a
-  `SameDayReplayStatsProvider`) and delete the private reach-through — the
-  interim fail-closed guard + `tests/test_sim_t1_snapshot_guard.py` ride
-  UNCOMMITTED with the branch's `sim_t1.py`; align the ablation gate CI
-  (code: seed+match) with the registered YAML text (match-clustered)
-  before any rerun; prefix-cache `predict_next_ball` (currently O(L²)
-  re-forward per ball — dominant PPC cost); minor trainer/serving
-  hygiene items listed in the review record.
+  in IMPROVEMENTS.md).** Landed 2026-08-21: the fail-closed snapshot guard
+  + `tests/test_sim_t1_snapshot_guard.py` are committed;
+  `TransformerT1SimModel.for_feature_audit()` replaces the `__new__`
+  assembly in the parity audit; `loaders.create_match_state` and
+  `EmpiricalBowlerSelector.empirical_usage_active` replace the private
+  reaches from the PPC runners; the two seed bootstrap estimators are
+  unified in `scripts/registered_experiment.py` and relabeled
+  (seed-mean+match vs seed-draw+match) in code, reports, and the report
+  index. Still open: `run_sim_eval_t1` should build a
+  `SameDayReplayStatsProvider` (the diagnostic snapshot reach-through in
+  `OnlineT1OutcomeDists._base` survives behind
+  `T1_ALLOW_SNAPSHOT_COUNTS=1`); the ablation gate itself still evaluates
+  the seed-mean+match CI where the registered YAML text says
+  "match-clustered" — pick one and restate before any rerun;
+  prefix-cache `predict_next_ball` (currently O(L²) re-forward per ball —
+  dominant PPC cost); minor trainer/serving hygiene items listed in the
+  review record.
 - [ ] **Backlog: model free hits.** After a NO_BALL the next delivery is a
   free hit — only run-outs can dismiss. The sim currently samples wickets
   at the full rate there (~0.5–1% of one delivery's wicket mass per
