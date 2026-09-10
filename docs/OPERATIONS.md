@@ -1407,7 +1407,8 @@ never modify a directory carrying `BUILT`. Create a new sibling, build both
 state files there, then seal it and atomically move the symlink:
 
 ```bash
-build_dir="data/live_state_i7_$(date -u +%Y-%m-%d_%Y%m%dT%H%M%SZ)"
+as_of="2026-07-30"                      # last match date the new state covers
+build_dir="data/live_state_i7_${as_of}_$(date -u +%Y%m%dT%H%M%SZ)"
 uv run --no-sync python scripts/build_stats_cache.py \
   --source-dir data/t20s_json \
   --extra-source-dir \
@@ -1427,7 +1428,9 @@ uv run --no-sync python scripts/predict_fixture.py \
 
 BUILD_DIR="$build_dir" uv run --no-sync python - <<'PY'
 import os
-from scripts.artifacts import promote_live_state
+import sys
+sys.path.insert(0, "scripts")
+from artifacts import promote_live_state   # writes BUILT, moves the symlink
 promote_live_state(os.environ["BUILD_DIR"])
 PY
 ```
@@ -1710,8 +1713,28 @@ test and run `verify <role>`.
 
 Automated match-model claims take paired sliced JSONs. Betting-layer claims
 add one placements JSON per aligned seed. Sim/prop claims are manual records
-of their pre-committed gate script and detail JSON. Exact argument forms:
+of their pre-committed gate script and detail JSON. The three invocations:
 
+```bash
+# match-model claim: one sliced JSON per aligned, stamped seed and arm
+uv run --no-sync python scripts/sim_eval/claim_gate.py \
+  --kind match_model \
+  --candidate eval_out/<run>/cand_seed29.json eval_out/<run>/cand_seed7.json ... \
+  --baseline  eval_out/<run>/base_seed29.json eval_out/<run>/base_seed7.json ... \
+  --odds-role odds_iteration_v2 --out eval_out/<run>/gate.json
+
+# betting-layer claim: identical probabilities, one placements JSON per seed
+uv run --no-sync python scripts/sim_eval/claim_gate.py \
+  --kind betting_layer --candidate ... --baseline ... \
+  --metrics-json eval_out/<run>/placements_seed29.json ... \
+  --odds-role odds_iteration_v2 --out eval_out/<run>/gate.json
+
+# sim/prop claim: record the per-idea gate evidence by hash
+uv run --no-sync python scripts/sim_eval/claim_gate.py record-manual \
+  --kind sim_prop --idea B21 --gate-script scripts/auto/b21_gate_analysis.py \
+  --detail-json reports/prop_calibration_detail_<...>.json \
+  --verdict TABLED --note "<pre-committed gate pair>" --out research/handoff/B21/gate.json
+```
 - `claim_gate.py --kind match_model --candidate ... --baseline ... --odds-role ... --out ...`
 - `claim_gate.py --kind betting_layer --candidate ... --baseline ... --metrics-json ... --odds-role ... --out ...`
 - `claim_gate.py record-manual --kind sim_prop --idea ... --gate-script ... --detail-json ... --verdict ... --note ... --out ...`

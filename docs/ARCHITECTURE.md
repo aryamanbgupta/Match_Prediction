@@ -1023,7 +1023,7 @@ get clean cache hits; busy ICC days will partially invalidate.
   considers it.
 - **Real-time streaming**: out of scope. Eval on captured pre-match odds.
 
-### Phase-aware bowler selection (2026-05-12)
+### 6.15 Phase-aware bowler selection (2026-05-12)
 
 The sim originally picked each over's bowler uniformly at random from the
 available set (`RandomBowlerSelector`). For winner-market eval this barely
@@ -1052,7 +1052,7 @@ continuous-prop MAE wins are significant and the team-fours over-count
 bias halved. Pass `RandomBowlerSelector()` to `T20Rules(...)` (or
 `--bowler-selector random` to `run_sim_eval.py`) to recover the baseline.
 
-### 6.15 One home per job
+### 6.16 One home per job
 
 `scripts/sim_eval/market_math.py` owns betting arithmetic; placement policy
 stays with each caller. `scripts/sim_eval/eval_statistics.py` owns the legacy
@@ -1060,7 +1060,7 @@ zero-cost price boundary and shared evaluation policies. Verdict classification,
 registered-price reconstruction, and evidence replay live in
 `scripts/sim_eval/claim_gate.py` ([item 2](remediation/item2_acceptance.md), [item 4](remediation/item4_acceptance.md)).
 
-### 6.16 Evidence of record
+### 6.17 Evidence of record
 
 `docs/registered_odds.json` registers each admissible odds file, its hash, and
 its cluster source. `models/MANIFEST.yaml` registers model, state, frame, and
