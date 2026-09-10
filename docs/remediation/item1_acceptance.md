@@ -40,3 +40,8 @@ Review findings and resolutions:
 6. Claude: the shipped-odds contract skipped on a missing tracked file. Changed to a hard failure.
 
 Deviations from plan text: CI Python 3.9 not 3.12 (finding 1); fixture module keeps mode keywords (finding 2). No frozen evidence touched.
+
+CI: first run on the pushed branch, 2026-09-10, run 34443297003, green in
+55 s (tests job). A9 and the "CI green" clause of the plan's acceptance are
+met. Annotation only: GitHub's Node 20 deprecation notice on the action
+versions, no effect on results.
