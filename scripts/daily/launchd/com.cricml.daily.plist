@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- CricML daily prediction job (plan item 3 step 8). Runs the t60 schedule
+       only: fetch at 00:30 UTC, then a 30-minute cadence so every fixture gets
+       an attempt inside its T-75..T-45 window. The toss run kind is never
+       scheduled. Install with scripts/daily/launchd/install.sh on the Mac mini. -->
+  <key>Label</key><string>com.cricml.daily</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>cd "$HOME/CricML/Match_Prediction" &amp;&amp; OMP_NUM_THREADS=2 bash scripts/daily/run_daily.sh</string>
+  </array>
+  <key>StartInterval</key><integer>1800</integer>
+  <key>RunAtLoad</key><false/>
+  <key>StandardOutPath</key><string>/Users/aryamangupta/CricML/Match_Prediction/daily/logs/launchd.out.log</string>
+  <key>StandardErrorPath</key><string>/Users/aryamangupta/CricML/Match_Prediction/daily/logs/launchd.err.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/Users/aryamangupta/.local/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>TZ</key><string>UTC</string>
+  </dict>
+</dict>
+</plist>

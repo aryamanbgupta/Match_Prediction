@@ -125,12 +125,16 @@ def md5_file(path: Path | str, chunk_size: int = 8 * 1024 * 1024) -> str:
 
 
 def md5_directory(path: Path | str) -> str:
-    """Hash sorted ``relative_path md5`` lines, joined with LF (no final LF)."""
+    """Hash sorted ``relative_path md5`` lines, joined with LF (no final LF).
+
+    The ``BUILT`` marker is excluded: it records promotion time and differs
+    per machine, and it is the immutability seal, not content (2026-09-10).
+    """
     root = Path(path)
     lines = [
         f"{child.relative_to(root).as_posix()} {md5_file(child)}"
         for child in root.rglob("*")
-        if child.is_file()
+        if child.is_file() and child.name != "BUILT"
     ]
     lines.sort()
     digest = hashlib.md5()  # noqa: S324 - artifact identity, not security

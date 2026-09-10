@@ -50,7 +50,7 @@ artifacts:
   - role: stats_cache_v3_legacy
     path: models/player_stats_cache_v3.sqlite
     kind: file
-    hash: 92e50f7d76b3ef8356128bbba32e85b5
+    hash: 3faf24a6d457e9fca0f98c026b3b0675
     producing_command: "uv run --no-sync python scripts/run_experiment.py experiments/configs/xgb_v6_hierarchical_shrink.yaml"
     input_roles: []
     promoting_doc: docs/OPERATIONS.md
@@ -59,7 +59,7 @@ artifacts:
   - role: live_state_i7
     path: data/live_state_i7
     kind: dir
-    hash: c65a87f81215f7f48934eff3b3cde58d
+    hash: eb0f1819ebf80d64ffc6d790e0ed1c76
     producing_command: "uv run --no-sync python scripts/daily/refresh_state.py"
     input_roles: [stats_cache_i7, forward_holdout]
     promoting_doc: docs/SWAP_I7_PROMOTION_CUTOVER_PLAN.md
@@ -78,7 +78,7 @@ artifacts:
   - role: ball_frame_v3_legacy
     path: data/xgb_data_v3
     kind: dir
-    hash: f2e10ef6d92f32c91b4b222da8f223c7
+    hash: 84fffa4d1cf3f4aac5bbcb25c22d1ee0
     producing_command: "unknown (2026-09-10 inventory)"
     input_roles: [stats_cache_v3_legacy]
     promoting_doc: CLAUDE.md
@@ -123,7 +123,7 @@ artifacts:
   - role: bowler_usage_corpus_b10
     path: models/b10_usage_corpus.pkl
     kind: file
-    hash: c98f190fe0eb9038e489b52469c974e2
+    hash: 42b313b138fefdd293c280a9d4be2e2b
     producing_command: "uv run --no-sync python scripts/auto/b9_usage_baseline.py --rebuild-corpus"
     input_roles: []
     promoting_doc: CLAUDE.md
@@ -168,7 +168,7 @@ artifacts:
   - role: iteration_set_v2
     path: data/polymarket_test_v2
     kind: dir
-    hash: 42f10aab0b624e06516340589fabd9f8
+    hash: 8005cad729458d0234265a9b983a6819
     producing_command: "unknown (2026-09-10 inventory)"
     input_roles: []
     promoting_doc: reports/market_benchmark_toss_defect_20260805.md

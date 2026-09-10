@@ -132,3 +132,21 @@ evidence `research/handoff/BR2/`. Step 5 complete except the G5 decision.
 G5 disposition (user, 2026-09-10): 89.7% accepted by written exception in
 BR2.md; the coverage bar is now **≥89%** going forward. Step 5 complete; step
 6 (merge) awaits the user's branch review.
+
+### Canonical-source correction (2026-09-10, found by verifying on the mini)
+
+`artifacts.py verify` on the mini reported five mismatches against the
+manifest hashed on this laptop. Causes and resolutions:
+
+- `iteration_set_v2`, `stats_cache_v3_legacy`, `ball_frame_v3_legacy`,
+  `bowler_usage_corpus_b10`: the laptop copies were later local rebuilds or
+  a cricsheet 1.2.0 re-export (same matches and deliveries; format fields
+  differ), not the mini's artifacts of record. The mini's copies now replace
+  them here (laptop copies kept aside with a `_local_20260910` suffix) and
+  the manifest hashes are recomputed. Prop actuals are unaffected (delivery
+  runs identical), so BR2 stands.
+- `live_state_i7`: the directory hash included the `BUILT` marker, which
+  carries promotion time and differs per machine. `md5_directory` now
+  excludes `BUILT`; hash recomputed.
+- `bowler_roster_policy` is laptop-only by record (MISSING on the mini is
+  expected and stays noted).
