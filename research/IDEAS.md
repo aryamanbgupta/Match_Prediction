@@ -2805,3 +2805,14 @@ b10_unit_check md5 pin (pre-ship `ea0c73d3…`, post-ship
 `2e650423f0c949631fca1f15dd1c8a56`, pre-ship backup at
 `models/auto/b12/bowler_phase_usage_pre_b12.json`). Interactive because it
 touches a production builder plus the shipped-artifact contract.
+
+## R1 [P1] [FAILED] Item 6 candidate A: five-seed logit ensemble vs the deployed seed-29 model
+*(remediation plan §6 step 3, 2026-09-10; first idea decided by the claim gate)*
+**Hypothesis:** the logit mean of five M7+swap seeds (29, 7, 13, 42, 101)
+beats the deployed single-seed production model on paired ≥$50k log loss.
+Seed averaging was rejected twice (E3, A2) under the old rule with deltas
+inside the 0.007 floor, so it is an open question. **Gate:** match_model
+kind, ensemble estimand (one prediction set vs the verified production
+artifact's own predictions, 1-seed rule → provisional, PROMISING at best),
+zero-cost decision, registered iteration odds v2. **Budget:** ~5 fits.
+**Result:** FAILED 2026-09-10 (gate). Ensemble ≥$50k LL 0.6289 vs production seed 29 0.6249: paired ΔLL +0.0040 [+0.0023, +0.0076] (unfavourable, interval excludes zero; provisional 1-seed rule, 18 blocks, 0 fallbacks, n=167). Δprofit +0.030 [+0.004, +0.052] is noise on 167 bets and does not decide. Reading: seed 29 is the best of the five members on the iteration set (members 0.6249/0.6266/0.6284/0.6336/0.6336); the ensemble (0.6289) beats the member mean (0.6294) by a Jensen sliver but not the deployed seed. Because the iteration set was used for selection, some of seed 29's edge is selection luck; that argues for confirming any future ensemble claim on the golden set rather than for retrying here. Artifacts: experiments/results/item6_seed_ensemble/{gate,harness}.json.

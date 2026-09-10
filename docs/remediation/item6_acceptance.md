@@ -92,3 +92,25 @@ Harness fix found by the run: the direct-only envelope refused a test frame
 with more matches than the registered odds cover (798 vs 255). It now
 evaluates the covered set and stamps `coverage`, matching the blend/reslice
 chain; the id-set assertion compares against the covered set.
+
+### Candidate A result (2026-09-10): FAILED
+
+Idea R1, the first verdict decided by the gate. Ensemble ≥$50k LL 0.6289 vs
+the deployed seed-29 model 0.6249: paired ΔLL **+0.0040 [+0.0023, +0.0076]**,
+unfavourable with the interval excluding zero; Δprofit +0.030
+[+0.004, +0.052] is noise on 167 bets. Members: 0.6249 / 0.6266 / 0.6284 /
+0.6336 / 0.6336; the ensemble beats the member mean (0.6294) by a Jensen
+sliver but not the deployed seed. Because the iteration set was used for
+selection, part of seed 29's edge is selection luck; any future ensemble
+claim should be confirmed on the golden set rather than retried here. Logged
+via `log_verdict --gate-json` (results.tsv carries the gate sha256);
+evidence copied to `research/handoff/R1/`. HA1–HA4 met.
+
+## Candidate B checks (written before running)
+
+| # | Check | Pass condition |
+|---|---|---|
+| HB1 | Harness `candidate.kind: calibrated` | trains the candidate arm with `--early-stop-before <date>`, then applies `calibrate_match_predictions.py --calib-after <date> --method platt` to its test predictions; the baseline arm is the same trainer args without calibration (raw, as served); leakage test H9 applies per seed |
+| HB2 | Date | `calib_after` chosen from the validation split's date range so both halves are non-empty; recorded in the config; the same date for every seed |
+| HB3 | Decision | five seeds, zero cost, registered odds v2; the gate decides; P2's 2026-08-07 re-look (val-fit Platt sharpens, a=1.107, point-favourable, CIs straddling zero) is the prior, not evidence |
+| HB4 | Record | R2 in IDEAS.md, verdict only through the gate, evidence copied to `research/handoff/R2/` |
