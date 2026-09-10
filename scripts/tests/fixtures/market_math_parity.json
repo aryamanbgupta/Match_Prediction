@@ -1,0 +1,1926 @@
+{
+  "generator": "scripts/tests/gen_market_math_parity.py",
+  "records": [
+    {
+      "id": "parity-000",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.05,
+          "Bravo": 1.85
+        },
+        "simulated_prob": {
+          "Alpha": 0.73145986120069,
+          "Bravo": 0.26854013879931005
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.25710088684171556,
+          "Bravo": -0.2571008868417155
+        },
+        "expected_value": 0.49949271546141427,
+        "fractional_kelly_fraction": 0.11892683701462246,
+        "fractional_kelly_pnl": 0.12487317886535357,
+        "full_kelly_fraction": 0.47570734805848985,
+        "full_kelly_pnl": 0.49949271546141427,
+        "market_prob": {
+          "Alpha": 0.4743589743589744,
+          "Bravo": 0.5256410256410255
+        },
+        "realized_pnl": 1.0499999999999998
+      },
+      "scenario": "win"
+    },
+    {
+      "id": "parity-001",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.05,
+          "Bravo": 1.85
+        },
+        "simulated_prob": {
+          "Alpha": 0.7126050187821446,
+          "Bravo": 0.28739498121785545
+        },
+        "winner": "Bravo"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.23824604442317016,
+          "Bravo": -0.2382460444231701
+        },
+        "expected_value": 0.4608402885033962,
+        "fractional_kelly_fraction": 0.10972387821509436,
+        "fractional_kelly_pnl": -0.10972387821509436,
+        "full_kelly_fraction": 0.4388955128603774,
+        "full_kelly_pnl": -0.4388955128603774,
+        "market_prob": {
+          "Alpha": 0.4743589743589744,
+          "Bravo": 0.5256410256410255
+        },
+        "realized_pnl": -1.0
+      },
+      "scenario": "loss"
+    },
+    {
+      "id": "parity-002",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.0,
+          "Bravo": 2.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.5,
+          "Bravo": 0.5
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": null,
+        "edge": {
+          "Alpha": 0.0,
+          "Bravo": 0.0
+        },
+        "expected_value": 0.0,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.5,
+          "Bravo": 0.5
+        },
+        "realized_pnl": 0.0
+      },
+      "scenario": "no_bet_edge"
+    },
+    {
+      "id": "parity-003",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 0.95,
+          "Bravo": 4.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.9,
+          "Bravo": 0.09999999999999998
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.09191919191919196,
+          "Bravo": -0.09191919191919196
+        },
+        "expected_value": 0.0,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.8080808080808081,
+          "Bravo": 0.19191919191919193
+        },
+        "realized_pnl": 0.0
+      },
+      "scenario": "odds_below_one"
+    },
+    {
+      "id": "parity-004",
+      "inputs": {
+        "market_odds": {
+          "Alpha": Infinity,
+          "Bravo": 2.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.9,
+          "Bravo": 0.09999999999999998
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.9,
+          "Bravo": -0.9
+        },
+        "expected_value": Infinity,
+        "fractional_kelly_fraction": NaN,
+        "fractional_kelly_pnl": NaN,
+        "full_kelly_fraction": NaN,
+        "full_kelly_pnl": NaN,
+        "market_prob": {
+          "Alpha": 0.0,
+          "Bravo": 1.0
+        },
+        "realized_pnl": 0.0
+      },
+      "scenario": "non_finite_odds"
+    },
+    {
+      "id": "parity-005",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.05,
+          "Bravo": 1.85
+        },
+        "simulated_prob": {
+          "Alpha": 0.709911166923928,
+          "Bravo": 0.29008883307607203
+        },
+        "winner": null
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.23555219256495358,
+          "Bravo": -0.23555219256495352
+        },
+        "expected_value": 0.45531789219405217,
+        "fractional_kelly_fraction": 0.10840902195096482,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.43363608780385926,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.4743589743589744,
+          "Bravo": 0.5256410256410255
+        },
+        "realized_pnl": null
+      },
+      "scenario": "missing_winner"
+    },
+    {
+      "id": "parity-006",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 1.8,
+          "Bravo": 2.2
+        },
+        "simulated_prob": {
+          "Alpha": 0.0,
+          "Bravo": 1.0
+        },
+        "winner": "Bravo"
+      },
+      "outputs": {
+        "bet_team": "Bravo",
+        "edge": {
+          "Alpha": -0.55,
+          "Bravo": 0.55
+        },
+        "expected_value": 1.2000000000000002,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.55,
+          "Bravo": 0.44999999999999996
+        },
+        "realized_pnl": 1.2000000000000002
+      },
+      "scenario": "p_zero"
+    },
+    {
+      "id": "parity-007",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.2,
+          "Bravo": 1.8
+        },
+        "simulated_prob": {
+          "Alpha": 1.0,
+          "Bravo": 0.0
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.55,
+          "Bravo": -0.55
+        },
+        "expected_value": 1.2000000000000002,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.44999999999999996,
+          "Bravo": 0.55
+        },
+        "realized_pnl": 1.2000000000000002
+      },
+      "scenario": "p_one"
+    },
+    {
+      "id": "parity-008",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 12.5,
+          "Bravo": 1.08
+        },
+        "simulated_prob": {
+          "Alpha": 0.185337607420797,
+          "Bravo": 0.814662392579203
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.10580888871682055,
+          "Bravo": -0.10580888871682048
+        },
+        "expected_value": 1.3167200927599625,
+        "fractional_kelly_fraction": 0.02862434984260788,
+        "fractional_kelly_pnl": 0.3291800231899906,
+        "full_kelly_fraction": 0.11449739937043152,
+        "full_kelly_pnl": 1.3167200927599625,
+        "market_prob": {
+          "Alpha": 0.07952871870397644,
+          "Bravo": 0.9204712812960235
+        },
+        "realized_pnl": 11.5
+      },
+      "scenario": "long_shot"
+    },
+    {
+      "id": "parity-009",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 1.000001,
+          "Bravo": 30.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.99,
+          "Bravo": 0.010000000000000009
+        },
+        "winner": "Bravo"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.022258095733609817,
+          "Bravo": -0.022258095733609803
+        },
+        "expected_value": -0.009999010000000091,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.9677419042663902,
+          "Bravo": 0.03225809573360981
+        },
+        "realized_pnl": -1.0
+      },
+      "scenario": "near_one"
+    },
+    {
+      "id": "parity-010",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.05,
+          "Bravo": 1.85
+        },
+        "simulated_prob": {
+          "Alpha": 0.7264948748822552,
+          "Bravo": 0.27350512511774483
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.2521359005232808,
+          "Bravo": -0.2521359005232807
+        },
+        "expected_value": 0.489314493508623,
+        "fractional_kelly_fraction": 0.11650345083538645,
+        "fractional_kelly_pnl": 0.12232862337715575,
+        "full_kelly_fraction": 0.4660138033415458,
+        "full_kelly_pnl": 0.489314493508623,
+        "market_prob": {
+          "Alpha": 0.4743589743589744,
+          "Bravo": 0.5256410256410255
+        },
+        "realized_pnl": 1.0499999999999998
+      },
+      "scenario": "win"
+    },
+    {
+      "id": "parity-011",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.05,
+          "Bravo": 1.85
+        },
+        "simulated_prob": {
+          "Alpha": 0.7220092877568655,
+          "Bravo": 0.27799071224313454
+        },
+        "winner": "Bravo"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.24765031339789106,
+          "Bravo": -0.247650313397891
+        },
+        "expected_value": 0.480119039901574,
+        "fractional_kelly_fraction": 0.1143140571194224,
+        "fractional_kelly_pnl": -0.1143140571194224,
+        "full_kelly_fraction": 0.4572562284776896,
+        "full_kelly_pnl": -0.4572562284776896,
+        "market_prob": {
+          "Alpha": 0.4743589743589744,
+          "Bravo": 0.5256410256410255
+        },
+        "realized_pnl": -1.0
+      },
+      "scenario": "loss"
+    },
+    {
+      "id": "parity-012",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.0,
+          "Bravo": 2.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.5,
+          "Bravo": 0.5
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": null,
+        "edge": {
+          "Alpha": 0.0,
+          "Bravo": 0.0
+        },
+        "expected_value": 0.0,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.5,
+          "Bravo": 0.5
+        },
+        "realized_pnl": 0.0
+      },
+      "scenario": "no_bet_edge"
+    },
+    {
+      "id": "parity-013",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 0.95,
+          "Bravo": 4.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.9,
+          "Bravo": 0.09999999999999998
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.09191919191919196,
+          "Bravo": -0.09191919191919196
+        },
+        "expected_value": 0.0,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.8080808080808081,
+          "Bravo": 0.19191919191919193
+        },
+        "realized_pnl": 0.0
+      },
+      "scenario": "odds_below_one"
+    },
+    {
+      "id": "parity-014",
+      "inputs": {
+        "market_odds": {
+          "Alpha": Infinity,
+          "Bravo": 2.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.9,
+          "Bravo": 0.09999999999999998
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.9,
+          "Bravo": -0.9
+        },
+        "expected_value": Infinity,
+        "fractional_kelly_fraction": NaN,
+        "fractional_kelly_pnl": NaN,
+        "full_kelly_fraction": NaN,
+        "full_kelly_pnl": NaN,
+        "market_prob": {
+          "Alpha": 0.0,
+          "Bravo": 1.0
+        },
+        "realized_pnl": 0.0
+      },
+      "scenario": "non_finite_odds"
+    },
+    {
+      "id": "parity-015",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.05,
+          "Bravo": 1.85
+        },
+        "simulated_prob": {
+          "Alpha": 0.7297892667386556,
+          "Bravo": 0.27021073326134437
+        },
+        "winner": null
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.25543029237968123,
+          "Bravo": -0.2554302923796812
+        },
+        "expected_value": 0.49606799681424396,
+        "fractional_kelly_fraction": 0.11811142781291525,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.472445711251661,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.4743589743589744,
+          "Bravo": 0.5256410256410255
+        },
+        "realized_pnl": null
+      },
+      "scenario": "missing_winner"
+    },
+    {
+      "id": "parity-016",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 1.8,
+          "Bravo": 2.2
+        },
+        "simulated_prob": {
+          "Alpha": 0.0,
+          "Bravo": 1.0
+        },
+        "winner": "Bravo"
+      },
+      "outputs": {
+        "bet_team": "Bravo",
+        "edge": {
+          "Alpha": -0.55,
+          "Bravo": 0.55
+        },
+        "expected_value": 1.2000000000000002,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.55,
+          "Bravo": 0.44999999999999996
+        },
+        "realized_pnl": 1.2000000000000002
+      },
+      "scenario": "p_zero"
+    },
+    {
+      "id": "parity-017",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.2,
+          "Bravo": 1.8
+        },
+        "simulated_prob": {
+          "Alpha": 1.0,
+          "Bravo": 0.0
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.55,
+          "Bravo": -0.55
+        },
+        "expected_value": 1.2000000000000002,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.44999999999999996,
+          "Bravo": 0.55
+        },
+        "realized_pnl": 1.2000000000000002
+      },
+      "scenario": "p_one"
+    },
+    {
+      "id": "parity-018",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 12.5,
+          "Bravo": 1.08
+        },
+        "simulated_prob": {
+          "Alpha": 0.16775347445337357,
+          "Bravo": 0.8322465255466265
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.08822475574939713,
+          "Bravo": -0.08822475574939703
+        },
+        "expected_value": 1.0969184306671695,
+        "fractional_kelly_fraction": 0.023846052840590642,
+        "fractional_kelly_pnl": 0.2742296076667924,
+        "full_kelly_fraction": 0.09538421136236257,
+        "full_kelly_pnl": 1.0969184306671695,
+        "market_prob": {
+          "Alpha": 0.07952871870397644,
+          "Bravo": 0.9204712812960235
+        },
+        "realized_pnl": 11.5
+      },
+      "scenario": "long_shot"
+    },
+    {
+      "id": "parity-019",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 1.000001,
+          "Bravo": 30.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.99,
+          "Bravo": 0.010000000000000009
+        },
+        "winner": "Bravo"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.022258095733609817,
+          "Bravo": -0.022258095733609803
+        },
+        "expected_value": -0.009999010000000091,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.9677419042663902,
+          "Bravo": 0.03225809573360981
+        },
+        "realized_pnl": -1.0
+      },
+      "scenario": "near_one"
+    },
+    {
+      "id": "parity-020",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.05,
+          "Bravo": 1.85
+        },
+        "simulated_prob": {
+          "Alpha": 0.7106193545574002,
+          "Bravo": 0.2893806454425998
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.23626038019842582,
+          "Bravo": -0.23626038019842577
+        },
+        "expected_value": 0.45676967684267034,
+        "fractional_kelly_fraction": 0.10875468496254058,
+        "fractional_kelly_pnl": 0.11419241921066758,
+        "full_kelly_fraction": 0.4350187398501623,
+        "full_kelly_pnl": 0.45676967684267034,
+        "market_prob": {
+          "Alpha": 0.4743589743589744,
+          "Bravo": 0.5256410256410255
+        },
+        "realized_pnl": 1.0499999999999998
+      },
+      "scenario": "win"
+    },
+    {
+      "id": "parity-021",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.05,
+          "Bravo": 1.85
+        },
+        "simulated_prob": {
+          "Alpha": 0.7088772700126545,
+          "Bravo": 0.29112272998734545
+        },
+        "winner": "Bravo"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.23451829565368015,
+          "Bravo": -0.2345182956536801
+        },
+        "expected_value": 0.45319840352594165,
+        "fractional_kelly_fraction": 0.1079043817918909,
+        "fractional_kelly_pnl": -0.1079043817918909,
+        "full_kelly_fraction": 0.4316175271675636,
+        "full_kelly_pnl": -0.4316175271675636,
+        "market_prob": {
+          "Alpha": 0.4743589743589744,
+          "Bravo": 0.5256410256410255
+        },
+        "realized_pnl": -1.0
+      },
+      "scenario": "loss"
+    },
+    {
+      "id": "parity-022",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.0,
+          "Bravo": 2.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.5,
+          "Bravo": 0.5
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": null,
+        "edge": {
+          "Alpha": 0.0,
+          "Bravo": 0.0
+        },
+        "expected_value": 0.0,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.5,
+          "Bravo": 0.5
+        },
+        "realized_pnl": 0.0
+      },
+      "scenario": "no_bet_edge"
+    },
+    {
+      "id": "parity-023",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 0.95,
+          "Bravo": 4.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.9,
+          "Bravo": 0.09999999999999998
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.09191919191919196,
+          "Bravo": -0.09191919191919196
+        },
+        "expected_value": 0.0,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.8080808080808081,
+          "Bravo": 0.19191919191919193
+        },
+        "realized_pnl": 0.0
+      },
+      "scenario": "odds_below_one"
+    },
+    {
+      "id": "parity-024",
+      "inputs": {
+        "market_odds": {
+          "Alpha": Infinity,
+          "Bravo": 2.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.9,
+          "Bravo": 0.09999999999999998
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.9,
+          "Bravo": -0.9
+        },
+        "expected_value": Infinity,
+        "fractional_kelly_fraction": NaN,
+        "fractional_kelly_pnl": NaN,
+        "full_kelly_fraction": NaN,
+        "full_kelly_pnl": NaN,
+        "market_prob": {
+          "Alpha": 0.0,
+          "Bravo": 1.0
+        },
+        "realized_pnl": 0.0
+      },
+      "scenario": "non_finite_odds"
+    },
+    {
+      "id": "parity-025",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.05,
+          "Bravo": 1.85
+        },
+        "simulated_prob": {
+          "Alpha": 0.7258216114256173,
+          "Bravo": 0.2741783885743827
+        },
+        "winner": null
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.2514626370666429,
+          "Bravo": -0.25146263706664285
+        },
+        "expected_value": 0.4879343034225153,
+        "fractional_kelly_fraction": 0.11617483414821796,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.4646993365928718,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.4743589743589744,
+          "Bravo": 0.5256410256410255
+        },
+        "realized_pnl": null
+      },
+      "scenario": "missing_winner"
+    },
+    {
+      "id": "parity-026",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 1.8,
+          "Bravo": 2.2
+        },
+        "simulated_prob": {
+          "Alpha": 0.0,
+          "Bravo": 1.0
+        },
+        "winner": "Bravo"
+      },
+      "outputs": {
+        "bet_team": "Bravo",
+        "edge": {
+          "Alpha": -0.55,
+          "Bravo": 0.55
+        },
+        "expected_value": 1.2000000000000002,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.55,
+          "Bravo": 0.44999999999999996
+        },
+        "realized_pnl": 1.2000000000000002
+      },
+      "scenario": "p_zero"
+    },
+    {
+      "id": "parity-027",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.2,
+          "Bravo": 1.8
+        },
+        "simulated_prob": {
+          "Alpha": 1.0,
+          "Bravo": 0.0
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.55,
+          "Bravo": -0.55
+        },
+        "expected_value": 1.2000000000000002,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.44999999999999996,
+          "Bravo": 0.55
+        },
+        "realized_pnl": 1.2000000000000002
+      },
+      "scenario": "p_one"
+    },
+    {
+      "id": "parity-028",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 12.5,
+          "Bravo": 1.08
+        },
+        "simulated_prob": {
+          "Alpha": 0.1887618815613089,
+          "Bravo": 0.8112381184386911
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.10923316285733246,
+          "Bravo": -0.10923316285733242
+        },
+        "expected_value": 1.3595235195163613,
+        "fractional_kelly_fraction": 0.0295548591199209,
+        "fractional_kelly_pnl": 0.3398808798790903,
+        "full_kelly_fraction": 0.1182194364796836,
+        "full_kelly_pnl": 1.3595235195163613,
+        "market_prob": {
+          "Alpha": 0.07952871870397644,
+          "Bravo": 0.9204712812960235
+        },
+        "realized_pnl": 11.5
+      },
+      "scenario": "long_shot"
+    },
+    {
+      "id": "parity-029",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 1.000001,
+          "Bravo": 30.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.99,
+          "Bravo": 0.010000000000000009
+        },
+        "winner": "Bravo"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.022258095733609817,
+          "Bravo": -0.022258095733609803
+        },
+        "expected_value": -0.009999010000000091,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.9677419042663902,
+          "Bravo": 0.03225809573360981
+        },
+        "realized_pnl": -1.0
+      },
+      "scenario": "near_one"
+    },
+    {
+      "id": "parity-030",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.05,
+          "Bravo": 1.85
+        },
+        "simulated_prob": {
+          "Alpha": 0.7159382067287099,
+          "Bravo": 0.2840617932712901
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.2415792323697355,
+          "Bravo": -0.24157923236973544
+        },
+        "expected_value": 0.4676733237938552,
+        "fractional_kelly_fraction": 0.11135079137948935,
+        "fractional_kelly_pnl": 0.1169183309484638,
+        "full_kelly_fraction": 0.4454031655179574,
+        "full_kelly_pnl": 0.4676733237938552,
+        "market_prob": {
+          "Alpha": 0.4743589743589744,
+          "Bravo": 0.5256410256410255
+        },
+        "realized_pnl": 1.0499999999999998
+      },
+      "scenario": "win"
+    },
+    {
+      "id": "parity-031",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.05,
+          "Bravo": 1.85
+        },
+        "simulated_prob": {
+          "Alpha": 0.7077639376873374,
+          "Bravo": 0.29223606231266264
+        },
+        "winner": "Bravo"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.23340496332836297,
+          "Bravo": -0.2334049633283629
+        },
+        "expected_value": 0.4509160722590415,
+        "fractional_kelly_fraction": 0.10736096958548609,
+        "fractional_kelly_pnl": -0.10736096958548609,
+        "full_kelly_fraction": 0.42944387834194436,
+        "full_kelly_pnl": -0.42944387834194436,
+        "market_prob": {
+          "Alpha": 0.4743589743589744,
+          "Bravo": 0.5256410256410255
+        },
+        "realized_pnl": -1.0
+      },
+      "scenario": "loss"
+    },
+    {
+      "id": "parity-032",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.0,
+          "Bravo": 2.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.5,
+          "Bravo": 0.5
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": null,
+        "edge": {
+          "Alpha": 0.0,
+          "Bravo": 0.0
+        },
+        "expected_value": 0.0,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.5,
+          "Bravo": 0.5
+        },
+        "realized_pnl": 0.0
+      },
+      "scenario": "no_bet_edge"
+    },
+    {
+      "id": "parity-033",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 0.95,
+          "Bravo": 4.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.9,
+          "Bravo": 0.09999999999999998
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.09191919191919196,
+          "Bravo": -0.09191919191919196
+        },
+        "expected_value": 0.0,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.8080808080808081,
+          "Bravo": 0.19191919191919193
+        },
+        "realized_pnl": 0.0
+      },
+      "scenario": "odds_below_one"
+    },
+    {
+      "id": "parity-034",
+      "inputs": {
+        "market_odds": {
+          "Alpha": Infinity,
+          "Bravo": 2.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.9,
+          "Bravo": 0.09999999999999998
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.9,
+          "Bravo": -0.9
+        },
+        "expected_value": Infinity,
+        "fractional_kelly_fraction": NaN,
+        "fractional_kelly_pnl": NaN,
+        "full_kelly_fraction": NaN,
+        "full_kelly_pnl": NaN,
+        "market_prob": {
+          "Alpha": 0.0,
+          "Bravo": 1.0
+        },
+        "realized_pnl": 0.0
+      },
+      "scenario": "non_finite_odds"
+    },
+    {
+      "id": "parity-035",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.05,
+          "Bravo": 1.85
+        },
+        "simulated_prob": {
+          "Alpha": 0.7272745566413654,
+          "Bravo": 0.2727254433586346
+        },
+        "winner": null
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.252915582282391,
+          "Bravo": -0.25291558228239097
+        },
+        "expected_value": 0.49091284111479894,
+        "fractional_kelly_fraction": 0.11688400978923787,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.46753603915695147,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.4743589743589744,
+          "Bravo": 0.5256410256410255
+        },
+        "realized_pnl": null
+      },
+      "scenario": "missing_winner"
+    },
+    {
+      "id": "parity-036",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 1.8,
+          "Bravo": 2.2
+        },
+        "simulated_prob": {
+          "Alpha": 0.0,
+          "Bravo": 1.0
+        },
+        "winner": "Bravo"
+      },
+      "outputs": {
+        "bet_team": "Bravo",
+        "edge": {
+          "Alpha": -0.55,
+          "Bravo": 0.55
+        },
+        "expected_value": 1.2000000000000002,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.55,
+          "Bravo": 0.44999999999999996
+        },
+        "realized_pnl": 1.2000000000000002
+      },
+      "scenario": "p_zero"
+    },
+    {
+      "id": "parity-037",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.2,
+          "Bravo": 1.8
+        },
+        "simulated_prob": {
+          "Alpha": 1.0,
+          "Bravo": 0.0
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.55,
+          "Bravo": -0.55
+        },
+        "expected_value": 1.2000000000000002,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.44999999999999996,
+          "Bravo": 0.55
+        },
+        "realized_pnl": 1.2000000000000002
+      },
+      "scenario": "p_one"
+    },
+    {
+      "id": "parity-038",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 12.5,
+          "Bravo": 1.08
+        },
+        "simulated_prob": {
+          "Alpha": 0.17255799239514874,
+          "Bravo": 0.8274420076048512
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.0930292736911723,
+          "Bravo": -0.09302927369117231
+        },
+        "expected_value": 1.1569749049393594,
+        "fractional_kelly_fraction": 0.025151628368246942,
+        "fractional_kelly_pnl": 0.28924372623483985,
+        "full_kelly_fraction": 0.10060651347298777,
+        "full_kelly_pnl": 1.1569749049393594,
+        "market_prob": {
+          "Alpha": 0.07952871870397644,
+          "Bravo": 0.9204712812960235
+        },
+        "realized_pnl": 11.5
+      },
+      "scenario": "long_shot"
+    },
+    {
+      "id": "parity-039",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 1.000001,
+          "Bravo": 30.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.99,
+          "Bravo": 0.010000000000000009
+        },
+        "winner": "Bravo"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.022258095733609817,
+          "Bravo": -0.022258095733609803
+        },
+        "expected_value": -0.009999010000000091,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.9677419042663902,
+          "Bravo": 0.03225809573360981
+        },
+        "realized_pnl": -1.0
+      },
+      "scenario": "near_one"
+    },
+    {
+      "id": "parity-040",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.05,
+          "Bravo": 1.85
+        },
+        "simulated_prob": {
+          "Alpha": 0.7092393074842077,
+          "Bravo": 0.2907606925157923
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.23488033312523332,
+          "Bravo": -0.23488033312523326
+        },
+        "expected_value": 0.45394058034262574,
+        "fractional_kelly_fraction": 0.10808109055776806,
+        "fractional_kelly_pnl": 0.11348514508565644,
+        "full_kelly_fraction": 0.43232436223107223,
+        "full_kelly_pnl": 0.45394058034262574,
+        "market_prob": {
+          "Alpha": 0.4743589743589744,
+          "Bravo": 0.5256410256410255
+        },
+        "realized_pnl": 1.0499999999999998
+      },
+      "scenario": "win"
+    },
+    {
+      "id": "parity-041",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.05,
+          "Bravo": 1.85
+        },
+        "simulated_prob": {
+          "Alpha": 0.7132541196305718,
+          "Bravo": 0.28674588036942816
+        },
+        "winner": "Bravo"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.23889514527159744,
+          "Bravo": -0.2388951452715974
+        },
+        "expected_value": 0.4621709452426721,
+        "fractional_kelly_fraction": 0.11004070124825528,
+        "fractional_kelly_pnl": -0.11004070124825528,
+        "full_kelly_fraction": 0.44016280499302113,
+        "full_kelly_pnl": -0.44016280499302113,
+        "market_prob": {
+          "Alpha": 0.4743589743589744,
+          "Bravo": 0.5256410256410255
+        },
+        "realized_pnl": -1.0
+      },
+      "scenario": "loss"
+    },
+    {
+      "id": "parity-042",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.0,
+          "Bravo": 2.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.5,
+          "Bravo": 0.5
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": null,
+        "edge": {
+          "Alpha": 0.0,
+          "Bravo": 0.0
+        },
+        "expected_value": 0.0,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.5,
+          "Bravo": 0.5
+        },
+        "realized_pnl": 0.0
+      },
+      "scenario": "no_bet_edge"
+    },
+    {
+      "id": "parity-043",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 0.95,
+          "Bravo": 4.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.9,
+          "Bravo": 0.09999999999999998
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.09191919191919196,
+          "Bravo": -0.09191919191919196
+        },
+        "expected_value": 0.0,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.8080808080808081,
+          "Bravo": 0.19191919191919193
+        },
+        "realized_pnl": 0.0
+      },
+      "scenario": "odds_below_one"
+    },
+    {
+      "id": "parity-044",
+      "inputs": {
+        "market_odds": {
+          "Alpha": Infinity,
+          "Bravo": 2.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.9,
+          "Bravo": 0.09999999999999998
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.9,
+          "Bravo": -0.9
+        },
+        "expected_value": Infinity,
+        "fractional_kelly_fraction": NaN,
+        "fractional_kelly_pnl": NaN,
+        "full_kelly_fraction": NaN,
+        "full_kelly_pnl": NaN,
+        "market_prob": {
+          "Alpha": 0.0,
+          "Bravo": 1.0
+        },
+        "realized_pnl": 0.0
+      },
+      "scenario": "non_finite_odds"
+    },
+    {
+      "id": "parity-045",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.05,
+          "Bravo": 1.85
+        },
+        "simulated_prob": {
+          "Alpha": 0.7116498618614581,
+          "Bravo": 0.28835013813854193
+        },
+        "winner": null
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.23729088750248367,
+          "Bravo": -0.23729088750248362
+        },
+        "expected_value": 0.45888221681598895,
+        "fractional_kelly_fraction": 0.10925767067047358,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.4370306826818943,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.4743589743589744,
+          "Bravo": 0.5256410256410255
+        },
+        "realized_pnl": null
+      },
+      "scenario": "missing_winner"
+    },
+    {
+      "id": "parity-046",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 1.8,
+          "Bravo": 2.2
+        },
+        "simulated_prob": {
+          "Alpha": 0.0,
+          "Bravo": 1.0
+        },
+        "winner": "Bravo"
+      },
+      "outputs": {
+        "bet_team": "Bravo",
+        "edge": {
+          "Alpha": -0.55,
+          "Bravo": 0.55
+        },
+        "expected_value": 1.2000000000000002,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.55,
+          "Bravo": 0.44999999999999996
+        },
+        "realized_pnl": 1.2000000000000002
+      },
+      "scenario": "p_zero"
+    },
+    {
+      "id": "parity-047",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.2,
+          "Bravo": 1.8
+        },
+        "simulated_prob": {
+          "Alpha": 1.0,
+          "Bravo": 0.0
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.55,
+          "Bravo": -0.55
+        },
+        "expected_value": 1.2000000000000002,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.44999999999999996,
+          "Bravo": 0.55
+        },
+        "realized_pnl": 1.2000000000000002
+      },
+      "scenario": "p_one"
+    },
+    {
+      "id": "parity-048",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 12.5,
+          "Bravo": 1.08
+        },
+        "simulated_prob": {
+          "Alpha": 0.17811256152664612,
+          "Bravo": 0.8218874384733539
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.09858384282266967,
+          "Bravo": -0.09858384282266963
+        },
+        "expected_value": 1.2264070190830765,
+        "fractional_kelly_fraction": 0.026661022153979922,
+        "fractional_kelly_pnl": 0.3066017547707691,
+        "full_kelly_fraction": 0.10664408861591969,
+        "full_kelly_pnl": 1.2264070190830765,
+        "market_prob": {
+          "Alpha": 0.07952871870397644,
+          "Bravo": 0.9204712812960235
+        },
+        "realized_pnl": 11.5
+      },
+      "scenario": "long_shot"
+    },
+    {
+      "id": "parity-049",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 1.000001,
+          "Bravo": 30.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.99,
+          "Bravo": 0.010000000000000009
+        },
+        "winner": "Bravo"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.022258095733609817,
+          "Bravo": -0.022258095733609803
+        },
+        "expected_value": -0.009999010000000091,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.9677419042663902,
+          "Bravo": 0.03225809573360981
+        },
+        "realized_pnl": -1.0
+      },
+      "scenario": "near_one"
+    },
+    {
+      "id": "parity-050",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.05,
+          "Bravo": 1.85
+        },
+        "simulated_prob": {
+          "Alpha": 0.7286844960211342,
+          "Bravo": 0.27131550397886584
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.25432552166215977,
+          "Bravo": -0.2543255216621597
+        },
+        "expected_value": 0.49380321684332495,
+        "fractional_kelly_fraction": 0.11757219448650597,
+        "fractional_kelly_pnl": 0.12345080421083124,
+        "full_kelly_fraction": 0.47028877794602386,
+        "full_kelly_pnl": 0.49380321684332495,
+        "market_prob": {
+          "Alpha": 0.4743589743589744,
+          "Bravo": 0.5256410256410255
+        },
+        "realized_pnl": 1.0499999999999998
+      },
+      "scenario": "win"
+    },
+    {
+      "id": "parity-051",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.05,
+          "Bravo": 1.85
+        },
+        "simulated_prob": {
+          "Alpha": 0.7251876266038765,
+          "Bravo": 0.2748123733961235
+        },
+        "winner": "Bravo"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.2508286522449021,
+          "Bravo": -0.25082865224490203
+        },
+        "expected_value": 0.48663463453794664,
+        "fractional_kelly_fraction": 0.1158653891757016,
+        "fractional_kelly_pnl": -0.1158653891757016,
+        "full_kelly_fraction": 0.4634615567028064,
+        "full_kelly_pnl": -0.4634615567028064,
+        "market_prob": {
+          "Alpha": 0.4743589743589744,
+          "Bravo": 0.5256410256410255
+        },
+        "realized_pnl": -1.0
+      },
+      "scenario": "loss"
+    },
+    {
+      "id": "parity-052",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.0,
+          "Bravo": 2.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.5,
+          "Bravo": 0.5
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": null,
+        "edge": {
+          "Alpha": 0.0,
+          "Bravo": 0.0
+        },
+        "expected_value": 0.0,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.5,
+          "Bravo": 0.5
+        },
+        "realized_pnl": 0.0
+      },
+      "scenario": "no_bet_edge"
+    },
+    {
+      "id": "parity-053",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 0.95,
+          "Bravo": 4.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.9,
+          "Bravo": 0.09999999999999998
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.09191919191919196,
+          "Bravo": -0.09191919191919196
+        },
+        "expected_value": 0.0,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.8080808080808081,
+          "Bravo": 0.19191919191919193
+        },
+        "realized_pnl": 0.0
+      },
+      "scenario": "odds_below_one"
+    },
+    {
+      "id": "parity-054",
+      "inputs": {
+        "market_odds": {
+          "Alpha": Infinity,
+          "Bravo": 2.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.9,
+          "Bravo": 0.09999999999999998
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.9,
+          "Bravo": -0.9
+        },
+        "expected_value": Infinity,
+        "fractional_kelly_fraction": NaN,
+        "fractional_kelly_pnl": NaN,
+        "full_kelly_fraction": NaN,
+        "full_kelly_pnl": NaN,
+        "market_prob": {
+          "Alpha": 0.0,
+          "Bravo": 1.0
+        },
+        "realized_pnl": 0.0
+      },
+      "scenario": "non_finite_odds"
+    },
+    {
+      "id": "parity-055",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.05,
+          "Bravo": 1.85
+        },
+        "simulated_prob": {
+          "Alpha": 0.7325813614906179,
+          "Bravo": 0.2674186385093821
+        },
+        "winner": null
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.2582223871316435,
+          "Bravo": -0.25822238713164347
+        },
+        "expected_value": 0.5017917910557667,
+        "fractional_kelly_fraction": 0.11947423596565875,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.477896943862635,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.4743589743589744,
+          "Bravo": 0.5256410256410255
+        },
+        "realized_pnl": null
+      },
+      "scenario": "missing_winner"
+    },
+    {
+      "id": "parity-056",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 1.8,
+          "Bravo": 2.2
+        },
+        "simulated_prob": {
+          "Alpha": 0.0,
+          "Bravo": 1.0
+        },
+        "winner": "Bravo"
+      },
+      "outputs": {
+        "bet_team": "Bravo",
+        "edge": {
+          "Alpha": -0.55,
+          "Bravo": 0.55
+        },
+        "expected_value": 1.2000000000000002,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.55,
+          "Bravo": 0.44999999999999996
+        },
+        "realized_pnl": 1.2000000000000002
+      },
+      "scenario": "p_zero"
+    },
+    {
+      "id": "parity-057",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 2.2,
+          "Bravo": 1.8
+        },
+        "simulated_prob": {
+          "Alpha": 1.0,
+          "Bravo": 0.0
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.55,
+          "Bravo": -0.55
+        },
+        "expected_value": 1.2000000000000002,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.44999999999999996,
+          "Bravo": 0.55
+        },
+        "realized_pnl": 1.2000000000000002
+      },
+      "scenario": "p_one"
+    },
+    {
+      "id": "parity-058",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 12.5,
+          "Bravo": 1.08
+        },
+        "simulated_prob": {
+          "Alpha": 0.183378326409882,
+          "Bravo": 0.816621673590118
+        },
+        "winner": "Alpha"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.10384960770590555,
+          "Bravo": -0.10384960770590557
+        },
+        "expected_value": 1.292229080123525,
+        "fractional_kelly_fraction": 0.028091936524424457,
+        "fractional_kelly_pnl": 0.32305727003088125,
+        "full_kelly_fraction": 0.11236774609769783,
+        "full_kelly_pnl": 1.292229080123525,
+        "market_prob": {
+          "Alpha": 0.07952871870397644,
+          "Bravo": 0.9204712812960235
+        },
+        "realized_pnl": 11.5
+      },
+      "scenario": "long_shot"
+    },
+    {
+      "id": "parity-059",
+      "inputs": {
+        "market_odds": {
+          "Alpha": 1.000001,
+          "Bravo": 30.0
+        },
+        "simulated_prob": {
+          "Alpha": 0.99,
+          "Bravo": 0.010000000000000009
+        },
+        "winner": "Bravo"
+      },
+      "outputs": {
+        "bet_team": "Alpha",
+        "edge": {
+          "Alpha": 0.022258095733609817,
+          "Bravo": -0.022258095733609803
+        },
+        "expected_value": -0.009999010000000091,
+        "fractional_kelly_fraction": 0.0,
+        "fractional_kelly_pnl": null,
+        "full_kelly_fraction": 0.0,
+        "full_kelly_pnl": null,
+        "market_prob": {
+          "Alpha": 0.9677419042663902,
+          "Bravo": 0.03225809573360981
+        },
+        "realized_pnl": -1.0
+      },
+      "scenario": "near_one"
+    }
+  ],
+  "seed": 20260910
+}

@@ -89,3 +89,7 @@ research/STOP
 # by research/make_digest.py at the start of every loop iteration. Derived and
 # reproducible; the tracked sources are the durable record.
 research/digest.md
+
+# Committed test fixtures are evidence, not outputs (item 1/2, 2026-09-10)
+!scripts/tests/fixtures/*.json
+!tests/fixtures/**
