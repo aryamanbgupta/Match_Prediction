@@ -1,0 +1,22 @@
+Test matches scored:       255
+Bowler slots checked:      3,061
+Covered (≥100 balls): 2,746 (89.7%)
+Matches with full coverage: 98/255 (38.4%)
+
+Per-year coverage:
+  2025: 925/1022 (90.5%)
+  2026: 1821/2039 (89.3%)
+
+Top 10 zero-history bowlers (likely new debutants or name variants):
+  AM Ghazanfar                   appears in 9 test match(es)
+  Ajay Kumar                     appears in 8 test match(es)
+  Wasim Akram                    appears in 7 test match(es)
+  Khuzaima Tanveer               appears in 7 test match(es)
+  Arab Gul                       appears in 4 test match(es)
+  O Davidson                     appears in 4 test match(es)
+  Muhammad Ismail                appears in 4 test match(es)
+  Ashok Sharma                   appears in 4 test match(es)
+  Shivang Kumar                  appears in 4 test match(es)
+  Mohammad Khan Rafah            appears in 4 test match(es)
+
+Gate G5 (≥90% bowlers with ≥100 balls): ❌ FAIL

@@ -124,3 +124,7 @@ reinterpreted bar.
 | G3 top_batter | **PASS** | Δ Brier −0.0017 (bar ≤ +0.003), n=5,593 paired batter rows |
 | G5 bowler coverage | **FAIL as measured** | 89.7% (2,746 / 3,061 slots; 2025 90.5%, 2026 89.3%) against 90%. Requires the user's written exception or a separate debutant-fallback change. |
 | E2 | pending restatement (`eval_out/br2_gates/e2_restated.md`) | cannot block |
+
+E2 restated: parity (15.99 vs 16.39, −0.40 [−1.02, +0.17]); old "sim adds
+skill" withdrawn for this family. Full record: `research/reports/auto/BR2.md`;
+evidence `research/handoff/BR2/`. Step 5 complete except the G5 decision.
