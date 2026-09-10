@@ -188,3 +188,58 @@ def test_stale_build_is_sealed_but_not_promoted(tmp_path, capsys):
     assert stable.resolve() == current.resolve()
     assert (build / "BUILT").is_file()
     assert "stale build not promoted" in capsys.readouterr().err
+
+
+def _runner_with_count(count: int, match_date: str = "2026-09-09"):
+    def runner(command, **kwargs):
+        if isinstance(command, str):
+            incoming = Path(kwargs["env"]["CRICML_CONTEXT_DIR"])
+            (incoming / "2.json").write_text(match_json(match_date, serialize=True))
+        elif "scripts/build_stats_cache.py" in command:
+            output = Path(command[command.index("--out") + 1])
+            with sqlite3.connect(output) as conn:
+                conn.execute("CREATE TABLE _meta (key TEXT PRIMARY KEY, value TEXT)")
+                conn.execute(f"INSERT INTO _meta VALUES ('source_match_count', '{count}')")
+        else:
+            snapshot = Path(command[command.index("--tracker-snapshot") + 1])
+            with snapshot.open("wb") as handle:
+                pickle.dump({"n_matches_walked": count}, handle)
+    return runner
+
+
+def test_migrated_production_state_without_state_json_is_not_regressed(tmp_path, capsys):
+    """The Mac mini dry day (2026-09-10): the current target carries only a bare
+    BUILT and its cache _meta; a smaller, older build must NOT be promoted."""
+    data, base, contexts, metadata, prior = _setup(tmp_path)
+    current = data / "live_state_i7_2026-07-30_20260801T050221Z"
+    current.mkdir()
+    (current / "BUILT").write_text("sealed\n")
+    with sqlite3.connect(current / "player_stats_cache_i7.sqlite") as conn:
+        conn.execute("CREATE TABLE _meta (key TEXT PRIMARY KEY, value TEXT)")
+        conn.execute("INSERT INTO _meta VALUES ('source_match_count', '9948')")
+    stable = data / "live_state_i7"
+    stable.symlink_to(current.name, target_is_directory=True)
+    build = refresh_state(
+        base_source=base, context_root=contexts, state_parent=data,
+        stable_link=stable, metadata_csv=metadata, prior_sqlite=prior,
+        fetch_cmd="stub", context_date="2026-09-10", runner=_runner_with_count(2),
+    )
+    assert stable.resolve() == current.resolve()
+    assert (build / "BUILT").is_file()
+    assert "not promoted" in capsys.readouterr().err
+
+
+def test_unreadable_current_state_metadata_refuses_promotion(tmp_path, capsys):
+    data, base, contexts, metadata, prior = _setup(tmp_path)
+    current = data / "live_state_i7_current"   # no as_of in the name, no _meta
+    current.mkdir()
+    (current / "BUILT").write_text("sealed\n")
+    stable = data / "live_state_i7"
+    stable.symlink_to(current.name, target_is_directory=True)
+    build = refresh_state(
+        base_source=base, context_root=contexts, state_parent=data,
+        stable_link=stable, metadata_csv=metadata, prior_sqlite=prior,
+        fetch_cmd="stub", context_date="2026-09-10", runner=_runner_with_count(10_000),
+    )
+    assert stable.resolve() == current.resolve()
+    assert "unreadable" in capsys.readouterr().err

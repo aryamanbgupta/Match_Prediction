@@ -86,3 +86,19 @@ per-file and global locks, non-regressive promotion, serialize-then-lock-
 then-clock appends, HMAC-signed fixture lines under a machine-local key,
 expiry filtering before lineups, real offline driver test). Suite 545
 passed, 0 failed. C11–C20 met; step 8 next.
+
+### Step 8 progress (2026-09-10)
+
+C21 met (branch on the mini at ff53c0a+, `artifacts.py verify` identical to
+the laptop after the canonical-source correction; live state migrated to
+the versioned layout). C24 dry day run 1 exposed a real defect: the
+promotion guard only ran when the current target carried `state.json`, so
+the migrated production state (bare `BUILT`) was replaced by a 2026-04-16
+build. Symlink restored by hand within minutes (the old dir was intact);
+`refresh_state` now derives the current state's as-of and count from the
+cache `_meta` and the directory name and fails closed when it cannot;
+regression tests reproduce the mini's layout. Dry day re-run follows.
+Before going live the two context dirs the production state was built
+from (sealed forward context and `live_context_20260801`) must be seeded
+into `daily/context/` under their dates, or no daily build can ever be
+non-regressive.

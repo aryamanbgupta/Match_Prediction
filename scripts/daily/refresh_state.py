@@ -231,20 +231,56 @@ def _refresh_state_unlocked(*, base_source: Path, context_root: Path, state_pare
         "source_match_count": source_count,
         "built_utc": datetime.now(timezone.utc).isoformat(),
     }, indent=2) + "\n")
-    promote = True
-    if stable_link.exists() and (stable_link / "state.json").exists():
-        current = json.loads((stable_link / "state.json").read_text())
-        current_count = current.get("source_match_count")
-        if current_count is None:
-            current_count = _sqlite_count(stable_link / "player_stats_cache_i7.sqlite")
-        promote = (as_of >= str(current.get("state_as_of", ""))
-                   and source_count >= int(current_count or 0))
+    promote, reason = _promotion_decision(stable_link, as_of, source_count)
     if promote:
         promote_live_state(build, link_path=stable_link)
     else:
         (build / "BUILT").write_text("sealed\n")
-        print("stale build not promoted", file=sys.stderr)
+        print(f"stale build not promoted ({reason})", file=sys.stderr)
     return build
+
+
+_DIRNAME_AS_OF = re.compile(r"live_state_i7_(\d{4}-\d{2}-\d{2})_")
+
+
+def _current_state_record(stable_link: Path) -> dict | None:
+    """Metadata of the state currently served, or None if it cannot be read.
+
+    Prefers ``state.json``; a state promoted before the daily job existed
+    (the migrated production dir carries only ``BUILT``) is described by its
+    cache ``_meta`` source count and the ``<as_of>`` in its directory name.
+    The 2026-09-10 dry day on the Mac mini promoted a 2026-04-16 build over
+    the 2026-07-30 production state because the guard only ran when
+    ``state.json`` existed; the guard now fails closed instead.
+    """
+    if not stable_link.exists():
+        return None
+    record_path = stable_link / "state.json"
+    if record_path.exists():
+        record = json.loads(record_path.read_text())
+        if record.get("state_as_of") and record.get("source_match_count") is not None:
+            return {"state_as_of": str(record["state_as_of"]),
+                    "source_match_count": int(record["source_match_count"])}
+    target = stable_link.resolve()
+    match = _DIRNAME_AS_OF.search(target.name)
+    sqlite_path = target / "player_stats_cache_i7.sqlite"
+    count = _sqlite_count(sqlite_path) if sqlite_path.exists() else None
+    if match is None or count is None:
+        return None
+    return {"state_as_of": match.group(1), "source_match_count": count}
+
+
+def _promotion_decision(stable_link: Path, as_of: str, source_count: int) -> tuple[bool, str]:
+    if not stable_link.exists():
+        return True, "no current state"
+    current = _current_state_record(stable_link)
+    if current is None:
+        return False, "current state metadata unreadable; refusing to replace it"
+    if as_of < current["state_as_of"]:
+        return False, f"as_of {as_of} < current {current['state_as_of']}"
+    if source_count < current["source_match_count"]:
+        return False, f"source count {source_count} < current {current['source_match_count']}"
+    return True, "non-regressive"
 
 
 def refresh_state(**kwargs) -> Path:
