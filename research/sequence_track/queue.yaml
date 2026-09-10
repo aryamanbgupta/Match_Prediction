@@ -1,0 +1,34 @@
+# Sequence-track job queue, read by research/sequence_track/run_queue.sh.
+#
+# Jobs run in listed order, one at a time, on the machine whose tag matches
+# --machine (default: laptop). A job is skipped when its output_dir holds a
+# COMPLETE marker whose config_sha256 equals the sha256 of its config file,
+# so a night that was stopped resumes where it left off.
+#
+# Paths are relative to the repository root unless absolute. Commands run
+# through /bin/bash -c with the repository root as the working directory.
+
+defaults:
+  # Refuse to launch a job when available memory (vm_stat: free + inactive +
+  # speculative) is below this. Laptop is 48 GB, the mini 16 GB.
+  memory_floor_gb: 8
+  # Kill a job whose process-tree RSS exceeds this.
+  memory_cap_gb: 36
+  # Watchdog poll interval, seconds.
+  poll_seconds: 30
+  # Touch this file to stop the queue between jobs; remove it to resume.
+  stop_file: research/sequence_track/STOP
+
+jobs:
+  - id: stage1_placeholder
+    config: experiments/configs/seq_stage1_sim_v1.yaml
+    command: echo placeholder
+    output_dir: eval_out/seq_stage1/placeholder
+    expected_hours: 0.01
+    machine: laptop
+    notes: >
+      Placeholder for the first stage 1 arm. The config it names is the D5
+      deliverable and does not exist yet, so its signature is recorded as a
+      sentinel; when the real config lands the signature changes and the job
+      re-runs. Replace the command with the arm's run line before the stage 1
+      night.

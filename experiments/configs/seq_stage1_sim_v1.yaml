@@ -1,0 +1,1553 @@
+# Stage 1 registered configuration — sequence and embeddings track.
+#
+# GENERATED FILE. Written by `scripts/sequence_track/pin_stage1.py --write`
+# and checked by `--verify`, which recomputes every hash, the checkpoint
+# choice and the command lines from the files on disk and exits non-zero on
+# any difference. Do not edit by hand: change pin_stage1.py and re-run.
+#
+# Acceptance: docs/sequence_track/stage0_acceptance.md, section "D5".
+experiment:
+  name: seq_stage1_sim_v1
+  registered: '2026-09-10'
+  purpose: 'Run four ball models (A production i7, A50 the same family at equal
+    information, B token MLP, C full T1) through ONE simulator, one chronology,
+    one set of same-day replay cutoffs, one bowler selector, one extras law and
+    one per-fixture seed schedule, so the winner-market comparison isolates the
+    model and nothing else. Two questions: system comparison (B-A, C-A) and incremental
+    sequence value in rollout (C-B).'
+  plan: docs/SEQUENCE_TRACK_PLAN.md, sections "Stage 0" and "Stage 1"
+  acceptance: docs/sequence_track/stage0_acceptance.md, section "D5"
+  statistical_rules: docs/SEQUENCE_TRACK_PLAN.md, section "Statistical rules for
+    the whole track"
+  design: single-checkpoint screen; one training seed per neural arm
+  expected_outcome_written_before_the_run: A-C parity, B-C parity, realism close
+    on all arms; no arm advances
+  forbidden_data:
+  - data/golden
+  - data/forward_holdout
+  generated_by: scripts/sequence_track/pin_stage1.py
+  generated_note: this file is generated; edit pin_stage1.py and re-run --write,
+    never the YAML by hand (pin_stage1.py --verify fails on a hand edit)
+arms:
+  A:
+    status: active
+    role: production system (reference for B-A, C-A and A50-A)
+    description: promoted i7 no-class-weights XGBoost ball model, 114 features,
+      manifest role ball_model_prod, served RAW (no ball calibrator, per D16/D17)
+    model_type: xgboost
+    model_dir: models/xgb_i7_noweights_production
+    model_dir_role: ball_model_prod
+    model_dir_md5: a6ac76710d86d2f1abd55f838c64c4c3
+    model_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+    checkpoint: models/xgb_i7_noweights_production/xgboost_model_i7.pkl
+    checkpoint_md5: 7ee1e1809917f45be7e726b3ea4a8a6c
+    stats_version: i7
+    stats_cache: models/player_stats_cache_i7.sqlite
+    stats_cache_role: stats_cache_i7
+    stats_cache_md5: 671ac8200b275fa3d11d848e609f5132
+    context_dir: data/t20s_json
+    context_dir_md5: 6da2f2d7880d5e8ab0fe95c37574ee14
+    context_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+    context_dir_json_count: 11264
+    player_metadata: data/all_players_enriched.csv
+    player_metadata_sha256: e5a657b7b714b8a13b7e66d82c6e88a3bfd02d8952dc793c8b398d533208db21
+    bowler_selector: RosterEmpiricalBowlerSelector
+    bowler_selector_note: the phase-aware empirical selector with the corrected
+      roster-aware policy; identical class and hashes on every arm
+    bowler_usage: models/bowler_phase_usage.json
+    bowler_usage_role: bowler_phase_usage
+    bowler_usage_md5: 2e650423f0c949631fca1f15dd1c8a56
+    b10_corpus: models/b10_usage_corpus.pkl
+    b10_corpus_role: bowler_usage_corpus_b10
+    b10_corpus_md5: 42b313b138fefdd293c280a9d4be2e2b
+    b10_corpus_note: the usage corpus behind bowler_phase_usage.json; pinned for
+      provenance, not passed as a runtime flag
+    roster_policy: models/bowler_roster_policy.json
+    roster_policy_role: bowler_roster_policy
+    roster_policy_md5: f2a5efa2810eef02124d875da0c6dd83
+    extras_graft: models/auto/b18/extras_graft_v1.json
+    extras_graft_role: null
+    extras_graft_role_note: the B18 sidecar is unpromoted and has no manifest role,
+      so its path is composed from segments and its identity is the sha256 below
+    extras_graft_sha256: ad6e863b1a2dfa3b47259d3d952157f392a0579af960cf597bcb90d2eb68bfa1
+    extras_graft_matches_report: research/reports/embeddings/T1_SIM_PARITY_PPC_V1.md
+      line 59
+    extras_graft_applied_via: the XGBoostModelV2.extras_graft attribute, set by
+      run_arm._apply_extras_graft; sim_v1_2.py exposes no explicit-path seam (see
+      deviations)
+    run_out:
+      source: scripts/sim_v1_2.py
+      constant: RUNOUT_P
+      value: 0.075077
+      line: 106
+      note: a code constant read by import; the models/auto/d15/runout_rates.json
+        sidecar the engine banner cites is absent on this checkout, so the constant
+        is the rule
+    odds:
+      role: odds_iteration_v2
+      path: betting_odds_polymarket_v2.json
+      sha256: dc36aef3002a1709a3cd14fc95d2c369227c9c44a7284d6732b71539a36ab292
+      sha256_source: docs/registered_odds.json (role odds_iteration_v2), recomputed
+        and equal
+      cluster_source_dir: data/polymarket_test_v2
+      cluster_source_dir_role: iteration_set_v2
+      row_count: 255
+    prop_fair_baseline_corpus: models/prop_fair_baseline_corpus_v2.pkl
+    prop_fair_baseline_corpus_role: prop_fair_baseline_corpus_v2
+    prop_fair_baseline_corpus_md5: a78b7c3f933f68fac5f2422292e979d8
+    fixture_set:
+      path: data/polymarket_test_v2
+      role: iteration_set_v2
+      dir_md5: 8005cad729458d0234265a9b983a6819
+      dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+      count: 255
+    prefix_cache: 'off'
+    device: cpu
+    threads: 4
+    clip:
+    - 0.01
+    - 0.99
+    base_seed: 20260910
+    env:
+      OMP_NUM_THREADS: '4'
+      MKL_NUM_THREADS: '4'
+      OPENBLAS_NUM_THREADS: '4'
+      VECLIB_MAXIMUM_THREADS: '4'
+      NUMEXPR_NUM_THREADS: '4'
+    full_run:
+      fixture_dir: data/polymarket_test_v2
+      fixture_dir_role: iteration_set_v2
+      fixture_dir_md5: 8005cad729458d0234265a9b983a6819
+      fixture_count: 255
+      n_sims: to_be_filled_before_1d
+      base_seeds:
+      - 20260910
+      n_sims_source: convergence_protocol.chosen_n_sims, set from the 1b replicated
+        convergence check; pin_stage1.py renders --n-sims from the same constant,
+        so the command and the protocol cannot disagree
+      output_dir: models/embeddings/seq_stage1/full/A
+      command: env OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 VECLIB_MAXIMUM_THREADS=4
+        NUMEXPR_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/run_arm.py
+        --arm A --config experiments/configs/seq_stage1_sim_v1.yaml --model-dir
+        models/xgb_i7_noweights_production --stats-version i7 --fixture-dir data/polymarket_test_v2
+        --context-dir data/t20s_json --odds betting_odds_polymarket_v2.json --player-metadata
+        data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+        <chosen_n_sims> --base-seed 20260910 --threads 4 --output-dir models/embeddings/seq_stage1/full/A
+      command_completeness: every flag and env var is final except the single token
+        '<chosen_n_sims>', which is unresolved until 1d by design (check 5.6 forbids
+        choosing n_sims before the convergence check). Set CHOSEN_N_SIMS in pin_stage1.py
+        and re-run --write to render a runnable command.
+    smoke_1a:
+      fixture_dir: models/embeddings/seq_stage1/smoke/fixtures
+      fixture_dir_md5: 703f522de0f0384f42a250247b9a653d
+      fixture_count: 4
+      n_sims: 10
+      base_seeds:
+      - 20260910
+      output_dir: models/embeddings/seq_stage1/smoke/A
+      differs_from_full_run_only_in:
+      - --fixture-dir
+      - --n-sims
+      - --output-dir
+      command: env OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 VECLIB_MAXIMUM_THREADS=4
+        NUMEXPR_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/run_arm.py
+        --arm A --config experiments/configs/seq_stage1_sim_v1.yaml --model-dir
+        models/xgb_i7_noweights_production --stats-version i7 --fixture-dir models/embeddings/seq_stage1/smoke/fixtures
+        --context-dir data/t20s_json --odds betting_odds_polymarket_v2.json --player-metadata
+        data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+        10 --base-seed 20260910 --threads 4 --output-dir models/embeddings/seq_stage1/smoke/A
+    timing_1b:
+      purpose: 'the 1b convergence protocol and the variability rerun: the same
+        timing shard simulated under each registered batch base seed at each candidate
+        n_sims'
+      fixture_dir: models/embeddings/seq_stage1/timing/fixtures
+      fixture_dir_status: 'absent: populated at 1b, re-pin after it is built'
+      fixture_dir_md5: null
+      fixture_count: null
+      fixture_count_expected: 10
+      base_seeds:
+      - 20260910
+      - 20260911
+      - 20260912
+      n_sims: &id001
+      - 100
+      - 200
+      - 400
+      - 800
+      - 1600
+      - 3200
+      candidates_screened:
+      - 100
+      - 200
+      - 400
+      - 800
+      - 1600
+      - 3200
+      - 6400
+      n_sims_source: 'seeds.overlap_check.joint: every screened candidate whose
+        (fixture, base seed) intervals stay disjoint across all 3 batch base seeds;
+        the rest are recorded as not_permitted_without_new_seeds'
+      output_dir_template: models/embeddings/seq_stage1/timing/A/seed<base_seed>_n<n_sims>
+      seed_cohort: the three batch base seeds share one seed line, so run_arm screens
+        their JOINT intervals for any launch on this block and refuses a candidate
+        above 3290
+      command_template: env OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4
+        VECLIB_MAXIMUM_THREADS=4 NUMEXPR_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/run_arm.py
+        --arm A --config experiments/configs/seq_stage1_sim_v1.yaml --model-dir
+        models/xgb_i7_noweights_production --stats-version i7 --fixture-dir models/embeddings/seq_stage1/timing/fixtures
+        --context-dir data/t20s_json --odds betting_odds_polymarket_v2.json --player-metadata
+        data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+        <candidate> --base-seed <batch_base_seed> --threads 4 --output-dir models/embeddings/seq_stage1/timing/A/seed<base_seed>_n<n_sims>
+    variability_rerun:
+      what: 'the 1b Monte Carlo variability rerun: the timing shard at the chosen
+        n_sims, re-run under the second registered base seed 20260911 (and the third,
+        20260912, for the third batch)'
+      runs_through: the timing_1b block above
+      base_seeds:
+      - 20260911
+      - 20260912
+      reads: the paired spread across batches, which is what the convergence stop
+        rule thresholds
+  A50:
+    status: active
+    role: production family at equal information (exploratory system control)
+    description: XGBoost on the production hyperparameters trained on T1's 50 features
+      only, from the i7 frame by column selection (stage-1 D4 artifact)
+    model_type: xgboost
+    model_dir: models/embeddings/seq_stage1/a50
+    model_dir_role: null
+    model_dir_md5: 1ae7bbaba91a32ca54b87bd175f4c069
+    model_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+    checkpoint: models/embeddings/seq_stage1/a50/xgboost_model_a50.pkl
+    checkpoint_md5: 7705b330bac547674d8e569f4b28a278
+    stats_version: i7
+    stats_cache: models/player_stats_cache_i7.sqlite
+    stats_cache_role: stats_cache_i7
+    stats_cache_md5: 671ac8200b275fa3d11d848e609f5132
+    context_dir: data/t20s_json
+    context_dir_md5: 6da2f2d7880d5e8ab0fe95c37574ee14
+    context_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+    context_dir_json_count: 11264
+    player_metadata: data/all_players_enriched.csv
+    player_metadata_sha256: e5a657b7b714b8a13b7e66d82c6e88a3bfd02d8952dc793c8b398d533208db21
+    bowler_selector: RosterEmpiricalBowlerSelector
+    bowler_selector_note: the phase-aware empirical selector with the corrected
+      roster-aware policy; identical class and hashes on every arm
+    bowler_usage: models/bowler_phase_usage.json
+    bowler_usage_role: bowler_phase_usage
+    bowler_usage_md5: 2e650423f0c949631fca1f15dd1c8a56
+    b10_corpus: models/b10_usage_corpus.pkl
+    b10_corpus_role: bowler_usage_corpus_b10
+    b10_corpus_md5: 42b313b138fefdd293c280a9d4be2e2b
+    b10_corpus_note: the usage corpus behind bowler_phase_usage.json; pinned for
+      provenance, not passed as a runtime flag
+    roster_policy: models/bowler_roster_policy.json
+    roster_policy_role: bowler_roster_policy
+    roster_policy_md5: f2a5efa2810eef02124d875da0c6dd83
+    extras_graft: models/auto/b18/extras_graft_v1.json
+    extras_graft_role: null
+    extras_graft_role_note: the B18 sidecar is unpromoted and has no manifest role,
+      so its path is composed from segments and its identity is the sha256 below
+    extras_graft_sha256: ad6e863b1a2dfa3b47259d3d952157f392a0579af960cf597bcb90d2eb68bfa1
+    extras_graft_matches_report: research/reports/embeddings/T1_SIM_PARITY_PPC_V1.md
+      line 59
+    extras_graft_applied_via: the XGBoostModelV2.extras_graft attribute, set by
+      run_arm._apply_extras_graft; sim_v1_2.py exposes no explicit-path seam (see
+      deviations)
+    run_out:
+      source: scripts/sim_v1_2.py
+      constant: RUNOUT_P
+      value: 0.075077
+      line: 106
+      note: a code constant read by import; the models/auto/d15/runout_rates.json
+        sidecar the engine banner cites is absent on this checkout, so the constant
+        is the rule
+    odds:
+      role: odds_iteration_v2
+      path: betting_odds_polymarket_v2.json
+      sha256: dc36aef3002a1709a3cd14fc95d2c369227c9c44a7284d6732b71539a36ab292
+      sha256_source: docs/registered_odds.json (role odds_iteration_v2), recomputed
+        and equal
+      cluster_source_dir: data/polymarket_test_v2
+      cluster_source_dir_role: iteration_set_v2
+      row_count: 255
+    prop_fair_baseline_corpus: models/prop_fair_baseline_corpus_v2.pkl
+    prop_fair_baseline_corpus_role: prop_fair_baseline_corpus_v2
+    prop_fair_baseline_corpus_md5: a78b7c3f933f68fac5f2422292e979d8
+    fixture_set:
+      path: data/polymarket_test_v2
+      role: iteration_set_v2
+      dir_md5: 8005cad729458d0234265a9b983a6819
+      dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+      count: 255
+    prefix_cache: 'off'
+    device: cpu
+    threads: 4
+    clip:
+    - 0.01
+    - 0.99
+    base_seed: 20260910
+    env:
+      OMP_NUM_THREADS: '4'
+      MKL_NUM_THREADS: '4'
+      OPENBLAS_NUM_THREADS: '4'
+      VECLIB_MAXIMUM_THREADS: '4'
+      NUMEXPR_NUM_THREADS: '4'
+    full_run:
+      fixture_dir: data/polymarket_test_v2
+      fixture_dir_role: iteration_set_v2
+      fixture_dir_md5: 8005cad729458d0234265a9b983a6819
+      fixture_count: 255
+      n_sims: to_be_filled_before_1d
+      base_seeds:
+      - 20260910
+      n_sims_source: convergence_protocol.chosen_n_sims, set from the 1b replicated
+        convergence check; pin_stage1.py renders --n-sims from the same constant,
+        so the command and the protocol cannot disagree
+      output_dir: models/embeddings/seq_stage1/full/A50
+      command: env OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 VECLIB_MAXIMUM_THREADS=4
+        NUMEXPR_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/run_arm.py
+        --arm A50 --config experiments/configs/seq_stage1_sim_v1.yaml --model-dir
+        models/embeddings/seq_stage1/a50 --stats-version i7 --fixture-dir data/polymarket_test_v2
+        --context-dir data/t20s_json --odds betting_odds_polymarket_v2.json --player-metadata
+        data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+        <chosen_n_sims> --base-seed 20260910 --threads 4 --output-dir models/embeddings/seq_stage1/full/A50
+      command_completeness: every flag and env var is final except the single token
+        '<chosen_n_sims>', which is unresolved until 1d by design (check 5.6 forbids
+        choosing n_sims before the convergence check). Set CHOSEN_N_SIMS in pin_stage1.py
+        and re-run --write to render a runnable command.
+    smoke_1a:
+      fixture_dir: models/embeddings/seq_stage1/smoke/fixtures
+      fixture_dir_md5: 703f522de0f0384f42a250247b9a653d
+      fixture_count: 4
+      n_sims: 10
+      base_seeds:
+      - 20260910
+      output_dir: models/embeddings/seq_stage1/smoke/A50
+      differs_from_full_run_only_in:
+      - --fixture-dir
+      - --n-sims
+      - --output-dir
+      command: env OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 VECLIB_MAXIMUM_THREADS=4
+        NUMEXPR_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/run_arm.py
+        --arm A50 --config experiments/configs/seq_stage1_sim_v1.yaml --model-dir
+        models/embeddings/seq_stage1/a50 --stats-version i7 --fixture-dir models/embeddings/seq_stage1/smoke/fixtures
+        --context-dir data/t20s_json --odds betting_odds_polymarket_v2.json --player-metadata
+        data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+        10 --base-seed 20260910 --threads 4 --output-dir models/embeddings/seq_stage1/smoke/A50
+    timing_1b:
+      purpose: 'the 1b convergence protocol and the variability rerun: the same
+        timing shard simulated under each registered batch base seed at each candidate
+        n_sims'
+      fixture_dir: models/embeddings/seq_stage1/timing/fixtures
+      fixture_dir_status: 'absent: populated at 1b, re-pin after it is built'
+      fixture_dir_md5: null
+      fixture_count: null
+      fixture_count_expected: 10
+      base_seeds:
+      - 20260910
+      - 20260911
+      - 20260912
+      n_sims: *id001
+      candidates_screened:
+      - 100
+      - 200
+      - 400
+      - 800
+      - 1600
+      - 3200
+      - 6400
+      n_sims_source: 'seeds.overlap_check.joint: every screened candidate whose
+        (fixture, base seed) intervals stay disjoint across all 3 batch base seeds;
+        the rest are recorded as not_permitted_without_new_seeds'
+      output_dir_template: models/embeddings/seq_stage1/timing/A50/seed<base_seed>_n<n_sims>
+      seed_cohort: the three batch base seeds share one seed line, so run_arm screens
+        their JOINT intervals for any launch on this block and refuses a candidate
+        above 3290
+      command_template: env OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4
+        VECLIB_MAXIMUM_THREADS=4 NUMEXPR_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/run_arm.py
+        --arm A50 --config experiments/configs/seq_stage1_sim_v1.yaml --model-dir
+        models/embeddings/seq_stage1/a50 --stats-version i7 --fixture-dir models/embeddings/seq_stage1/timing/fixtures
+        --context-dir data/t20s_json --odds betting_odds_polymarket_v2.json --player-metadata
+        data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+        <candidate> --base-seed <batch_base_seed> --threads 4 --output-dir models/embeddings/seq_stage1/timing/A50/seed<base_seed>_n<n_sims>
+    variability_rerun:
+      what: 'the 1b Monte Carlo variability rerun: the timing shard at the chosen
+        n_sims, re-run under the second registered base seed 20260911 (and the third,
+        20260912, for the third batch)'
+      runs_through: the timing_1b block above
+      base_seeds:
+      - 20260911
+      - 20260912
+      reads: the paired spread across batches, which is what the convergence stop
+        rule thresholds
+  B:
+    status: active
+    role: nonlinear control (reference for C-B)
+    description: token MLP over the same 50 pre-ball features, no sequence memory;
+      registered checkpoint from the t1_ablation_v1_mps `mlp` arm
+    model_type: transformer
+    model_dir: models/embeddings/t1_ablation_v1_mps/mlp/seed_101
+    model_dir_role: null
+    model_dir_md5: a7047d948f8a4de7e53345afedd158a6
+    model_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+    checkpoint: models/embeddings/t1_ablation_v1_mps/mlp/seed_101/model.pt
+    checkpoint_md5: 5cfb36ab5083f6b61f194c32600824e3
+    ablation_arm: mlp
+    checkpoint_seed: 101
+    checkpoint_validation_ll: 1.437755
+    checkpoint_selection: 'see checkpoint_selection: lowest validation LL in models/embeddings/t1_ablation_v1_mps/summary.yaml,
+      ties to the lowest seed, test LL not consulted'
+    stats_version: v3
+    stats_cache: models/player_stats_cache_v3.sqlite
+    stats_cache_role: stats_cache_v3_legacy
+    stats_cache_md5: 3faf24a6d457e9fca0f98c026b3b0675
+    context_dir: data/t20s_json
+    context_dir_md5: 6da2f2d7880d5e8ab0fe95c37574ee14
+    context_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+    context_dir_json_count: 11264
+    player_metadata: data/all_players_enriched.csv
+    player_metadata_sha256: e5a657b7b714b8a13b7e66d82c6e88a3bfd02d8952dc793c8b398d533208db21
+    bowler_selector: RosterEmpiricalBowlerSelector
+    bowler_selector_note: the phase-aware empirical selector with the corrected
+      roster-aware policy; identical class and hashes on every arm
+    bowler_usage: models/bowler_phase_usage.json
+    bowler_usage_role: bowler_phase_usage
+    bowler_usage_md5: 2e650423f0c949631fca1f15dd1c8a56
+    b10_corpus: models/b10_usage_corpus.pkl
+    b10_corpus_role: bowler_usage_corpus_b10
+    b10_corpus_md5: 42b313b138fefdd293c280a9d4be2e2b
+    b10_corpus_note: the usage corpus behind bowler_phase_usage.json; pinned for
+      provenance, not passed as a runtime flag
+    roster_policy: models/bowler_roster_policy.json
+    roster_policy_role: bowler_roster_policy
+    roster_policy_md5: f2a5efa2810eef02124d875da0c6dd83
+    extras_graft: models/auto/b18/extras_graft_v1.json
+    extras_graft_role: null
+    extras_graft_role_note: the B18 sidecar is unpromoted and has no manifest role,
+      so its path is composed from segments and its identity is the sha256 below
+    extras_graft_sha256: ad6e863b1a2dfa3b47259d3d952157f392a0579af960cf597bcb90d2eb68bfa1
+    extras_graft_matches_report: research/reports/embeddings/T1_SIM_PARITY_PPC_V1.md
+      line 59
+    extras_graft_applied_via: T1_EXTRAS_GRAFT_PATH (sim_t1.py)
+    run_out:
+      source: scripts/sim_v1_2.py
+      constant: RUNOUT_P
+      value: 0.075077
+      line: 106
+      note: a code constant read by import; the models/auto/d15/runout_rates.json
+        sidecar the engine banner cites is absent on this checkout, so the constant
+        is the rule
+    odds:
+      role: odds_iteration_v2
+      path: betting_odds_polymarket_v2.json
+      sha256: dc36aef3002a1709a3cd14fc95d2c369227c9c44a7284d6732b71539a36ab292
+      sha256_source: docs/registered_odds.json (role odds_iteration_v2), recomputed
+        and equal
+      cluster_source_dir: data/polymarket_test_v2
+      cluster_source_dir_role: iteration_set_v2
+      row_count: 255
+    prop_fair_baseline_corpus: models/prop_fair_baseline_corpus_v2.pkl
+    prop_fair_baseline_corpus_role: prop_fair_baseline_corpus_v2
+    prop_fair_baseline_corpus_md5: a78b7c3f933f68fac5f2422292e979d8
+    fixture_set:
+      path: data/polymarket_test_v2
+      role: iteration_set_v2
+      dir_md5: 8005cad729458d0234265a9b983a6819
+      dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+      count: 255
+    prefix_cache: 'off'
+    device: cpu
+    threads: 4
+    clip:
+    - 0.01
+    - 0.99
+    base_seed: 20260910
+    env:
+      OMP_NUM_THREADS: '4'
+      MKL_NUM_THREADS: '4'
+      OPENBLAS_NUM_THREADS: '4'
+      VECLIB_MAXIMUM_THREADS: '4'
+      NUMEXPR_NUM_THREADS: '4'
+      T1_SIM_MODEL_DIR: models/embeddings/t1_ablation_v1_mps/mlp/seed_101
+      T1_SIM_DEVICE: cpu
+      T1_EXTRAS_GRAFT_PATH: models/auto/b18/extras_graft_v1.json
+      T1_SIM_PREFIX_CACHE: '<unset: prefix cache OFF>'
+    full_run:
+      fixture_dir: data/polymarket_test_v2
+      fixture_dir_role: iteration_set_v2
+      fixture_dir_md5: 8005cad729458d0234265a9b983a6819
+      fixture_count: 255
+      n_sims: to_be_filled_before_1d
+      base_seeds:
+      - 20260910
+      n_sims_source: convergence_protocol.chosen_n_sims, set from the 1b replicated
+        convergence check; pin_stage1.py renders --n-sims from the same constant,
+        so the command and the protocol cannot disagree
+      output_dir: models/embeddings/seq_stage1/full/B
+      command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4
+        VECLIB_MAXIMUM_THREADS=4 NUMEXPR_NUM_THREADS=4 T1_SIM_MODEL_DIR=models/embeddings/t1_ablation_v1_mps/mlp/seed_101
+        T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+        uv run --no-sync python scripts/sequence_track/run_arm.py --arm B --config
+        experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/t1_ablation_v1_mps/mlp/seed_101
+        --stats-version v3 --fixture-dir data/polymarket_test_v2 --context-dir data/t20s_json
+        --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+        --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+        models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+        --clip-low 0.01 --clip-high 0.99 --n-sims <chosen_n_sims> --base-seed 20260910
+        --threads 4 --output-dir models/embeddings/seq_stage1/full/B
+      command_completeness: every flag and env var is final except the single token
+        '<chosen_n_sims>', which is unresolved until 1d by design (check 5.6 forbids
+        choosing n_sims before the convergence check). Set CHOSEN_N_SIMS in pin_stage1.py
+        and re-run --write to render a runnable command.
+    smoke_1a:
+      fixture_dir: models/embeddings/seq_stage1/smoke/fixtures
+      fixture_dir_md5: 703f522de0f0384f42a250247b9a653d
+      fixture_count: 4
+      n_sims: 10
+      base_seeds:
+      - 20260910
+      output_dir: models/embeddings/seq_stage1/smoke/B
+      differs_from_full_run_only_in:
+      - --fixture-dir
+      - --n-sims
+      - --output-dir
+      command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4
+        VECLIB_MAXIMUM_THREADS=4 NUMEXPR_NUM_THREADS=4 T1_SIM_MODEL_DIR=models/embeddings/t1_ablation_v1_mps/mlp/seed_101
+        T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+        uv run --no-sync python scripts/sequence_track/run_arm.py --arm B --config
+        experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/t1_ablation_v1_mps/mlp/seed_101
+        --stats-version v3 --fixture-dir models/embeddings/seq_stage1/smoke/fixtures
+        --context-dir data/t20s_json --odds betting_odds_polymarket_v2.json --player-metadata
+        data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+        10 --base-seed 20260910 --threads 4 --output-dir models/embeddings/seq_stage1/smoke/B
+    timing_1b:
+      purpose: 'the 1b convergence protocol and the variability rerun: the same
+        timing shard simulated under each registered batch base seed at each candidate
+        n_sims'
+      fixture_dir: models/embeddings/seq_stage1/timing/fixtures
+      fixture_dir_status: 'absent: populated at 1b, re-pin after it is built'
+      fixture_dir_md5: null
+      fixture_count: null
+      fixture_count_expected: 10
+      base_seeds:
+      - 20260910
+      - 20260911
+      - 20260912
+      n_sims: *id001
+      candidates_screened:
+      - 100
+      - 200
+      - 400
+      - 800
+      - 1600
+      - 3200
+      - 6400
+      n_sims_source: 'seeds.overlap_check.joint: every screened candidate whose
+        (fixture, base seed) intervals stay disjoint across all 3 batch base seeds;
+        the rest are recorded as not_permitted_without_new_seeds'
+      output_dir_template: models/embeddings/seq_stage1/timing/B/seed<base_seed>_n<n_sims>
+      seed_cohort: the three batch base seeds share one seed line, so run_arm screens
+        their JOINT intervals for any launch on this block and refuses a candidate
+        above 3290
+      command_template: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=4 MKL_NUM_THREADS=4
+        OPENBLAS_NUM_THREADS=4 VECLIB_MAXIMUM_THREADS=4 NUMEXPR_NUM_THREADS=4 T1_SIM_MODEL_DIR=models/embeddings/t1_ablation_v1_mps/mlp/seed_101
+        T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+        uv run --no-sync python scripts/sequence_track/run_arm.py --arm B --config
+        experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/t1_ablation_v1_mps/mlp/seed_101
+        --stats-version v3 --fixture-dir models/embeddings/seq_stage1/timing/fixtures
+        --context-dir data/t20s_json --odds betting_odds_polymarket_v2.json --player-metadata
+        data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+        <candidate> --base-seed <batch_base_seed> --threads 4 --output-dir models/embeddings/seq_stage1/timing/B/seed<base_seed>_n<n_sims>
+    variability_rerun:
+      what: 'the 1b Monte Carlo variability rerun: the timing shard at the chosen
+        n_sims, re-run under the second registered base seed 20260911 (and the third,
+        20260912, for the third batch)'
+      runs_through: the timing_1b block above
+      base_seeds:
+      - 20260911
+      - 20260912
+      reads: the paired spread across batches, which is what the convergence stop
+        rule thresholds
+  C:
+    status: active
+    role: sequence candidate
+    description: full T1 transformer over the same 50 pre-ball features; registered
+      checkpoint from the t1_ablation_v1_mps `full` arm
+    model_type: transformer
+    model_dir: models/embeddings/t1_ablation_v1_mps/full/seed_101
+    model_dir_role: null
+    model_dir_md5: 2675b034e2e1b9a62d3e847e2fca365c
+    model_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+    checkpoint: models/embeddings/t1_ablation_v1_mps/full/seed_101/model.pt
+    checkpoint_md5: 504c3b64ee3f46e5ea0d6f173211f3bf
+    ablation_arm: full
+    checkpoint_seed: 101
+    checkpoint_validation_ll: 1.436634
+    checkpoint_selection: 'see checkpoint_selection: lowest validation LL in models/embeddings/t1_ablation_v1_mps/summary.yaml,
+      ties to the lowest seed, test LL not consulted'
+    stats_version: v3
+    stats_cache: models/player_stats_cache_v3.sqlite
+    stats_cache_role: stats_cache_v3_legacy
+    stats_cache_md5: 3faf24a6d457e9fca0f98c026b3b0675
+    context_dir: data/t20s_json
+    context_dir_md5: 6da2f2d7880d5e8ab0fe95c37574ee14
+    context_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+    context_dir_json_count: 11264
+    player_metadata: data/all_players_enriched.csv
+    player_metadata_sha256: e5a657b7b714b8a13b7e66d82c6e88a3bfd02d8952dc793c8b398d533208db21
+    bowler_selector: RosterEmpiricalBowlerSelector
+    bowler_selector_note: the phase-aware empirical selector with the corrected
+      roster-aware policy; identical class and hashes on every arm
+    bowler_usage: models/bowler_phase_usage.json
+    bowler_usage_role: bowler_phase_usage
+    bowler_usage_md5: 2e650423f0c949631fca1f15dd1c8a56
+    b10_corpus: models/b10_usage_corpus.pkl
+    b10_corpus_role: bowler_usage_corpus_b10
+    b10_corpus_md5: 42b313b138fefdd293c280a9d4be2e2b
+    b10_corpus_note: the usage corpus behind bowler_phase_usage.json; pinned for
+      provenance, not passed as a runtime flag
+    roster_policy: models/bowler_roster_policy.json
+    roster_policy_role: bowler_roster_policy
+    roster_policy_md5: f2a5efa2810eef02124d875da0c6dd83
+    extras_graft: models/auto/b18/extras_graft_v1.json
+    extras_graft_role: null
+    extras_graft_role_note: the B18 sidecar is unpromoted and has no manifest role,
+      so its path is composed from segments and its identity is the sha256 below
+    extras_graft_sha256: ad6e863b1a2dfa3b47259d3d952157f392a0579af960cf597bcb90d2eb68bfa1
+    extras_graft_matches_report: research/reports/embeddings/T1_SIM_PARITY_PPC_V1.md
+      line 59
+    extras_graft_applied_via: T1_EXTRAS_GRAFT_PATH (sim_t1.py)
+    run_out:
+      source: scripts/sim_v1_2.py
+      constant: RUNOUT_P
+      value: 0.075077
+      line: 106
+      note: a code constant read by import; the models/auto/d15/runout_rates.json
+        sidecar the engine banner cites is absent on this checkout, so the constant
+        is the rule
+    odds:
+      role: odds_iteration_v2
+      path: betting_odds_polymarket_v2.json
+      sha256: dc36aef3002a1709a3cd14fc95d2c369227c9c44a7284d6732b71539a36ab292
+      sha256_source: docs/registered_odds.json (role odds_iteration_v2), recomputed
+        and equal
+      cluster_source_dir: data/polymarket_test_v2
+      cluster_source_dir_role: iteration_set_v2
+      row_count: 255
+    prop_fair_baseline_corpus: models/prop_fair_baseline_corpus_v2.pkl
+    prop_fair_baseline_corpus_role: prop_fair_baseline_corpus_v2
+    prop_fair_baseline_corpus_md5: a78b7c3f933f68fac5f2422292e979d8
+    fixture_set:
+      path: data/polymarket_test_v2
+      role: iteration_set_v2
+      dir_md5: 8005cad729458d0234265a9b983a6819
+      dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+      count: 255
+    prefix_cache: 'off'
+    device: cpu
+    threads: 4
+    clip:
+    - 0.01
+    - 0.99
+    base_seed: 20260910
+    env:
+      OMP_NUM_THREADS: '4'
+      MKL_NUM_THREADS: '4'
+      OPENBLAS_NUM_THREADS: '4'
+      VECLIB_MAXIMUM_THREADS: '4'
+      NUMEXPR_NUM_THREADS: '4'
+      T1_SIM_MODEL_DIR: models/embeddings/t1_ablation_v1_mps/full/seed_101
+      T1_SIM_DEVICE: cpu
+      T1_EXTRAS_GRAFT_PATH: models/auto/b18/extras_graft_v1.json
+      T1_SIM_PREFIX_CACHE: '<unset: prefix cache OFF>'
+    full_run:
+      fixture_dir: data/polymarket_test_v2
+      fixture_dir_role: iteration_set_v2
+      fixture_dir_md5: 8005cad729458d0234265a9b983a6819
+      fixture_count: 255
+      n_sims: to_be_filled_before_1d
+      base_seeds:
+      - 20260910
+      n_sims_source: convergence_protocol.chosen_n_sims, set from the 1b replicated
+        convergence check; pin_stage1.py renders --n-sims from the same constant,
+        so the command and the protocol cannot disagree
+      output_dir: models/embeddings/seq_stage1/full/C
+      command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4
+        VECLIB_MAXIMUM_THREADS=4 NUMEXPR_NUM_THREADS=4 T1_SIM_MODEL_DIR=models/embeddings/t1_ablation_v1_mps/full/seed_101
+        T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+        uv run --no-sync python scripts/sequence_track/run_arm.py --arm C --config
+        experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/t1_ablation_v1_mps/full/seed_101
+        --stats-version v3 --fixture-dir data/polymarket_test_v2 --context-dir data/t20s_json
+        --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+        --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+        models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+        --clip-low 0.01 --clip-high 0.99 --n-sims <chosen_n_sims> --base-seed 20260910
+        --threads 4 --output-dir models/embeddings/seq_stage1/full/C
+      command_completeness: every flag and env var is final except the single token
+        '<chosen_n_sims>', which is unresolved until 1d by design (check 5.6 forbids
+        choosing n_sims before the convergence check). Set CHOSEN_N_SIMS in pin_stage1.py
+        and re-run --write to render a runnable command.
+    smoke_1a:
+      fixture_dir: models/embeddings/seq_stage1/smoke/fixtures
+      fixture_dir_md5: 703f522de0f0384f42a250247b9a653d
+      fixture_count: 4
+      n_sims: 10
+      base_seeds:
+      - 20260910
+      output_dir: models/embeddings/seq_stage1/smoke/C
+      differs_from_full_run_only_in:
+      - --fixture-dir
+      - --n-sims
+      - --output-dir
+      command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4
+        VECLIB_MAXIMUM_THREADS=4 NUMEXPR_NUM_THREADS=4 T1_SIM_MODEL_DIR=models/embeddings/t1_ablation_v1_mps/full/seed_101
+        T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+        uv run --no-sync python scripts/sequence_track/run_arm.py --arm C --config
+        experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/t1_ablation_v1_mps/full/seed_101
+        --stats-version v3 --fixture-dir models/embeddings/seq_stage1/smoke/fixtures
+        --context-dir data/t20s_json --odds betting_odds_polymarket_v2.json --player-metadata
+        data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+        10 --base-seed 20260910 --threads 4 --output-dir models/embeddings/seq_stage1/smoke/C
+    timing_1b:
+      purpose: 'the 1b convergence protocol and the variability rerun: the same
+        timing shard simulated under each registered batch base seed at each candidate
+        n_sims'
+      fixture_dir: models/embeddings/seq_stage1/timing/fixtures
+      fixture_dir_status: 'absent: populated at 1b, re-pin after it is built'
+      fixture_dir_md5: null
+      fixture_count: null
+      fixture_count_expected: 10
+      base_seeds:
+      - 20260910
+      - 20260911
+      - 20260912
+      n_sims: *id001
+      candidates_screened:
+      - 100
+      - 200
+      - 400
+      - 800
+      - 1600
+      - 3200
+      - 6400
+      n_sims_source: 'seeds.overlap_check.joint: every screened candidate whose
+        (fixture, base seed) intervals stay disjoint across all 3 batch base seeds;
+        the rest are recorded as not_permitted_without_new_seeds'
+      output_dir_template: models/embeddings/seq_stage1/timing/C/seed<base_seed>_n<n_sims>
+      seed_cohort: the three batch base seeds share one seed line, so run_arm screens
+        their JOINT intervals for any launch on this block and refuses a candidate
+        above 3290
+      command_template: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=4 MKL_NUM_THREADS=4
+        OPENBLAS_NUM_THREADS=4 VECLIB_MAXIMUM_THREADS=4 NUMEXPR_NUM_THREADS=4 T1_SIM_MODEL_DIR=models/embeddings/t1_ablation_v1_mps/full/seed_101
+        T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+        uv run --no-sync python scripts/sequence_track/run_arm.py --arm C --config
+        experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/t1_ablation_v1_mps/full/seed_101
+        --stats-version v3 --fixture-dir models/embeddings/seq_stage1/timing/fixtures
+        --context-dir data/t20s_json --odds betting_odds_polymarket_v2.json --player-metadata
+        data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+        <candidate> --base-seed <batch_base_seed> --threads 4 --output-dir models/embeddings/seq_stage1/timing/C/seed<base_seed>_n<n_sims>
+    variability_rerun:
+      what: 'the 1b Monte Carlo variability rerun: the timing shard at the chosen
+        n_sims, re-run under the second registered base seed 20260911 (and the third,
+        20260912, for the third batch)'
+      runs_through: the timing_1b block above
+      base_seeds:
+      - 20260911
+      - 20260912
+      reads: the paired spread across batches, which is what the convergence stop
+        rule thresholds
+  C114:
+    status: deferred
+    role: sequence beyond hand-built history (optional, after A50)
+    description: full T1 given the production 114 features, to test whether learned
+      sequence adds anything beyond the 9 hand-built history columns production
+      already carries
+    reason_deferred: 'no checkpoint exists: a 114-feature T1 has never been trained,
+      and training one is a stage-2 sized job, not a stage-1 screen. It is also
+      the wrong order — A50 answers the equal-information question first, and C114
+      only becomes informative if a 50-feature sequence arm shows something. No
+      artifact, hash, seed or command is registered for it, so it cannot be run
+      under this config.'
+    artifacts: null
+selector:
+  class: RosterEmpiricalBowlerSelector
+  identical_across_arms: true
+  asserted_by: scripts/sequence_track/audit_cross_arm.py, which fails when any arm's
+    selector class, usage hash or roster hash differs
+  bowler_usage: models/bowler_phase_usage.json
+  bowler_usage_role: bowler_phase_usage
+  bowler_usage_md5: 2e650423f0c949631fca1f15dd1c8a56
+  roster_policy: models/bowler_roster_policy.json
+  roster_policy_role: bowler_roster_policy
+  roster_policy_md5: f2a5efa2810eef02124d875da0c6dd83
+  b10_corpus: models/b10_usage_corpus.pkl
+  b10_corpus_role: bowler_usage_corpus_b10
+  b10_corpus_md5: 42b313b138fefdd293c280a9d4be2e2b
+  k: 30
+  enabled_by: run_arm.py --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+    models/bowler_roster_policy.json; WITHOUT the roster flag run_arm builds a plain
+    EmpiricalBowlerSelector and no roster policy is applied, so the flag is not
+    optional
+  why: 'the plan requires the corrected roster-aware policy: the B10 selector used
+    7.5-7.9 distinct bowlers against 6.0-6.1 observed'
+checkpoint_selection:
+  rule: lowest validation LL in models/embeddings/t1_ablation_v1_mps/summary.yaml
+    per arm; ties break to the lowest seed number; test LL is not consulted
+  computed_by: scripts/sequence_track/pin_stage1.py (not hardcoded)
+  source: models/embeddings/t1_ablation_v1_mps/summary.yaml
+  source_role: null
+  source_role_note: the T1 ablation lineage is an unpromoted research artifact with
+    no manifest role; its path is composed from segments and its identity is the
+    sha256 below
+  source_sha256: 5ad70b2b68d86f112c5dfcf8aba06060bf86a7e0592a50dd8e6234bdfa021b33
+  split: validation
+  split_rows: 124292
+  per_seed_validation_ll:
+    mlp:
+    - seed: 7
+      validation_ll: 1.438134
+    - seed: 13
+      validation_ll: 1.438039
+    - seed: 29
+      validation_ll: 1.438053
+    - seed: 42
+      validation_ll: 1.4386
+    - seed: 101
+      validation_ll: 1.437755
+    full:
+    - seed: 7
+      validation_ll: 1.436972
+    - seed: 13
+      validation_ll: 1.438353
+    - seed: 29
+      validation_ll: 1.437451
+    - seed: 42
+      validation_ll: 1.437245
+    - seed: 101
+      validation_ll: 1.436634
+  chosen:
+    B:
+      ablation_arm: mlp
+      seed: 101
+      validation_ll: 1.437755
+      model_dir: models/embeddings/t1_ablation_v1_mps/mlp/seed_101
+      checkpoint: models/embeddings/t1_ablation_v1_mps/mlp/seed_101/model.pt
+    C:
+      ablation_arm: full
+      seed: 101
+      validation_ll: 1.436634
+      model_dir: models/embeddings/t1_ablation_v1_mps/full/seed_101
+      checkpoint: models/embeddings/t1_ablation_v1_mps/full/seed_101/model.pt
+seeds:
+  base_seed: 20260910
+  second_base_seed: 20260911
+  second_base_seed_use: 'the 1b variability rerun: the timing shard is re-run with
+    this base seed to measure paired Monte Carlo variability'
+  per_fixture_rule: low 31 bits of sha256(f'{cricsheet_id}:{base_seed}')
+  per_fixture_implementation: int.from_bytes(hashlib.sha256(f'{cricsheet_id}:{int(base_seed)}'.encode()).digest(),
+    'big') & ((1 << 31) - 1)
+  substream_rule: low 31 bits of sha256(f'{fixture_seed}:{name}')
+  substream_implementation: int.from_bytes(hashlib.sha256(f'{int(fixture_seed)}:{name}'.encode()).digest(),
+    'big') & ((1 << 31) - 1)
+  substreams:
+  - outcome
+  - extras
+  - selector
+  implemented_by: scripts/sequence_track/run_arm.py functions fixture_seed and sub_seed;
+    scripts/tests/test_pin_stage1.py asserts this config's documented formula reproduces
+    them
+  evaluator_seam: MatchLevelEvaluator._simulation_seed in scripts/sim_eval/match_evaluator.py,
+    overridden by run_arm._ArmEvaluator; the legacy fixed LEGACY_SIMULATION_SEED
+    = 42 is not used by any stage-1 arm
+  consumed_as: SimulationConfig.random_seed, one value per fixture
+  substream_status: the three named sub-seeds are derived and written to arm_provenance.json
+    but the engine cannot consume them separately — see deviations.single_global_rng_stream
+  worked_example:
+  - cricsheet_id: '1477609'
+    base_seed: 20260910
+    fixture_seed: 40343472
+    sub_seeds:
+      outcome: 420537122
+      extras: 1799797402
+      selector: 817427680
+  - cricsheet_id: '1478908'
+    base_seed: 20260910
+    fixture_seed: 1700084169
+    sub_seeds:
+      outcome: 1184448536
+      extras: 104971194
+      selector: 1533117965
+  - cricsheet_id: '1501896'
+    base_seed: 20260910
+    fixture_seed: 2033558947
+    sub_seeds:
+      outcome: 1433581797
+      extras: 373819125
+      selector: 1902100017
+  - cricsheet_id: '1505127'
+    base_seed: 20260910
+    fixture_seed: 678096512
+    sub_seeds:
+      outcome: 1706250371
+      extras: 1064453679
+      selector: 180333092
+  interval_mechanism: 'the engine seeds simulation i of a fixture with SimulationConfig.random_seed
+    + i, so ONE fixture occupies the half-open seed interval [fixture_seed, fixture_seed
+    + n_sims). If two fixtures'' intervals intersect, the simulations at the shared
+    seeds replay the same draw schedule: those two fixtures'' Monte Carlo errors
+    are then correlated inside every arm. The chance of some collision GROWS with
+    n_sims (about N^2 * n_sims / 2^31 for N fixtures), so it cannot be dismissed
+    for the larger convergence candidates, and it does NOT cancel in a paired contrast
+    — the draws are shared, but each arm''s model maps them to a different match,
+    so the induced error is model-dependent'
+  interval_guard: run_arm.seed_intervals_disjoint is called in preflight over the
+    run's own fixture set and REFUSES to launch on any overlap, naming the pair;
+    pin_stage1.py --check-seed-overlap --n-sims N screens a candidate over the full
+    registered fixture set. The table below is that screen for both registered base
+    seeds
+  overlap_check:
+    fixture_dir: data/polymarket_test_v2
+    fixture_dir_role: iteration_set_v2
+    fixture_count: 255
+    candidates:
+    - 100
+    - 200
+    - 400
+    - 800
+    - 1600
+    - 3200
+    - 6400
+    implementation: scripts/sequence_track/run_arm.py seed_intervals_disjoint, imported
+      by this script so the screen and the runtime refusal are one implementation
+    by_base_seed:
+      '20260910':
+      - n_sims: 100
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 8353
+      - n_sims: 200
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 8353
+      - n_sims: 400
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 8353
+      - n_sims: 800
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 8353
+      - n_sims: 1600
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 8353
+      - n_sims: 3200
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 8353
+      - n_sims: 6400
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 8353
+      '20260911':
+      - n_sims: 100
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 9126
+      - n_sims: 200
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 9126
+      - n_sims: 400
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 9126
+      - n_sims: 800
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 9126
+      - n_sims: 1600
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 9126
+      - n_sims: 3200
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 9126
+      - n_sims: 6400
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 9126
+      '20260912':
+      - n_sims: 100
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 107535
+      - n_sims: 200
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 107535
+      - n_sims: 400
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 107535
+      - n_sims: 800
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 107535
+      - n_sims: 1600
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 107535
+      - n_sims: 3200
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 107535
+      - n_sims: 6400
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 107535
+    joint:
+      base_seeds:
+      - 20260910
+      - 20260911
+      - 20260912
+      joint_min_seed_gap: 3290
+      largest_permitted_candidate: 3200
+      largest_permitted_n_sims_any: 3290
+      rule: a candidate is permitted only while n_sims <= joint_min_seed_gap; larger
+        candidates need new base seeds and a re-screen, and run_arm refuses them
+        at launch
+      rows:
+      - n_sims: 100
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 3290
+      - n_sims: 200
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 3290
+      - n_sims: 400
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 3290
+      - n_sims: 800
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 3290
+      - n_sims: 1600
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 3290
+      - n_sims: 3200
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 3290
+      - n_sims: 6400
+        overlapping_pairs: 2
+        disjoint: false
+        permitted: not_permitted_without_new_seeds
+        example_overlap: '1493246@20260910 (seed 198607220) and 1512733@20260911
+          (seed 198610510): gap 3290'
+        min_seed_gap: 3290
+    joint_note: 'the per-base-seed rows above are NOT sufficient: the three 1b batches
+      run the same fixtures on one seed line, so the screen that governs a convergence
+      candidate is the joint one. run_arm screens the joint cohort for any block
+      that registers several base seeds'
+clipping:
+  bounds:
+  - 0.01
+  - 0.99
+  seam: MatchLevelEvaluator.prob_clip, applied at the single seam MatchLevelEvaluator._clip_and_normalize
+  seam_source: scripts/sim_eval/match_evaluator.py
+  applied_where: after the tie-free renormalisation and before log loss, Brier,
+    edge and bet placement, on both evaluation paths
+  default: prob_clip = None, which reproduces the historical DEFAULT_PROB_CLIP =
+    [0.05, 0.95] exactly, so every existing runner and every stored BR2 result is
+    unchanged
+  replaces_not_composes: the seam REPLACES the evaluator's historical unconditional
+    [0.05, 0.95] clip; it does not compose with it. The registered stage-1 clip
+    is therefore WIDER than every previous run's, including BR2 G1, so a stage-1
+    winner log loss is not comparable to any number produced under the [0.05, 0.95]
+    clip
+  enabled_by: run_arm.py --clip-low 0.01 --clip-high 0.99
+  why: at 100 sims the plug-in winner probability has SE 0.05 at p = 0.5; a 0/100
+    or 100/100 draw must not cost an unbounded log loss, and a 0.05 floor would
+    hide real confidence at the resolution stage 1 is trying to measure
+convergence_protocol:
+  candidates: 'n_sims doubles from 100 with no ceiling: 100, 200, 400, 800, ...'
+  first_candidate: 100
+  batches_per_arm_per_candidate: 3
+  batch_base_seeds:
+  - 20260910
+  - 20260911
+  - 20260912
+  batch_independence: three independent simulation batches per arm per candidate,
+    one per registered batch base seed; the fixture set, chronology, selector and
+    extras law are identical across batches
+  shard: 'the 1b timing shard: 10 fixtures chosen to include long innings'
+  statistic: the paired C-B and B-A winner log loss on the shard, computed per batch
+  stop_rule: stop at the smallest n_sims at which the 95% range of the paired C-B
+    and B-A winner LL across the three batches is below 0.002
+  threshold: 0.002
+  chosen_n_sims: to_be_filled_before_1d
+  chosen_n_sims_drives: the --n-sims token in every arm's full_run.command; both
+    are rendered from pin_stage1.CHOSEN_N_SIMS
+  spread_table_columns:
+  - n_sims
+  - contrast
+  - batch_1_delta_ll
+  - batch_2_delta_ll
+  - batch_3_delta_ll
+  - range_95
+  - below_threshold
+  spread_table: []
+  fill_before: 1d (the full 255-fixture run)
+decision_rule:
+  primary_slice: '>=$50k (--min-volume 50000)'
+  reported_slices:
+  - all
+  - '50000'
+  - '100000'
+  sign_convention: every contrast is candidate minus reference, in winner log loss,
+    so a negative delta is favourable to the candidate
+  equivalence_margin_ll: 0.007
+  margin_basis: the branch-wide seed-noise floor (claim_gate SEED_FLOOR = 0.007);
+    a difference below it is not resolvable by this protocol
+  confirmatory_family:
+  - contrast: C-B
+    candidate: C
+    reference: B
+    slice: '50000'
+    question: incremental sequence value in rollout
+    decision_it_feeds: whether learned sequence adds anything over the same features
+      without sequence memory; it is evidence, not by itself an advancement
+  - contrast: B-A
+    candidate: B
+    reference: A
+    slice: '50000'
+    question: system comparison, token MLP vs production
+    decision_it_feeds: B advances only if this is favourable
+  - contrast: C-A
+    candidate: C
+    reference: A
+    slice: '50000'
+    question: system comparison, full T1 vs production
+    decision_it_feeds: C advances only if this is favourable
+  multiplicity: Holm adjustment across the three confirmatory contrasts (C-B, B-A,
+    C-A); the family is fixed here, before any run
+  exploratory_contrasts:
+  - contrast: A50-A
+    candidate: A50
+    reference: A
+    slice: '50000'
+    label: exploratory system contrast
+    note: A50 is the equal-information control for the A-vs-B/C comparison; it is
+      outside the confirmatory family, is not Holm-adjusted, and cannot advance
+      anything
+  outcomes:
+    parity: the 95% block interval lies entirely inside [-0.007, +0.007]
+    favourable: the 95% block interval excludes zero and the point estimate is below
+      -0.007
+    adverse: the 95% block interval excludes zero and the point estimate is above
+      +0.007
+    inconclusive: anything else
+  advancement: 'symmetric: B advances only if B-A is favourable, C advances only
+    if C-A is favourable; a favourable C-B on its own is sequence evidence for stage
+    2, not an advancement'
+  market_claim: no winner-LL result is a market claim. A market claim additionally
+    requires the claim gate's market comparison with the registered cost scenarios
+    below, and a paired Δprofit or ΔROI interval, per program.md's LANDED rule
+  cost_scenarios:
+  - spread 0 bps, fee 0 bps on winnings
+  - spread 100 bps, fee 0 bps on winnings
+  - spread 200 bps, fee 0 bps on winnings
+  - spread 100 bps, fee 100 bps on winnings
+  - spread 100 bps, fee 100 bps on stake
+  estimands_reported_separately:
+  - the registered checkpoint's own performance, with uncertainty from paired tournament-block
+    resampling of matches and independent simulation batches
+  - across-training-seed robustness, which this single-checkpoint screen does NOT
+    measure and must not be read from it
+scoring:
+  winner_log_loss:
+    status: confirmatory
+    gate: scripts/sim_eval/claim_gate.py
+    kind: match_model
+    odds_role: odds_iteration_v2
+    cluster_source_dir: data/polymarket_test_v2
+    cluster_source_dir_role: iteration_set_v2
+    slices:
+    - all
+    - '50000'
+    - '100000'
+    uncertainty: 'tournament_time_block_v1: 10,000 seed-42 whole-event resamples
+      with explicit bet placement; fewer than 10 blocks is descriptive, never a
+      claim'
+    prices: the gate recomputes prices, placement and profit from the registered
+      odds role; stored prices in an eval JSON are never evidence
+    cost_scenarios:
+    - spread 0 bps, fee 0 bps on winnings
+    - spread 100 bps, fee 0 bps on winnings
+    - spread 200 bps, fee 0 bps on winnings
+    - spread 100 bps, fee 100 bps on winnings
+    - spread 100 bps, fee 100 bps on stake
+    command_template: uv run --no-sync python scripts/sim_eval/claim_gate.py --kind
+      match_model --candidate <candidate arm dir>/sliced_50000.json --baseline <reference
+      arm dir>/sliced_50000.json --odds-role odds_iteration_v2 --cluster-source-dir
+      data/polymarket_test_v2 --out <gate output>.json
+  realism:
+    status: exploratory
+    scorer: scripts/sequence_track/score_realism.py
+    input: <arm output dir>/raw_sims.jsonl
+    output: <arm output dir>/realism.json
+    metrics:
+    - innings score P10/P50/P90 coverage of the actual innings
+    - first-innings score bias
+    - extras per innings
+    - wickets per innings
+    - unique bowlers used per innings
+    - batting-first minus chasing flip on the PPC cohort
+    note: read after the confirmatory contrasts; no realism number advances an arm
+      or supports a claim
+  props:
+    status: exploratory
+    scorer: scripts/sequence_track/score_props.py
+    baseline: scripts/sim_eval/prop_fair_baselines.py
+    corpus: models/prop_fair_baseline_corpus_v2.pkl
+    corpus_role: prop_fair_baseline_corpus_v2
+    corpus_md5: a78b7c3f933f68fac5f2422292e979d8
+    input: <arm output dir>/raw_sims.jsonl
+    output: <arm output dir>/props.json
+    metric: paired per-family Brier (mean absolute error for the four *_mae families),
+      sim minus as-of fair baseline, per arm
+    bar: 'E2 v2: no binary prop family beats an as-of fair baseline, so a prop claim
+      must clear the versioned fair baseline, never a base rate'
+    families:
+    - top_batter
+    - top_bowler
+    - batter_50plus
+    - batter_6plus_six
+    - batter_fours_1plus
+    - batter_fours_2plus
+    - batter_fours_3plus
+    - bowler_wkts_1plus
+    - bowler_wkts_2plus
+    - bowler_wkts_3plus
+    - innings_runs_ou_160_5
+    - innings_runs_ou_170_5
+    - innings_runs_ou_180_5
+    - pp_total_ou_45_5
+    - pp_total_ou_50_5
+    - pp_total_ou_55_5
+    - team_highest_individual_ou_29_5
+    - team_highest_individual_ou_34_5
+    - team_highest_individual_ou_39_5
+    - first_wicket_runs_ou_30_5
+    - match_total_sixes_ou_15_5
+    - match_total_sixes_ou_20_5
+    - highest_over_runs_ou_18_5
+    - highest_over_runs_ou_24_5
+    - batter_runs_mae
+    - team_total_fours_mae
+    - team_total_sixes_mae
+    - team_first_over_mae
+    - highest_individual_mae
+    note: prop_backtest.py builds its own XGBoostModelV2 and has no T1 seam, so
+      the stage-1 prop scorer consumes the arm runner's own per-simulation output
+      instead of re-simulating
+deviations:
+- id: single_global_rng_stream
+  what: the plan registers three named RNG sub-streams (outcome, extras, selector);
+    the engine seeds ONE global random/np.random stream per simulation (SimulationConfig.random_seed
+    + i) and outcome sampling, extras, selector draws and run-outs all draw from
+    it
+  why: separating the streams needs an engine-wide RNG refactor of sim_v1_2.SimulationEngine,
+    which is the BR2-gated engine; stage 1 must not change the engine it is measuring
+  consequence: the sub-seeds are derived and recorded in arm_provenance.json but
+    are not separately consumed. Every arm still shares one identical draw schedule
+    per fixture, which is what the paired comparison needs; what is lost is the
+    ability to hold, say, the extras draws fixed while the outcome draws move
+  second_consequence: 'the engine''s additive scheme (random_seed + i for the i-th
+    simulation) makes ONE fixture occupy the seed interval [fixture_seed, fixture_seed
+    + n_sims). Two fixtures whose intervals intersect replay the same draw schedule
+    at the shared seeds, so their Monte Carlo errors are correlated inside every
+    arm and the run has fewer independent draws than n_sims x fixtures suggests.
+    The chance of some collision GROWS with n_sims (about N^2 * n_sims / 2^31 for
+    N fixtures), and it does NOT cancel in a paired contrast: the draws are shared,
+    but each arm''s model maps them to a different match, so the induced error is
+    model-dependent. This is guarded, not assumed away — run_arm refuses to launch
+    on any overlap in its own fixture set, and seeds.overlap_check screens every
+    convergence candidate over the full registered set for every registered base
+    seed'
+  status: stream separation deferred; the interval overlap it causes is screened
+    and refused at launch
+- id: extras_graft_attribute_seam
+  what: the B18 extras sidecar reaches the XGBoost arms (A, A50) through the public
+    XGBoostModelV2.extras_graft attribute set by run_arm._apply_extras_graft, not
+    through a constructor argument
+  why: XGBoostModelV2 exposes no explicit-path seam for the graft; it only auto-detects
+    an extras_graft_v1.json sitting beside the model artifact, and neither production
+    model directory carries one. The attribute is what the engine reads and what
+    the T1 wrapper sets from T1_EXTRAS_GRAFT_PATH, so both families end up on the
+    same law without editing sim_v1_2.py
+  consequence: run_arm refuses to run if a model directory carries its own sidecar
+    that differs from the requested one, so an ambiguous extras law fails closed
+    rather than passing silently
+  status: accepted
+- id: run_out_sidecar_absent
+  what: the plan lists a run-out sidecar among the pinned artifacts; models/auto/d15/runout_rates.json
+    is absent on this checkout
+  why: the run-out rate is a code constant, sim_v1_2.RUNOUT_P; the sidecar the engine
+    banner cites was never committed
+  consequence: the config pins the constant, its value read by import, and its source
+    line, and the engine md5 in provenance covers any change to it
+  status: accepted
+- id: scorers_consume_raw_sims
+  what: the realism and prop scorers read the arm runner's raw_sims.jsonl instead
+    of re-simulating through prop_backtest.py
+  why: prop_backtest.py constructs XGBoostModelV2 directly and has no T1 seam, so
+    it cannot score B or C at all; re-simulating would also break the identical-draw-schedule
+    guarantee
+  consequence: realism and prop numbers describe exactly the simulations the winner-LL
+    numbers came from; they are not comparable line for line with historical prop_backtest.py
+    reports
+  status: accepted
+- id: no_parallel_within_a_run
+  what: run_arm.py refuses --parallel; sharding across processes is the only parallelism
+  why: the same-day replay lifecycle is strictly sequential — it orders every stats
+    read — and stage 1 needs one deterministic prediction-time cutoff per fixture
+  consequence: the 1c shard-consistency check exists precisely because sharding
+    is the only way to use more than one core; each shard keeps the full replay
+    context
+  status: accepted
+- id: clip_seam_replaces_rather_than_composes
+  what: MatchLevelEvaluator.prob_clip REPLACES the evaluator's historical unconditional
+    [0.05, 0.95] clip; it does not compose with it, so stage 1 runs at a strictly
+    wider clip than every earlier run
+  why: composing would leave the 0.05 floor in force and make the registered [0.01,
+    0.99] bound decorative; replacing is the only way to measure at the resolution
+    the plan asks for
+  consequence: no stage-1 winner log loss is comparable to any number produced under
+    the [0.05, 0.95] clip, BR2 G1 included. prob_clip = None still reproduces the
+    legacy behaviour exactly, so no existing runner or stored result moves
+  status: accepted
+- id: resolved_flag_reads_cricsheet_not_the_odds_row
+  what: the `resolved` eligibility flag is read from the cricsheet document's info.outcome.winner,
+    not from the odds row's actual_winner field
+  why: eligibility must be identical across arms by construction, and the cricsheet
+    document is the one input every arm sees identically; an odds-row field could
+    differ if the odds loader ever changed
+  consequence: a fixture the odds file calls settled but cricsheet records with
+    no winner (a no-result or an abandoned match) counts as unresolved for every
+    arm alike. The cross-arm audit tests a real invariant rather than a copied field
+  status: accepted
+- id: as_of_stamp_for_odds_less_fixtures
+  what: for a fixture with no odds row there is no prediction lock, so its as-of
+    stamp is taken at begin_match instead of at lock_prediction
+  why: the runner only locks a prediction when one is required; nothing advances
+    between begin_match and lock_prediction, so the begin_match snapshot IS the
+    state at the point a lock would have happened
+  consequence: the two stamps are equal wherever both exist, and the audit compares
+    them across arms uniformly; an odds-less fixture is still stamped and still
+    audited
+  status: accepted
+- id: roster_selector_installed_by_factory_swap
+  what: run_sim_eval.py has no roster-policy flag, so run_arm swaps the module-level
+    EmpiricalBowlerSelector for a factory that builds RosterEmpiricalBowlerSelector
+    when --bowler-roster-policy is given
+  why: adding a flag to the frozen runner would change the runner stage 1 is meant
+    to leave alone; the factory swap is confined to the arm runner
+  consequence: WITHOUT --bowler-roster-policy no roster policy is applied and the
+    arm silently runs the plain empirical selector, which is NOT the registered
+    configuration. Every command line in this config carries the flag, and the cross-arm
+    audit asserts the selector class and roster hash match across arms
+  status: accepted
+known_asymmetries:
+- id: stats_cache_i7_vs_v3
+  what: A and A50 serve from the i7 stats cache (models/player_stats_cache_i7.sqlite);
+    B and C serve from the legacy v3 cache (models/player_stats_cache_v3.sqlite)
+  why: the ablation checkpoints were trained on data/xgb_data_v3 and sim_t1.py refuses
+    any other frame
+  consequence: B-A and C-A are system contrasts across two caches, not model-only
+    contrasts. C-B is within one cache and is the only clean incremental comparison
+  removable_in_stage_0: false
+- id: training_frame_i7_vs_v3
+  what: A and A50 are trained on the i7 identity frame (data/xgb_data_i7); B and
+    C are trained on the pre-I7 v3 frame (data/xgb_data_v3, 467 raw venue strings)
+  why: 'the same constraint: the ablation lineage predates the I7 identity contract,
+    and the v3 frame fail-closes under it, so those checkpoints cannot be retrained
+    on i7 without a new training run outside stage 1''s scope'
+  consequence: any A-vs-B or A-vs-C difference confounds venue identity resolution
+    with the model; A50 narrows the feature-set part of that confound but not the
+    frame part
+  removable_in_stage_0: false
+- id: arm_a_path_is_the_replay_lifecycle
+  what: arm A runs through the T1 replay lifecycle (SameDayReplayStatsProvider +
+    _T1ReplayEvaluator via run_arm.py), not through the BR2 snapshot runner it was
+    measured on
+  why: identical prediction-time cutoffs across arms are only possible if one runner
+    drives every arm; the replay provider's tracker view implements every provider
+    method XGBoostModelV2's feature builder calls
+  consequence: BR2's G1 winner-LL line is NOT a stage-1 reference number for arm
+    A. The only valid reference for every stage-1 contrast is arm A's own stage-1
+    run under this config
+  removable_in_stage_0: false
+- id: br2_g1_is_not_a_stage_1_number
+  what: BR2 G1 ran arm A's model with the plain EmpiricalBowlerSelector, the snapshot
+    stats provider, and the evaluator's unconditional [0.05, 0.95] clip. Stage 1
+    runs the same model with RosterEmpiricalBowlerSelector, the SameDayReplayStatsProvider,
+    and the registered [0.01, 0.99] clip
+  why: 'three separate stage-1 requirements force the change: the plan''s roster-aware
+    selector, one replay chronology shared by every arm, and a clip wide enough
+    not to mask the resolution being measured'
+  consequence: NO stage-1 number is comparable to BR2, in either direction. A stage-1
+    result that differs from BR2's G1 line is not evidence of anything; the only
+    admissible baseline for B-A, C-A and A50-A is arm A's own run under this config
+  removable_in_stage_0: false
+provenance:
+  pins_generated_at: '2026-09-10T18:53:47Z'
+  git_head_short: dfa45ad
+  not_verified:
+  - provenance.pins_generated_at
+  - provenance.git_head_short
+  not_verified_reason: both change without the config's meaning changing (a re-pin
+    moves the timestamp; the commit that lands this file moves HEAD), so --verify
+    records them and does not compare them
+  config_sha256_self_reference: 'deliberately absent: a config cannot contain its
+    own sha256. The integrity check is pin_stage1.py --verify, which recomputes
+    every pinned fact from the files'
+  source_closure_rule: 'every source file on the stage-1 execution path is hashed,
+    not just the runner and the engine: replay and rehydration, the delegated runner,
+    the loaders and chronology, the stats cache, the feature contract, the gate''s
+    statistics and market arithmetic, and both scorers with their reducers. A change
+    to any of them moves stage-1 results, so a change to any of them must fail --verify'
+  source_count: 34
+  source_md5:
+    scripts/sequence_track/run_arm.py: 55100de6c1a5f70528b9aa24a734ba1f
+    scripts/sequence_track/audit_cross_arm.py: a7d9c9a27a690fc31f1c0edb84e28c04
+    scripts/sequence_track/score_realism.py: acc2aaffc0a2011c56d15d13d3b5d2fa
+    scripts/sequence_track/score_props.py: 3aa0f6d31543fc9a590a188f90e72f33
+    scripts/sequence_track/pin_stage1.py: 452533a0508df96052d59b8b7e947f9d
+    scripts/sim_eval/run_sim_eval.py: 30397dac0e5f226ae18cffde0a6af39a
+    scripts/sim_eval/run_sim_eval_t1.py: ff3b0233be5acc8faa1af552ec2952de
+    scripts/sim_eval/match_evaluator.py: 7c33cae1cf287d70fdf357948bc672bc
+    scripts/sim_eval/same_day_stats.py: 1887c94a268120b9b17daea8b3a47a92
+    scripts/sim_eval/loaders.py: 2a812b18704ebfe0c81f2f1e713eca2d
+    scripts/sim_eval/reslice_eval_json.py: b5a4718df5dc25d6259b7006a56578c8
+    scripts/sim_eval/claim_gate.py: 0bc9508eea0c41408e521240ae15feab
+    scripts/sim_eval/eval_statistics.py: 37423259d6651e43771f9a69df848a71
+    scripts/sim_eval/market_math.py: fd951b3426bf523b3bfa4c9de16eb146
+    scripts/sim_eval/settlement_common.py: 2442b9404cb658f8372a670074bd548b
+    scripts/sim_eval/prop_backtest.py: bd2020e653307ff8f8f231f41186613f
+    scripts/sim_eval/prop_fair_baselines.py: 27bf4e8235496282772cef96328799df
+    scripts/sim_v1_2.py: d7e7a70d443320e113e6b6fde5a566ae
+    scripts/sim_t1.py: 0ef27ec39264ba43e02b30a67e927969
+    scripts/transformer_t1.py: 0765668075b8948276cff3809f7507c2
+    scripts/embeddings_e1.py: 3116a7506ee60eccbd4d7847d61b829d
+    scripts/t1_ppc_common.py: c291c695ad08a0ee200bc43423733f82
+    scripts/tracker_rehydration.py: 42533b4368c59e597e5deb12af839082
+    scripts/parsing_v2.py: 555f2d1293871ec68df93f8f38f22734
+    scripts/stats_provider.py: ce315969ec600b3f2153757046bcdfd3
+    scripts/stats_sqlite_backend.py: c23918fe695516cbab43bb0adbfda41c
+    scripts/loaders_common.py: 5bbcb7fd867419ab1fbea943830ae536
+    scripts/player_metadata.py: 7bec7ed7e4486731da6a0cf029f95173
+    scripts/feature_registry.py: 0985813869e658099bd7699cb4c5fb44
+    scripts/identity_maps.py: 96adb28f49e334587d840347057b5528
+    scripts/match_identity.py: 81dc69b80f6e4ee4d31b3d6e1fc28aa9
+    scripts/elo_update.py: d3755406bc83a4c14603448b2683212f
+    scripts/registered_experiment.py: 5650562b58e88433c86321fe5a9bb480
+    scripts/artifacts.py: abd9f6ed4387b9e3bbfc974f29c20b81
+  source_md5_absent: []
+  source_md5_absent_note: closure files not present on this checkout; they are dropped
+    from the hash set and named here rather than skipped silently
+  runtime:
+    python: 3.9.25
+    packages:
+      xgboost: 2.1.4
+      torch: 2.5.1
+      numpy: 1.24.3
+      pandas: 2.3.2
+      scikit-learn: 1.6.1
+    read_via: importlib.metadata.version
+    verified: true
+    note: 'these are pinned facts, not documentation: xgboost, torch and numpy all
+      change simulation output, so a stage-1 result produced under different versions
+      is a different result. pin_stage1.py --verify fails on the environment, and
+      the fix is to restore the environment or re-pin deliberately'
+  pinned_by: scripts/sequence_track/pin_stage1.py

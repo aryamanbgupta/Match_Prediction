@@ -31,6 +31,17 @@ from .market_math import (
 # Betting configuration
 BET_EDGE_THRESHOLD = 0.0  # Minimum edge required to place bet (0 = any positive edge)
 
+# Historical match-probability clip bounds, applied after the tie-free
+# renormalisation and before log loss / Brier / edge / bet placement. The
+# `MatchLevelEvaluator.prob_clip` seam replaces them; `prob_clip = None`
+# (the default) reproduces every earlier run exactly.
+DEFAULT_PROB_CLIP = (0.05, 0.95)
+
+# Legacy per-match simulation seed. Every historical run seeded every match
+# identically; `MatchLevelEvaluator._simulation_seed` is the seam that lets a
+# runner derive a per-fixture seed instead.
+LEGACY_SIMULATION_SEED = 42
+
 
 @dataclass
 class MatchEvaluationResult:
@@ -146,7 +157,15 @@ class OverallEvaluationResults:
 
 class MatchLevelEvaluator:
     """Evaluates match predictions against betting odds"""
-    
+
+    # Sequence-track stage 1 seams (2026-09-10). Both default to the legacy
+    # behaviour, so every existing runner and every stored result is
+    # unchanged when neither is touched.
+    #
+    # `prob_clip = (low, high)` REPLACES the historical (0.05, 0.95) match
+    # win-probability clip bounds at the single seam below. None = legacy.
+    prob_clip: Optional[Tuple[float, float]] = None
+
     def __init__(self, model, simulation_engine: SimulationEngine,
                  n_simulations: int = 1000, parallel: bool = True,
                  bootstrap_resamples: int = DEFAULT_BOOTSTRAP_RESAMPLES,
@@ -170,6 +189,30 @@ class MatchLevelEvaluator:
         self.bootstrap_resamples = bootstrap_resamples
         self.cluster_lookup = dict(cluster_lookup or {})
         self.cost_model = cost_model or CostModel.none()
+
+    def _simulation_seed(self, match_id: str) -> int:
+        """Seed handed to `SimulationConfig.random_seed` for one fixture.
+
+        Legacy behaviour: one fixed seed for every match. The sequence-track
+        arm runner overrides this to derive a per-fixture seed so different
+        arms share one draw schedule per fixture.
+        """
+        return LEGACY_SIMULATION_SEED
+
+    def _clip_and_normalize(
+        self, team1_prob_norm: float, team2_prob_norm: float
+    ) -> Tuple[float, float]:
+        """Clip the tie-free two-team probabilities, then renormalise.
+
+        One seam, used by both evaluation paths. Bounds come from
+        `self.prob_clip` when set, else the historical (0.05, 0.95); the
+        arithmetic is verbatim from the two inline blocks it replaced.
+        """
+        prob_floor, prob_ceiling = self.prob_clip or DEFAULT_PROB_CLIP
+        team1_prob = max(prob_floor, min(prob_ceiling, team1_prob_norm))
+        team2_prob = max(prob_floor, min(prob_ceiling, team2_prob_norm))
+        clip_total = team1_prob + team2_prob
+        return team1_prob / clip_total, team2_prob / clip_total
 
     @staticmethod
     def _resolve_odds_row(
@@ -305,7 +348,7 @@ class MatchLevelEvaluator:
                 config = SimulationConfig(
                     n_simulations=self.n_simulations,
                     parallel=self.parallel,
-                    random_seed=42,
+                    random_seed=self._simulation_seed(match_id),
                     verbose=False
                 )
                 sim_results = self.engine.simulate_multiple(match_state, config)
@@ -442,14 +485,8 @@ class MatchLevelEvaluator:
             t1_cal = float(calibrated_all[i])
             t2_cal = 1.0 - t1_cal
 
-            # Clip to [5%, 95%]
-            PROB_FLOOR = 0.05
-            PROB_CEILING = 0.95
-            t1_cal = max(PROB_FLOOR, min(PROB_CEILING, t1_cal))
-            t2_cal = max(PROB_FLOOR, min(PROB_CEILING, t2_cal))
-            clip_total = t1_cal + t2_cal
-            t1_cal /= clip_total
-            t2_cal /= clip_total
+            # Clip to [5%, 95%] by default; `prob_clip` replaces the bounds.
+            t1_cal, t2_cal = self._clip_and_normalize(t1_cal, t2_cal)
 
             simulated_win_prob = {d['team1']: t1_cal, d['team2']: t2_cal}
 
@@ -577,7 +614,8 @@ class MatchLevelEvaluator:
         config = SimulationConfig(
             n_simulations=self.n_simulations,
             parallel=self.parallel,
-            random_seed=42,  # Fixed for reproducibility
+            # Fixed for reproducibility; per-fixture via `_simulation_seed`.
+            random_seed=self._simulation_seed(match_id),
             verbose=False
         )
         
@@ -604,17 +642,13 @@ class MatchLevelEvaluator:
             team1_prob_norm = 0.5
             team2_prob_norm = 0.5
 
-        # Step 2: Clip to avoid extreme predictions (5%-95%)
-        PROB_FLOOR = 0.05
-        PROB_CEILING = 0.95
-        team1_prob = max(PROB_FLOOR, min(PROB_CEILING, team1_prob_norm))
-        team2_prob = max(PROB_FLOOR, min(PROB_CEILING, team2_prob_norm))
-
-        # Re-normalize after clipping to ensure they sum to 1.0
-        clip_total = team1_prob + team2_prob
+        # Step 2: Clip to avoid extreme predictions (5%-95% by default; the
+        # `prob_clip` seam replaces the bounds) and re-normalize to 1.0
+        team1_prob, team2_prob = self._clip_and_normalize(
+            team1_prob_norm, team2_prob_norm)
         simulated_win_prob = {
-            team1: team1_prob / clip_total,
-            team2: team2_prob / clip_total
+            team1: team1_prob,
+            team2: team2_prob
         }
         
         # Extract score statistics
