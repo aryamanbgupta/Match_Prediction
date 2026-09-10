@@ -2816,3 +2816,14 @@ kind, ensemble estimand (one prediction set vs the verified production
 artifact's own predictions, 1-seed rule → provisional, PROMISING at best),
 zero-cost decision, registered iteration odds v2. **Budget:** ~5 fits.
 **Result:** FAILED 2026-09-10 (gate). Ensemble ≥$50k LL 0.6289 vs production seed 29 0.6249: paired ΔLL +0.0040 [+0.0023, +0.0076] (unfavourable, interval excludes zero; provisional 1-seed rule, 18 blocks, 0 fallbacks, n=167). Δprofit +0.030 [+0.004, +0.052] is noise on 167 bets and does not decide. Reading: seed 29 is the best of the five members on the iteration set (members 0.6249/0.6266/0.6284/0.6336/0.6336); the ensemble (0.6289) beats the member mean (0.6294) by a Jensen sliver but not the deployed seed. Because the iteration set was used for selection, some of seed 29's edge is selection luck; that argues for confirming any future ensemble claim on the golden set rather than for retrying here. Artifacts: experiments/results/item6_seed_ensemble/{gate,harness}.json.
+
+## R2 [P1] [FAILED] Item 6 candidate B: Platt calibration fitted on an isolated validation slice
+*(remediation plan §6 step 4, 2026-09-10)*
+**Hypothesis:** with early stopping restricted to validation rows before
+2025-04-20 and Platt fitted only on rows on/after it (no row used twice),
+the calibrated model beats the raw model on paired ≥$50k log loss. Prior:
+P2's 2026-08-07 re-look found val-fit Platt sharpens (a=1.107) and is
+point-favourable with intervals straddling zero. **Gate:** match_model,
+five aligned seeds (29, 7, 13, 42, 101), zero-cost decision, registered
+iteration odds v2. **Budget:** ~10 fits.
+**Result:** FAILED 2026-09-10 (gate). Five aligned seeds, non-provisional. ≥$50k paired ΔLL −0.0068 [−0.0230, +0.0125]: favourable on 5/5 seeds (−0.0046, −0.0083, −0.0063, −0.0076, −0.0071; raw 0.6249/0.6336/0.6266/0.6284/0.6336 → Platt 0.6204/0.6252/0.6203/0.6208/0.6265) but the 18-block interval straddles zero, so the LL gate does not clear; Δprofit −0.010 [−0.121, +0.062] is noise. Reading: consistent across seeds and just under the 0.007 floor, i.e. the shape of a real but small effect that 168 fixtures in 18 blocks cannot resolve; consistent with P2's re-look. Not a retry candidate on this set; a golden-set confirmation or more fixtures is the only way to resolve it. Serving stays raw. Artifacts: experiments/results/item6_platt_isolated/{gate,harness}.json; evidence copied to research/handoff/R2/.

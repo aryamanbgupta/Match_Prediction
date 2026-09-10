@@ -114,3 +114,11 @@ evidence copied to `research/handoff/R1/`. HA1–HA4 met.
 | HB2 | Date | `calib_after` chosen from the validation split's date range so both halves are non-empty; recorded in the config; the same date for every seed |
 | HB3 | Decision | five seeds, zero cost, registered odds v2; the gate decides; P2's 2026-08-07 re-look (val-fit Platt sharpens, a=1.107, point-favourable, CIs straddling zero) is the prior, not evidence |
 | HB4 | Record | R2 in IDEAS.md, verdict only through the gate, evidence copied to `research/handoff/R2/` |
+
+### Candidate B result (2026-09-10): FAILED
+
+Idea R2. Five non-provisional seeds; paired ≥$50k ΔLL **−0.0068
+[−0.0230, +0.0125]**, favourable on 5/5 seeds but the interval straddles
+zero; Δprofit noise. The effect is consistent and just under the seed floor,
+which 18 blocks cannot resolve; serving stays raw. HB1–HB4 met; evidence in
+`research/handoff/R2/`.
