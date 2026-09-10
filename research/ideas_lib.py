@@ -55,8 +55,8 @@ RESULTS_PATH = REPO_ROOT / "research" / "results.tsv"
 DIGEST_PATH = REPO_ROOT / "research" / "digest.md"
 PROGRAM_PATH = REPO_ROOT / "program.md"
 
-#: An idea id: one or two letters then digits (A1, B19, D18, I20, C1).
-IDEA_ID_RE = re.compile(r"^[A-Z]{1,2}[0-9]{1,3}$")
+#: An idea id, optionally followed by the mechanical five-seed confirmation suffix.
+IDEA_ID_RE = re.compile(r"^[A-Z]{1,2}[0-9]{1,3}(?:-confirm)?$")
 #: A leading ``[...]`` bracket group on a heading.
 LEADING_BRACKET_RE = re.compile(r"^\[([^\]]*)\]\s*")
 PRIORITY_RE = re.compile(r"^P[0-9]$")
@@ -73,6 +73,7 @@ FULL_TEXT_STATUSES = ("RUNNING", "PENDING", "TABLED")
 #: Statuses the digest reduces to one line each.
 ONE_LINE_STATUSES = (
     "LANDED",
+    "PROMISING",
     "FAILED",
     "CRASH",
     "SUPERSEDED",
@@ -137,8 +138,8 @@ class Idea:
     def sort_key(self) -> tuple:
         """Priority first (P0 before P3, unprioritised last), then id."""
         prio = int(self.priority[1:]) if self.priority else 99
-        series = re.match(r"^([A-Z]+)([0-9]+)$", self.ident)
-        return (prio, series.group(1), int(series.group(2)))
+        series = re.match(r"^([A-Z]+)([0-9]+)(-confirm)?$", self.ident)
+        return (prio, series.group(1), int(series.group(2)), bool(series.group(3)))
 
     def result_line_index(self) -> int | None:
         """Absolute index of this idea's ``**Result:**`` line, if it has one."""

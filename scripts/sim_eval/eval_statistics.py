@@ -402,5 +402,150 @@ def bootstrap_mean_ci(
     )
 
 
+def bootstrap_ratio_of_sums_difference_ci(
+    candidate_pnl: Sequence[Sequence[float]],
+    candidate_stake: Sequence[Sequence[float]],
+    baseline_pnl: Sequence[Sequence[float]],
+    baseline_stake: Sequence[Sequence[float]],
+    clusters: Sequence[Any],
+    n_resamples: int = DEFAULT_BOOTSTRAP_RESAMPLES,
+    ci: float = 0.95,
+    seed: int = DEFAULT_BOOTSTRAP_SEED,
+) -> tuple[float, float]:
+    """Tournament-block CI for candidate ROI minus baseline ROI.
+
+    Each replicate recomputes each arm's ROI as a ratio of sums. With multiple
+    fitted seeds, paired seed indices are resampled before tournament blocks,
+    matching the seed-mean gate estimator. A zero-stake arm has ROI zero.
+    """
+    arrays = [np.atleast_2d(np.asarray(values, dtype=float)) for values in (
+        candidate_pnl, candidate_stake, baseline_pnl, baseline_stake
+    )]
+    shape = arrays[0].shape
+    if any(array.shape != shape for array in arrays[1:]):
+        raise ValueError("ROI pnl/stake arrays are not aligned")
+    if shape[1] != len(clusters):
+        raise ValueError("ROI rows and clusters are not aligned")
+    if shape[1] == 0 or n_resamples <= 0:
+        return (float("nan"), float("nan"))
+
+    _, inverse = np.unique(np.asarray(clusters), return_inverse=True)
+    n_clusters = int(inverse.max()) + 1
+    block_sums = [np.stack([
+        np.bincount(inverse, weights=row, minlength=n_clusters)
+        for row in array
+    ]) for array in arrays]
+    rng = np.random.default_rng(seed)
+    estimates = np.empty(n_resamples, dtype=float)
+    n_seeds = shape[0]
+    for draw in range(n_resamples):
+        sampled_seeds = rng.integers(0, n_seeds, size=n_seeds)
+        sampled_blocks = rng.integers(0, n_clusters, size=n_clusters)
+        totals = [values[sampled_seeds][:, sampled_blocks].sum()
+                  for values in block_sums]
+        candidate_roi = totals[0] / totals[1] if totals[1] else 0.0
+        baseline_roi = totals[2] / totals[3] if totals[3] else 0.0
+        estimates[draw] = candidate_roi - baseline_roi
+    alpha = (1 - ci) / 2
+    return (float(np.quantile(estimates, alpha)),
+            float(np.quantile(estimates, 1 - alpha)))
+
+
 def count_unique_clusters(clusters: Iterable[Any]) -> int:
     return len(set(clusters))
+
+
+# ---------------------------------------------------------------------------
+# Paired prop/sim helpers
+# ---------------------------------------------------------------------------
+
+
+def load(path: Path | str) -> Any:
+    """Load a JSON artifact (legacy public name used by auto gate scripts)."""
+    with Path(path).open() as handle:
+        return json.load(handle)
+
+
+def paired_rows(det_a: Sequence[Mapping[str, Any]],
+                det_b: Sequence[Mapping[str, Any]], fam: str) -> list[tuple]:
+    """Return positionally paired ``(match_id, y, p_a, p_b)`` rows."""
+    idx_b = {record["match_id"]: record["obs"] for record in det_b}
+    out = []
+    for record_a in det_a:
+        match_id = record_a["match_id"]
+        obs_a = record_a["obs"].get(fam)
+        obs_b = idx_b.get(match_id, {}).get(fam)
+        if not obs_a or not obs_b or len(obs_a) != len(obs_b):
+            continue
+        for value_a, value_b in zip(obs_a, obs_b):
+            if value_a.get("y") != value_b.get("y"):
+                continue
+            out.append((match_id, float(value_a["y"]),
+                        float(value_a["p"]), float(value_b["p"])))
+    return out
+
+
+def metric_rows(detail: Sequence[Mapping[str, Any]], fam: str) -> list[tuple]:
+    """Return ``(match_id, y, p)`` rows for a detail metric family."""
+    out = []
+    for record in detail:
+        for value in record["obs"].get(fam, []):
+            out.append((record["match_id"], float(value["y"]),
+                        float(value["p"])))
+    return out
+
+
+def cluster_boot(rows: Sequence[Sequence[Any]], fn, n_boot: int = 2000,
+                 seed: int = 29) -> tuple[float, float]:
+    """Legacy A8 whole-match bootstrap, retained with identical defaults."""
+    rng = np.random.default_rng(seed)
+    by: dict[Any, list] = defaultdict(list)
+    for row in rows:
+        by[row[0]].append(row)
+    match_ids = list(by)
+    values = []
+    for _ in range(n_boot):
+        sampled = rng.choice(len(match_ids), size=len(match_ids), replace=True)
+        accumulated = []
+        for index in sampled:
+            accumulated.extend(fn(row) for row in by[match_ids[index]])
+        values.append(np.mean(accumulated))
+    return (float(np.percentile(values, 2.5)),
+            float(np.percentile(values, 97.5)))
+
+
+def brier_pair(rows: Sequence[Sequence[Any]]) -> tuple:
+    """Return Brier A/B, paired delta B-A, and its match-bootstrap CI."""
+    brier_a = float(np.mean([(p_a - y) ** 2 for _, y, p_a, _ in rows]))
+    brier_b = float(np.mean([(p_b - y) ** 2 for _, y, _, p_b in rows]))
+    interval = cluster_boot(
+        rows,
+        lambda row: ((row[3] - row[1]) ** 2 - (row[2] - row[1]) ** 2),
+    )
+    return brier_a, brier_b, brier_b - brier_a, interval
+
+
+def mae_pair(det_a: Sequence[Mapping[str, Any]],
+             det_b: Sequence[Mapping[str, Any]], fam: str) -> tuple | None:
+    """Return paired MAE A/B, delta B-A, CI, and row count."""
+    rows_a = {record["match_id"]: record["obs"].get(fam) for record in det_a}
+    rows_b = {record["match_id"]: record["obs"].get(fam) for record in det_b}
+    rows = []
+    for match_id in rows_a:
+        obs_a, obs_b = rows_a.get(match_id), rows_b.get(match_id)
+        if not obs_a or not obs_b or len(obs_a) != len(obs_b):
+            continue
+        for value_a, value_b in zip(obs_a, obs_b):
+            if value_a.get("actual") != value_b.get("actual"):
+                continue
+            rows.append((match_id, float(value_a["actual"]),
+                         float(value_a["sim_mean"]),
+                         float(value_b["sim_mean"])))
+    if not rows:
+        return None
+    mae_a = float(np.mean([abs(p_a - y) for _, y, p_a, _ in rows]))
+    mae_b = float(np.mean([abs(p_b - y) for _, y, _, p_b in rows]))
+    interval = cluster_boot(
+        rows, lambda row: abs(row[3] - row[1]) - abs(row[2] - row[1])
+    )
+    return mae_a, mae_b, mae_b - mae_a, interval, len(rows)

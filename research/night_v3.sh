@@ -118,7 +118,8 @@ if (( DRY_RUN )); then
   else
     echo "  iterations:        until time limit or STOP"
   fi
-  echo "  per-iteration prep: uv run python research/make_digest.py -> research/digest.md"
+  echo "  per-iteration prep: uv run --no-sync python research/make_digest.py -> research/digest.md"
+  echo "  verdict contract:   replayed auto gate or hash-locked manual sim/prop -> log_verdict.py"
   echo "  command:           claude -p --model $ORCHESTRATOR_MODEL_VALUE --fallback-model $EXECUTOR_MODEL_VALUE --permission-mode auto -- <prompt>"
   echo "  side effects:      none"
   exit 0
@@ -175,7 +176,7 @@ while (( $(date +%s) < END )) && [[ ! -f research/STOP ]]; do
   # Regenerate the orchestrator's digest from the queue files before the
   # iteration starts (LOOP_IMPROVEMENTS P1). Plain script, no model call. A
   # failure here is not fatal: the prompt still permits reading the full files.
-  if ! uv run python research/make_digest.py >> "$LOG_FILE" 2>&1; then
+  if ! uv run --no-sync python research/make_digest.py >> "$LOG_FILE" 2>&1; then
     echo "=== v3 iter=$i WARNING: make_digest.py failed; orchestrator falls back to full IDEAS.md/results.tsv ===" >> "$LOG_FILE"
   fi
 

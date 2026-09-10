@@ -30,7 +30,7 @@ Orient (`git log --oneline -10`, `research/digest.md`), pick the ONE
 highest-priority `PENDING` idea, claim it:
 
 ```bash
-uv run python research/log_verdict.py claim <id>     # PENDING -> RUNNING <ts>
+uv run --no-sync python research/log_verdict.py claim <id>     # PENDING -> RUNNING <ts>
 ```
 
 then commit `Auto[<id>]: claim`. Do not hand-edit the status with `sed`/`grep`
@@ -82,19 +82,65 @@ output — except for cheap targeted spot-checks (see below).
    rows both appear in reslice output and a bare-number match can hit the
    wrong slice. If they disagree, or the raw output is missing, the numbers
    do not exist: record CRASH and revert.
-2. **Verdict** per the dual-metric rule in `program.md`. Both gate metrics
-   improve → LANDED; exactly one → TABLED; neither → FAILED. Improvement
-   smaller than the noise floor is not improvement.
-3. If not LANDED, `git revert` the implementation commits (keep the report).
+2. **Verdict** by running the registered claim gate (do not decide from the
+   headline summaries by hand). Use the invocation for the claim kind.
+
+   Match model — paired sliced JSONs only:
+
+   ```bash
+   uv run --no-sync python scripts/sim_eval/claim_gate.py \
+       --candidate <candidate-sliced-json> --baseline <baseline-sliced-json> \
+       --kind match_model \
+       --cost-spread-bps 0 --cost-fee-bps 0 --cost-fee-basis winnings \
+       --odds-role odds_iteration_v2 \
+       --cluster-source-dir data/polymarket_test_v2 \
+       --out research/handoff/<id>/gate.json
+   ```
+
+   Betting layer — paired sliced JSONs with identical probability vectors plus
+   placements. `metric_a` is the `flat_pnl` or `kelly_pnl` stake source; the
+   gate decides on block-bootstrapped ratio-of-sums ΔROI and rejects metric B:
+
+   ```bash
+   uv run --no-sync python scripts/sim_eval/claim_gate.py \
+       --candidate <candidate-sliced-json> --baseline <baseline-sliced-json> \
+       --metrics-json <placements-json> --kind betting_layer \
+       --cost-spread-bps 0 --cost-fee-bps 0 --cost-fee-basis winnings \
+       --odds-role odds_iteration_v2 \
+       --cluster-source-dir data/polymarket_test_v2 \
+       --out research/handoff/<id>/gate.json
+   ```
+
+   Sim/prop — run the per-idea gate script against its pre-committed pair, then
+   record the manual verdict and hash-locked evidence (the automated gate does
+   not decide sim/prop claims):
+
+   ```bash
+   uv run --no-sync python scripts/sim_eval/claim_gate.py record-manual \
+       --kind sim_prop --idea <id> --gate-script <per-idea-gate.py> \
+       --detail-json <detail-json> \
+       --verdict <LANDED|TABLED|FAILED|DESCRIPTIVE> \
+       --note "<pre-committed gate pair text>" \
+       --out research/handoff/<id>/gate.json
+   ```
+
+   For automated multi-seed work, repeat each applicable evidence flag once per
+   aligned seed and pass `--seeds <labels...>`. Automated gate JSONs store
+   repo-relative paths and canonical hashes; logging re-hashes the sources,
+   re-runs `decide()`, and requires exact payload equality. Manual sim/prop
+   hashes the gate script and every detail JSON. Use the recorded verdict.
+3. For TABLED, FAILED, DESCRIPTIVE, or CRASH, `git revert` the implementation
+   commits (keep the report). For PROMISING, keep the code on its branch.
 4. Log the verdict with the script — it appends the one `research/results.tsv`
    row, flips the status in `IDEAS.md`, and fills the idea's `**Result:** —`
    placeholder, in one call:
 
    ```bash
-   uv run python research/log_verdict.py verdict <id> <LANDED|TABLED|FAILED|CRASH> \
+   uv run --no-sync python research/log_verdict.py verdict <id> <LANDED|PROMISING|TABLED|FAILED|DESCRIPTIVE|CRASH> \
        --date <YYYY-MM-DD> --commit <sha> \
        --metrics <ll_50k> <market_ll> <roi_50k_pct> <roi_ci> <n_bets> \
        --notes "<the results.tsv notes field>" \
+       --gate-json research/handoff/<id>/gate.json \
        --result-text-file research/handoff/<id>/result_line.md
    ```
 
@@ -106,7 +152,11 @@ output — except for cheap targeted spot-checks (see below).
    an existing `results.tsv` row, and does not commit.
    Then write `research/reports/auto/<id>.md`, and append up to 2 new `PENDING`
    ideas to `IDEAS.md` by hand if this run genuinely surfaced them.
-5. Final commit `Auto[<id>]: <verdict> — <one-line result>`. Stop.
+5. Only after step 4 has logged a PROMISING verdict, run
+   `uv run --no-sync python research/log_verdict.py queue-confirm <id>` to
+   append the PENDING `<id>-confirm` five-seed confirmation. `queue-confirm`
+   requires the source idea to be PROMISING.
+6. Final commit `Auto[<id>]: <verdict> — <one-line result>`. Stop.
 
 ## NON-NEGOTIABLES
 

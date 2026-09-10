@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "registered_odds": [
+    {
+      "role": "odds_iteration_v2",
+      "path": "betting_odds_polymarket_v2.json",
+      "cluster_source_dir": "data/polymarket_test_v2",
+      "sha256": "dc36aef3002a1709a3cd14fc95d2c369227c9c44a7284d6732b71539a36ab292",
+      "row_count": 255,
+      "registered": "2026-09-10"
+    },
+    {
+      "role": "odds_golden_v2",
+      "path": "data/golden/betting_odds_golden_v2.json",
+      "cluster_source_dir": "data/golden/polymarket_test_v2",
+      "sha256": "b6d013cc33e9ae1af11a9df07af8be9732a817ec1022f395c3f17819fbd86210",
+      "row_count": 124,
+      "registered": "2026-09-10"
+    },
+    {
+      "role": "odds_forward_sealed",
+      "path": "data/forward_holdout/2026-06-01_2026-07-13/betting_odds.json",
+      "cluster_source_dir": "data/forward_holdout/2026-06-01_2026-07-13/polymarket_test",
+      "sha256": "08b8de3b4e2bcb6f6c00136fe2516ff13c523600f478e5dcae54f5b8f732dbab",
+      "row_count": 137,
+      "registered": "2026-09-10"
+    }
+  ]
+}

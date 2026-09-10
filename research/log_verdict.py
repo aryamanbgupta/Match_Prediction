@@ -12,6 +12,7 @@ turns of hand `grep`/`sed` against a 190 KB `IDEAS.md`:
         --date 2026-08-07 --commit 1a2b3c4 \\
         --metrics 0.6231 0.5940 +18.40 "[-4.10,+41.02]" 168 \\
         --notes "one-line notes field for results.tsv" \\
+        --gate-json research/handoff/B20/gate.json \\
         --result-text-file research/handoff/B20/result_line.md
 
 `--metrics` defaults to `(sim-gate)` in all five metric columns, which is the
@@ -42,14 +43,19 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import hashlib
+import json
 import os
 import re
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+
+from sim_eval.claim_gate import verify_gate_payload  # noqa: E402
 
 from ideas_lib import (  # noqa: E402
     IDEAS_PATH,
@@ -71,6 +77,9 @@ from ideas_lib import (  # noqa: E402
 
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+GATE_VERDICTS = ("LANDED", "PROMISING", "TABLED", "FAILED", "DESCRIPTIVE", "CRASH")
+REGISTERED_ODDS_PATH = REPO_ROOT / "docs" / "registered_odds.json"
+PROGRAM_PATH = REPO_ROOT / "program.md"
 
 
 class BookkeepingError(RuntimeError):
@@ -171,6 +180,18 @@ def _append_results_row(path: Path, row: str, dry_run: bool) -> None:
         )
 
 
+def _append_bytes(path: Path, addition: bytes, dry_run: bool = False) -> None:
+    old = path.read_bytes()
+    if old and not old.endswith(b"\n"):
+        raise BookkeepingError(f"{path} does not end with a newline; refusing to append")
+    if dry_run:
+        return
+    _atomic_write(path, old + addition)
+    if path.read_bytes() != old + addition:
+        _atomic_write(path, old)
+        raise BookkeepingError(f"append to {path} was not byte-append-only; rolled back")
+
+
 def _clean_notes(notes: str) -> str:
     """results.tsv is one row per line: collapse newlines/tabs into spaces."""
     cleaned = notes.replace("\t", " ").replace("\r", " ").replace("\n", " ")
@@ -178,6 +199,96 @@ def _clean_notes(notes: str) -> str:
     if not cleaned:
         raise BookkeepingError("--notes is empty after whitespace cleanup")
     return cleaned
+
+
+def _load_gate(path: Path, registry_path: Path) -> tuple[dict, str]:
+    """Load a gate result and validate its registered evidence contracts."""
+    raw = path.read_bytes()
+    try:
+        gate = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise BookkeepingError(f"--gate-json {path} is not valid JSON: {exc}") from exc
+    try:
+        gate_verdict = verify_gate_payload(gate, registry_path)
+    except (KeyError, OSError, TypeError, ValueError) as exc:
+        raise BookkeepingError(f"gate JSON failed internal verification: {exc}") from exc
+    manual = gate.get("gate_mode") == "manual_sim_prop"
+    if not manual and gate_verdict == "LANDED" and (
+            gate.get("provisional") is not False or int(gate.get("seed_count", 0)) < 5):
+        raise BookkeepingError("LANDED requires non-provisional evidence from at least 5 seeds")
+    if manual:
+        return gate, hashlib.sha256(raw).hexdigest()
+    try:
+        registry = json.loads(registry_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise BookkeepingError(f"cannot read registered odds {registry_path}: {exc}") from exc
+    entries = registry.get("registered_odds", registry.get("roles", []))
+    if isinstance(entries, dict):
+        entries = list(entries.values())
+    registered_hashes = {str(entry.get("sha256")) for entry in entries}
+    odds_hash = str(gate.get("odds_sha256", ""))
+    if odds_hash not in registered_hashes:
+        raise BookkeepingError(
+            f"gate odds sha256 {odds_hash!r} is not in {registry_path}"
+        )
+    cluster = gate.get("cluster_contract") or {}
+    fallback_count = cluster.get("fallback_count", 0)
+    if int(fallback_count or 0) > 0:
+        raise BookkeepingError(
+            f"gate cluster contract has {fallback_count} fallback resolution(s)"
+        )
+    return gate, hashlib.sha256(raw).hexdigest()
+
+
+def _gate_notes(notes: str, gate_sha256: str, gate_mode: str | None = None) -> str:
+    cleaned = _clean_notes(notes)
+    mode = f" gate_mode={gate_mode}" if gate_mode else ""
+    return f"{cleaned}{mode} gate_sha256={gate_sha256}"
+
+
+def _review_metadata(program_path: Path) -> tuple[str, int, date]:
+    text = program_path.read_text()
+    due_match = re.search(r"(?m)^review_due:[ \t]*(\d{4}-\d{2}-\d{2})[ \t]*$", text)
+    count_match = re.search(r"(?m)^verdicts_since_review:[ \t]*(\d+)[ \t]*$", text)
+    if not due_match or not count_match:
+        raise BookkeepingError(
+            f"{program_path} must contain review_due and verdicts_since_review"
+        )
+    return text, int(count_match.group(1)), date.fromisoformat(due_match.group(1))
+
+
+def _set_review_metadata(program_path: Path, *, count: int, due: date | None = None,
+                         dry_run: bool = False) -> str:
+    try:
+        old_text, _, old_due = _review_metadata(program_path)
+    except OSError as exc:
+        raise BookkeepingError(f"cannot read review metadata from {program_path}: {exc}") from exc
+    due = due or old_due
+    new_text = re.sub(
+        r"(?m)^review_due:[ \t]*\d{4}-\d{2}-\d{2}[ \t]*$",
+        f"review_due: {due.isoformat()}", old_text, count=1,
+    )
+    new_text = re.sub(
+        r"(?m)^verdicts_since_review:[ \t]*\d+[ \t]*$",
+        f"verdicts_since_review: {count}", new_text, count=1,
+    )
+    if not dry_run:
+        _atomic_write(program_path, new_text.encode("utf-8"))
+    return _diff(old_text, new_text, program_path.name)
+
+
+def _review_reminder(program_path: Path) -> None:
+    """Print the standing-rule review reminder when either trigger is due."""
+    try:
+        _, configured_count, due = _review_metadata(program_path)
+    except OSError as exc:
+        raise BookkeepingError(f"cannot read review metadata from {program_path}: {exc}") from exc
+    if date.today() >= due or configured_count >= 10:
+        print(
+            "log_verdict.py: REVIEW REMINDER — the gate rule is due for its "
+            "90-day/10-verdict review (program.md).",
+            file=sys.stderr,
+        )
 
 
 def _rel(path: Path) -> str:
@@ -268,9 +379,10 @@ def cmd_claim(args: argparse.Namespace) -> int:
 
 def cmd_verdict(args: argparse.Namespace) -> int:
     verdict = args.verdict.upper()
-    if verdict not in VERDICTS:
+    accepted_verdicts = tuple(dict.fromkeys((*VERDICTS, *GATE_VERDICTS)))
+    if verdict not in accepted_verdicts:
         raise BookkeepingError(
-            f"verdict {verdict!r} is not one of {', '.join(VERDICTS)}"
+            f"verdict {verdict!r} is not one of {', '.join(accepted_verdicts)}"
         )
     if not DATE_RE.match(args.date):
         raise BookkeepingError(f"--date {args.date!r} is not YYYY-MM-DD")
@@ -288,7 +400,16 @@ def cmd_verdict(args: argparse.Namespace) -> int:
         if "\t" in value or "\n" in value or value.strip() == "":
             raise BookkeepingError(f"--metrics value for {name} is empty or has a tab")
 
-    notes = _clean_notes(args.notes)
+    gate, gate_sha256 = _load_gate(args.gate_json, args.registry_path)
+    if (gate.get("gate_mode") == "manual_sim_prop"
+            and str(gate.get("idea")) != args.ident):
+        raise BookkeepingError("manual sim/prop gate idea does not match requested idea")
+    gate_verdict = str(gate["verdict"]).upper()
+    if verdict != gate_verdict:
+        raise BookkeepingError(
+            f"stated verdict {verdict} does not match gate verdict {gate_verdict}"
+        )
+    notes = _gate_notes(args.notes, gate_sha256, gate.get("gate_mode"))
 
     result_text = args.result_text_file.read_bytes().decode("utf-8").strip()
     if not result_text:
@@ -353,6 +474,8 @@ def cmd_verdict(args: argparse.Namespace) -> int:
         args.results_path.write_bytes(raw[: -(len(row.encode("utf-8")) + 1)])
         raise
 
+    _, review_count, _ = _review_metadata(args.program_path)
+    _set_review_metadata(args.program_path, count=review_count + 1)
     print(
         f"\nlog_verdict.py: {idea.ident} -> {verdict}; 1 row appended to "
         f"{args.results_path}, status + result updated in {args.ideas_path}"
@@ -368,6 +491,106 @@ def cmd_verdict(args: argparse.Namespace) -> int:
         "(also `git add research/reports/auto/"
         f"{idea.ident}.md` if you wrote the report — PROTOCOL step 6.)"
     )
+    _review_reminder(args.program_path)
+    return 0
+
+
+def cmd_reassess(args: argparse.Namespace) -> int:
+    if not DATE_RE.match(args.date):
+        raise BookkeepingError(f"--date {args.date!r} is not YYYY-MM-DD")
+    commit = args.commit.strip()
+    if not commit or re.search(r"\s", commit):
+        raise BookkeepingError("--commit must be a single non-empty token")
+    gate, gate_sha256 = _load_gate(args.gate_json, args.registry_path)
+    if (gate.get("gate_mode") == "manual_sim_prop"
+            and str(gate.get("idea")) != args.ident):
+        raise BookkeepingError("manual sim/prop gate idea does not match requested idea")
+    verdict = str(gate["verdict"]).upper()
+    metrics = list(args.metrics) if args.metrics else [METRIC_PLACEHOLDER] * 5
+    if len(metrics) != 5:
+        raise BookkeepingError("--metrics takes exactly 5 values")
+    for name, value in zip(METRIC_COLUMNS, metrics):
+        if "\t" in value or "\n" in value or not value.strip():
+            raise BookkeepingError(f"--metrics value for {name} is empty or has a tab")
+    notes = _gate_notes(args.notes, gate_sha256, gate.get("gate_mode"))
+    old_text, lines, ideas, _ = load_ideas(args.ideas_path)
+    idea = _resolve_idea(ideas, args.ident)
+    _, _, existing_rows = load_results(args.results_path)
+    pattern = re.compile(rf"^{re.escape(idea.ident)}-r(\d+)$")
+    revisions = [int(match.group(1)) for row in existing_rows
+                 if (match := pattern.match(row.split("\t")[1]))]
+    revision = max(revisions, default=1) + 1
+    reassessment_id = f"{idea.ident}-r{revision}"
+    detail = args.result_text_file.read_text().strip() if args.result_text_file else args.notes
+    if not detail.strip():
+        raise BookkeepingError("reassessment text is empty")
+    addition = (
+        f"\n# Reassessment: {idea.ident} ({args.date})\n\n"
+        f"**Reassessment:** **{verdict}**. {detail.strip()} "
+        f"(`gate_sha256={gate_sha256}`)\n"
+    )
+    row = "\t".join([args.date, reassessment_id, commit, *metrics, verdict, notes])
+    if len(row.split("\t")) != len(RESULTS_COLUMNS):
+        raise BookkeepingError("constructed row does not have 10 columns")
+    print(addition, end="")
+    print(f"\n--- appending 1 row to {args.results_path}:\n{row}")
+    if args.dry_run:
+        print("\nDRY RUN — nothing written.")
+        return 0
+    _append_results_row(args.results_path, row, dry_run=False)
+    try:
+        _append_bytes(args.ideas_path, addition.encode("utf-8"))
+    except BookkeepingError:
+        raw = args.results_path.read_bytes()
+        _atomic_write(args.results_path, raw[: -(len(row.encode("utf-8")) + 1)])
+        raise
+    _, review_count, _ = _review_metadata(args.program_path)
+    _set_review_metadata(args.program_path, count=review_count + 1)
+    print(f"\nlog_verdict.py: appended reassessment {reassessment_id} ({verdict})")
+    print(_git_hint([args.ideas_path, args.results_path],
+                    f"Auto[{idea.ident}]: reassessment {revision} — {verdict}"), end="")
+    _review_reminder(args.program_path)
+    return 0
+
+
+def cmd_queue_confirm(args: argparse.Namespace) -> int:
+    old_text, _, ideas, _ = load_ideas(args.ideas_path)
+    idea = _resolve_idea(ideas, args.ident)
+    if idea.status != "PROMISING":
+        raise BookkeepingError(
+            f"refusing to queue confirmation for {idea.ident}: status is {idea.status}"
+        )
+    confirm_id = f"{idea.ident}-confirm"
+    if any(item.ident == confirm_id for item in ideas):
+        raise BookkeepingError(f"confirmation idea {confirm_id} already exists")
+    priority = f"[{idea.priority}] " if idea.priority else ""
+    addition = (
+        f"\n## {confirm_id} {priority}[PENDING] Five-seed confirmation of {idea.ident}\n\n"
+        f"**Method:** Run the registered gate on five aligned seeds for {idea.ident}.\n\n"
+        "**Result:** —\n\n---\n"
+    )
+    print(addition, end="")
+    if args.dry_run:
+        print("\nDRY RUN — nothing written.")
+        return 0
+    _append_bytes(args.ideas_path, addition.encode("utf-8"))
+    print(f"log_verdict.py: queued {confirm_id} in {args.ideas_path}")
+    return 0
+
+
+def cmd_review_done(args: argparse.Namespace) -> int:
+    if not DATE_RE.match(args.date):
+        raise BookkeepingError(f"date {args.date!r} is not YYYY-MM-DD")
+    completed = date.fromisoformat(args.date)
+    diff = _set_review_metadata(
+        args.program_path, count=0, due=completed + timedelta(days=90),
+        dry_run=args.dry_run,
+    )
+    print(diff, end="")
+    if args.dry_run:
+        print("\nDRY RUN — nothing written.")
+    else:
+        print(f"log_verdict.py: review recorded; next due {completed + timedelta(days=90)}")
     return 0
 
 
@@ -413,8 +636,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="RUNNING -> LANDED/TABLED/FAILED/CRASH/SUPERSEDED + results.tsv row",
     )
     common(verdict)
-    verdict.add_argument("verdict", metavar="VERDICT", choices=[*VERDICTS, *[v.lower() for v in VERDICTS]])
+    verdict_choices = tuple(dict.fromkeys((*VERDICTS, *GATE_VERDICTS)))
+    verdict.add_argument("verdict", metavar="VERDICT", choices=[*verdict_choices, *[v.lower() for v in verdict_choices]])
     verdict.add_argument("--results-path", type=Path, default=RESULTS_PATH)
+    verdict.add_argument("--program-path", type=Path, default=PROGRAM_PATH)
+    verdict.add_argument("--registry-path", type=Path, default=REGISTERED_ODDS_PATH)
+    verdict.add_argument("--gate-json", required=True, type=Path)
     verdict.add_argument("--date", required=True, help="YYYY-MM-DD for the results.tsv row")
     verdict.add_argument("--commit", required=True, help="commit sha or tag for the row")
     verdict.add_argument("--notes", required=True, help="the results.tsv notes field")
@@ -432,6 +659,35 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"the 5 metric columns (default: {METRIC_PLACEHOLDER} in each)",
     )
     verdict.set_defaults(func=cmd_verdict)
+
+    reassess = sub.add_parser(
+        "reassess", help="append a gate-backed reassessment without rewriting history"
+    )
+    common(reassess)
+    reassess.add_argument("--results-path", type=Path, default=RESULTS_PATH)
+    reassess.add_argument("--program-path", type=Path, default=PROGRAM_PATH)
+    reassess.add_argument("--registry-path", type=Path, default=REGISTERED_ODDS_PATH)
+    reassess.add_argument("--gate-json", required=True, type=Path)
+    reassess.add_argument("--date", required=True)
+    reassess.add_argument("--commit", required=True)
+    reassess.add_argument("--notes", required=True)
+    reassess.add_argument("--result-text-file", type=Path)
+    reassess.add_argument("--metrics", nargs=5, metavar=tuple(METRIC_COLUMNS), default=None)
+    reassess.set_defaults(func=cmd_reassess)
+
+    confirm = sub.add_parser(
+        "queue-confirm", help="append a PENDING five-seed confirmation for PROMISING ID"
+    )
+    common(confirm)
+    confirm.set_defaults(func=cmd_queue_confirm)
+
+    review = sub.add_parser(
+        "review-done", help="reset verdict counter and set the next 90-day review"
+    )
+    review.add_argument("date", help="completed review date (YYYY-MM-DD)")
+    review.add_argument("--program-path", type=Path, default=PROGRAM_PATH)
+    review.add_argument("--dry-run", action="store_true")
+    review.set_defaults(func=cmd_review_done)
     return parser
 
 

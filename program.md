@@ -61,6 +61,102 @@ historical headline. If no fresh baseline row exists yet, produce one first
 
 ## VERDICT RULE (follow exactly)
 
+Match-model and betting-layer claims are decided by
+`scripts/sim_eval/claim_gate.py` from source evidence. The emitted JSON stores
+repo-relative paths, canonical JSON SHA-256s, and every decision input.
+`log_verdict.py` re-hashes every source and re-runs `decide()`; every field of
+the replayed verdict must equal the stored payload. Stored statistics are never
+trusted. Intervals use 10,000 tournament-block resamples with seed 42.
+
+The three claim kinds have separate evidence invocations:
+
+- `match_model`: `--candidate <candidate-sliced-json...> --baseline
+  <baseline-sliced-json...>`; do not pass `--metrics-json`.
+- `betting_layer`: the same candidate and baseline sliced JSONs, plus one
+  `--metrics-json` placements file per seed.
+- `sim_prop`: the automated gate does not classify these claims. Keep the
+  per-idea gate script and pre-committed gate pair, then record its evidence and
+  manual verdict with `record-manual`. The standing review inspects these
+  manual verdicts.
+
+```bash
+# match_model
+uv run --no-sync python scripts/sim_eval/claim_gate.py --kind match_model \
+  --candidate <candidate-sliced-json> --baseline <baseline-sliced-json> <common-options>
+
+# betting_layer
+uv run --no-sync python scripts/sim_eval/claim_gate.py --kind betting_layer \
+  --candidate <candidate-sliced-json> --baseline <baseline-sliced-json> \
+  --metrics-json <placements-json> <common-options>
+
+# sim_prop (repeat --detail-json values as needed)
+uv run --no-sync python scripts/sim_eval/claim_gate.py record-manual \
+  --kind sim_prop --idea <ID> --gate-script <per-idea-gate.py> \
+  --detail-json <detail.json> \
+  --verdict <LANDED|TABLED|FAILED|DESCRIPTIVE> \
+  --note "<pre-committed gate pair text>" --out <gate.json>
+```
+
+For betting-layer claims, callers select only the stake source. `GATE_PAIRS`
+accepts `flat_pnl` or `kelly_pnl`; both mean that placements/stakes come from
+that policy, while the deciding statistic is ΔROI. A placements file is:
+
+```json
+{
+  "kind": "betting_layer",
+  "metric_a": {"name": "flat_pnl"},
+  "rows": [
+    {"match_id": "...", "cand_bet_team": "...", "cand_stake": 1.0,
+     "base_bet_team": null, "base_stake": 0.0}
+  ]
+}
+```
+
+Betting-layer candidate and baseline probabilities must be identical per match
+to absolute tolerance 1e-12; otherwise the work is a `match_model` claim. The
+gate settles placements from registered prices under the configured cost model,
+computes each arm's ROI as total P&L / total stake over the union-of-placements
+population, and block-bootstraps the difference by recomputing both ratios in
+every replicate. It also stamps Δprofit and cost-scenario Δprofit/ΔROI
+diagnostics. `metric_b` and direction fields are rejected.
+
+- **LANDED** — a non-provisional match-model claim whose paired ΔLL interval
+  excludes zero favourably and whose paired Δprofit interval does not exclude
+  zero unfavourably. A betting-layer claim requires the ΔROI interval to
+  exclude zero favourably. A manual sim/prop LANDED is reviewed by the standing
+  review rather than inferred by this automated rule.
+- **PROMISING** — provisional evidence (one to four aligned seeds) that meets
+  its favourable interval test; a match-model claim must also clear the A1
+  point ΔLL floor of 0.007. Keep it on its branch and queue a five-seed run.
+  A provisional claim can never be LANDED.
+- **TABLED** — the match-model accuracy gate clears but profit is clearly
+  harmful, or the pre-committed manual sim/prop pair calls for TABLED. Revert
+  the experiment code but preserve the evidence for combinations.
+- **FAILED** — the required gate does not clear. Revert the experiment code.
+- **DESCRIPTIVE** — evidence is not decision-grade: any cluster fallback,
+  `bootstrap_reliable: false`, or fewer than ten tournament blocks. It can
+  never be LANDED.
+- **CRASH** — evaluation crashes or exceeds twice its time budget; kill it,
+  revert, and record the failure.
+
+Five or more identically aligned seeds use `seed_mean_match_cluster_ci` and
+are not provisional; two to four use that estimator provisionally; one uses
+`match_cluster_ci` provisionally. Match ids must align exactly. Missing outcome
+or market rows are dropped symmetrically. The default decision cost is zero
+(`CostModel.none()`); configured spread/fee scenarios are diagnostics and
+never replace the zero-cost decision unless the experiment explicitly
+pre-registers another decision cost.
+
+Run the gate CLI after evaluation and pass its JSON unchanged to
+`research/log_verdict.py verdict --gate-json ...`. Each results row records the
+gate file SHA-256. When out of `PENDING` ideas, design one combination of
+`TABLED` ideas and run it (see PROTOCOL step 1).
+
+review_due: 2026-12-09
+verdicts_since_review: 0
+
+### Superseded 2026-09-10 (verbatim)
+
 - **BOTH** LL improves **AND** ROI improves → **LANDED** — keep the commits.
 - **Exactly one** improves → **TABLED** — revert the code, but keep the idea
   in `IDEAS.md` marked `TABLED`, recording which metric moved and by how much.
@@ -199,8 +295,10 @@ Full n=261 × 100 sims ≈ 40+ min. One heavy process at a time — never
 3. **Implement** (artifacts under `models/auto/<id>/`, `data/auto/<id>/`).
    Commit before running the eval.
 4. **Evaluate** per the recipe. Wait for it to finish; record real numbers.
-5. **Verdict** per the rule. If not LANDED, `git revert` the implementation
-   commits (keep the report/log changes).
+5. **Verdict**: run `scripts/sim_eval/claim_gate.py` on the paired sliced JSONs
+   and baseline, write `research/handoff/<id>/gate.json`, and use its verdict.
+   Revert implementation commits only for TABLED, FAILED, DESCRIPTIVE, or
+   CRASH. PROMISING keeps its code on its branch.
 6. **Log**: append one row to `research/results.tsv`
    (`date  idea  commit  ll_50k  market_ll  roi_50k_pct  roi_ci  n_bets  verdict  notes`)
    and write `research/reports/auto/<id>.md` — hypothesis, what you did,
@@ -208,5 +306,7 @@ Full n=261 × 100 sims ≈ 40+ min. One heavy process at a time — never
 7. **Update the queue**: set the idea's final status + one-line result in
    `IDEAS.md`. Append up to 2 new `PENDING` ideas if this run surfaced
    genuinely promising directions (check for duplicates first; never delete
-   or edit other entries).
+   or edit other entries). For PROMISING, first log the PROMISING verdict in
+   step 6, then run `research/log_verdict.py queue-confirm <ID>`; it requires
+   PROMISING and appends the PENDING `<ID>-confirm` five-seed confirmation.
 8. Final commit `Auto[<id>]: <verdict> — <one-line result>`. **Stop.**
