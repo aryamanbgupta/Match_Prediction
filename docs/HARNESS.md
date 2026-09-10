@@ -21,7 +21,14 @@ reviewing a run whose `len(seeds) * expected_minutes_per_seed` exceeds
 content hash, not an unverified declaration, enters the harness configuration
 hash. Each arm has `trainer_args`, expressed as a YAML list
 of command-line tokens or as a flag/value mapping. `candidate.kind` is
-`trainer` or `ensemble`.
+`trainer`, `ensemble`, or `calibrated`.
+
+A calibrated candidate additionally requires `candidate.calib_after` as a
+date string and accepts `candidate.method` (`platt` by default, or any method
+accepted by `calibrate_match_predictions.py`). Its baseline and candidate
+`trainer_args` must be identical. The boundary must leave at least one
+validation row before it for early stopping and at least one row on or after
+it for calibration.
 
 `seeds` defaults to `[29, 7, 13, 42, 101]`. An integer `N` selects the first
 `N` entries from that ladder (for example, `seeds: 3` means `[29, 7, 13]`);
@@ -61,6 +68,20 @@ is present and the output is not a dry-run stub; dry-run and real-run artifacts
 never resume each other. Pairing is checked before the shared claim gate is
 called.
 
+For `candidate.kind: calibrated`, each candidate seed receives
+`--early-stop-before <calib_after>` in addition to its configured trainer
+arguments. The same-seed baseline receives the identical configured arguments
+without early stopping and remains raw. The harness then runs
+`calibrate_match_predictions.py --model-dir <candidate_dir> --data-dir <frame>
+--calib-after <calib_after> --method <method>`. The original candidate output
+is retained as `test_predictions_raw.json`; calibrated predictions become
+`test_predictions.json` and carry
+`summary.calibration = {method, calib_after, early_stop_before}`. Every seed
+rechecks that calibration row IDs are disjoint from the trainer's recorded
+early-stop IDs. The completion record binds the calibration command and stamp,
+the raw prediction SHA-256, and the calibrated prediction SHA-256. Dry runs
+exercise the same lifecycle with a deterministic fake calibrator.
+
 Every evaluation synthesizes a direct-only envelope from the prediction rows
 under test and the registered odds. Recorded simulation envelopes are never
 used, and the blended match-id set must equal the prediction set. The registered
@@ -75,6 +96,7 @@ run. The evaluation copy is stamped `prod_seed29` with the verified production
 hash and the source file's SHA-256, while the source prediction summary is
 preserved under `source_summary`; it is never retrained.
 
+Outside the calibrated candidate flow,
 `calibrate_match_predictions.py --calib-after DATE` is accepted only when the
 model's `train_metrics.json` records the same `early_stop_before` date and a
 disjoint `early_stop_match_ids` set. Models trained without the paired early

@@ -50,7 +50,8 @@ def _frame(path: Path, n: int = 12) -> Path:
 
 
 def _config(tmp_path: Path, *, seeds=1, kind="trainer", folds=None,
-            verify=None, expected=1, ceiling=240) -> Path:
+            verify=None, expected=1, ceiling=240, calib_after=None,
+            method=None) -> Path:
     frame = _frame(tmp_path / "frame")
     payload = {
         "name": "H_TEST", "frame": str(frame),
@@ -63,6 +64,10 @@ def _config(tmp_path: Path, *, seeds=1, kind="trainer", folds=None,
     }
     if folds is not None:
         payload["folds"] = folds
+    if calib_after is not None:
+        payload["candidate"]["calib_after"] = calib_after
+    if method is not None:
+        payload["candidate"]["method"] = method
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump(payload))
     return path
@@ -96,6 +101,33 @@ def test_h1_rejects_exact_prefix_and_equals_harness_owned_args(tmp_path, token):
 
 def test_h9_integer_seed_is_count_from_default_ladder(tmp_path):
     assert harness.load_config(_config(tmp_path, seeds=3)).seeds == [29, 7, 13]
+
+
+def test_hb1_calibrated_schema_defaults_to_platt_and_requires_same_args(tmp_path):
+    path = _config(tmp_path, kind="calibrated", calib_after="2025-01-07")
+    config = harness.load_config(path)
+    assert config.calib_after == "2025-01-07"
+    assert config.calibration_method == "platt"
+
+    raw = yaml.safe_load(path.read_text())
+    raw["baseline"]["trainer_args"] = {"monotone": True}
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(harness.ConfigError, match="must equal candidate.trainer_args"):
+        harness.load_config(path)
+
+
+def test_hb1_calibrated_trainer_argv_isolates_candidate_early_stop(tmp_path):
+    config = harness.load_config(_config(
+        tmp_path, kind="calibrated", calib_after="2025-01-07",
+    ))
+    baseline = harness._trainer_argv(
+        config, "baseline", 29, config.frame, tmp_path / "baseline", False
+    )
+    candidate = harness._trainer_argv(
+        config, "candidate", 29, config.frame, tmp_path / "candidate", False
+    )
+    assert "--early-stop-before" not in baseline
+    assert candidate[-2:] == ["--early-stop-before", "2025-01-07"]
 
 
 @pytest.mark.parametrize("fresh_prediction,model_present", [(False, True), (True, False)])
@@ -473,6 +505,86 @@ def test_i7_calib_after_refuses_different_recorded_boundary(tmp_path):
     }))
     with pytest.raises(ValueError, match="must equal"):
         _validate_calibration_contract(tmp_path, validation, "2025-02-01")
+
+
+def test_hb1_stub_calibrated_flow_preserves_raw_and_stamps_resume_identity(tmp_path):
+    config = harness.load_config(_config(
+        tmp_path, kind="calibrated", calib_after="2025-01-07", method="platt",
+    ))
+    harness.run(config, dry_run=True)
+    baseline_dir = config.out_dir / "baseline_seed29"
+    candidate_dir = config.out_dir / "candidate_seed29"
+    baseline_summary, baseline_rows = harness._prediction_parts(
+        baseline_dir / "test_predictions.json"
+    )
+    raw_summary, raw_rows = harness._prediction_parts(
+        candidate_dir / "test_predictions_raw.json"
+    )
+    calibrated_summary, calibrated_rows = harness._prediction_parts(
+        candidate_dir / "test_predictions.json"
+    )
+    stamp = {
+        "method": "platt",
+        "calib_after": "2025-01-07",
+        "early_stop_before": "2025-01-07",
+    }
+    assert baseline_summary.get("calibration") is None
+    assert raw_summary.get("calibration") is None
+    assert [row["p_team1"] for row in raw_rows.values()] == [
+        row["p_team1"] for row in baseline_rows.values()
+    ]
+    assert calibrated_summary["calibration"] == stamp
+    assert calibrated_rows["m0"]["p_team1_raw"] == raw_rows["m0"]["p_team1"]
+    assert calibrated_rows["m0"]["p_team1"] != raw_rows["m0"]["p_team1"]
+    assert json.loads((candidate_dir / "platt_calibrator.json").read_text()) == {
+        "stub": True, "method": "platt", "slope": 1.05,
+    }
+    completion = json.loads((candidate_dir / "harness_run.json").read_text())
+    assert completion["calibration"] == stamp
+    assert completion["calibrated_test_predictions_sha256"] == harness._sha256_file(
+        candidate_dir / "test_predictions.json"
+    )
+    assert completion["test_predictions_raw_sha256"] == harness._sha256_file(
+        candidate_dir / "test_predictions_raw.json"
+    )
+
+    first = (candidate_dir / "test_predictions.json").read_bytes()
+    (candidate_dir / "harness_run.json").unlink()
+    harness.run(config, dry_run=True)
+    assert (candidate_dir / "test_predictions.json").read_bytes() == first
+
+
+def test_hb1_calibrated_flow_refuses_per_seed_leakage(tmp_path, monkeypatch):
+    config = harness.load_config(_config(
+        tmp_path, kind="calibrated", calib_after="2025-01-07",
+    ))
+    original = harness._run_trainer
+
+    def leaking_trainer(config, arm, seed, frame, model_dir, dry_run):
+        path = original(config, arm, seed, frame, model_dir, dry_run)
+        if arm == "candidate":
+            metrics = json.loads((model_dir / "train_metrics.json").read_text())
+            metrics["early_stop_match_ids"].append("m6")
+            (model_dir / "train_metrics.json").write_text(json.dumps(metrics))
+        return path
+
+    monkeypatch.setattr(harness, "_run_trainer", leaking_trainer)
+    with pytest.raises(ValueError, match="overlap"):
+        harness.run(config, dry_run=True)
+
+
+def test_hb1_calibrated_resume_refuses_new_early_stop_overlap(tmp_path):
+    config = harness.load_config(_config(
+        tmp_path, kind="calibrated", calib_after="2025-01-07",
+    ))
+    harness.run(config, dry_run=True)
+    candidate_dir = config.out_dir / "candidate_seed29"
+    metrics_path = candidate_dir / "train_metrics.json"
+    metrics = json.loads(metrics_path.read_text())
+    metrics["early_stop_match_ids"].append("m6")
+    metrics_path.write_text(json.dumps(metrics))
+    with pytest.raises(ValueError, match="overlap"):
+        harness.run(config, dry_run=True)
 
 
 def test_h10_fold_masks_and_means(tmp_path):

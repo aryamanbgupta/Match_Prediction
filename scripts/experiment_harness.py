@@ -24,6 +24,10 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from artifacts import load_manifest, md5_directory, verify_role  # noqa: E402
+from calibrate_match_predictions import (  # noqa: E402
+    _METHOD_REGISTRY,
+    _validate_calibration_contract,
+)
 from sim_eval import blend_eval_json, claim_gate, reslice_eval_json  # noqa: E402
 from sim_eval.market_math import CostModel  # noqa: E402
 from xgboost_match_v1 import _SWAP_NEGATE, _swap_augment_train  # noqa: E402
@@ -46,6 +50,8 @@ class HarnessConfig:
     baseline_args: list[str]
     candidate_kind: str
     candidate_args: list[str]
+    calib_after: str | None
+    calibration_method: str | None
     seeds: list[int]
     slices: list[str | int]
     cost: CostModel
@@ -160,9 +166,9 @@ def load_config(path: Path) -> HarnessConfig:
     if "trainer_args" not in candidate:
         raise _error("candidate.trainer_args", "is required")
     kind = candidate["kind"]
-    if kind not in {"trainer", "ensemble"}:
-        raise _error("candidate.kind", "must be trainer or ensemble")
-    if kind == "trainer" and "trainer_args" not in baseline:
+    if kind not in {"trainer", "ensemble", "calibrated"}:
+        raise _error("candidate.kind", "must be trainer, ensemble, or calibrated")
+    if kind in {"trainer", "calibrated"} and "trainer_args" not in baseline:
         raise _error("baseline.trainer_args", "is required")
     baseline_args = _trainer_args(baseline.get("trainer_args"), "baseline.trainer_args")
     candidate_args = _trainer_args(candidate.get("trainer_args"), "candidate.trainer_args")
@@ -179,6 +185,34 @@ def load_config(path: Path) -> HarnessConfig:
         }
         if overlap:
             raise _error(field, f"harness-owned argument(s): {sorted(overlap)}")
+    calib_after = None
+    calibration_method = None
+    if kind == "calibrated":
+        if baseline_args != candidate_args:
+            raise _error(
+                "baseline.trainer_args",
+                "must equal candidate.trainer_args for a calibrated comparison",
+            )
+        calib_after = candidate.get("calib_after")
+        if not isinstance(calib_after, str) or not calib_after:
+            raise _error("candidate.calib_after", "must be a non-empty date string")
+        try:
+            boundary = pd.Timestamp(calib_after)
+        except (TypeError, ValueError) as exc:
+            raise _error("candidate.calib_after", "must be a valid date string") from exc
+        validation = pd.read_parquet(frame / "validation.parquet")
+        dates = pd.to_datetime(validation["match_date"], errors="raise")
+        if not (dates < boundary).any() or not (dates >= boundary).any():
+            raise _error(
+                "candidate.calib_after",
+                "must leave non-empty early-stop and calibration slices",
+            )
+        calibration_method = candidate.get("method", "platt")
+        if (not isinstance(calibration_method, str)
+                or calibration_method not in _METHOD_REGISTRY):
+            raise _error(
+                "candidate.method", f"must be one of {sorted(_METHOD_REGISTRY)}"
+            )
     seed_value = raw.get("seeds", DEFAULT_SEEDS)
     if isinstance(seed_value, int) and not isinstance(seed_value, bool):
         if not 1 <= seed_value <= len(DEFAULT_SEEDS):
@@ -264,6 +298,7 @@ def load_config(path: Path) -> HarnessConfig:
     return HarnessConfig(
         raw=raw, name=name, frame=frame, baseline_args=baseline_args,
         candidate_kind=kind, candidate_args=candidate_args, seeds=seeds,
+        calib_after=calib_after, calibration_method=calibration_method,
         slices=normalized_slices, cost=cost,
         expected_minutes_per_seed=expected, ceiling_minutes=ceiling,
         odds_role=str(raw.get("odds_role", "odds_iteration_v2")),
@@ -340,12 +375,12 @@ def _write_predictions(path: Path, summary: dict[str, Any], rows: dict[str, Any]
 
 
 def _stub_train(frame: Path, model_dir: Path, seed: int, arm: str,
-                config_hash: str) -> Path:
+                config_hash: str, *, strength_arm: str | None = None) -> Path:
     model_dir.mkdir(parents=True, exist_ok=True)
     (model_dir / "model.pkl").unlink(missing_ok=True)
     test = pd.read_parquet(frame / "test.parquet")
     rows: dict[str, dict[str, Any]] = {}
-    arm_strength = .14 if arm == "candidate" else .08
+    arm_strength = .14 if (strength_arm or arm) == "candidate" else .08
     jitter = ((seed * 37) % 19 - 9) / 1000
     for index, row in test.iterrows():
         truth = int(row["team1_wins"])
@@ -378,17 +413,53 @@ def _stamp_prediction(path: Path, arm: str, seed: int | str, config_hash: str) -
 def _trainer_argv(config: HarnessConfig, arm: str, seed: int, frame: Path,
                   model_dir: Path, dry_run: bool) -> list[str]:
     args = config.baseline_args if arm == "baseline" else config.candidate_args
+    early_stop = (
+        ["--early-stop-before", config.calib_after]
+        if config.candidate_kind == "calibrated" and arm == "candidate"
+        else []
+    )
     if dry_run:
         return ["dry-run-stub", "--data-dir", str(frame), "--model-dir", str(model_dir),
-                "--seed", str(seed), "--arm", arm, *args]
+                "--seed", str(seed), "--arm", arm, *args, *early_stop]
     return ["uv", "run", "--no-sync", "python", "scripts/xgboost_match_v1.py",
             "--cmd", "both", "--data-dir", str(frame), "--model-dir", str(model_dir),
-            "--seed", str(seed), "--fit-encoders-on", "train", *args]
+            "--seed", str(seed), "--fit-encoders-on", "train", *args, *early_stop]
+
+
+def _calibration_stamp(config: HarnessConfig, arm: str) -> dict[str, str] | None:
+    if config.candidate_kind != "calibrated" or arm != "candidate":
+        return None
+    assert config.calib_after is not None
+    assert config.calibration_method is not None
+    return {
+        "method": config.calibration_method,
+        "calib_after": config.calib_after,
+        "early_stop_before": config.calib_after,
+    }
+
+
+def _calibration_argv(config: HarnessConfig, model_dir: Path,
+                      dry_run: bool) -> list[str] | None:
+    stamp = _calibration_stamp(config, "candidate")
+    if stamp is None:
+        return None
+    prefix = ["dry-run-stub-calibrator"] if dry_run else [
+        "uv", "run", "--no-sync", "python",
+        "scripts/calibrate_match_predictions.py",
+    ]
+    return [
+        *prefix, "--model-dir", str(model_dir), "--data-dir", str(config.frame),
+        "--calib-after", stamp["calib_after"], "--method", stamp["method"],
+    ]
 
 
 def _write_completion(config: HarnessConfig, arm: str, seed: int, frame: Path,
                       model_dir: Path, *, dry_run: bool) -> None:
     argv = _trainer_argv(config, arm, seed, frame, model_dir, dry_run)
+    calibration = _calibration_stamp(config, arm)
+    calibration_argv = (
+        _calibration_argv(config, model_dir, dry_run) if calibration else None
+    )
     model = model_dir / "model.pkl"
     stub_model = model_dir / "stub_model.json"
     record = {
@@ -398,9 +469,20 @@ def _write_completion(config: HarnessConfig, arm: str, seed: int, frame: Path,
         "dry_run": dry_run,
         "trainer_argv": argv,
         "trainer_argv_sha256": _sha256_argv(argv),
+        "calibration": calibration,
+        "calibration_argv": calibration_argv,
+        "calibration_argv_sha256": (
+            _sha256_argv(calibration_argv) if calibration_argv else None
+        ),
         "model_sha256": _sha256_file(model) if model.is_file() else None,
         "stub_model_sha256": _sha256_file(stub_model) if stub_model.is_file() else None,
         "test_predictions_sha256": _sha256_file(model_dir / "test_predictions.json"),
+        "calibrated_test_predictions_sha256": (
+            _sha256_file(model_dir / "test_predictions.json") if calibration else None
+        ),
+        "test_predictions_raw_sha256": (
+            _sha256_file(model_dir / "test_predictions_raw.json") if calibration else None
+        ),
         "sliced_sha256": {
             str(value): _sha256_file(model_dir / f"sliced_{value}.json")
             for value in config.slices
@@ -428,6 +510,10 @@ def _completed(config: HarnessConfig, arm: str, seed: int, frame: Path,
     except (OSError, json.JSONDecodeError, TypeError):
         return False
     argv = _trainer_argv(config, arm, seed, frame, model_dir, dry_run)
+    calibration = _calibration_stamp(config, arm)
+    calibration_argv = (
+        _calibration_argv(config, model_dir, dry_run) if calibration else None
+    )
     expected_identity = {
         "arm": arm,
         "seed": seed,
@@ -435,11 +521,27 @@ def _completed(config: HarnessConfig, arm: str, seed: int, frame: Path,
         "dry_run": dry_run,
         "trainer_argv": argv,
         "trainer_argv_sha256": _sha256_argv(argv),
+        "calibration": calibration,
+        "calibration_argv": calibration_argv,
+        "calibration_argv_sha256": (
+            _sha256_argv(calibration_argv) if calibration_argv else None
+        ),
     }
     if any(record.get(key) != value for key, value in expected_identity.items()):
         return False
     if not _summary_matches(prediction_path, arm, seed, config.config_hash):
         return False
+    try:
+        prediction_summary, _ = _prediction_parts(prediction_path)
+    except (OSError, json.JSONDecodeError, TypeError):
+        return False
+    if prediction_summary.get("calibration") != calibration:
+        return False
+    if calibration:
+        validation = pd.read_parquet(frame / "validation.parquet")
+        _validate_calibration_contract(
+            model_dir, validation, calibration["calib_after"]
+        )
     if not _summary_matches(blended_path, arm, seed, config.config_hash):
         return False
     if dry_run:
@@ -465,6 +567,15 @@ def _completed(config: HarnessConfig, arm: str, seed: int, frame: Path,
     try:
         if record.get("test_predictions_sha256") != _sha256_file(prediction_path):
             return False
+        if calibration:
+            raw_path = model_dir / "test_predictions_raw.json"
+            calibrated_sha = _sha256_file(prediction_path)
+            if (record.get("calibrated_test_predictions_sha256") != calibrated_sha
+                    or record.get("test_predictions_raw_sha256") != _sha256_file(raw_path)):
+                return False
+        elif (record.get("calibrated_test_predictions_sha256") is not None
+              or record.get("test_predictions_raw_sha256") is not None):
+            return False
     except OSError:
         return False
     recorded_slices = record.get("sliced_sha256")
@@ -488,7 +599,26 @@ def _run_trainer(config: HarnessConfig, arm: str, seed: int, frame: Path,
                  model_dir: Path, dry_run: bool) -> Path:
     (model_dir / "harness_run.json").unlink(missing_ok=True)
     if dry_run:
-        return _stub_train(frame, model_dir, seed, arm, config.config_hash)
+        path = _stub_train(
+            frame, model_dir, seed, arm, config.config_hash,
+            strength_arm=(
+                "baseline"
+                if config.candidate_kind == "calibrated" and arm == "candidate"
+                else None
+            ),
+        )
+        if config.candidate_kind == "calibrated" and arm == "candidate":
+            assert config.calib_after is not None
+            validation = pd.read_parquet(frame / "validation.parquet")
+            dates = pd.to_datetime(validation["match_date"], errors="raise")
+            early_ids = validation.loc[
+                dates < pd.Timestamp(config.calib_after), "match_id"
+            ].astype(str).tolist()
+            (model_dir / "train_metrics.json").write_text(json.dumps({
+                "early_stop_before": config.calib_after,
+                "early_stop_match_ids": early_ids,
+            }, indent=2))
+        return path
     (model_dir / "stub_model.json").unlink(missing_ok=True)
     command = _trainer_argv(config, arm, seed, frame, model_dir, dry_run)
     print("$ " + " ".join(command), flush=True)
@@ -501,6 +631,56 @@ def _run_trainer(config: HarnessConfig, arm: str, seed: int, frame: Path,
         raise RuntimeError("trainer did not write model.pkl alongside its predictions")
     _stamp_prediction(path, arm, seed, config.config_hash)
     return path
+
+
+def _run_calibration(config: HarnessConfig, model_dir: Path,
+                     *, dry_run: bool) -> Path:
+    """Calibrate one candidate seed and replace its served test predictions."""
+    stamp = _calibration_stamp(config, "candidate")
+    assert stamp is not None
+    validation = pd.read_parquet(config.frame / "validation.parquet")
+    _validate_calibration_contract(model_dir, validation, stamp["calib_after"])
+    raw_path = model_dir / "test_predictions.json"
+    calibrated_path = model_dir / "test_predictions_calibrated.json"
+    if dry_run:
+        summary, rows = _prediction_parts(raw_path)
+        calibrated_rows = {}
+        for match_id, row in rows.items():
+            updated = dict(row)
+            raw_probability = float(row["p_team1"])
+            probability = float(np.clip(
+                .5 + 1.05 * (raw_probability - .5), 1e-9, 1 - 1e-9
+            ))
+            updated.update({
+                "p_team1": probability,
+                "p_team2": 1 - probability,
+                "p_team1_raw": raw_probability,
+            })
+            calibrated_rows[match_id] = updated
+        summary["calibration_method"] = f"Stub{stamp['method'].title()}Calibrator"
+        _write_predictions(calibrated_path, summary, calibrated_rows)
+        suffix = "pkl" if stamp["method"] == "isotonic" else "json"
+        (model_dir / f"{stamp['method']}_calibrator.{suffix}").write_text(
+            json.dumps({"stub": True, "method": stamp["method"], "slope": 1.05})
+        )
+    else:
+        command = _calibration_argv(config, model_dir, dry_run=False)
+        assert command is not None
+        print("$ " + " ".join(command), flush=True)
+        run_started_ns = time.time_ns()
+        subprocess.run(command, cwd=ROOT, check=True)
+        if (not calibrated_path.is_file()
+                or calibrated_path.stat().st_mtime_ns < run_started_ns):
+            raise RuntimeError(
+                "calibrator did not write fresh test_predictions_calibrated.json"
+            )
+    raw_archive = model_dir / "test_predictions_raw.json"
+    raw_path.replace(raw_archive)
+    calibrated_path.replace(raw_path)
+    summary, rows = _prediction_parts(raw_path)
+    summary["calibration"] = stamp
+    _write_predictions(raw_path, summary, rows)
+    return raw_path
 
 
 def _registry_entry(role: str, registry_path: Path, root: Path) -> tuple[Path, Path]:
@@ -757,6 +937,8 @@ def run(config: HarnessConfig, *, dry_run: bool = False,
                 prediction = model_dir / "test_predictions.json"
             else:
                 prediction = _run_trainer(config, arm, seed, config.frame, model_dir, dry_run)
+                if config.candidate_kind == "calibrated" and arm == "candidate":
+                    prediction = _run_calibration(config, model_dir, dry_run=dry_run)
                 _evaluate(config, model_dir, arm, seed, odds_path, cluster_dir)
                 _write_completion(
                     config, arm, seed, config.frame, model_dir, dry_run=dry_run
