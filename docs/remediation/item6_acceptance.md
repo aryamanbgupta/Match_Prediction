@@ -66,3 +66,13 @@ arm/model, role frames trusted by declared hash, production baseline
 unverified) fixed by Sol with locking tests. Claude recorded the serving
 encoder change as an intentional change in IMPROVEMENTS.md. Suite: 496
 passed, 0 failed. Candidates A–D follow with their own check blocks.
+
+## Harness validation run and candidate A checks (written before running)
+
+| # | Check | Pass condition |
+|---|---|---|
+| HA0 | Harness reproduces a known result | `experiments/harness/swap_smoke.yaml` (base vs swap, M7 config, five seeds, zero-cost decision) on this laptop; the gate's paired ≥$50k ΔLL must be favourable on 5/5 seeds with mean within seed noise of the I17 record (−0.0144, `docs/I17_I7_SWAP_SUCCESSOR.md`); verdict LANDED or TABLED (profit is noise); no fallback clusters |
+| HA1 | Candidate A config | `seed_ensemble.yaml`: candidate = logit mean of five swap-config seeds; baseline = the verified production artifact's own predictions; decision at zero cost; slices all / ≥$50k / ≥$100k |
+| HA2 | Estimand | gate runs under the 1-seed rule, so the best verdict is PROMISING; the 0.007 point floor applies; per-seed diagnostics reported only |
+| HA3 | Record | harness.json + gate.json under `experiments/results/`; IDEAS.md entry and results.tsv row written only through `log_verdict --gate-json` with the reassess/queue-confirm semantics; the verdict is whatever the gate says |
+| HA4 | Resources | run on this laptop (frame 8.6 MB in memory); seeds sequential; no mini load |

@@ -7,7 +7,7 @@ candidate:
   trainer_args: {monotone: true, swap_augment: true}
 seeds: [29, 7, 13, 42, 101]
 slices: [all, 50000, 100000]
-cost: {spread_bps: 100, fee_bps: 100, fee_basis: winnings}
+cost: {spread_bps: 0, fee_bps: 0, fee_basis: winnings}  # decision at zero cost (plan 2.5 / 4); scenarios are diagnostics
 expected_minutes_per_seed: 18
 ceiling_minutes: 240
 odds_role: odds_iteration_v2

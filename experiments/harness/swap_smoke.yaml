@@ -11,8 +11,8 @@ candidate:
 seeds: [29, 7, 13, 42, 101]
 slices: [all, 50000, 100000]
 cost:
-  spread_bps: 100
-  fee_bps: 100
+  spread_bps: 0   # decision at zero cost (plan 2.5 / 4); scenarios are diagnostics
+  fee_bps: 0
   fee_basis: winnings
 expected_minutes_per_seed: 18
 ceiling_minutes: 240
