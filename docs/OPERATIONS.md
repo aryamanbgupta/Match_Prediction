@@ -1373,6 +1373,13 @@ except Exception as e:
 
 ### Operation 6: Predict an upcoming fixture (live)
 
+The scheduled protocol-v1 state refresh is owned by
+`scripts/daily/refresh_state.py`; it wraps the procedure below by fetching
+new matches into a dated context directory, rebuilding the matched cache and
+tracker into a new versioned directory, writing `BUILT` last, and promoting
+the `live_state_i7` symlink atomically. Use that command for the daily job;
+the manual commands remain the recovery/reference procedure.
+
 For a genuine upcoming fixture, use the match-level direct model via
 `predict_fixture.py`. Hand-write a fixture JSON (see
 `fixtures/_template.json`), then:

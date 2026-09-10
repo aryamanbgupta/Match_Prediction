@@ -27,6 +27,7 @@ env/
 venv/
 .venv/
 .env
+daily/.writer_key
 
 # Notebooks
 .ipynb_checkpoints
@@ -95,4 +96,5 @@ research/digest.md
 
 # Committed test fixtures are evidence, not outputs (item 1/2, 2026-09-10)
 !scripts/tests/fixtures/*.json
+!scripts/tests/fixtures/**
 !tests/fixtures/**

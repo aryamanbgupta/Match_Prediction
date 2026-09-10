@@ -1099,7 +1099,147 @@ def toss_branches(record: dict) -> "dict[str, dict]":
     return branches
 
 
-def main() -> int:
+def predict_record(
+    fixture: dict,
+    *,
+    model_dir: Path,
+    state_dir: Path,
+    tracker_snapshot: Path,
+    tracker_source_dirs: Sequence[Path | str] = DEFAULT_TRACKER_SOURCE_DIRS,
+    tracker_aux_dirs: Sequence[Path | str] = (),
+    team_aliases: dict[str, str] | None = None,
+    state_version: str = "i7",
+    venue_identity_mode: str = DEFAULT_LIVE_VENUE_IDENTITY_MODE,
+    elo_update_version: str = BASELINE_ELO_UPDATE_VERSION,
+    max_state_age_days: int = DEFAULT_MAX_STATE_AGE_DAYS,
+    allow_stale_state: bool = False,
+    max_unresolved_players: int = MAX_UNRESOLVED_PER_LINEUP,
+    verbose: bool = False,
+) -> dict:
+    """Return one prediction record without writing or rebuilding artifacts.
+
+    Callers own fixture/output I/O and tracker rebuilding.  This boundary is
+    deliberately read-only so scheduled jobs can append their own protocol
+    record without the serving function mutating state behind them.
+    """
+    model_dir = Path(model_dir)
+    state_dir = Path(state_dir)
+    tracker_snapshot = Path(tracker_snapshot)
+    tracker_sources = tuple(tracker_source_dirs)
+    tracker_aux_sources = tuple(tracker_aux_dirs)
+    aliases = dict(team_aliases or {})
+
+    sqlite_state = read_sqlite_state_metadata(
+        state_dir, version=state_version, identity_mode=venue_identity_mode,
+        elo_update_version=elo_update_version,
+    )
+    tracker_state = read_tracker_state_metadata(
+        tracker_snapshot, identity_mode=venue_identity_mode,
+        elo_update_version=elo_update_version,
+    )
+    state_freshness = assess_state_freshness(
+        fixture["date"], sqlite_state, tracker_state,
+        max_state_age_days=max_state_age_days,
+    )
+    if state_freshness["status"] == "stale":
+        if not allow_stale_state:
+            raise RuntimeError(
+                f"live state is {state_freshness['age_days']} days behind "
+                f"fixture {fixture['date']} (maximum {max_state_age_days}); "
+                "rebuild a matched SQLite cache and tracker snapshot"
+            )
+        state_freshness["status"] = "stale_override"
+        state_freshness["override_used"] = True
+    else:
+        state_freshness["override_used"] = False
+
+    provider = StatsProvider(
+        str(state_dir), version=state_version, require_order_contract=True,
+        required_elo_update_version=elo_update_version,
+    )
+    metadata = PlayerMetadataProvider(str(REPO / "data" / "all_players_enriched.csv"))
+    form, h2h, home = load_trackers(
+        tracker_snapshot, tracker_sources, aux_source_dirs=tracker_aux_sources,
+        team_aliases=aliases, identity_mode=venue_identity_mode,
+        elo_update_version=elo_update_version,
+    )
+    record = compute_features(
+        fixture, provider, metadata, form, h2h, home,
+        max_unresolved=max_unresolved_players, identity_mode=venue_identity_mode,
+    )
+    toss_known = bool(record.pop("_toss_known", True))
+    toss_branch_probs = None
+    if toss_known:
+        p_team1, debug = apply_encoders_and_predict(
+            record, model_dir, identity_mode=venue_identity_mode,
+            elo_update_version=elo_update_version,
+        )
+    else:
+        branch_probs = {}
+        debug = None
+        for label, branch in toss_branches(record).items():
+            p_branch, branch_debug = apply_encoders_and_predict(
+                branch, model_dir, identity_mode=venue_identity_mode,
+                elo_update_version=elo_update_version,
+            )
+            debug = debug or branch_debug
+            branch_probs[label] = p_branch
+        p_team1 = sum(branch_probs.values()) / len(branch_probs)
+        toss_branch_probs = branch_probs
+    p_team2 = 1.0 - p_team1
+    a7_in_scope = (
+        not tracker_aux_sources and not aliases
+        and not tracker_state.get("aux_source_dirs")
+        and not tracker_state.get("aux_source_match_count")
+        and str(fixture.get("format", "t20")).lower() in ("t20", "t20i")
+    )
+    bet_info = compute_bet(
+        fixture["team1"], fixture["team2"], p_team1,
+        fixture.get("polymarket_odds"),
+        top6_batting_elo_diff=record["top6_batting_elo_diff"],
+        polymarket_volume_usd=fixture.get("polymarket_volume_usd"),
+        state_eligible=state_freshness["status"] == "fresh",
+        policy_scope_eligible=a7_in_scope,
+    )
+    output = {
+        "fixture": {k: v for k, v in fixture.items()
+                    if k not in {"team1_lineup", "team2_lineup"}},
+        "fixture_lineups": {
+            "team1": fixture["team1_lineup"],
+            "team2": fixture["team2_lineup"],
+        },
+        "prediction": {fixture["team1"]: p_team1, fixture["team2"]: p_team2},
+        "bet": bet_info,
+        "diagnostics": {
+            "model": str(model_dir),
+            "venue_identity_mode": venue_identity_mode,
+            "elo_update_version": elo_update_version,
+            "fixture_venue_raw": fixture["venue"],
+            "fixture_venue_effective": record["venue"],
+            "rehydrate_as_of": fixture["date"],
+            "state_freshness": state_freshness,
+            "sqlite_cache": sqlite_state["path"],
+            "tracker_snapshot": tracker_state["path"],
+            "tracker_snapshot_as_of": _peek_snapshot_as_of(tracker_snapshot),
+            "tracker_aux_source_dirs": tracker_state.get("aux_source_dirs"),
+            "tracker_aux_match_count": tracker_state.get("aux_source_match_count"),
+            "team_aliases_applied": aliases,
+            "toss_known": toss_known,
+            "toss_branch_probs": toss_branch_probs,
+            "encoder_warnings": debug["encoder_warnings"],
+            "h2h_n_meetings": record["h2h_n_meetings"],
+            "is_team1_home": record["is_team1_home"],
+            "is_team2_home": record["is_team2_home"],
+            "top6_batting_elo_diff": record["top6_batting_elo_diff"],
+            "bottom5_bowling_elo_diff": record["bottom5_bowling_elo_diff"],
+        },
+    }
+    if verbose:
+        output["feature_row"] = debug["feature_row"]
+    return output
+
+
+def _cli() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--fixture", type=Path, required=True,
                     help="Path to fixture JSON (see fixtures/_template.json)")
@@ -1257,218 +1397,40 @@ def main() -> int:
             identity_mode=args.venue_identity_mode,
             elo_update_version=args.elo_update_version,
         )
-
     fixture = json.loads(args.fixture.read_text())
-    print(f"Predicting: {fixture['date']}  "
-          f"{fixture['team1']} vs {fixture['team2']}  @ {fixture['venue']}")
-
-    sqlite_state = read_sqlite_state_metadata(args.state_dir,
-                                              version=args.state_version,
-                                              identity_mode=args.venue_identity_mode,
-                                              elo_update_version=args.elo_update_version)
-    tracker_state = read_tracker_state_metadata(
-        args.tracker_snapshot,
-        identity_mode=args.venue_identity_mode,
+    output = predict_record(
+        fixture,
+        model_dir=args.model_dir,
+        state_dir=args.state_dir,
+        tracker_snapshot=args.tracker_snapshot,
+        tracker_source_dirs=tracker_sources,
+        tracker_aux_dirs=tracker_aux_sources,
+        team_aliases=team_aliases,
+        state_version=args.state_version,
+        venue_identity_mode=args.venue_identity_mode,
         elo_update_version=args.elo_update_version,
-    )
-    state_freshness = assess_state_freshness(
-        fixture["date"],
-        sqlite_state,
-        tracker_state,
         max_state_age_days=args.max_state_age_days,
+        allow_stale_state=args.allow_stale_state,
+        max_unresolved_players=args.max_unresolved_players,
+        verbose=args.verbose,
     )
-    if state_freshness["status"] == "stale":
-        message = (
-            f"live state is {state_freshness['age_days']} days behind fixture "
-            f"{fixture['date']} (maximum {args.max_state_age_days}); effective "
-            f"state is available through "
-            f"{state_freshness['state_available_through']}. Rebuild a "
-            "separate SQLite cache and tracker snapshot from the same sources, "
-            "then pass --state-dir/--tracker-snapshot. "
-            "--allow-stale-state is diagnostic-only and suppresses betting."
-        )
-        if not args.allow_stale_state:
-            raise RuntimeError(message)
-        state_freshness["status"] = "stale_override"
-        state_freshness["override_used"] = True
-        print(f"  WARN: {message}")
-    else:
-        state_freshness["override_used"] = False
-
-    print("Loading providers + trackers...")
-    provider = StatsProvider(
-        str(args.state_dir),
-        version=args.state_version,
-        # Invariant #5: serving must assert the same same-day-order
-        # contract the materializer does — a live-state cache rebuilt under
-        # a different ordering previously served with only a warning.
-        require_order_contract=True,
-        required_elo_update_version=args.elo_update_version,
+    out_path = args.out or (
+        REPO / "predictions" /
+        f"{fixture['date']}_{fixture['team1'].replace(' ', '_')}"
+        f"_vs_{fixture['team2'].replace(' ', '_')}.json"
     )
-    metadata = PlayerMetadataProvider(str(REPO / "data" / "all_players_enriched.csv"))
-    form, h2h, home = load_trackers(
-        args.tracker_snapshot, tracker_sources,
-        aux_source_dirs=tracker_aux_sources, team_aliases=team_aliases,
-        identity_mode=args.venue_identity_mode,
-        elo_update_version=args.elo_update_version,
-    )
-    if team_aliases:
-        print(f"  folded {len(team_aliases)} renamed team(s) into tracker "
-              f"history: {', '.join(f'{o} -> {n}' for o, n in team_aliases.items())}")
-
-    print("Computing features...")
-    record = compute_features(fixture, provider, metadata, form, h2h, home,
-                              max_unresolved=args.max_unresolved_players,
-                              identity_mode=args.venue_identity_mode)
-
-    print("Applying model...")
-    toss_known = bool(record.pop("_toss_known", True))
-    toss_branch_probs = None
-    if toss_known:
-        p_team1, debug = apply_encoders_and_predict(
-            record,
-            args.model_dir,
-            identity_mode=args.venue_identity_mode,
-            elo_update_version=args.elo_update_version,
-        )
-    else:
-        # Unknown toss: enumerate the four internally consistent
-        # (toss winner × decision) branches and average — see
-        # toss_branches() for why two bat-first branches were not enough.
-        # The toss is a fair coin; pre-toss decision propensity is unknown,
-        # so branches are equally weighted and reported individually.
-        branch_probs = {}
-        debug = None
-        for label, branch in toss_branches(record).items():
-            p_branch, branch_debug = apply_encoders_and_predict(
-                branch,
-                args.model_dir,
-                identity_mode=args.venue_identity_mode,
-                elo_update_version=args.elo_update_version,
-            )
-            if debug is None:
-                debug = branch_debug
-            branch_probs[label] = p_branch
-        p_team1 = sum(branch_probs.values()) / len(branch_probs)
-        toss_branch_probs = branch_probs
-        print("  (toss unknown — averaged four toss-winner x decision "
-              "branches: "
-              + ", ".join(f"{k} {v*100:.1f}%"
-                          for k, v in branch_probs.items()) + ")")
-    p_team2 = 1.0 - p_team1
-
-    # A7 was predeclared for male T20 winner markets on the standard state
-    # pool. Serving with auxiliary tracker pools, team aliases, or a non-T20
-    # fixture format puts the fixture outside that universe.
-    a7_in_scope = (
-        not tracker_aux_sources
-        and not team_aliases
-        and not tracker_state.get("aux_source_dirs")
-        and not tracker_state.get("aux_source_match_count")
-        and str(fixture.get("format", "t20")).lower() in ("t20", "t20i")
-    )
-    bet_info = compute_bet(
-        fixture["team1"],
-        fixture["team2"],
-        p_team1,
-        fixture.get("polymarket_odds"),
-        top6_batting_elo_diff=record["top6_batting_elo_diff"],
-        polymarket_volume_usd=fixture.get("polymarket_volume_usd"),
-        state_eligible=state_freshness["status"] == "fresh",
-        policy_scope_eligible=a7_in_scope,
-    )
-
-    output = {
-        "fixture": {k: v for k, v in fixture.items() if k != "team1_lineup" and k != "team2_lineup"},
-        "fixture_lineups": {
-            "team1": fixture["team1_lineup"],
-            "team2": fixture["team2_lineup"],
-        },
-        "prediction": {
-            fixture["team1"]: p_team1,
-            fixture["team2"]: p_team2,
-        },
-        "bet": bet_info,
-        "diagnostics": {
-            "model": str(args.model_dir),
-            "venue_identity_mode": args.venue_identity_mode,
-            "elo_update_version": args.elo_update_version,
-            "fixture_venue_raw": fixture["venue"],
-            "fixture_venue_effective": record["venue"],
-            "rehydrate_as_of": fixture["date"],
-            "state_freshness": state_freshness,
-            "sqlite_cache": sqlite_state["path"],
-            "tracker_snapshot": tracker_state["path"],
-            "tracker_snapshot_as_of": _peek_snapshot_as_of(
-                args.tracker_snapshot
-            ),
-            "tracker_aux_source_dirs": tracker_state.get("aux_source_dirs"),
-            "tracker_aux_match_count": tracker_state.get(
-                "aux_source_match_count"),
-            "team_aliases_applied": team_aliases,
-            "toss_known": toss_known,
-            "toss_branch_probs": toss_branch_probs,
-            "encoder_warnings": debug["encoder_warnings"],
-            "h2h_n_meetings": record["h2h_n_meetings"],
-            "is_team1_home": record["is_team1_home"],
-            "is_team2_home": record["is_team2_home"],
-            "top6_batting_elo_diff": record["top6_batting_elo_diff"],
-            "bottom5_bowling_elo_diff": record["bottom5_bowling_elo_diff"],
-        },
-    }
-    if args.verbose:
-        output["feature_row"] = debug["feature_row"]
-
-    out_path = args.out or (REPO / "predictions" /
-                            f"{fixture['date']}_{fixture['team1'].replace(' ','_')}"
-                            f"_vs_{fixture['team2'].replace(' ','_')}.json")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(output, indent=2))
-
-    print()
-    print(f"  P({fixture['team1']:<35s} wins) = {p_team1*100:>5.1f}%")
-    print(f"  P({fixture['team2']:<35s} wins) = {p_team2*100:>5.1f}%")
-    print()
-    if bet_info.get("odds_provided"):
-        if bet_info.get("shadow_bet_placed"):
-            print(
-                f"  Shadow A7: {bet_info['shadow_bet_team']} @ "
-                f"{bet_info['shadow_bet_decimal']:.2f}  "
-                f"(edge +{bet_info['shadow_bet_edge_pp']:.1f}pp; "
-                f"threshold >{bet_info['edge_threshold_pp']:.0f}pp)"
-            )
-            print(f"  PnL if win: +{bet_info['expected_pnl_per_unit_if_won']:.3f}; "
-                  f"PnL if loss: -1.000")
-        else:
-            reasons = ", ".join(bet_info.get("suppression_reasons") or [])
-            print(
-                f"  No A7 shadow bet — best edge "
-                f"{max(bet_info['edge_pp'].values()):+.1f}pp"
-                + (
-                    f"; threshold >{bet_info['edge_threshold_pp']:.0f}pp"
-                    if bet_info.get("edge_threshold_pp") is not None
-                    else ""
-                )
-                + (f"; {reasons}" if reasons else "")
-            )
-        print(
-            "  A7 policy: RETIRED 2026-08-07 — re-derived on v2 prices, no "
-            "cell clears the pre-committed bar "
-            "(reports/a7_m8_rederivation_v2_20260807.md)"
-        )
-        print("  Execution authorization: BLOCKED (policy retired)")
-    else:
-        print("  (no valid Polymarket odds; no A7 shadow decision)")
-
-    if debug["encoder_warnings"]:
-        print()
-        print("  WARNINGS:")
-        for w in debug["encoder_warnings"]:
-            print(f"    - {w}")
-
-    print()
+    p_team1 = output["prediction"][fixture["team1"]]
+    print(f"  P({fixture['team1']} wins) = {p_team1*100:.1f}%")
+    print(f"  P({fixture['team2']} wins) = {(1-p_team1)*100:.1f}%")
     print(f"  Full output -> {out_path}")
     return 0
+
+
+def main() -> int:
+    """CLI compatibility wrapper around the side-effect-free predictor."""
+    return _cli()
 
 
 if __name__ == "__main__":
