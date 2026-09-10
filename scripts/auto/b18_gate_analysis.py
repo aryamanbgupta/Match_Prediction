@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B18 gate analysis — empirical extras graft on the promoted i7 stack.
 
 WRITTEN AND COMMITTED BEFORE ANY B18 EVAL OUTPUT EXISTED. The mandatory

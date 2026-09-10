@@ -1,3 +1,4 @@
+# manifest-exempt: generic ball-model trainer owns configurable outputs
 from pathlib import Path
 from xgboost import XGBClassifier
 import pandas as pd

@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B16 gate analysis — quote-layer coverage re-check on the PROMOTED i7 stack.
 
 The B15 scale-only quote calibrator (record

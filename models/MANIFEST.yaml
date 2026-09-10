@@ -1,0 +1,222 @@
+schema_version: 1
+hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+artifacts:
+  - role: ball_model_prod
+    path: models/xgb_i7_noweights_production
+    kind: dir
+    hash: a6ac76710d86d2f1abd55f838c64c4c3
+    producing_command: "cp -a models/auto/d16/noweights/. models/xgb_i7_noweights_production/"
+    input_roles: [ball_frame_i7, stats_cache_i7, ball_encoders_i7_archive]
+    promoting_doc: research/reports/auto/D16.md
+    notes: "D16 no-class-weights production stack; xgboost_model_i7.pkl md5 7ee1e1809917f45be7e726b3ea4a8a6c; raw, no calibrator"
+    stats_version: i7
+
+  - role: match_model_prod
+    path: models/xgb_match_i7_swap_production
+    kind: dir
+    hash: f9ce67f56f1f8d945c4274fae171d27a
+    producing_command: "cp -a models/auto/i19/swap_seed29/. models/xgb_match_i7_swap_production/"
+    input_roles: [match_frame_i7_v2]
+    promoting_doc: models/xgb_match_i7_swap_production/PROVENANCE.md
+    notes: "M7 swap seed 29; model.pkl md5 54faf58638a799468d551beb3493b22d"
+
+  - role: match_model_i7_hundred
+    path: models/xgb_match_i7
+    kind: dir
+    hash: af4e9557ace047baa8984cd755bf9a4a
+    producing_command: "unknown (2026-09-10 inventory)"
+    input_roles: [match_frame_i7]
+    promoting_doc: docs/OPERATIONS.md
+    notes: "Unsymmetrized I7 family used by the Hundred path"
+
+  - role: ball_encoders_i7_archive
+    path: models/xgb_i7
+    kind: dir
+    hash: 9873a99bca7dbe6afad2ab4ce5309eaa
+    producing_command: "unknown (2026-09-10 inventory)"
+    input_roles: [ball_frame_i7, stats_cache_i7]
+    promoting_doc: research/reports/auto/D16.md
+    notes: "Archived I7 control model and encoders; production sidecars are byte-identical"
+
+  - role: stats_cache_i7
+    path: models/player_stats_cache_i7.sqlite
+    kind: file
+    hash: 671ac8200b275fa3d11d848e609f5132
+    producing_command: "uv run --no-sync python scripts/run_experiment.py experiments/configs/xgb_i7_venue_identity.yaml"
+    input_roles: []
+    promoting_doc: docs/OPERATIONS.md
+    notes: "Frozen iteration/golden I7 stats cache; never rebuild in place"
+
+  - role: stats_cache_v3_legacy
+    path: models/player_stats_cache_v3.sqlite
+    kind: file
+    hash: 92e50f7d76b3ef8356128bbba32e85b5
+    producing_command: "uv run --no-sync python scripts/run_experiment.py experiments/configs/xgb_v6_hierarchical_shrink.yaml"
+    input_roles: []
+    promoting_doc: docs/OPERATIONS.md
+    notes: "Legacy schema-v4 cache retained for replay; never rebuild in place"
+
+  - role: live_state_i7
+    path: data/live_state_i7
+    kind: dir
+    hash: c65a87f81215f7f48934eff3b3cde58d
+    producing_command: "uv run --no-sync python scripts/daily/refresh_state.py"
+    input_roles: [stats_cache_i7, forward_holdout]
+    promoting_doc: docs/SWAP_I7_PROMOTION_CUTOVER_PLAN.md
+    target: data/live_state_i7_2026-07-30_20260801T050221Z
+    notes: "Stable symlink to immutable target; as_of 2026-07-30; SQLite build_timestamp 2026-08-01T05:02:21.008717Z; BUILT added last during 2026-09-10 migration"
+
+  - role: ball_frame_i7
+    path: data/xgb_data_i7
+    kind: dir
+    hash: 0e012952f18934e756cc8d0d1a1c728a
+    producing_command: "uv run --no-sync python scripts/materialize_features.py --config experiments/configs/xgb_i7_venue_identity.yaml"
+    input_roles: [stats_cache_i7]
+    promoting_doc: research/reports/auto/D16.md
+    notes: "I7 identity ball frame of record"
+
+  - role: ball_frame_v3_legacy
+    path: data/xgb_data_v3
+    kind: dir
+    hash: f2e10ef6d92f32c91b4b222da8f223c7
+    producing_command: "unknown (2026-09-10 inventory)"
+    input_roles: [stats_cache_v3_legacy]
+    promoting_doc: CLAUDE.md
+    notes: "Local legacy frame retained for replay; untrainable under the I7 identity contract"
+
+  - role: match_frame_i7_v2
+    path: data/xgb_match_data_i7_v2
+    kind: dir
+    hash: 12ae4329f69633a5a85167dc5a290e65
+    producing_command: "unknown (2026-09-10 inventory)"
+    input_roles: [stats_cache_i7]
+    promoting_doc: research/reports/auto/I19.md
+    notes: "Cricsheet-primary I19 match frame of record; copied from the parity-verified I18 frame"
+
+  - role: match_frame_i7
+    path: data/xgb_match_data_i7
+    kind: dir
+    hash: db0bad38931cc3e7b1109b01e1b23967
+    producing_command: "unknown (2026-09-10 inventory)"
+    input_roles: [stats_cache_i7]
+    promoting_doc: docs/I17_I7_SWAP_SUCCESSOR.md
+    notes: "Pre-I19 archived match frame with synthetic display keys"
+
+  - role: bowler_phase_usage
+    path: models/bowler_phase_usage.json
+    kind: file
+    hash: 2e650423f0c949631fca1f15dd1c8a56
+    producing_command: "uv run --no-sync python scripts/build_bowler_phase_usage.py"
+    input_roles: []
+    promoting_doc: docs/OPERATIONS.md
+    notes: "Local-only artifact; not present on the Mac mini in the 2026-09-10 pull inventory"
+
+  - role: bowler_roster_policy
+    path: models/bowler_roster_policy.json
+    kind: file
+    hash: f2a5efa2810eef02124d875da0c6dd83
+    producing_command: "uv run --no-sync python scripts/build_bowler_roster_policy.py"
+    input_roles: [bowler_phase_usage]
+    promoting_doc: CLAUDE.md
+    notes: "Local-only artifact; not present on the Mac mini in the 2026-09-10 pull inventory"
+
+  - role: bowler_usage_corpus_b10
+    path: models/b10_usage_corpus.pkl
+    kind: file
+    hash: c98f190fe0eb9038e489b52469c974e2
+    producing_command: "uv run --no-sync python scripts/auto/b9_usage_baseline.py --rebuild-corpus"
+    input_roles: []
+    promoting_doc: CLAUDE.md
+    notes: "B10 as-of usage corpus consumed by the bowler phase-usage builder"
+
+  - role: prop_fair_baseline_corpus_v2
+    path: models/prop_fair_baseline_corpus_v2.pkl
+    kind: file
+    hash: a78b7c3f933f68fac5f2422292e979d8
+    producing_command: "unknown (2026-09-10 inventory)"
+    input_roles: []
+    promoting_doc: reports/e2_prop_fair_baselines.md
+    notes: "Versioned prop fair-baseline corpus of record"
+
+  - role: prop_fair_baseline_corpus_legacy
+    path: models/prop_fair_baseline_corpus.pkl
+    kind: file
+    hash: cb90407da9aa38486d466f8ded70781d
+    producing_command: "unknown (2026-09-10 inventory)"
+    input_roles: []
+    promoting_doc: reports/e2_prop_fair_baselines.md
+    notes: "Legacy corpus retained for replay"
+
+  - role: match_winner_map
+    path: models/match_winner_map.json
+    kind: file
+    hash: 1c09c3844913bf29e75cb52cc57997f3
+    producing_command: "unknown (2026-09-10 inventory)"
+    input_roles: []
+    promoting_doc: CLAUDE.md
+    notes: "Winner lookup used by the in-play evaluation path"
+
+  - role: odds_iteration_v2
+    path: betting_odds_polymarket_v2.json
+    kind: file
+    hash: b40622d4f540dc8870e08f5f6ceb3f93
+    producing_command: "uv run --no-sync python scripts/build_polymarket_odds.py"
+    input_roles: []
+    promoting_doc: reports/market_benchmark_toss_defect_20260805.md
+    notes: "Frozen corrected iteration odds; never edit in place"
+
+  - role: iteration_set_v2
+    path: data/polymarket_test_v2
+    kind: dir
+    hash: 42f10aab0b624e06516340589fabd9f8
+    producing_command: "unknown (2026-09-10 inventory)"
+    input_roles: []
+    promoting_doc: reports/market_benchmark_toss_defect_20260805.md
+    notes: "255-match corrected iteration Cricsheet set"
+
+  - role: iteration_set_legacy
+    path: data/polymarket_test
+    kind: dir
+    hash: 368ed487e94048c54f57fb059e4b8c6b
+    producing_command: "unknown (2026-09-10 inventory)"
+    input_roles: []
+    promoting_doc: CLAUDE.md
+    notes: "Legacy 261-match set retained only to preserve explicit replay defaults; never use for new market comparisons"
+
+  - role: odds_golden_v2
+    path: data/golden/betting_odds_golden_v2.json
+    kind: file
+    hash: 81c8a1a16d79b6cc9fb89bbe7df943e5
+    producing_command: "uv run --no-sync python scripts/build_polymarket_odds_golden.py"
+    input_roles: []
+    promoting_doc: reports/market_benchmark_toss_defect_20260805.md
+    notes: "Frozen corrected golden odds; never edit in place"
+
+  - role: golden_set_v2
+    path: data/golden/polymarket_test_v2
+    kind: dir
+    hash: 850a2937b11c29e7c26c0ce1040776b8
+    producing_command: "uv run --no-sync python scripts/extract_golden_cricsheet.py"
+    input_roles: []
+    promoting_doc: CLAUDE.md
+    notes: "124-match truly out-of-sample golden Cricsheet set"
+
+  - role: forward_holdout
+    path: data/forward_holdout/2026-06-01_2026-07-13
+    kind: dir
+    hash: 0a7944febcc23e2380015b6c0a20c0aa
+    producing_command: "unknown (2026-09-10 inventory)"
+    input_roles: []
+    promoting_doc: docs/FORWARD_HOLDOUT.md
+    dataset_fingerprint_sha256: 82ccde16cf2b7e5f13a9236f2788f3c8be1582f312f5c028ec44a6ab76561028
+    notes: "Frozen sealed forward evaluation set; consumed and never fitting input"
+
+  - role: forward_state
+    path: data/forward_state/2026-06-01_2026-07-13
+    kind: dir
+    hash: f613a78857b6919aa64db337172d4a91
+    producing_command: "uv run --no-sync python scripts/build_forward_state.py --holdout-dir data/forward_holdout/2026-06-01_2026-07-13"
+    input_roles: [forward_holdout, stats_cache_v3_legacy]
+    promoting_doc: docs/I6_SAME_DAY_ORDERING_AUDIT.md
+    directory_fingerprint_sha256: 725719e6ab1951cb0fa36544ea2e710ce22f0625e5934bd3dae992e21f9b792f
+    notes: "Canonical immutable forward sidecar only; rejected/staging siblings are excluded"

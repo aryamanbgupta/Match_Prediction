@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# manifest-exempt: closed-idea script, archived by item 8
 """I19 gate 2: prove retrains on the coherent-contract twin frame reproduce
 the archived I17 successor arms EXACTLY.
 

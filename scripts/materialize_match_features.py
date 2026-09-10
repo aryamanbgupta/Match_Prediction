@@ -1,3 +1,4 @@
+# manifest-exempt: generic artifact builder owns configurable frame outputs
 """Materialize one-row-per-match features for the direct match-level model.
 
 Phase A1 of the match-level direct + sim ensemble plan

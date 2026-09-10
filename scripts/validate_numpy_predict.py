@@ -1,3 +1,4 @@
+# manifest-exempt: legacy numerical parity diagnostic
 """Validate that XGBoost predict_proba on numpy matches DataFrame bit-for-bit,
 and measure the speedup. Must run green before touching sim_v1_2.py.
 

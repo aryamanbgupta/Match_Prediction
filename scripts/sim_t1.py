@@ -1,3 +1,4 @@
+# manifest-exempt: embeddings-ladder experimental artifact namespace
 """T4: TransformerT1 simulator wrapper (PredictionModel #8).
 
 Drops the T1 innings transformer (scripts/transformer_t1.py) into

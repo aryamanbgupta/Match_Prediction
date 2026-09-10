@@ -20,6 +20,7 @@ import pandas as pd
 from sklearn.metrics import brier_score_loss, log_loss
 
 from sim_eval.market_math import CostModel
+from artifacts import artifact_path
 
 
 def main() -> int:
@@ -27,10 +28,12 @@ def main() -> int:
     # Defaults follow the production of record (post 2026-07-31 promotion);
     # the pre-2026-08-14 defaults scored the long-retired v2_frozen model
     # against a legacy-identity frame with no contract check at all.
-    ap.add_argument("--model-dir", type=Path,
-                    default=Path("models/xgb_match_i7_swap_production"))
-    ap.add_argument("--parquet", type=Path,
-                    default=Path("data/xgb_match_data_i7_v2/golden_test.parquet"))
+    ap.add_argument("--role", default="match_model_prod",
+                    help="Manifest role for the match model")
+    ap.add_argument("--model-dir", type=Path, default=None)
+    ap.add_argument("--frame-role", default="match_frame_i7_v2",
+                    help="Manifest role for the match frame")
+    ap.add_argument("--parquet", type=Path, default=None)
     ap.add_argument("--out-json", type=Path, default=None,
                     help="Default: <model-dir>/golden_predictions.json")
     ap.add_argument('--spread-bps', type=float, default=0.0)
@@ -38,6 +41,13 @@ def main() -> int:
     ap.add_argument('--fee-basis', choices=('winnings', 'stake'),
                     default='winnings')
     args = ap.parse_args()
+    args.model_dir = artifact_path(args.role, args.model_dir)
+    frame_dir = artifact_path(args.frame_role)
+    args.parquet = artifact_path(
+        args.frame_role, args.parquet
+    )
+    if args.parquet == frame_dir:
+        args.parquet = args.parquet / "golden_test.parquet"
     CostModel(args.spread_bps, args.fee_bps, args.fee_basis)
     if args.out_json is None:
         args.out_json = args.model_dir / "golden_predictions.json"

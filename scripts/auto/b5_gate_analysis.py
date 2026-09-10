@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B5 gate analysis — PRE-COMMITTED before any eval result exists.
 
 Gate (per the B5 entry in research/IDEAS.md, translated to the loop's

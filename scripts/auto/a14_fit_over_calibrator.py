@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """A14 — fit a per-over vector-scaling ball calibrator.
 
 Follow-up to E5 (`reports/e5_class_weight_fix.md`) and A8 (phase-conditional

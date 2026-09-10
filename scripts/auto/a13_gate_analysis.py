@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# manifest-exempt: closed-idea script, archived by item 8
 """A13 gate analysis — dispersion (fan-out) vs single-vector baseline.
 
 Reads the aligned baseline (k=1) and dispersion (k fitted) detail JSONs emitted

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# manifest-exempt: closed-idea script, archived by item 8
 """I19 gate 3: prove the coherent-contract I7 twin frame carries the full
 I15/I16 match-identity contract on every split.
 

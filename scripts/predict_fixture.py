@@ -74,10 +74,11 @@ from sim_eval.market_math import (  # noqa: E402
     implied_probs,
     settle_flat,
 )
+from artifacts import artifact_path  # noqa: E402
 
 MODEL_DIR = REPO / "models" / "xgb_match_i7_swap_production"
-TRACKER_SNAPSHOT = REPO / "data" / "live_state_i7" / "tracker_snapshot.pkl"
 DEFAULT_STATE_DIR = REPO / "data" / "live_state_i7"
+TRACKER_SNAPSHOT = DEFAULT_STATE_DIR / "tracker_snapshot.pkl"
 DEFAULT_TRACKER_SOURCE_DIRS = (
     REPO / "data" / "t20s_json",
     REPO / "data" / "forward_holdout" / "2026-06-01_2026-07-13"
@@ -1115,7 +1116,9 @@ def main() -> int:
                     help="Output JSON path; default predictions/<match_id>.json")
     ap.add_argument("--rebuild-snapshot", action="store_true",
                     help="Force rebuild of the Phase A2 tracker snapshot.")
-    ap.add_argument("--model-dir", type=Path, default=MODEL_DIR,
+    ap.add_argument("--role", default="match_model_prod",
+                    help="Manifest role for the model artifact")
+    ap.add_argument("--model-dir", type=Path, default=None,
                     help=f"Model artifact dir (default: {MODEL_DIR.name})")
     ap.add_argument(
         "--venue-identity-mode",
@@ -1131,7 +1134,7 @@ def main() -> int:
     ap.add_argument(
         "--state-dir",
         type=Path,
-        default=DEFAULT_STATE_DIR,
+        default=None,
         help=(
             "Directory containing player_stats_cache_<version>.sqlite "
             f"(default: {DEFAULT_STATE_DIR})"
@@ -1157,7 +1160,7 @@ def main() -> int:
     ap.add_argument(
         "--tracker-snapshot",
         type=Path,
-        default=TRACKER_SNAPSHOT,
+        default=None,
         help=f"Tracker snapshot path (default: {TRACKER_SNAPSHOT})",
     )
     ap.add_argument(
@@ -1218,6 +1221,16 @@ def main() -> int:
     )
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
+
+    args.model_dir = REPO / artifact_path(args.role, args.model_dir)
+    args.state_dir = REPO / artifact_path("live_state_i7", args.state_dir)
+    args.tracker_snapshot = artifact_path(
+        "live_state_i7", args.tracker_snapshot
+    )
+    if args.tracker_snapshot == artifact_path("live_state_i7"):
+        args.tracker_snapshot = args.tracker_snapshot / "tracker_snapshot.pkl"
+    if not args.tracker_snapshot.is_absolute():
+        args.tracker_snapshot = REPO / args.tracker_snapshot
 
     tracker_sources = tuple(
         args.tracker_source_dirs or DEFAULT_TRACKER_SOURCE_DIRS

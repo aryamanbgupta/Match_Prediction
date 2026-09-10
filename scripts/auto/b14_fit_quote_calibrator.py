@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B14 — fit a per-checkpoint quote-layer calibrator on VAL quotes only.
 
 B5 (TABLED) showed the sim's in-play remaining-runs P50 beats naive

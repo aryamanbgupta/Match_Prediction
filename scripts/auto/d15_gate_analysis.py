@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D15 gate analysis — full attribution unit (D2 extras semantics + D14
 pre-ball snapshot + D4 run-out dismissal channel) vs the D1 baseline.
 

@@ -1,3 +1,4 @@
+# manifest-exempt: diagnostic one-off named in item 5
 """E1 — Temperature sharpening for the match-level direct model.
 
 Motivation (reports/reliability_diagnostic.png, 2026-06-07): the

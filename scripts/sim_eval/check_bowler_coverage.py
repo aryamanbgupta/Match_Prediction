@@ -18,6 +18,10 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
+import sys
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+from artifacts import artifact_path  # noqa: E402
+
 
 def cumulative_for_year(usage: dict, year: int) -> dict:
     """Return {cricsheet_id: total_balls} for all years strictly < year."""
@@ -34,12 +38,15 @@ def cumulative_for_year(usage: dict, year: int) -> dict:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--test-dir", default="data/polymarket_test")
-    ap.add_argument("--usage", default="models/bowler_phase_usage.json")
+    ap.add_argument("--test-role", default="iteration_set_legacy")
+    ap.add_argument("--test-dir", default=None)
+    ap.add_argument("--usage", default=None)
     ap.add_argument("--threshold", type=int, default=100,
                     help="A bowler is 'covered' if cumulative balls ≥ this.")
     ap.add_argument("--max-matches", type=int, default=None)
     args = ap.parse_args()
+    args.test_dir = artifact_path(args.test_role, args.test_dir)
+    args.usage = artifact_path("bowler_phase_usage", args.usage)
 
     with open(args.usage) as f:
         usage = json.load(f)

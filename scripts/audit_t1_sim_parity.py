@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# manifest-exempt: diagnostic feature-contract audit with a frozen replay frame
 """Replay held-out rows through T1's live simulator feature path.
 
 This is a feature-contract audit, not a model evaluation. It reconstructs

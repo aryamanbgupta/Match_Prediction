@@ -13,6 +13,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from registered_experiment import reject_sealed
+from artifacts import artifact_path
 
 
 def build(source: Path, min_legal_balls: int = 100) -> dict:
@@ -67,10 +68,11 @@ def build(source: Path, min_legal_balls: int = 100) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", type=Path, default=Path("data/t20s_json"))
-    parser.add_argument(
-        "--out", type=Path, default=Path("models/bowler_roster_policy.json"))
+    parser.add_argument("--role", default="bowler_roster_policy")
+    parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--min-legal-balls", type=int, default=100)
     args = parser.parse_args()
+    args.out = artifact_path(args.role, args.out)
     for path in (args.source, args.out):
         reject_sealed(path)
     result = build(args.source, args.min_legal_balls)

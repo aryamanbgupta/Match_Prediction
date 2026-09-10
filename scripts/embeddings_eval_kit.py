@@ -1,3 +1,4 @@
+# manifest-exempt: embeddings-ladder experimental artifact namespace
 """Frozen evaluation kit for the player-embedding ladder (E1..E4).
 
 Builds, once, the scoreboard every embedding rung is judged against

@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B12 gate analysis — B10 selector re-gated on bowler_wkts_1plus at fresh seed 44.
 
 WRITTEN AND COMMITTED BEFORE EITHER EVAL RESULT EXISTED.

@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """I14b gate — do physical venue features help the ball model where the
 venue embedding is weakest?
 

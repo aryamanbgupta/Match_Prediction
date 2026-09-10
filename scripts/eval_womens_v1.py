@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# manifest-exempt: isolated non-production women's research track
 """I12 v1 gates for the women's match model (coinflip + ELO baselines only).
 
 NOTE (2026-08-01): the original "no odds exist -> no market gate" premise was

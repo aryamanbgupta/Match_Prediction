@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D15 unit check — D2 extras semantics + D14 attribution snapshot + D4
 run-out dismissal channel, verified as one unit.
 

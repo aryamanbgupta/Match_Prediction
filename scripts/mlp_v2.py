@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# manifest-exempt: legacy model-family trainer owns its artifact namespace
 """
 MLP Model V2 Training for Cricket Ball Prediction
 

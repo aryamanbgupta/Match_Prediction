@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# manifest-exempt: closed-idea script, archived by item 8
 """I18 Gate A: parity check between a freshly rebuilt I7 match frame and the
 frozen production I7 frame.
 

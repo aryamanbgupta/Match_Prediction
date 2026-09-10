@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# manifest-exempt: closed-idea script, archived by item 8
 """I14b: augment the i7 ball frame with physical venue features.
 
 Joins the I14 registry (`config/identity/venue_registry_v0.csv`) and monthly

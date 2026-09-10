@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """A15 — fit a minimal OVER-0-ONLY vector-scaling ball calibrator.
 
 Parsimony follow-up to A14 (`scripts/auto/a14_fit_over_calibrator.py`, LANDED),

@@ -1,3 +1,4 @@
+# manifest-exempt: diagnostic one-off named in item 5
 """
 Profile script for sim_eval hot paths.
 

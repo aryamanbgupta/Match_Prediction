@@ -1,3 +1,4 @@
+# manifest-exempt: embeddings-ladder diagnostic artifact namespace
 """Diagnostic: does T1 degrade under self-conditioned (free-running)
 decoding vs. teacher-forced (ground-truth-history) decoding?
 

@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D2 unit check — strike rotation + balls-faced on extras (`MatchState.update`).
 
 Scripted deliveries through the real `T20Rules.process_ball` path assert the

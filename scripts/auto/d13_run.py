@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D13 — swap augmentation + recency decay combined (D7 x D8), paired 5-seed.
 
 D7 (LANDED): --swap-augment, dLL -0.0121 / dROI +3.01pp vs base.

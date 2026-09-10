@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """A12 — fit a dew-conditional 2nd-innings vector-scaling ball calibrator.
 
 Follow-up to A6 (dew has no *match-level* winner signal) and A8/A14 (vector /

@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D7 — team-swap symmetry augmentation (match model), paired 5-seed eval.
 
 The match model consumes absolute team1_/team2_ features and team assignment

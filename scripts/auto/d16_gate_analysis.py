@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D16 gate analysis — no-class-weights retrain vs its control+vector twin (i7).
 
 WRITTEN AND COMMITTED BEFORE EITHER D16 EVAL RESULT EXISTED.

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# manifest-exempt: legacy model conversion utility
 """
 Convert weights between PyTorch and MLX formats.
 

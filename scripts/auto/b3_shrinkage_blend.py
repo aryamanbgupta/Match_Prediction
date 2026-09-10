@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B3 — Continuous-forecast shrinkage blend (productize E2's finding).
 
 E2's standing result: the sim's only validated prop skill is continuous

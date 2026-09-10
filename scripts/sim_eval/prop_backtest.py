@@ -46,6 +46,7 @@ from sim_eval.settlement_common import (  # noqa: E402
 )
 from stats_provider import StatsProvider  # noqa: E402
 from player_metadata import PlayerMetadataProvider  # noqa: E402
+from artifacts import artifact_path  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -870,7 +871,8 @@ def bootstrap_ci(rows, metric_fn, n_reps=1000, alpha=0.05, seed=0):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--test-dir", default="data/polymarket_test")
+    ap.add_argument("--test-role", default="iteration_set_legacy")
+    ap.add_argument("--test-dir", default=None)
     ap.add_argument("--n-matches", default="30",
                     help="Number of matches to score, or 'all' for full test set.")
     ap.add_argument("--n-sims", type=int, default=100)
@@ -879,18 +881,20 @@ def main():
     # no-weights RAW on the i7 identity frame, no calibrator (D17).
     # Legacy v3 replay needs every path passed explicitly plus
     # --stats-version v3 and the vector calibrator (see CLAUDE.md).
+    ap.add_argument("--role", default="ball_model_prod",
+                    help="Manifest role for the ball-model directory")
     ap.add_argument(
         "--model-path",
-        default="models/xgb_i7_noweights_production/xgboost_model_i7.pkl")
+        default=None)
     ap.add_argument(
         "--batter-encoder",
-        default="models/xgb_i7_noweights_production/batter_encoder_i7.pkl")
+        default=None)
     ap.add_argument(
         "--bowler-encoder",
-        default="models/xgb_i7_noweights_production/bowler_encoder_i7.pkl")
+        default=None)
     ap.add_argument(
         "--feature-columns",
-        default="models/xgb_i7_noweights_production/feature_columns_i7.txt")
+        default=None)
     ap.add_argument(
         "--stats-version",
         default="i7",
@@ -899,8 +903,7 @@ def main():
     ap.add_argument("--bowler-selector", choices=["empirical", "random"],
                     default="empirical",
                     help="Bowler selection strategy. Default = empirical (phase-aware).")
-    ap.add_argument("--bowler-usage-path",
-                    default="models/bowler_phase_usage.json",
+    ap.add_argument("--bowler-usage-path", default=None,
                     help="Usage prior JSON for EmpiricalBowlerSelector.")
     ap.add_argument("--detail-out", default="reports/prop_calibration_detail.json")
     ap.add_argument("--report-out", default="reports/prop_calibration_report.md")
@@ -917,6 +920,24 @@ def main():
                          "closed. Legacy v3 replay uses "
                          "models/xgb_v3/vector_scaling_calibrator_v1.pkl.")
     args = ap.parse_args()
+
+    args.test_dir = artifact_path(args.test_role, args.test_dir)
+    model_dir = artifact_path(args.role)
+    args.model_path = artifact_path(
+        args.role, args.model_path or model_dir / "xgboost_model_i7.pkl"
+    )
+    args.batter_encoder = artifact_path(
+        args.role, args.batter_encoder or model_dir / "batter_encoder_i7.pkl"
+    )
+    args.bowler_encoder = artifact_path(
+        args.role, args.bowler_encoder or model_dir / "bowler_encoder_i7.pkl"
+    )
+    args.feature_columns = artifact_path(
+        args.role, args.feature_columns or model_dir / "feature_columns_i7.txt"
+    )
+    args.bowler_usage_path = artifact_path(
+        "bowler_phase_usage", args.bowler_usage_path
+    )
 
     if args.ball_calibrator == "vector" and not args.ball_calibrator_path:
         raise SystemExit(

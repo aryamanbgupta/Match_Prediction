@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# manifest-exempt: legacy training-cache diagnostic
 """Validate cache stats derivation against raw counters, backend-agnostic.
 
 Asserts `get_batting_stats` / `get_bowling_stats` compute the same values

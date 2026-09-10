@@ -1,3 +1,4 @@
+# manifest-exempt: embeddings-ladder experimental artifact namespace
 """T1 — minimal innings-scope transformer over ball sequences (Phase 2).
 
 Hypothesis (design doc + Phase-1 exit): within-innings history carries

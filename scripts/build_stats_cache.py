@@ -1,3 +1,4 @@
+# manifest-exempt: generic artifact builder owns configurable cache outputs
 """Build `models/player_stats_cache_v3.sqlite` directly from JSON matches.
 
 Walks `data/t20s_json/` in chronological order, advances `PlayerStatsTracker`

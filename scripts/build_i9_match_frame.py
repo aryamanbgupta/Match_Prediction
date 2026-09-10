@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# manifest-exempt: versioned experimental artifact builder owns its output namespace
 """Build the exact M7 direct-model frame for the I9 candidate."""
 from __future__ import annotations
 

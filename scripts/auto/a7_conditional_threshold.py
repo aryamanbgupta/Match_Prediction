@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """A7 — slice-conditional edge threshold (betting-layer, M8 follow-up).
 
 Pure betting-layer rule on top of the FROZEN production predictions. Does NOT

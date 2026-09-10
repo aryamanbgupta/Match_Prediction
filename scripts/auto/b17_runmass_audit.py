@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B17 Task 2 — teacher-forced run-mass audit of BOTH serving stacks.
 
 Diagnostic only. Measures how much run mass per LEGAL BALL each serving

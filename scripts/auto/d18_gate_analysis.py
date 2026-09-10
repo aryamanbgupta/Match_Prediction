@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D18 gate analysis — no-weights-adapted hyperparameters vs the D16 arm (i7).
 
 WRITTEN AND COMMITTED BEFORE THE D18 EVAL RESULT EXISTED.

@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D14 unit check — batting/bowling-card attribution in `_simulate_innings`
 plus the re-applied D2 extras semantics, verified as one unit.
 

@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D3 unit check — empirical extras graft, verified on the live path.
 
 Part 1 exercises `graft_extras` (the shared helper all six model-wrapper

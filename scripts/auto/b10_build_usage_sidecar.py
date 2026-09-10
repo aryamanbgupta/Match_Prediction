@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B10 — build the opt-in usage sidecar for the who-bowls alignment arm.
 
 Produces two artifacts under `models/auto/b10/` (gitignored):

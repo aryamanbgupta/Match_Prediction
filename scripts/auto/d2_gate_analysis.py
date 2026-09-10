@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D2 gate analysis — strike-rotation/balls-faced-on-extras fix vs the D1 baseline.
 
 Two prop_backtest detail JSONs, both venue-ON at seed 43, training-aligned

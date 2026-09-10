@@ -29,6 +29,7 @@ from elo_update import (
     resolve_elo_update_version,
 )
 from stats_provider import wrap_with_cache
+from artifacts import artifact_path
 
 
 # Schema v4: empirical outcome distribution features (42 columns across 5
@@ -711,10 +712,10 @@ class EmpiricalBowlerSelector(BowlerSelector):
 
     def __init__(
         self,
-        usage_path: str = "models/bowler_phase_usage.json",
+        usage_path: Optional[str] = None,
         k: int = 30,
     ):
-        self.usage_path = usage_path
+        self.usage_path = str(artifact_path("bowler_phase_usage", usage_path))
         self.k = k
         self._cumulative_cache: Dict[int, Dict[str, Dict[str, int]]] = {}
         self._league_share_cache: Dict[int, Dict[str, float]] = {}
@@ -972,11 +973,11 @@ class RosterEmpiricalBowlerSelector(EmpiricalBowlerSelector):
     overs remain — and fails closed at the first selection.
     """
 
-    def __init__(self, usage_path: str = "models/bowler_phase_usage.json",
-                 roster_path: str = "models/bowler_roster_policy.json",
+    def __init__(self, usage_path: Optional[str] = None,
+                 roster_path: Optional[str] = None,
                  k: int = 30):
         super().__init__(usage_path=usage_path, k=k)
-        self.roster_path = roster_path
+        self.roster_path = str(artifact_path("bowler_roster_policy", roster_path))
         self._roster_payload: Optional[Dict] = None
         self._roster_count_cache: Dict[int, Dict[int, int]] = {}
 

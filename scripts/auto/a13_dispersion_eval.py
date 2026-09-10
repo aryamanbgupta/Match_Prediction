@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# manifest-exempt: closed-idea script, archived by item 8
 """A13 — sim dispersion (variance) calibration on sampled score totals.
 
 A8 showed a *marginal-rate* correction (vector scaling) cannot move the

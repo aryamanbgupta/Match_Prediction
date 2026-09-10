@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B1 gate analysis — venue-encoder fix vs venue-blind sim (venue_encoded=0).
 
 Two prop_backtest detail JSONs (same 261 matches, same seed 42, same vector

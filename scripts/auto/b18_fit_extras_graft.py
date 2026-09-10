@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B18 — fit the empirical extras graft sidecar for the promoted i7 stack.
 
 Recovers D3's marginal-preserving extras composition (rates half) AND adds

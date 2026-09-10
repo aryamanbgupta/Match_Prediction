@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B7 gate analysis — refit (venue-ON) ball calibrators vs the stale ones.
 
 Two prop_backtest detail JSONs, both venue-ON at seed 43 (same 261 matches,

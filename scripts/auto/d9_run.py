@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D9 — decayed margin-aware team-results ELO (replacement test for the
 win_rate features), paired 5-seed eval.
 

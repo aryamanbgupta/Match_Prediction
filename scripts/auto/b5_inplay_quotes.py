@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B5 — in-play over/under quote prototype (analytics-engine seed).
 
 Teacher-forced replay of ACTUAL innings-1 balls to checkpoint states (end

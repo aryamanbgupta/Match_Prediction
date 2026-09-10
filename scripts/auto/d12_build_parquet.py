@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D12 — build the production-feature-set parquet from the m3_unfrozen superset.
 
 Production (`models/xgb_match_v3_m7_production`) trains on 46 numeric features

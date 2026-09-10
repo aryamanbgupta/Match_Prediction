@@ -1,3 +1,4 @@
+# manifest-exempt: embeddings-ladder experimental artifact namespace
 """Two-stage xR prototype: intent -> delivery -> reaction, on the T1 encoder.
 
 T1.5's lesson: predicting shot/control from PRE-ball context alone collapses

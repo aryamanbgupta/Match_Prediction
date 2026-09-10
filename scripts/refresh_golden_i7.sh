@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# manifest-exempt: reproduction comments name gitignored I18 reference paths
 # Golden-refresh for the i7 production line (post 2026-07-31 promotion).
 #
 # Scores the production match model on the golden set under the i7 identity
@@ -8,9 +9,9 @@
 #
 # The stamped envelope is the I18 reference artifact. If it is missing
 # (models/auto is gitignored), rebuild it first:
-#   uv run python scripts/synthesize_golden_envelope.py \
+#   uv run --no-sync python scripts/synthesize_golden_envelope.py \
 #       --out models/auto/i18/golden_envelope.json     # see I18.md
-#   uv run python scripts/auto/i18_stamp_envelope.py \
+#   uv run --no-sync python scripts/auto/i18_stamp_envelope.py \
 #       --envelope models/auto/i18/golden_envelope.json \
 #       --test-dir data/golden/polymarket_test_v2 \
 #       --out models/auto/i18/golden_envelope_cricsheet.json
@@ -19,12 +20,16 @@
 #   bash scripts/refresh_golden_i7.sh [MODEL_DIR] [GOLDEN_PARQUET]
 set -euo pipefail
 
-MODEL_DIR="${1:-models/xgb_match_i7_swap_production}"
-FRAME="${2:-data/xgb_match_data_i7_v2/golden_test.parquet}"
+artifact_path() {
+  uv run --no-sync python scripts/artifacts.py path "$1"
+}
+
+MODEL_DIR="${1:-$(artifact_path match_model_prod)}"
+FRAME="${2:-$(artifact_path match_frame_i7_v2)/golden_test.parquet}"
 ENVELOPE="models/auto/i18/golden_envelope_cricsheet.json"
 # _v2 = benchmark of record since 2026-08-05 (the pre-fix file carries the
 # toss-market defect and has been removed from working checkouts).
-ODDS="data/golden/betting_odds_golden_v2.json"
+ODDS="$(artifact_path odds_golden_v2)"
 OUT="eval_out/golden_i7_refresh"
 
 for f in "$ENVELOPE" "$ODDS" "$FRAME"; do
@@ -33,19 +38,19 @@ done
 mkdir -p "$OUT"
 
 echo "=== 1/3 predict golden (${MODEL_DIR}) ==="
-uv run python scripts/predict_golden.py \
+uv run --no-sync python scripts/predict_golden.py \
   --model-dir "$MODEL_DIR" \
   --parquet "$FRAME" \
   --out-json "$MODEL_DIR/golden_predictions.json"
 
 echo "=== 2/3 blend w=0.0 (pure direct) ==="
-uv run python scripts/sim_eval/blend_eval_json.py \
+uv run --no-sync python scripts/sim_eval/blend_eval_json.py \
   --sim-json "$ENVELOPE" \
   --direct-json "$MODEL_DIR/golden_predictions.json" \
   --w 0.0 --out-dir "$OUT"
 
 echo "=== 3/3 reslice (all / >=50k / >=100k, I3 blocks) ==="
-uv run python scripts/sim_eval/reslice_eval_json.py \
+uv run --no-sync python scripts/sim_eval/reslice_eval_json.py \
   --in "$OUT/golden_envelope_cricsheet_w0p00.json" \
   --odds "$ODDS" \
   --cluster-source-dir data/golden/t20s_json \

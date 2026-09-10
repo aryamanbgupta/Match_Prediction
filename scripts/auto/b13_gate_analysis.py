@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B13 gate analysis — never-bowler damping in the usage-absent branch.
 
 WRITTEN AND COMMITTED BEFORE ANY B13 EVAL RESULT EXISTED.

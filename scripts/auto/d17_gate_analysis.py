@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D17 gate analysis — val-fit vector calibrator ON TOP OF the no-weights arm (i7).
 
 WRITTEN AND COMMITTED BEFORE THE D17 EVAL RESULT EXISTED.

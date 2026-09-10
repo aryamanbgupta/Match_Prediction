@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """A11 — A7 boundary sweep (betting-layer, A7 follow-up).
 
 A7 landed the slice-conditional edge threshold with the mismatch/close boundary

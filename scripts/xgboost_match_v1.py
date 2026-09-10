@@ -1,3 +1,4 @@
+# manifest-exempt: generic match-model trainer owns configurable outputs
 """Train a match-level XGBoost binary classifier on the cheap-subset
 feature set materialized by `scripts/materialize_match_features.py`.
 

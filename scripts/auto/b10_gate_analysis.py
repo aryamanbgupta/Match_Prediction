@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B10 gate analysis — who-bowls usage alignment (blind twin vs b10 arm).
 
 WRITTEN AND COMMITTED BEFORE EITHER EVAL RESULT EXISTED.

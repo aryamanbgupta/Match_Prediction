@@ -1,3 +1,4 @@
+# manifest-exempt: isolated unpromoted I5 experiment
 """Fit the I5 global vector-scaling calibrator on validation balls only."""
 from __future__ import annotations
 

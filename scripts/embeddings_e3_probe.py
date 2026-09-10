@@ -1,3 +1,4 @@
+# manifest-exempt: embeddings-ladder experimental artifact namespace
 """E3 scoreboard: does a (player, season) vector predict NEXT-season
 performance better than career vectors or raw rates?
 

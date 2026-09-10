@@ -1,3 +1,4 @@
+# manifest-exempt: embeddings-ladder experimental artifact namespace
 """E1 — pure-ID (batter|bowler)2vec, the base rung of the embedding ladder.
 
 Alcorn-faithful: predict the 6-class ball outcome from (batter, bowler)

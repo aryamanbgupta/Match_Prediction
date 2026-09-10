@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# manifest-exempt: versioned artifact builder owns its output namespace
 """Build the exact production M7 feature frame from I7 materialization.
 
 The full match materializer contains later experimental feature families.

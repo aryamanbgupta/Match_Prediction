@@ -1,3 +1,4 @@
+# manifest-exempt: diagnostic one-off named in item 5
 """
 Feature Importance Analysis for XGBoost model.
 

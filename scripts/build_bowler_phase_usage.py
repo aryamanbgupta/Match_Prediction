@@ -42,6 +42,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent))
 
 from loaders_common import iter_matches_chronological  # noqa: E402
+from artifacts import artifact_path  # noqa: E402
 
 
 PHASES = ("pp", "mid", "death")
@@ -205,8 +206,10 @@ def main():
                          "Walked separately and merged.")
     ap.add_argument("--gender", default="male",
                     help="Gender filter (default 'male'; pass 'none' to disable).")
-    ap.add_argument("--out", default="models/bowler_phase_usage.json")
-    ap.add_argument("--b10-corpus", default="models/b10_usage_corpus.pkl",
+    ap.add_argument("--role", default="bowler_phase_usage",
+                    help="Manifest role for the output artifact")
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--b10-corpus", default=None,
                     help="As-of usage corpus the b10_asof_usage key points at "
                          "(shipped by B12).")
     ap.add_argument("--no-b10-key", action="store_true",
@@ -214,6 +217,8 @@ def main():
                          "(pre-B12 behavior; the shipped usage-aligned "
                          "selector branch will NOT activate).")
     args = ap.parse_args()
+    args.out = artifact_path(args.role, args.out)
+    args.b10_corpus = artifact_path("bowler_usage_corpus_b10", args.b10_corpus)
 
     gender = None if args.gender == "none" else args.gender
 

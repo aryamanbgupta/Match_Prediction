@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B4 — top_bowler pricing margin (post-calibration edge quantification).
 
 Quantifies the sim's top_bowler edge over the E2 as-of fair baseline as

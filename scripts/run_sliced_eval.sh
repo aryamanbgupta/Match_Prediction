@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# manifest-exempt: generated evaluation output CLI example
 # Run a 3-slice liquidity eval (all / >=$50k / >=$100k).
 #
 # Phase 1 of the outcome-dist follow-up plan. Wraps run_sim_eval.py three

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# manifest-exempt: legacy alternate model-family paths remain explicit replay options
 """
 Main script to run match-level evaluation against betting odds
 
@@ -28,6 +29,7 @@ from sim_eval.eval_statistics import (
 )
 from sim_eval.market_math import CostModel
 from match_identity import identity_contract
+from artifacts import artifact_path, load_manifest
 
 
 def create_example_odds_file():
@@ -104,6 +106,9 @@ def main():
                        help='Model type to use (xgboost, lstm, mlp, mlp_v2, transformer, or llm)')
     parser.add_argument('--model-version', type=str, default='v3',
                        help='Artifact version to use (for example v3 or i5)')
+    parser.add_argument('--role', default=None,
+                       help='Manifest role for the ball-model directory; '
+                            '--model-version remains the legacy replay selector')
     parser.add_argument('--model', type=str, default=None,
                        help='Path to trained model (overrides --model-version)')
     parser.add_argument('--batter-encoder', type=str, default=None,
@@ -173,31 +178,42 @@ def main():
     parser.add_argument('--bowler-selector', choices=['empirical', 'random'],
                        default='empirical',
                        help='Bowler selection strategy. Default = empirical (phase-aware).')
-    parser.add_argument('--bowler-usage-path',
-                       default='models/bowler_phase_usage.json',
+    parser.add_argument('--bowler-usage-path', default=None,
                        help='Usage prior JSON for EmpiricalBowlerSelector.')
 
     args = parser.parse_args()
 
-    # Set model paths based on a safe artifact version; explicit paths win.
+    # Set model paths based on a safe artifact version; explicit paths win,
+    # then --role, then the historical --model-version default.
     if (Path(args.model_version).name != args.model_version
             or args.model_version in {'', '.', '..'}):
         parser.error(f"unsafe --model-version {args.model_version!r}")
-    model_dir = Path('models') / f'xgb_{args.model_version}'
-    default_model = str(
-        model_dir / f'xgboost_model_{args.model_version}.pkl')
-    default_batter_encoder = str(
-        model_dir / f'batter_encoder_{args.model_version}.pkl')
-    default_bowler_encoder = str(
-        model_dir / f'bowler_encoder_{args.model_version}.pkl')
-    default_feature_columns = str(
-        model_dir / f'feature_columns_{args.model_version}.txt')
+    legacy_model_dir = Path('models') / f'xgb_{args.model_version}'
+    model_dir = artifact_path(
+        args.role or 'ball_model_prod',
+        None if args.role else legacy_model_dir,
+    )
     stats_version = args.model_version
+    if args.role:
+        stats_version = str(load_manifest()[args.role].get(
+            'stats_version', args.model_version
+        ))
+    default_model = str(
+        model_dir / f'xgboost_model_{stats_version}.pkl')
+    default_batter_encoder = str(
+        model_dir / f'batter_encoder_{stats_version}.pkl')
+    default_bowler_encoder = str(
+        model_dir / f'bowler_encoder_{stats_version}.pkl')
+    default_feature_columns = str(
+        model_dir / f'feature_columns_{stats_version}.txt')
 
     model_path = args.model or default_model
     batter_encoder_path = args.batter_encoder or default_batter_encoder
     bowler_encoder_path = args.bowler_encoder or default_bowler_encoder
     feature_columns_path = default_feature_columns
+    args.bowler_usage_path = str(artifact_path(
+        'bowler_phase_usage', args.bowler_usage_path
+    ))
     
     # Create example file if requested
     if args.create_example:
@@ -266,10 +282,16 @@ def main():
         if args.ball_calibrate_data:
             _ball_cal_data_path = args.ball_calibrate_data
         else:
-            _ball_cal_data_path = (
-                f'data/xgb_data_{args.model_version}/'
-                f'cricket_data_{args.model_version}_validation.parquet'
-            )
+            if args.role == 'ball_model_prod':
+                _ball_cal_data_path = str(
+                    artifact_path('ball_frame_i7')
+                    / 'cricket_data_i7_validation.parquet'
+                )
+            else:
+                _ball_cal_data_path = str(
+                    Path('data') / f'xgb_data_{args.model_version}'
+                    / f'cricket_data_{args.model_version}_validation.parquet'
+                )
 
         if not Path(_ball_cal_data_path).exists():
             print(f"\nWarning: Validation data not found at {_ball_cal_data_path}")

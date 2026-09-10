@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B14 gate analysis — PRE-COMMITTED before any corrected TEST number exists.
 
 Applies the VAL-fit per-checkpoint quote calibrator

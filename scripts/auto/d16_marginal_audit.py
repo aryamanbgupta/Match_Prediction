@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D16 — teacher-forced marginal audit of an i7-frame ball model (GATE 1(a)).
 
 WRITTEN AND COMMITTED BEFORE EITHER D16 MODEL EXISTED.

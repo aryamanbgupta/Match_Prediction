@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D1 gate analysis — sim-side run_rate scale fix vs the venue-ON baseline.
 
 Two prop_backtest detail JSONs, both venue-ON at seed 43, stale v1 global

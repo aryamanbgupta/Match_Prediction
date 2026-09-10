@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B10 unit check — who-bowls usage alignment, verified before any sim run.
 
 Five parts, ALL must pass:

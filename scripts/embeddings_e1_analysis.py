@@ -1,3 +1,4 @@
+# manifest-exempt: embeddings-ladder diagnostic artifact namespace
 """E1 diagnosis: where does the pure-ID model win/lose vs the baselines?
 
 Slices val/test log-loss by player familiarity, runs linear probes on the

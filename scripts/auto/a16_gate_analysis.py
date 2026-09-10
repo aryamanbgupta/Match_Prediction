@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """A16 gate analysis — sparse regime-change-over calibrator {0,6,15}.
 
 A16 adds over-6 (start of middle overs) and over-15 (start of death) vectors on

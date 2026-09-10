@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# manifest-exempt: closed-idea script, archived by item 8
 """I18 Gate A join: stamp cricsheet_id onto the HALF-MIGRATED golden envelope.
 
 ``scripts/patch_envelope_cricsheet_ids.py`` assumes a fully legacy (pre-I15)

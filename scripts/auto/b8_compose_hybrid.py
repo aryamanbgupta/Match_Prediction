@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B8 — compose the HYBRID ball calibrator (stale v1 global + B7 venue-ON over-0).
 
 NO fitting happens here. This script is pure composition of two artifacts that

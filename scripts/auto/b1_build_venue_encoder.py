@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B1 — rebuild the training-time venue LabelEncoder for the v7 sim model.
 
 xgboost_v2.py fits le_venue on the unique venues of train+val+test at training

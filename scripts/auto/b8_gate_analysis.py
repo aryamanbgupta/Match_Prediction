@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B8 gate analysis — hybrid calibrator (stale v1 global + B7 venue-ON over-0).
 
 Two prop_backtest detail JSONs, both venue-ON at seed 43 (same 261 matches,

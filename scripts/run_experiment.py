@@ -1,3 +1,4 @@
+# manifest-exempt: generic experiment orchestrator constructs versioned outputs
 """
 Pipeline Runner — Run a complete experiment from a YAML config.
 

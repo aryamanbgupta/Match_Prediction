@@ -29,3 +29,36 @@ matrix) and 6 (merge) get their own checks appended before they start.
 | E13 | Frozen evidence untouched | `git diff --stat main -- betting_odds_polymarket*.json data/golden/ data/forward_holdout/ reports/` empty; pulled evidence under `data/golden` and `data/forward_holdout` is byte-identical to the tracked versions where tracked |
 | E14 | Suite | `uv run --no-sync pytest -q` 0 failures; artifact-free collection still identical |
 | E15 | Review | Claude reviews the full diff (plan §11: item 5 reviewer is Claude) |
+
+## Result, steps 1–4 (2026-09-10)
+
+Implemented by Codex Sol; reviewed by Claude (E15). `artifacts.py verify`
+reports OK for all 24 roles on this checkout; the two production hashes match
+the plan (ball booster `7ee1e180…`, match model `54faf586…`). Live state
+migrated to `data/live_state_i7_2026-07-30_20260801T050221Z/` with a `BUILT`
+marker and the `data/live_state_i7` symlink; `predict_fixture` resolves
+through it. Loader migration: precedence explicit path > `--role` > manifest
+default, verified in the diffs of the eight listed production loaders;
+`run_br2_gates.sh` G1 now passes explicit i7 model paths. Item 5 tests: 8
+passed; artifact-free collection identical (414 ids).
+
+Exemption inventory (E12): 72 `scripts/auto/` scripts (closed-idea scripts,
+archived by item 8), the three named diagnostics, and 33 further scripts
+grouped in the test as diagnostics/replay tools, trainers and frame builders
+that own configurable namespaces, legacy model tooling, embeddings-ladder
+experiments, isolated research paths, and shell reproduction scripts. Claude's
+review note: the trainer/builder group is broader than the plan's "diagnostic
+one-offs" wording; it is accepted because those scripts take their paths as
+required CLI inputs in every documented use, and item 6's harness passes
+explicit paths. Any new production default must migrate, not join the list.
+
+E14 carries three known failures in `test_forward_eval_contract.py`, an
+environment fact rather than a code defect: this checkout's `data/t20s_json`
+is a fresh cricsheet 1.2.0 export that contains the 137 sealed forward
+fixtures, so the sealed-set preflight correctly fails closed; the same tests
+pass on the Mac mini whose pool is the frozen corpus of record. Resolution
+(replace the local pool with the mini's, keeping the fresh export aside) is
+awaiting the user's decision. Not on the mini: `models/bowler_roster_policy.json`
+(local-only, recorded in the manifest).
+
+Steps 5–6 (gate matrix, merge) remain open.

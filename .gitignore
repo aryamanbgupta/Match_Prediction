@@ -14,6 +14,9 @@ features/
 *.pkl
 *.pt
 models/
+!models/
+models/*
+!models/MANIFEST.yaml
 
 # Python
 __pycache__/

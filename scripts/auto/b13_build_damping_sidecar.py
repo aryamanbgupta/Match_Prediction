@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B13 — build the opt-in never-bowler damping sidecar (B10 defect-(b) fix).
 
 B10/B12 (LANDED, shipped) aligned the usage-ABSENT branch of

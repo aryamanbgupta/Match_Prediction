@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B15 gate analysis — scale-only vs B14-full quote calibrator, fresh draws.
 
 B14 LANDED a val-fit per-checkpoint quote calibrator (shift + band scale)

@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """A9 — E4 quantile pooling forward test.
 
 E4 (reports/e4_quantile_pooling.md) added 8 quantile-pooled ELO "survivor"

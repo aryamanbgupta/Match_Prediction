@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D14 gate analysis — card-attribution fix + re-applied D2 extras semantics
 (one unit) vs the D1 baseline.
 

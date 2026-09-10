@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B17 Task 1 — decompose the in-play continuation P50 bias on EXISTING quotes.
 
 Diagnostic only. Reads quote JSONs already produced by

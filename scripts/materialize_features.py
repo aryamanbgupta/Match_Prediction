@@ -1,3 +1,4 @@
+# manifest-exempt: generic artifact builder owns configurable frame outputs
 """Materialize per-ball feature parquet from SQLite + JSON.
 
 Phase B deliverable §3. Replaces the parquet-writing half of

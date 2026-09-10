@@ -1,3 +1,4 @@
+# manifest-exempt: diagnostic one-off for an archived experiment
 """E3 — Seed-ensemble for the match-level direct model.
 
 Hypothesis: a single XGBoost at depth 4 / lr 0.05 / subsample 0.8 /

@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D11 — inference-time symmetrization on the D7 swap-augmented models.
 
 D7's augmentation makes the match model *approximately* antisymmetric but not

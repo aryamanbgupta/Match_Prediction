@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D3 gate analysis — empirical extras graft (sim-side half) vs the D15
 canonical baseline.
 

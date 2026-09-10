@@ -1,3 +1,4 @@
+# manifest-exempt: embeddings-ladder diagnostic artifact namespace
 """Identifiability test: can players be told apart from outcome sequences AT ALL?
 
 Phase-1 found that learned vectors carry no style structure (probes at

@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """A12 gate analysis — dew-conditional 2nd-innings calibrator vs single-vector.
 
 Reads two prop_backtest detail JSONs (same matches / same seed; only the ball

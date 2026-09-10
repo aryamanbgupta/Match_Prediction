@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# manifest-exempt: isolated I9 experiment
 """Train the frozen five-seed direct-model I9 control and candidate."""
 from __future__ import annotations
 

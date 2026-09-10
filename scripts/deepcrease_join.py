@@ -1,3 +1,4 @@
+# manifest-exempt: embeddings-ladder experimental artifact namespace
 """Join DeepCrease shot/line/length/control annotations onto the
 Match_Prediction feature parquets.
 

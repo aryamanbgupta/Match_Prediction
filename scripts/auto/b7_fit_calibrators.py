@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B7 — refit the ball calibrators on the venue-ON sim input distribution.
 
 B6 shipped the training-time venue encoder into the default sim path

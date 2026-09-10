@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D3 — empirical per-delivery wide / no-ball rates from cricsheet.
 
 Why: every sim model wrapper grafts a flat 1% wide + 1% no-ball onto the

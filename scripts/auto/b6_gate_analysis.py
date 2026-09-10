@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B6 gate analysis — venue-encoder fix re-gated on a batter-level continuous
 primary at a FRESH seed (B1 follow-up).
 

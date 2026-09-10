@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# manifest-exempt: diagnostic rebuild for an unpromoted sidecar
 """Rebuild the ignored B18 extras sidecar from committed fit evidence.
 
 The original fitted parquet and promoted i7 booster are not present in every

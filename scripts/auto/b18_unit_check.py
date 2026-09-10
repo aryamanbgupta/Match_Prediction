@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B18 unit check — opt-in extras graft: default-path inertness + contract.
 
 Part 1 (INERTNESS, the one that matters for a committed engine edit):

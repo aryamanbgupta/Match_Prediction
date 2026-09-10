@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D12 — swap augmentation on the PRODUCTION config (D7 transfer test).
 
 D7 landed team-swap symmetry augmentation on the loop's recipe-A baseline

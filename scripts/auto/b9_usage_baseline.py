@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B9 — top_bowler margin vs a usage-share fair baseline (B4 follow-up).
 
 B4 showed the E2 career-wickets-share baseline is weak exactly where the

@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B13 unit check — never-bowler damping, verified before any sim run.
 
 Mirrors `scripts/auto/b10_unit_check.py`'s lineup battery / weight-table

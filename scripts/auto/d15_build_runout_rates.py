@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D15 — empirical run-out dismissal rates from cricsheet (as-of, pre-test).
 
 Why: the sim credits EVERY sampled WICKET to the bowler (bowling card in

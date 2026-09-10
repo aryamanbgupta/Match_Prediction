@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """B5 unit check — teacher-forced replay fidelity + continuation smoke.
 
 Part 1 (no model, fast): replay innings 1 for EVERY in-scope test match and

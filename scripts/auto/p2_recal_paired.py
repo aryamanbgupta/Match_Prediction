@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """P2 recalibration re-look — paired calibrated-vs-raw statistics.
 
 Pairs two sliced eval JSONs (same slice, same fixtures, raw vs calibrated

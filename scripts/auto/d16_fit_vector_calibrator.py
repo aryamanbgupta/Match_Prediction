@@ -1,3 +1,4 @@
+# manifest-exempt: closed-idea script, archived by item 8
 """D16 — fit the fresh vector-scaling ball calibrator on the CONTROL arm.
 
 WRITTEN AND COMMITTED BEFORE EITHER D16 MODEL EXISTED.

@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# manifest-exempt: closed-idea script, archived by item 8
 """I14b: train the venue-physical arm on the i14b frame.
 
 Same recipe as the promoted production ball model (D16 no-weights, i7
