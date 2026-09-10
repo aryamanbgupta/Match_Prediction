@@ -4,6 +4,8 @@ import copy
 import json
 from pathlib import Path
 
+import pytest
+
 from sim_eval.market_math import CostModel
 from sim_eval.reslice_eval_json import reslice
 from sim_eval import blend_report
@@ -34,20 +36,89 @@ def test_reslice_zero_cost_parity_and_provenance():
     assert summary["volume_basis"] == "event"
 
 
-def test_reslice_ignores_stored_pnl_and_nonzero_spread_changes_profit(tmp_path):
+@pytest.mark.parametrize("corrupt_value", [999999.0, None])
+def test_reslice_ignores_stored_pnl_and_nonzero_spread_changes_profit(
+    tmp_path, corrupt_value
+):
     payload = copy.deepcopy(json.loads(EVAL.read_text()))
     for match in payload["matches"]:
-        match["realized_pnl"] = 999999.0
+        if match.get("bet_placed") is True:
+            assert match.get("bet_team") is not None
+            match["realized_pnl"] = corrupt_value
     corrupted = tmp_path / "corrupted.json"
     corrupted.write_text(json.dumps(payload))
     baseline = reslice(str(EVAL), str(ODDS), None, n_resamples=100)
     corrupt = reslice(str(corrupted), str(ODDS), None, n_resamples=100)
-    assert corrupt["summary"]["flat_betting_total_pnl"] == baseline["summary"]["flat_betting_total_pnl"]
+    assert corrupt["matches"] == baseline["matches"]
+    corrupt_summary = dict(corrupt["summary"])
+    baseline_summary = dict(baseline["summary"])
+    corrupt_summary.pop("reslice_source")
+    baseline_summary.pop("reslice_source")
+    assert corrupt_summary == baseline_summary
     spread = reslice(
         str(EVAL), str(ODDS), None, n_resamples=100,
         cost_model=CostModel(100, 0, "winnings"),
     )
     assert spread["summary"]["flat_betting_total_pnl"] != baseline["summary"]["flat_betting_total_pnl"]
+
+
+def test_reslice_missing_market_odds_cost_policy_and_counter(tmp_path):
+    payload = {
+        "matches": [{
+            "match_id": "new-format-missing-price",
+            "teams": ["A", "B"],
+            "actual_winner": "A",
+            "edge": {"A": 0.1, "B": -0.1},
+            "bet_placed": True,
+            "bet_team": "A",
+            "realized_pnl": 7.5,
+            "log_loss": 0.5,
+            "brier_score": 0.2,
+        }]
+    }
+    eval_path = tmp_path / "missing-price.json"
+    odds_path = tmp_path / "odds.json"
+    eval_path.write_text(json.dumps(payload))
+    odds_path.write_text('{"matches": []}')
+
+    zero = reslice(str(eval_path), str(odds_path), None, n_resamples=100)
+    assert zero["matches"][0]["realized_pnl"] == 7.5
+    assert zero["summary"]["pnl_unrecomputable"] == 1
+
+    cost = reslice(
+        str(eval_path), str(odds_path), None, n_resamples=100,
+        cost_model=CostModel(100, 0, "winnings"),
+    )
+    assert cost["matches"][0]["realized_pnl"] is None
+    assert cost["summary"]["pnl_unrecomputable"] == 1
+    assert cost["summary"]["flat_betting_bets_placed"] == 0
+
+
+def test_legacy_placement_reconstruction_still_uses_settledness_sentinel(
+    tmp_path,
+):
+    """Legacy P&L is only a placement sentinel here, never copied profit."""
+    base = {
+        "match_id": "legacy",
+        "teams": ["A", "B"],
+        "actual_winner": "A",
+        "edge": {"A": 0.1, "B": -0.1},
+        "market_odds": {"A": 2.0, "B": 2.0},
+        "log_loss": 0.5,
+        "brier_score": 0.2,
+    }
+    odds_path = tmp_path / "odds.json"
+    odds_path.write_text('{"matches": []}')
+    rows = []
+    for sentinel in (123.0, None):
+        eval_path = tmp_path / f"legacy-{sentinel}.json"
+        eval_path.write_text(json.dumps({"matches": [{**base, "realized_pnl": sentinel}]}))
+        rows.append(
+            reslice(str(eval_path), str(odds_path), None, n_resamples=100)["matches"][0]
+        )
+    assert rows[0]["bet_placed"] is True
+    assert rows[0]["realized_pnl"] == 1.0
+    assert rows[1]["bet_placed"] is False
 
 
 def test_event_and_market_volume_bases_select_different_rows():

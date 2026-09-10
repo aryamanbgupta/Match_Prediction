@@ -54,6 +54,13 @@ def test_implied_probs_raw_normalized_edge_and_invalid_price():
 
 
 def test_effective_price_cap_and_returns_at_both_fee_bases():
+    zero_spread_cap = CostModel.none()
+    near_boundary_odds = 1.0 / (1.0 - 5e-10)
+    capped_return = settle_flat(
+        "A", near_boundary_odds, "A", zero_spread_cap
+    )
+    assert capped_return == 1.0 / (1.0 - 1e-9) - 1.0
+    assert capped_return != near_boundary_odds - 1.0
     capped = CostModel(9999, 0, "winnings")
     assert settle_flat("A", 1.0000001, "A", capped) == pytest.approx(
         1.0 / (1.0 - 1e-9) - 1.0
@@ -87,6 +94,14 @@ def test_ev_and_kelly_share_effective_returns_and_general_formula():
         -expected_kelly * loss
     )
 
+    winnings = CostModel(100, 200, "winnings")
+    winnings_return = (1.0 / 0.505 - 1.0) * 0.98
+    winnings_ev = p * winnings_return - (1.0 - p)
+    assert expected_value(p, 2.0, winnings) == pytest.approx(winnings_ev)
+    assert kelly_fraction(p, 2.0, winnings) == pytest.approx(
+        winnings_ev / winnings_return
+    )
+
 
 def test_kelly_zero_conditions_and_stake_bankroll_bound():
     assert kelly_fraction(0.5, 2.0, NONE) == 0.0
@@ -103,6 +118,8 @@ def test_kelly_zero_conditions_and_stake_bankroll_bound():
     "args",
     [(-1, 0, "winnings"), (10000, 0, "winnings"),
      (0, -1, "winnings"), (0, 10000, "winnings"),
+     (math.nan, 0, "winnings"), (math.inf, 0, "winnings"),
+     (0, math.nan, "winnings"), (0, math.inf, "winnings"),
      (0, 0, "turnover")],
 )
 def test_cost_constructor_rejects_invalid_values(args):

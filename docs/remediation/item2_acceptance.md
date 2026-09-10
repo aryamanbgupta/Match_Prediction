@@ -47,3 +47,41 @@ behaviour unchanged, listed here because Sol's report omitted them):
 
 Step 6 (re-baseline on the production `test_predictions.json`) remains
 deferred to the Mac-mini pull (item 5 step 3).
+
+## Fix pass (Astra review)
+
+1. **Reslice missing-price and corrupted-P&L handling.** New-format records
+   with explicit placement always recompute from `market_odds`, so numeric
+   and null stored-P&L corruption produce identical output. A placed record
+   without `market_odds` retains stored P&L only under `CostModel.none()`;
+   any nonzero cost makes P&L null. Both paths stamp `pnl_unrecomputable`.
+   Legacy rows without explicit placement still use non-null P&L solely as
+   the settled-ness sentinel needed by `flat_bet_team`; it is not reused as
+   profit when a price is available.
+2. **Evaluator price boundary.** `settle_flat_policy` and
+   `settle_kelly_policy` in `eval_statistics.py` are now the sole home for
+   the legacy zero-cost odds-1.0 behavior. With any nonzero cost, the strict
+   market primitive rejects the price; the evaluator excludes the record
+   from returns and stamps `price_rejected` in its summary.
+3. **Sizing unresolved outcomes.** `_compute_pnl` now returns null for an
+   unresolved winner, and `evaluate` stamps `unresolved_excluded`. This is
+   the documented intentional change from the legacy lost-bet treatment.
+4. **Blend parity.** Realized flat P&L at odds 1.0 and zero-fraction Kelly
+   P&L now use the shared policy helpers and match the legacy evaluator
+   exactly. The parity generator now includes positive-edge/non-positive-
+   Kelly overround-gap cases. Claude regenerated the frozen fixture from the
+   pre-refactor commit `ec4e59a` in a clean worktree: 72 records (60 → 72);
+   the original 60 differ only in their `id` numbering.
+5. **Numeric coverage.** Market-math tests now pin the zero-spread effective-
+   price cap, winnings-basis fee EV/Kelly values, and rejection of non-finite
+   cost constructor inputs.
+6. **Prediction boundary.** A regression test pins `compute_bet` odds 1.0
+   suppression as `invalid_odds`, and the intentional change is recorded in
+   `IMPROVEMENTS.md`.
+
+Second Astra pass: five of six resolved; one residual (evaluator with an
+unresolved winner skipped price validation, so a positive-edge bet at odds
+1.0 under a nonzero cost model raised inside the EV calculation). Fixed by
+Claude at both evaluator sites: the EV/Kelly block now catches the price
+rejection, stamps `price_rejected`, and zeroes the sizing outputs; regression
+in `scripts/tests/test_eval_math.py`.

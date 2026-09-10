@@ -49,12 +49,12 @@ from eval_statistics import (  # noqa: E402
     MIN_RECOMMENDED_CLUSTERS,
     cluster_id_for_record,
     load_competition_clusters,
+    settle_flat_policy,
+    settle_kelly_policy,
 )
 from sim_eval.market_math import (  # noqa: E402
     CostModel,
     InvalidMarketPriceError,
-    settle_flat,
-    settle_kelly,
 )
 
 
@@ -94,13 +94,13 @@ def _compute_pnl(match: dict, sizing: str, kelly_mult: float, cap: float
     if not np.isfinite(odds) or odds < 1.0:
         return None
     actual_winner = match.get("actual_winner")
+    if actual_winner is None:
+        return None
     cost = CostModel.none()
 
     if sizing == "flat":
-        if odds == 1.0 and cost == CostModel.none():
-            return 0.0 if actual_winner == best_team else -1.0
         try:
-            return settle_flat(best_team, odds, actual_winner, cost)
+            return settle_flat_policy(best_team, odds, actual_winner, cost)
         except InvalidMarketPriceError:
             return None
 
@@ -111,7 +111,9 @@ def _compute_pnl(match: dict, sizing: str, kelly_mult: float, cap: float
         capped = min(full_k, cap)
         stake = capped * kelly_mult
         try:
-            return settle_kelly(stake, odds, best_team, actual_winner, cost)
+            return settle_kelly_policy(
+                stake, odds, best_team, actual_winner, cost
+            )
         except InvalidMarketPriceError:
             return None
 
@@ -134,6 +136,7 @@ def evaluate(matches: List[dict], vol_by_id: Dict[str, Optional[float]],
     wins: List[bool] = []
     n_eligible = 0
     skipped_under_threshold = 0
+    unresolved_excluded = 0
     cluster_metadata_coverage = 0
     for match in matches:
         if min_volume is not None:
@@ -150,6 +153,9 @@ def evaluate(matches: List[dict], vol_by_id: Dict[str, Optional[float]],
         bet_team, edge = _bet_team_and_edge(match)
         if edge <= threshold:
             skipped_under_threshold += 1
+            continue
+        if match.get("actual_winner") is None:
+            unresolved_excluded += 1
             continue
         pnl = _compute_pnl(match, sizing, kelly_mult, cap)
         if pnl is None:
@@ -186,6 +192,7 @@ def evaluate(matches: List[dict], vol_by_id: Dict[str, Optional[float]],
         "n_eligible": n_eligible,
         "n_bets": n_bets,
         "skipped_under_threshold": skipped_under_threshold,
+        "unresolved_excluded": unresolved_excluded,
         "total_pnl": total_pnl,
         "roi_pct": roi_pct,
         "roi_ci_lo": roi_lo * 100 if not np.isnan(roi_lo) else float("nan"),

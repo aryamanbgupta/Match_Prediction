@@ -178,6 +178,15 @@ def test_a7_retirement_suppresses_fully_qualified_fixture():
     assert decision["bet_placed"] is False
 
 
+def test_compute_bet_rejects_unit_decimal_odds():
+    decision = compute_bet(
+        "A", "B", 0.6, {"A": 1.0, "B": 2.0},
+        top6_batting_elo_diff=0.0,
+        polymarket_volume_usd=100_000.0,
+    )
+    assert decision["suppression_reasons"] == ["invalid_odds"]
+
+
 def test_a7_close_fixture_uses_strictly_positive_edge_and_normalized_market():
     decision = compute_bet(
         "A",

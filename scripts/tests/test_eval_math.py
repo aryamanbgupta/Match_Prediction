@@ -25,8 +25,10 @@ import math
 import sys
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -35,6 +37,7 @@ from sim_eval.match_evaluator import (  # noqa: E402
     MatchEvaluationResult,
     MatchLevelEvaluator,
 )
+from sim_eval import match_evaluator as match_evaluator_module  # noqa: E402
 from sim_eval import blend_eval_json as bl  # noqa: E402
 from sim_eval import reslice_eval_json as rs  # noqa: E402
 from sim_eval import sizing_rules as sizing  # noqa: E402
@@ -47,6 +50,7 @@ from sim_eval.eval_statistics import (  # noqa: E402
     flat_bet_team,
     load_competition_clusters,
 )
+from sim_eval.market_math import CostModel, InvalidMarketPriceError  # noqa: E402
 
 
 # --------------------------------------------------------------------------
@@ -272,6 +276,9 @@ def test_kelly_pnl_arithmetic():
         "loss: -stake"
     assert ev._calculate_kelly_pnl(0.0, 2.5, "A", "A") is None, "no stake -> None"
     assert ev._calculate_kelly_pnl(0.2, 2.5, "A", None) is None, "no winner -> None"
+    assert ev._calculate_kelly_pnl(0.0, 1.0, "A", "B") is None
+    assert ev._calculate_kelly_pnl(0.2, 1.0, "A", "A") == 0.0
+    assert ev._calculate_kelly_pnl(0.2, 1.0, "A", "B") == -0.2
 
 
 # --------------------------------------------------------------------------
@@ -704,6 +711,88 @@ def test_sizing_kelly_zero_fraction_is_not_a_placed_bet():
     assert summary["n_bets"] == 0
 
 
+def test_sizing_excludes_unresolved_outcome_instead_of_scoring_a_loss():
+    row = {
+        "match_id": "m_unresolved",
+        "teams": ["A", "B"],
+        "edge": {"A": 0.1, "B": -0.1},
+        "market_odds": {"A": 2.0, "B": 2.0},
+        "actual_winner": None,
+    }
+    old_value = 1.0 if row["actual_winner"] == "A" else -1.0
+    assert old_value == -1.0
+    assert sizing._compute_pnl(row, "flat", 0.25, 0.02) is None
+    summary = sizing.evaluate(
+        [row], {}, {}, threshold=0.0, sizing="flat", n_resamples=100
+    )
+    assert summary["unresolved_excluded"] == 1
+    assert summary["n_bets"] == 0
+
+
+def test_evaluator_unit_odds_boundary_and_nonzero_cost_rejection():
+    zero_cost = _evaluator()
+    edge = {"A": 0.1, "B": -0.1}
+    odds = {"A": 1.0, "B": 2.0}
+    assert zero_cost._calculate_realized_pnl(edge, odds, "B") == -1.0
+
+    priced = _evaluator()
+    priced.cost_model = CostModel(100, 0, "winnings")
+    with pytest.raises(InvalidMarketPriceError):
+        priced._calculate_realized_pnl(edge, odds, "B")
+
+    valid = _mk_result(
+        match_id="valid", edge=edge, realized_pnl=1.0,
+        bet_placed=True, bet_team="A",
+    )
+    rejected = _mk_result(
+        match_id="rejected", edge=edge, market_odds=odds,
+        realized_pnl=None, price_rejected=True,
+        bet_placed=True, bet_team="A",
+    )
+    summary = priced._aggregate_results([valid, rejected], 0.0)
+    assert summary.price_rejected == 1
+    assert summary.total_pnl == 1.0
+    assert summary.bets_placed == 1
+
+
+def test_evaluator_rejects_unit_odds_record_and_counts_it(monkeypatch):
+    aggregate = {
+        "win_probability": {"A": 0.9, "B": 0.1},
+        "score_stats": {"A": {}, "B": {}},
+    }
+    monkeypatch.setattr(
+        match_evaluator_module.ResultAggregator,
+        "aggregate",
+        staticmethod(lambda _results: aggregate),
+    )
+
+    class Engine:
+        def simulate_multiple(self, _state, _config):
+            return []
+
+    evaluator = MatchLevelEvaluator(
+        None, Engine(), n_simulations=1, parallel=False,
+        bootstrap_resamples=100,
+        cost_model=CostModel(100, 0, "winnings"),
+    )
+    record = evaluator._evaluate_single_match(
+        "unit-price",
+        SimpleNamespace(team1="A", team2="B"),
+        {
+            "odds": {"winner": {"A": 1.0, "B": 2.0}},
+            "actual_winner": "B",
+        },
+    )
+    assert record.bet_placed is True
+    assert record.bet_team == "A"
+    assert record.realized_pnl is None
+    assert record.price_rejected is True
+    summary = evaluator._aggregate_results([record], 0.0)
+    assert summary.price_rejected == 1
+    assert summary.total_pnl == 0.0
+    assert summary.bets_placed == 0
+
+
 def test_invalid_or_nonfinite_odds_do_not_place_bets():
     base = {
         "match_id": "m_invalid",
@@ -866,6 +955,29 @@ def test_blend_realized_pnl_mirror_grid():
         "blend duplicates the threshold constant — must stay in lockstep"
 
 
+def test_blend_unit_odds_and_zero_kelly_match_legacy_evaluator():
+    edge = {"A": 0.1, "B": -0.1}
+    odds = {"A": 1.0, "B": 2.0}
+    assert bl._recompute_realized_pnl(edge, odds, "B") == -1.0
+    assert bl._recompute_realized_pnl(edge, odds, "A") == 0.0
+
+    base = {
+        "match_id": "zero-kelly",
+        "teams": ["A", "B"],
+        "simulated_prob": {"A": 0.49, "B": 0.51},
+        "market_prob": {"A": 0.48, "B": 0.52},
+        "market_odds": {"A": 2.0, "B": 1.8},
+        "actual_winner": "A",
+    }
+    for winner in ("A", "B"):
+        row = bl._blend_match(
+            {**base, "actual_winner": winner}, p_direct_team1=0.49, w=0.0
+        )
+        assert row["full_kelly_fraction"] == 0.0
+        assert row["full_kelly_pnl"] is None
+        assert row["fractional_kelly_pnl"] is None
+
+
 def test_blend_persists_recomputed_bet_contract():
     sim_json, direct = _blend_fixture()
     out = bl.blend(sim_json, direct, w=0.0)
@@ -910,3 +1022,22 @@ if __name__ == "__main__":
     print(f"\n{n_pass} passed, {n_xfail} xfailed (known bugs), "
           f"{len(failures)} failed")
     sys.exit(1 if failures else 0)
+
+
+def test_unresolved_winner_with_unit_odds_under_cost_is_rejected_not_raised():
+    """Astra item 2 review: an unresolved winner makes settlement return
+    before the price is validated, so the shared sizing step must reject the
+    price itself instead of raising inside the EV calculation."""
+    priced = _evaluator()
+    priced.cost_model = CostModel(100, 0, "winnings")
+    edge = {"A": 0.8, "B": -0.8}
+    odds = {"A": 1.0, "B": 2.0}
+    # Settlement returns None (unresolved) without touching the price ...
+    assert priced._calculate_realized_pnl(edge, odds, None) is None
+    # ... so the sizing step is where rejection has to happen.
+    assert priced._size_bet(0.9, 1.0, "A", None) is None
+    # A valid price under the same cost model sizes normally.
+    sized = priced._size_bet(0.9, 2.0, "A", None)
+    assert sized is not None and sized[0] > 0 and sized[2] is None
+    # Zero cost keeps the legacy boundary: sizing at odds 1.0 does not raise.
+    assert _evaluator()._size_bet(0.9, 1.0, "A", None) is not None

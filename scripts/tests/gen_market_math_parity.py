@@ -105,6 +105,10 @@ def build_cases() -> list[dict]:
         ("p_one", 1.0, 2.2, 1.8, "Alpha"),
         ("long_shot", 0.18, 12.5, 1.08, "Alpha"),
         ("near_one", 0.99, 1.000001, 30.0, "Bravo"),
+        # Positive edge against the de-vigged A price, but non-positive
+        # Kelly against A's raw price: 0.4737 < p=0.49 < 0.5.
+        ("positive_edge_zero_kelly_win", 0.49, 2.0, 1.8, "Alpha"),
+        ("positive_edge_zero_kelly_loss", 0.49, 2.0, 1.8, "Bravo"),
     ]
     cases = []
     for repetition in range(6):
@@ -112,6 +116,8 @@ def build_cases() -> list[dict]:
             jitter = 0.0 if scenario in {
                 "no_bet_edge", "odds_below_one", "non_finite_odds",
                 "p_zero", "p_one", "near_one",
+                "positive_edge_zero_kelly_win",
+                "positive_edge_zero_kelly_loss",
             } else rng.uniform(-0.015, 0.015)
             cases.append({
                 "scenario": scenario,

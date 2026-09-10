@@ -17,6 +17,7 @@ from typing import Any, Iterable, Mapping, Optional, Sequence
 import numpy as np
 
 from identity_maps import canonicalize_venue
+from sim_eval.market_math import CostModel, settle_flat, settle_kelly
 
 
 BOOTSTRAP_CONTRACT_VERSION = "tournament_time_block_v1"
@@ -33,6 +34,37 @@ MIN_RECOMMENDED_CLUSTERS = 10
 # through such an alias is ambiguous and must fail loudly at use.
 AMBIGUOUS_CLUSTER_ALIAS = "__ambiguous_doubleheader_alias__"
 _DATE_PREFIX = re.compile(r"^(\d{4})-(\d{2})-(\d{2})(?:_|$)")
+
+
+def settle_flat_policy(
+    bet_team: str | None,
+    odds: float,
+    winner: str | None,
+    cost: CostModel,
+) -> float | None:
+    """Settle the flat policy, including its legacy zero-cost boundary."""
+    if cost == CostModel.none() and odds == 1.0:
+        if winner is None:
+            return None
+        if bet_team is None:
+            return 0.0
+        return 0.0 if bet_team == winner else -1.0
+    return settle_flat(bet_team, odds, winner, cost)
+
+
+def settle_kelly_policy(
+    fraction: float,
+    odds: float,
+    bet_team: str,
+    winner: str | None,
+    cost: CostModel,
+) -> float | None:
+    """Settle Kelly sizing, including its legacy zero-cost boundary."""
+    if fraction <= 0.0 or winner is None:
+        return None
+    if cost == CostModel.none() and odds == 1.0:
+        return 0.0 if bet_team == winner else -fraction
+    return settle_kelly(fraction, odds, bet_team, winner, cost)
 
 
 def _field(record: Any, name: str, default: Any = None) -> Any:

@@ -34,12 +34,11 @@ from typing import Dict, List, Optional, Tuple
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
-from sim_eval.eval_statistics import flat_bet_team
+from sim_eval.eval_statistics import flat_bet_team, settle_flat_policy
 from sim_eval.market_math import (
     DEFAULT_SCENARIOS,
     CostModel,
     InvalidMarketPriceError,
-    settle_flat,
 )
 
 # Hardcoded reference baselines from CLAUDE.md / TODO.md.
@@ -111,12 +110,9 @@ def _scenario_roi(matches: List[dict], cost: CostModel) -> float:
             continue
         try:
             odds = float((match.get("market_odds") or {})[team])
-            if odds == 1.0 and cost == CostModel.none():
-                pnl = 0.0 if team == match.get("actual_winner") else -1.0
-            else:
-                pnl = settle_flat(
-                    team, odds, match.get("actual_winner"), cost
-                )
+            pnl = settle_flat_policy(
+                team, odds, match.get("actual_winner"), cost
+            )
         except (KeyError, TypeError, ValueError, InvalidMarketPriceError):
             continue
         if pnl is not None:

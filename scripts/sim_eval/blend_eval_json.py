@@ -36,6 +36,8 @@ sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 from sim_eval.eval_statistics import (  # noqa: E402
     cluster_id_for_record,
     flat_bet_team,
+    settle_flat_policy,
+    settle_kelly_policy,
 )
 from match_identity import build_compatibility_alias_lookup  # noqa: E402
 from sim_eval.market_math import (  # noqa: E402
@@ -43,8 +45,6 @@ from sim_eval.market_math import (  # noqa: E402
     InvalidMarketPriceError,
     expected_value,
     kelly_fraction,
-    settle_flat,
-    settle_kelly,
 )
 
 # Match the existing eval pipeline's edge threshold so realized_pnl is
@@ -95,7 +95,9 @@ def _recompute_realized_pnl(edge: Dict[str, float],
     if not math.isfinite(odds) or odds < 1.0:
         return 0.0
     try:
-        return settle_flat(best_team, odds, actual_winner, CostModel.none())
+        return settle_flat_policy(
+            best_team, odds, actual_winner, CostModel.none()
+        )
     except InvalidMarketPriceError:
         return 0.0
 
@@ -193,15 +195,19 @@ def _blend_match(match: dict, p_direct_team1: Optional[float], w: float) -> dict
     if best_team and best_edge > BET_EDGE_THRESHOLD and best_team in market_odds:
         odds = float(market_odds[best_team])
         win_prob = new_sim[best_team]
-        if odds > 1.0:
+        if odds >= 1.0:
             cost = CostModel.none()
-            out["expected_value"] = expected_value(win_prob, odds, cost)
-            kelly = kelly_fraction(win_prob, odds, cost)
+            if odds > 1.0:
+                out["expected_value"] = expected_value(win_prob, odds, cost)
+                kelly = kelly_fraction(win_prob, odds, cost)
+            else:
+                out["expected_value"] = 0.0
+                kelly = 0.0
             out["full_kelly_fraction"] = kelly
-            out["full_kelly_pnl"] = settle_kelly(
+            out["full_kelly_pnl"] = settle_kelly_policy(
                 kelly, odds, best_team, actual_winner, cost
             )
-            out["fractional_kelly_pnl"] = settle_kelly(
+            out["fractional_kelly_pnl"] = settle_kelly_policy(
                 kelly * 0.25, odds, best_team, actual_winner, cost
             )
         else:

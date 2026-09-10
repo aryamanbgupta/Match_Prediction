@@ -55,11 +55,11 @@ from sim_eval.eval_statistics import (  # noqa: E402
     flat_bet_team,
     flat_bet_won,
     load_competition_clusters,
+    settle_flat_policy,
 )
 from sim_eval.market_math import (  # noqa: E402
     CostModel,
     InvalidMarketPriceError,
-    settle_flat,
 )
 
 
@@ -268,6 +268,8 @@ def reslice(eval_json_path: str, odds_json_path: str,
         match["match_id"] = canonicalize_match_id(match["match_id"])
         matches.append(match)
     kept_matches = []
+    pnl_unrecomputable = 0
+    price_rejected = 0
     cluster_resolution = {"stamped": 0, "lookup": 0, "fallback": 0}
     for match in matches:
         if min_volume is not None:
@@ -286,20 +288,24 @@ def reslice(eval_json_path: str, odds_json_path: str,
         elif not match.get("market_odds"):
             # Backward compatibility for old summary-only fixtures that did
             # not persist prices. New evaluator artifacts always carry them.
-            enriched["realized_pnl"] = match.get("realized_pnl")
+            pnl_unrecomputable += 1
+            enriched["realized_pnl"] = (
+                match.get("realized_pnl")
+                if cost_model == CostModel.none()
+                else None
+            )
         else:
             try:
                 odds = float((match.get("market_odds") or {})[bet_team])
-                if odds == 1.0 and cost_model == CostModel.none():
-                    enriched["realized_pnl"] = (
-                        0.0 if bet_team == match.get("actual_winner") else -1.0
-                    )
-                else:
-                    enriched["realized_pnl"] = settle_flat(
-                        bet_team, odds, match.get("actual_winner"), cost_model
-                    )
-            except (KeyError, TypeError, ValueError, InvalidMarketPriceError):
-                enriched["realized_pnl"] = 0.0
+                enriched["realized_pnl"] = settle_flat_policy(
+                    bet_team, odds, match.get("actual_winner"), cost_model
+                )
+            except InvalidMarketPriceError:
+                enriched["realized_pnl"] = None
+                price_rejected += 1
+            except (KeyError, TypeError, ValueError):
+                enriched["realized_pnl"] = None
+                pnl_unrecomputable += 1
         cluster_id, resolution = cluster_id_with_resolution(
             match,
             cluster_lookup,
@@ -337,7 +343,10 @@ def reslice(eval_json_path: str, odds_json_path: str,
                     if m.get('brier_score') is not None and not (
                         isinstance(m['brier_score'], float) and np.isnan(m['brier_score']))]
 
-    flat_betting_matches = [m for m in kept_matches if _has_bet(m)]
+    flat_betting_matches = [
+        m for m in kept_matches
+        if _has_bet(m) and m.get("realized_pnl") is not None
+    ]
     flat_returns = [m['realized_pnl'] for m in flat_betting_matches]
 
     # Strata are filtered to the same subset they're scoring against.
@@ -440,6 +449,8 @@ def reslice(eval_json_path: str, odds_json_path: str,
         'flat_betting_roi_ci_high': flat_roi_ci_high,
         'flat_betting_win_rate':   win_rate,
         'flat_betting_bets_placed': bets_placed,
+        'pnl_unrecomputable':       pnl_unrecomputable,
+        'price_rejected':           price_rejected,
     }
 
     return {'summary': summary, 'matches': kept_matches}

@@ -2099,6 +2099,15 @@ records that decision flip. All other placement policies retain their prior
 scope, suppression, side-selection, and sizing rules while using the shared
 `sim_eval.market_math` arithmetic.
 
+`sim_eval.sizing_rules` now excludes a selected bet when the winner is
+unresolved and stamps `unresolved_excluded`; the legacy implementation
+treated the missing winner as a loss (`-1` flat or `-stake` Kelly).
+
+`predict_fixture.compute_bet` now suppresses decimal odds exactly equal to
+1.0 with `suppression_reasons: ["invalid_odds"]`. The prior policy accepted
+that boundary even though it does not imply a market price strictly inside
+the required `(0, 1)` interval.
+
 ## What NOT To Do
 
 - Don't chase ball-level accuracy beyond ~60% — individual balls are inherently noisy.

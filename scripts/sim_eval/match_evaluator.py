@@ -17,6 +17,8 @@ from .eval_statistics import (
     count_unique_clusters,
     flat_bet_team,
     flat_bet_won,
+    settle_flat_policy,
+    settle_kelly_policy,
 )
 from .market_math import (
     CostModel,
@@ -24,8 +26,6 @@ from .market_math import (
     edge as market_edge,
     expected_value,
     kelly_fraction,
-    settle_flat,
-    settle_kelly,
 )
 
 # Betting configuration
@@ -72,6 +72,7 @@ class MatchEvaluationResult:
     cricsheet_id: Optional[str] = None
     display_match_id: Optional[str] = None
     match_identity_version: Optional[str] = None
+    price_rejected: bool = False
 
 
 @dataclass
@@ -140,6 +141,7 @@ class OverallEvaluationResults:
     bootstrap_contract: str = BOOTSTRAP_CONTRACT_VERSION
     n_bootstrap_clusters: int = 0
     bootstrap_reliable: bool = False
+    price_rejected: int = 0
 
 
 class MatchLevelEvaluator:
@@ -461,7 +463,14 @@ class MatchLevelEvaluator:
             brier_score = self._calculate_brier_score(simulated_win_prob, d['actual_winner'],
                                                        d['team1'], d['team2'])
             edge = self._calculate_edge(simulated_win_prob, d['market_win_prob'])
-            realized_pnl = self._calculate_realized_pnl(edge, d['market_odds'], d['actual_winner'])
+            try:
+                realized_pnl = self._calculate_realized_pnl(
+                    edge, d['market_odds'], d['actual_winner']
+                )
+                price_rejected = False
+            except InvalidMarketPriceError:
+                realized_pnl = None
+                price_rejected = True
             decision = {
                 "match_id": d["match_id"],
                 "teams": [d["team1"], d["team2"]],
@@ -483,15 +492,26 @@ class MatchLevelEvaluator:
                 if team_edge > best_edge:
                     best_edge = team_edge
                     best_team = team
+            if price_rejected:
+                bet_team = (
+                    best_team if best_edge > BET_EDGE_THRESHOLD else None
+                )
 
-            if best_team and best_edge > BET_EDGE_THRESHOLD and best_team in d['market_odds']:
+            if (
+                not price_rejected
+                and best_team
+                and best_edge > BET_EDGE_THRESHOLD
+                and best_team in d['market_odds']
+            ):
                 win_prob = simulated_win_prob[best_team]
                 odds = d['market_odds'][best_team]
-                expected_value = self._calculate_expected_value(win_prob, odds)
-                full_kelly_fraction = self._calculate_kelly_fraction(win_prob, odds)
-                full_kelly_pnl = self._calculate_kelly_pnl(full_kelly_fraction, odds, best_team, d['actual_winner'])
-                fractional_kelly_fraction = full_kelly_fraction * 0.25
-                fractional_kelly_pnl = self._calculate_kelly_pnl(fractional_kelly_fraction, odds, best_team, d['actual_winner'])
+                sizing = self._size_bet(win_prob, odds, best_team, d['actual_winner'])
+                if sizing is None:
+                    price_rejected = True
+                    realized_pnl = None
+                    sizing = (0.0, 0.0, None, 0.0, None)
+                (expected_value, full_kelly_fraction, full_kelly_pnl,
+                 fractional_kelly_fraction, fractional_kelly_pnl) = sizing
             else:
                 expected_value = 0.0
                 full_kelly_fraction = 0.0
@@ -525,6 +545,7 @@ class MatchLevelEvaluator:
                 cricsheet_id=d.get('cricsheet_id'),
                 display_match_id=d.get('display_match_id'),
                 match_identity_version=d.get('match_identity_version'),
+                price_rejected=price_rejected,
             )
             match_results.append(result)
 
@@ -611,7 +632,14 @@ class MatchLevelEvaluator:
         log_loss = self._calculate_log_loss(simulated_win_prob, actual_winner, team1, team2)
         brier_score = self._calculate_brier_score(simulated_win_prob, actual_winner, team1, team2)
         edge = self._calculate_edge(simulated_win_prob, market_win_prob)
-        realized_pnl = self._calculate_realized_pnl(edge, market_odds, actual_winner)
+        try:
+            realized_pnl = self._calculate_realized_pnl(
+                edge, market_odds, actual_winner
+            )
+            price_rejected = False
+        except InvalidMarketPriceError:
+            realized_pnl = None
+            price_rejected = True
         decision = {
             "match_id": match_id,
             "teams": [team1, team2],
@@ -633,22 +661,25 @@ class MatchLevelEvaluator:
             if team_edge > best_edge:
                 best_edge = team_edge
                 best_team = team
+        if price_rejected:
+            bet_team = best_team if best_edge > BET_EDGE_THRESHOLD else None
 
         # Only calculate Kelly/EV if we have a positive edge bet
-        if best_team and best_edge > BET_EDGE_THRESHOLD and best_team in market_odds:
+        if (
+            not price_rejected
+            and best_team
+            and best_edge > BET_EDGE_THRESHOLD
+            and best_team in market_odds
+        ):
             win_prob = simulated_win_prob[best_team]
             odds = market_odds[best_team]
-
-            # Expected value
-            expected_value = self._calculate_expected_value(win_prob, odds)
-
-            # Full Kelly
-            full_kelly_fraction = self._calculate_kelly_fraction(win_prob, odds)
-            full_kelly_pnl = self._calculate_kelly_pnl(full_kelly_fraction, odds, best_team, actual_winner)
-
-            # Fractional Kelly (25%)
-            fractional_kelly_fraction = full_kelly_fraction * 0.25
-            fractional_kelly_pnl = self._calculate_kelly_pnl(fractional_kelly_fraction, odds, best_team, actual_winner)
+            sizing = self._size_bet(win_prob, odds, best_team, actual_winner)
+            if sizing is None:
+                price_rejected = True
+                realized_pnl = None
+                sizing = (0.0, 0.0, None, 0.0, None)
+            (expected_value, full_kelly_fraction, full_kelly_pnl,
+             fractional_kelly_fraction, fractional_kelly_pnl) = sizing
         else:
             expected_value = 0.0
             full_kelly_fraction = 0.0
@@ -692,6 +723,7 @@ class MatchLevelEvaluator:
                 "match_identity_version",
                 None,
             ),
+            price_rejected=price_rejected,
         )
     
     def _calculate_log_loss(self, sim_prob: Dict[str, float], actual_winner: Optional[str],
@@ -797,21 +829,46 @@ class MatchLevelEvaluator:
         # If edge doesn't meet threshold, no bet
         if not best_team or best_edge <= BET_EDGE_THRESHOLD:
             return 0.0
+        cost = getattr(self, "cost_model", CostModel.none())
         try:
             odds = float(market_odds[best_team])
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValueError) as exc:
+            if cost == CostModel.none():
+                return 0.0
+            raise InvalidMarketPriceError(
+                f"invalid decimal odds for {best_team!r}"
+            ) from exc
+        if cost == CostModel.none() and (
+            not np.isfinite(odds) or odds < 1.0
+        ):
             return 0.0
-        if not np.isfinite(odds) or odds < 1.0:
-            return 0.0
-        # Legacy policy accepts the zero-return boundary; the strict numeric
-        # primitive correctly rejects q == 1 under the new contract.
-        if odds == 1.0:
-            return 0.0 if best_team == actual_winner else -1.0
-        
-        return settle_flat(
-            best_team, odds, actual_winner,
-            getattr(self, "cost_model", CostModel.none()),
+        return settle_flat_policy(
+            best_team, odds, actual_winner, cost,
         )
+
+    def _size_bet(self, win_prob: float, odds: float, best_team: str,
+                  actual_winner: Optional[str]):
+        """EV and Kelly outputs for the chosen bet, or None if the price is
+        rejected under this evaluator's cost model.
+
+        Both evaluation paths call this. It exists because an unresolved
+        winner makes ``_calculate_realized_pnl`` return before the price is
+        validated, so a rejected price must also be caught here (Astra item 2
+        review, 2026-09-10). Returns (expected_value, full_kelly_fraction,
+        full_kelly_pnl, fractional_kelly_fraction, fractional_kelly_pnl).
+        """
+        try:
+            expected_value = self._calculate_expected_value(win_prob, odds)
+            full_kelly_fraction = self._calculate_kelly_fraction(win_prob, odds)
+            full_kelly_pnl = self._calculate_kelly_pnl(
+                full_kelly_fraction, odds, best_team, actual_winner)
+            fractional_kelly_fraction = full_kelly_fraction * 0.25
+            fractional_kelly_pnl = self._calculate_kelly_pnl(
+                fractional_kelly_fraction, odds, best_team, actual_winner)
+        except InvalidMarketPriceError:
+            return None
+        return (expected_value, full_kelly_fraction, full_kelly_pnl,
+                fractional_kelly_fraction, fractional_kelly_pnl)
 
     def _calculate_expected_value(self, win_prob: float, odds: float) -> float:
         """Calculate expected value of a bet
@@ -827,15 +884,12 @@ class MatchLevelEvaluator:
         Returns:
             Expected value in units (e.g., 0.15 = 15% expected return)
         """
-        if odds <= 1.0:
+        cost = getattr(self, "cost_model", CostModel.none())
+        if cost == CostModel.none() and (
+            not np.isfinite(odds) or odds <= 1.0
+        ):
             return 0.0
-        try:
-            return expected_value(
-                win_prob, odds,
-                getattr(self, "cost_model", CostModel.none()),
-            )
-        except InvalidMarketPriceError:
-            return 0.0
+        return expected_value(win_prob, odds, cost)
 
     def _calculate_kelly_fraction(self, win_prob: float, odds: float) -> float:
         """Calculate Kelly Criterion optimal stake fraction
@@ -854,16 +908,17 @@ class MatchLevelEvaluator:
             Optimal fraction of bankroll to bet (e.g., 0.15 = 15%)
             Returns 0 if no edge or negative Kelly
         """
-        if odds <= 1.0 or win_prob <= 0 or win_prob >= 1:
-            return 0.0
-
-        try:
-            return kelly_fraction(
-                win_prob, odds,
-                getattr(self, "cost_model", CostModel.none()),
+        cost = getattr(self, "cost_model", CostModel.none())
+        if (
+            (
+                cost == CostModel.none()
+                and (not np.isfinite(odds) or odds <= 1.0)
             )
-        except InvalidMarketPriceError:
+            or win_prob <= 0
+            or win_prob >= 1
+        ):
             return 0.0
+        return kelly_fraction(win_prob, odds, cost)
 
     def _calculate_kelly_pnl(self, kelly_fraction: float, odds: float,
                              bet_team: str, actual_winner: Optional[str]) -> Optional[float]:
@@ -881,13 +936,10 @@ class MatchLevelEvaluator:
         if kelly_fraction <= 0 or not actual_winner:
             return None
 
-        try:
-            return settle_kelly(
-                kelly_fraction, odds, bet_team, actual_winner,
-                getattr(self, "cost_model", CostModel.none()),
-            )
-        except InvalidMarketPriceError:
-            return None
+        return settle_kelly_policy(
+            kelly_fraction, odds, bet_team, actual_winner,
+            getattr(self, "cost_model", CostModel.none()),
+        )
 
     def _bootstrap_ci(self, values: List[float], n_resamples: int = None,
                       ci: float = 0.95, seed: int = DEFAULT_BOOTSTRAP_SEED,
@@ -990,7 +1042,10 @@ class MatchLevelEvaluator:
 
             flat_bet_results = [
                 r for r, _ in category_results
-                if flat_bet_team(r, BET_EDGE_THRESHOLD) is not None
+                if (
+                    flat_bet_team(r, BET_EDGE_THRESHOLD) is not None
+                    and r.realized_pnl is not None
+                )
             ]
             flat_pnl = sum(float(r.realized_pnl) for r in flat_bet_results)
             flat_bets = len(flat_bet_results)
@@ -1079,7 +1134,10 @@ class MatchLevelEvaluator:
                         all_signed_edges.append(-edge)  # Wrong prediction
 
             # Track actual P&L
-            if flat_bet_team(result, BET_EDGE_THRESHOLD) is not None:
+            if (
+                flat_bet_team(result, BET_EDGE_THRESHOLD) is not None
+                and result.realized_pnl is not None
+            ):
                 total_pnl += float(result.realized_pnl)
                 bets_placed += 1
                 if flat_bet_won(result, BET_EDGE_THRESHOLD):
@@ -1131,7 +1189,10 @@ class MatchLevelEvaluator:
                     fractional_kelly_wins += 1
 
             # Track flat returns for Sharpe
-            if flat_bet_team(result, BET_EDGE_THRESHOLD) is not None:
+            if (
+                flat_bet_team(result, BET_EDGE_THRESHOLD) is not None
+                and result.realized_pnl is not None
+            ):
                 flat_returns.append(float(result.realized_pnl))
                 flat_clusters.append(
                     cluster_id_for_record(
@@ -1222,6 +1283,9 @@ class MatchLevelEvaluator:
             bootstrap_reliable=(
                 count_unique_clusters(flat_clusters)
                 >= MIN_RECOMMENDED_CLUSTERS
+            ),
+            price_rejected=sum(
+                1 for result in match_results if result.price_rejected
             ),
         )
     

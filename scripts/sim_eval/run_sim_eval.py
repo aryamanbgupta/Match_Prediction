@@ -567,6 +567,7 @@ def main():
                 'n_bootstrap_clusters': results.n_bootstrap_clusters,
                 'bootstrap_reliable': results.bootstrap_reliable,
                 'cluster_metadata_coverage': cluster_coverage,
+                'price_rejected': results.price_rejected,
                 # Full Kelly
                 'full_kelly_total_pnl': results.full_kelly_total_pnl,
                 'full_kelly_roi_pct': results.full_kelly_roi,
@@ -620,6 +621,7 @@ def main():
                 'full_kelly_fraction': match.full_kelly_fraction,
                 'full_kelly_pnl': match.full_kelly_pnl,
                 'fractional_kelly_pnl': match.fractional_kelly_pnl,
+                'price_rejected': match.price_rejected,
             })
         
         with open(output_path, 'w') as f:
