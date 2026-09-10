@@ -481,6 +481,8 @@ Step-by-step v7 sim equivalent: `build_stats_cache.py` → `materialize_features
 | What is the sealed daily-prediction protocol? | [docs/DAILY_PREDICTION_PROTOCOL.md](docs/DAILY_PREDICTION_PROTOCOL.md) |
 | Which artifacts and odds evidence are authoritative? | [models/MANIFEST.yaml](models/MANIFEST.yaml) + [docs/registered_odds.json](docs/registered_odds.json) |
 | What are the remediation acceptance checks and landed results? | [docs/remediation/](docs/remediation/) |
+| How does the daily prediction job run, and what does it write? | [scripts/daily/README.md](scripts/daily/README.md) + [docs/DAILY_PREDICTION_PROTOCOL.md](docs/DAILY_PREDICTION_PROTOCOL.md) |
+| Which engine gates passed on the fixed engine? | [research/reports/auto/BR2.md](research/reports/auto/BR2.md) |
 | How is the sealed forward set built and protected? | [docs/FORWARD_HOLDOUT.md](docs/FORWARD_HOLDOUT.md) |
 | What exactly changed in deterministic same-day state? | [docs/I6_SAME_DAY_ORDERING_AUDIT.md](docs/I6_SAME_DAY_ORDERING_AUDIT.md) |
 | What did the system look like historically? | [docs/archive/](docs/archive/) |

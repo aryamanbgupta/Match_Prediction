@@ -22,12 +22,12 @@
 |---:|---|---|
 | 1 | DONE | `ae1588c`, `c2847a0`, `4b48810`; [acceptance](docs/remediation/item1_acceptance.md) |
 | 2 | DONE | `0aa69ac`, `9097b8b`, `014328a`, `3f2567b`; [acceptance](docs/remediation/item2_acceptance.md) |
-| 3 | IN PROGRESS — protocol step complete | `0a32082`; [acceptance](docs/remediation/item3_acceptance.md) |
-| 4 | DONE through steps 1–4; later steps wait on item 6 | `bb1cf4e`, `2e25db5`; [acceptance](docs/remediation/item4_acceptance.md) |
-| 5 | DONE through steps 1–4 | `c31c43e`, `a2e8413`; [acceptance](docs/remediation/item5_acceptance.md) |
-| 6 | IN PROGRESS — acceptance committed, harness work active | `8c8c7bb`; [acceptance](docs/remediation/item6_acceptance.md) |
+| 3 | DONE through step 7; step 8 built and dry-run on the mini, scheduler load awaits the user | `0a32082`, `d56f06b`, `cd62991`, `21a05de`; [acceptance](docs/remediation/item3_acceptance.md) |
+| 4 | DONE through steps 1–4; step 5 (TABLED re-run) open; standing review due 2026-12-09 | `bb1cf4e`, `2e25db5`; [acceptance](docs/remediation/item4_acceptance.md) |
+| 5 | DONE through step 5 (BR2: all four gates pass, G5 by written exception, bar now ≥89%); step 6 merge awaits the user | `c31c43e`, `0060178`, `3f8f665`, `ff53c0a`; [acceptance](docs/remediation/item5_acceptance.md), [BR2](research/reports/auto/BR2.md) |
+| 6 | DONE: harness validated (reproduces I17); candidates A–D decided (R1, R2, R4 FAILED at the gate; R3 M7 retained) | `5ec1856`, `a9e40e6`, `70df0df`, `bc87b80`, `0f9c942`; [acceptance](docs/remediation/item6_acceptance.md) |
 | 7 | NOT STARTED | [plan §7](docs/REMEDIATION_PLAN_2026-09-09.md#7-simulator-feature-builder-consolidation) |
-| 8 | IN PROGRESS — rolling docs pass | `35dc740` acceptance baseline; [checks](docs/remediation/docs_pass_acceptance.md) |
+| 8 | Rolling docs pass done (`cec294d`, `28200ea`); final tidy (archive sweep, feature-count sweep of frozen reports) waits for the merge | [checks](docs/remediation/docs_pass_acceptance.md) |
 
 > **Corpus swap:** with approval, the fresh Cricsheet export was kept aside
 > and `data/t20s_json` was replaced by the frozen corpus of record from the
