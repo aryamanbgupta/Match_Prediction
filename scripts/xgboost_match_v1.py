@@ -267,24 +267,62 @@ def _auto_numeric_features(df: pd.DataFrame) -> list:
             if c not in METADATA_COLS and c not in CATEGORICAL_FEATURES]
 
 
-def _fit_encoders(train: pd.DataFrame, val: pd.DataFrame, test: pd.DataFrame):
+def _fit_encoders(train: pd.DataFrame, val: pd.DataFrame | None = None,
+                  test: pd.DataFrame | None = None, *, fit_on: str = "all"):
+    """Fit categoricals on the requested split boundary.
+
+    ``all`` preserves the historical command-line behaviour.  Experiments
+    use ``train`` so validation/test categories cannot leak into a fold.
+    """
+    if fit_on not in {"train", "all"}:
+        raise ValueError("fit_on must be 'train' or 'all'")
     encoders = {}
     for col in CATEGORICAL_FEATURES:
         le = LabelEncoder()
-        all_vals = pd.concat([train[col].astype(str),
-                              val[col].astype(str),
-                              test[col].astype(str)]).unique()
-        le.fit(all_vals)
+        frames = [train]
+        if fit_on == "all":
+            frames.extend(frame for frame in (val, test) if frame is not None)
+        values = pd.concat([frame[col].astype(str) for frame in frames]).unique()
+        le.fit(values)
         encoders[col] = le
     return encoders
 
 
-def _apply_encoders(df: pd.DataFrame, encoders: dict) -> pd.DataFrame:
+def apply_encoders(df: pd.DataFrame, encoders: dict) -> pd.DataFrame:
+    """Apply saved categorical encoders, mapping unknown values to ``-1``."""
     df = df.copy()
+    degraded = 0
+    unseen_categories: list[dict[str, str]] = []
     for col, le in encoders.items():
         encoded_col = f"{col}_id_encoded" if col == "venue" else f"{col}_encoded"
-        df[encoded_col] = le.transform(df[col].astype(str))
+        known = {str(value): index for index, value in enumerate(le.classes_)}
+        values = df[col].astype(str)
+        unseen = ~values.isin(known)
+        degraded += int(unseen.sum())
+        unseen_categories.extend(
+            {"column": col, "value": value}
+            for value in values.loc[unseen].drop_duplicates().tolist()
+        )
+        df[encoded_col] = values.map(known).fillna(-1).astype(int)
+    df.attrs["degraded_unseen_categories"] = degraded
+    df.attrs["unseen_categories"] = unseen_categories
     return df
+
+
+# Kept for existing experiment scripts that imported the private name.
+_apply_encoders = apply_encoders
+
+
+def _early_stop_validation(validation: pd.DataFrame,
+                           before: str | None) -> pd.DataFrame:
+    """Return the validation rows eligible for early stopping."""
+    if before is None:
+        return validation.copy()
+    dates = pd.to_datetime(validation["match_date"], errors="raise")
+    selected = validation.loc[dates < pd.Timestamp(before)].copy()
+    if selected.empty:
+        raise ValueError("--early-stop-before leaves no validation rows")
+    return selected
 
 
 def _feature_columns(numeric: list, encoders: dict) -> list:
@@ -384,10 +422,17 @@ def train_model(args) -> tuple:
     # don't double-count.
     numeric = _auto_numeric_features(train)
 
-    encoders = _fit_encoders(train, val, test)
+    encoders = _fit_encoders(train, val, test, fit_on=args.fit_encoders_on)
     train = _apply_encoders(train, encoders)
     val = _apply_encoders(val, encoders)
     test = _apply_encoders(test, encoders)
+    unseen_counts = {
+        "train": int(train.attrs.get("degraded_unseen_categories", 0)),
+        "validation": int(val.attrs.get("degraded_unseen_categories", 0)),
+        "test": int(test.attrs.get("degraded_unseen_categories", 0)),
+    }
+
+    early_stop_val = _early_stop_validation(val, args.early_stop_before)
 
     feat_cols = _feature_columns(numeric, encoders)
 
@@ -407,7 +452,7 @@ def train_model(args) -> tuple:
               f"{sum(1 for s in monotone if s == -1)} -1)")
 
     X_train, y_train = train[feat_cols], train["team1_wins"]
-    X_val, y_val = val[feat_cols], val["team1_wins"]
+    X_val, y_val = early_stop_val[feat_cols], early_stop_val["team1_wins"]
     X_test, y_test = test[feat_cols], test["team1_wins"]
 
     model = XGBClassifier(
@@ -463,6 +508,12 @@ def train_model(args) -> tuple:
             "n_val": int(len(X_val)),
             "n_test": int(len(X_test)),
             "seed": int(args.seed),
+            "fit_encoders_on": args.fit_encoders_on,
+            "degraded_unseen_categories": unseen_counts,
+            "early_stop_before": args.early_stop_before,
+            "early_stop_match_ids": [
+                str(value) for value in early_stop_val["match_id"].tolist()
+            ],
             "feature_importances": {
                 feat: float(imp)
                 for feat, imp in zip(feat_cols, model.feature_importances_)
@@ -494,6 +545,7 @@ def predict_test(args, model=None, encoders=None, feat_cols=None) -> Path:
 
     test = _load_split(data_dir, "test")
     test_enc = _apply_encoders(test, encoders)
+    degraded = int(test_enc.attrs.get("degraded_unseen_categories", 0))
     proba = model.predict_proba(test_enc[feat_cols])[:, 1]
 
     predictions = {}
@@ -529,8 +581,18 @@ def predict_test(args, model=None, encoders=None, feat_cols=None) -> Path:
         }
 
     out_path = model_dir / "test_predictions.json"
+    payload = predictions
+    if getattr(args, "fit_encoders_on", "all") == "train":
+        payload = {
+            "summary": {
+                "model_seed": int(args.seed),
+                "fit_encoders_on": "train",
+                "degraded_unseen_categories": degraded,
+            },
+            "predictions": predictions,
+        }
     with open(out_path, "w") as f:
-        json.dump(predictions, f, indent=2)
+        json.dump(payload, f, indent=2)
 
     # Standalone test LL on the FULL test slice (all 791 matches).
     truth = test["team1_wins"].values
@@ -543,7 +605,7 @@ def predict_test(args, model=None, encoders=None, feat_cols=None) -> Path:
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(allow_abbrev=False)
     ap.add_argument("--cmd", choices=["train", "predict-test", "both"],
                     default="both")
     ap.add_argument("--data-dir", type=str,
@@ -560,7 +622,14 @@ def main():
     ap.add_argument("--reg-alpha", type=float, default=0.1)
     ap.add_argument("--reg-lambda", type=float, default=1.0)
     ap.add_argument("--early-stopping-rounds", type=int, default=30)
+    ap.add_argument("--early-stop-before", type=str, default=None,
+                    help="Use only validation rows before this date for "
+                    "early stopping (calibration may use the later rows).")
     ap.add_argument("--seed", type=int, default=29)
+    ap.add_argument("--fit-encoders-on", choices=("train", "all"),
+                    default="all", help="Fit categorical encoders on the "
+                    "training split only, or preserve the legacy all-split "
+                    "vocabulary. Default: all.")
     ap.add_argument("--swap-augment", action="store_true",
                     help="D7: append a team-swapped mirror of every TRAIN row "
                     "(label flipped) to enforce antisymmetry. Val/test are "

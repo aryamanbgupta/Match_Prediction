@@ -75,6 +75,7 @@ from sim_eval.market_math import (  # noqa: E402
     settle_flat,
 )
 from artifacts import artifact_path  # noqa: E402
+from xgboost_match_v1 import apply_encoders  # noqa: E402
 
 MODEL_DIR = REPO / "models" / "xgb_match_i7_swap_production"
 DEFAULT_STATE_DIR = REPO / "data" / "live_state_i7"
@@ -877,21 +878,11 @@ def apply_encoders_and_predict(record: dict,
         elo_update_version,
     )
 
-    df = pd.DataFrame([record])
-    encoder_warnings = []
-    for col, le in encoders.items():
-        encoded_col = f"{col}_id_encoded" if col == "venue" else f"{col}_encoded"
-        known = set(le.classes_)
-        if df[col].iloc[0] not in known:
-            # The fallback injects a REAL entity's learned identity (the
-            # alphabetically-first encoder class), not a neutral value —
-            # the prediction is degraded, and the flag below must surface
-            # in the output, not just in a scroll-by warning.
-            fallback = le.classes_[0]
-            encoder_warnings.append(
-                f"unseen {col}={df[col].iloc[0]!r}; falling back to {fallback!r}")
-            df[col] = fallback
-        df[encoded_col] = le.transform(df[col].astype(str))
+    df = apply_encoders(pd.DataFrame([record]), encoders)
+    encoder_warnings = [
+        f"unseen {item['column']}={item['value']!r}; encoded as -1"
+        for item in df.attrs.get("unseen_categories", [])
+    ]
 
     proba = float(model.predict_proba(df[feat_cols])[0, 1])
     return proba, {"encoder_warnings": encoder_warnings,

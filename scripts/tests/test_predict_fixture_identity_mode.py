@@ -7,7 +7,9 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
+from sklearn.preprocessing import LabelEncoder
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -21,10 +23,34 @@ from predict_fixture import (  # noqa: E402
     VENUE_IDENTITY_I7,
     VENUE_IDENTITY_LEGACY,
     _load_model_artifacts,
+    apply_encoders_and_predict,
     read_sqlite_state_metadata,
     read_tracker_state_metadata,
     resolve_venue_identity,
 )
+
+
+def test_serving_unseen_venue_uses_trainer_minus_one_and_degraded_flag(monkeypatch):
+    class Model:
+        seen = None
+
+        def predict_proba(self, frame):
+            self.seen = frame.copy()
+            return np.array([[0.4, 0.6]])
+
+    model = Model()
+    encoders = {"venue": LabelEncoder().fit(["Known Ground"])}
+    monkeypatch.setattr(
+        predict_fixture,
+        "_load_model_artifacts",
+        lambda *args: (model, encoders, ["venue_id_encoded"]),
+    )
+    probability, debug = apply_encoders_and_predict(
+        {"venue": "Unseen Ground"}, identity_mode=VENUE_IDENTITY_LEGACY
+    )
+    assert probability == pytest.approx(0.6)
+    assert model.seen["venue_id_encoded"].tolist() == [-1]
+    assert debug["prediction_degraded_by_unseen_categories"] is True
 
 
 def _write_sqlite(path: Path, metadata: dict[str, object]) -> None:

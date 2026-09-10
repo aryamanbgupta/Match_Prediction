@@ -44,7 +44,56 @@ _METHOD_REGISTRY = {
 }
 
 
-def _val_predictions(model_dir: Path, data_dir: Path):
+def _calibration_validation(validation: pd.DataFrame,
+                            calib_after: str | None) -> pd.DataFrame:
+    """Select calibration rows, complementary to trainer early stopping."""
+    if calib_after is None:
+        return validation.copy()
+    dates = pd.to_datetime(validation["match_date"], errors="raise")
+    selected = validation.loc[dates >= pd.Timestamp(calib_after)].copy()
+    if selected.empty:
+        raise ValueError("--calib-after leaves no calibration rows")
+    return selected
+
+
+def _validate_calibration_contract(model_dir: Path, validation: pd.DataFrame,
+                                   calib_after: str | None) -> None:
+    """Require calibration to be complementary to recorded early stopping."""
+    if calib_after is None:
+        return
+    metrics_path = model_dir / "train_metrics.json"
+    try:
+        metrics = json.loads(metrics_path.read_text())
+    except FileNotFoundError as exc:
+        raise ValueError(
+            "--calib-after requires train_metrics.json with early-stop metadata"
+        ) from exc
+    early_stop_before = metrics.get("early_stop_before")
+    if early_stop_before is None:
+        raise ValueError(
+            "--calib-after requires a model trained with --early-stop-before"
+        )
+    if str(early_stop_before) != str(calib_after):
+        raise ValueError(
+            "--calib-after must equal train_metrics early_stop_before"
+        )
+    if not isinstance(metrics.get("early_stop_match_ids"), list):
+        raise ValueError(
+            "--calib-after requires train_metrics early_stop_match_ids"
+        )
+    calibration = _calibration_validation(validation, calib_after)
+    calibration_ids = set(calibration["match_id"].astype(str))
+    early_ids = {str(value) for value in metrics.get("early_stop_match_ids", [])}
+    overlap = calibration_ids & early_ids
+    if overlap:
+        raise ValueError(
+            "calibration match ids overlap train_metrics early_stop_match_ids: "
+            + ", ".join(sorted(overlap)[:5])
+        )
+
+
+def _val_predictions(model_dir: Path, data_dir: Path,
+                     calib_after: str | None = None):
     """Score val.parquet with the saved booster + encoders.
 
     Returns (probs, truth) ndarrays for use as the calibration training
@@ -52,7 +101,9 @@ def _val_predictions(model_dir: Path, data_dir: Path):
     this script works against any saved model directory that has the
     standard {model.pkl, encoders.pkl, feature_columns.txt} layout.
     """
-    val = pd.read_parquet(data_dir / "validation.parquet")
+    validation = pd.read_parquet(data_dir / "validation.parquet")
+    _validate_calibration_contract(model_dir, validation, calib_after)
+    val = _calibration_validation(validation, calib_after)
     model = joblib.load(model_dir / "model.pkl")
     encoders = joblib.load(model_dir / "encoders.pkl")
     with open(model_dir / "feature_columns.txt") as f:
@@ -69,7 +120,13 @@ def _calibrate_predictions_json(in_path: Path, out_path: Path,
     written by xgboost_match_v1.predict_test. Returns (raw_ll, cal_ll)
     on whatever truth is present in the JSON.
     """
-    preds = json.load(open(in_path))
+    payload = json.load(open(in_path))
+    wrapped = (
+        isinstance(payload, dict)
+        and isinstance(payload.get("summary"), dict)
+        and isinstance(payload.get("predictions"), dict)
+    )
+    preds = payload["predictions"] if wrapped else payload
     mids = list(preds.keys())
     raw = np.array([preds[m]["p_team1"] for m in mids])
     truth = np.array([preds[m]["team1_wins"] for m in mids], dtype=float)
@@ -82,7 +139,11 @@ def _calibrate_predictions_json(in_path: Path, out_path: Path,
         rec["p_team2"] = float(1.0 - p_cal)
         rec["p_team1_raw"] = float(preds[m]["p_team1"])
         out[m] = rec
-    out_path.write_text(json.dumps(out, indent=2))
+    output = ({"summary": dict(payload["summary"]), "predictions": out}
+              if wrapped else out)
+    if wrapped:
+        output["summary"]["calibration_method"] = type(calibrator).__name__
+    out_path.write_text(json.dumps(output, indent=2))
 
     raw_ll = log_loss(truth, raw, labels=[0, 1]) if len(set(truth)) > 1 else float("nan")
     cal_ll = log_loss(truth, cal, labels=[0, 1]) if len(set(truth)) > 1 else float("nan")
@@ -104,11 +165,16 @@ def main() -> int:
                     "on small samples (val n=525 in 2026-05-10 baseline); "
                     "isotonic is non-parametric and needs ~1000+ samples to "
                     "avoid noise-driven LL regressions. Default: platt.")
+    ap.add_argument("--calib-after", default=None,
+                    help="Fit calibration only on validation rows on or "
+                    "after this date. Pair with trainer --early-stop-before.")
     args = ap.parse_args()
 
     cls = _METHOD_REGISTRY[args.method]
     print(f"Fitting {args.method} calibrator on val from {args.data_dir}...")
-    val_probs, val_truth = _val_predictions(args.model_dir, args.data_dir)
+    val_probs, val_truth = _val_predictions(
+        args.model_dir, args.data_dir, args.calib_after
+    )
     print(f"  val n = {len(val_probs)}")
     print(f"  val raw LL    = {log_loss(val_truth, val_probs):.4f}")
     print(f"  val raw Brier = {brier_score_loss(val_truth, val_probs):.4f}")

@@ -1,0 +1,24 @@
+name: ITEM6_SWAP_SMOKE
+frame: match_frame_i7_v2
+baseline:
+  trainer_args:
+    monotone: true
+candidate:
+  kind: trainer
+  trainer_args:
+    monotone: true
+    swap_augment: true
+seeds: [29, 7, 13, 42, 101]
+slices: [all, 50000, 100000]
+cost:
+  spread_bps: 100
+  fee_bps: 100
+  fee_basis: winnings
+expected_minutes_per_seed: 18
+ceiling_minutes: 240
+odds_role: odds_iteration_v2
+verify:
+  - diff_negation_identity
+  - h2h_prior_half
+  - swap_doubling
+out_dir: experiments/results/item6_swap_smoke

@@ -2113,6 +2113,17 @@ online EB overlay's extras counting matches the legacy training path
 exactly; one-predict-one-update engine contract sound; softmax sampling
 un-tempered; no batch-statistic or y-derived leakage in any arm.
 
+### Intentional changes — 2026-09-10, Item 6
+
+`predict_fixture.py` serving now encodes an unseen venue or competition tier
+as the reserved code `-1` through the trainer's shared `apply_encoders`,
+instead of substituting the alphabetically-first encoder class (which
+injected a real entity's learned identity). Non-degraded predictions are
+unchanged; only fixtures that already raised the degraded flag move, and
+they still raise it. Regression: `scripts/tests/test_predict_fixture_identity_mode.py`
+(serving unseen category → `-1`, flag set). Plan §6 [v4] unseen-category
+policy; see `docs/remediation/item6_acceptance.md`.
+
 ### Intentional changes — 2026-09-10, Item 2
 
 `build_ipl_dashboard.compute_bet` now removes the two-outcome bookmaker
