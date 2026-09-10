@@ -56,6 +56,11 @@ from sim_eval.eval_statistics import (  # noqa: E402
     flat_bet_won,
     load_competition_clusters,
 )
+from sim_eval.market_math import (  # noqa: E402
+    CostModel,
+    InvalidMarketPriceError,
+    settle_flat,
+)
 
 
 SLICE_NAMES = ("all", "ipl", "international", "mismatch", "close")
@@ -111,11 +116,20 @@ def _lookup_for_match(lookup: Mapping, match: Mapping, default=None):
 
 def _load_odds_volume_lookup(
     odds_data: Mapping,
+    volume_basis: str = "event",
 ) -> CompatibilityAliasLookup:
+    if volume_basis == "event":
+        value_fn = lambda row: row.get("polymarket_volume_usd")
+    elif volume_basis == "market":
+        value_fn = lambda row: (row.get("market_selection") or {}).get(
+            "market_volume_usd"
+        )
+    else:
+        raise ValueError(f"unknown volume basis: {volume_basis}")
     return _build_identity_lookup(
         odds_data.get("matches", []),
-        value_fn=lambda row: row.get("polymarket_volume_usd"),
-        context="odds volume join",
+        value_fn=value_fn,
+        context=f"odds {volume_basis} volume join",
     )
 
 
@@ -222,7 +236,9 @@ def reslice(eval_json_path: str, odds_json_path: str,
             mismatch_thresh: float = 15.0,
             close_thresh: float = 5.0,
             stratify_by: Optional[str] = None,
-            cluster_source_dir: Optional[Path] = None) -> Dict:
+            cluster_source_dir: Optional[Path] = None,
+            cost_model: Optional[CostModel] = None,
+            volume_basis: str = "event") -> Dict:
     """Recompute summary stats over the slice {match: vol >= min_volume
     AND predicate(slice_name)}.
     """
@@ -231,7 +247,8 @@ def reslice(eval_json_path: str, odds_json_path: str,
     with open(odds_json_path) as f:
         odds_data = json.load(f)
 
-    vol_by_id = _load_odds_volume_lookup(odds_data)
+    cost_model = cost_model or CostModel.none()
+    vol_by_id = _load_odds_volume_lookup(odds_data, volume_basis)
     feat_lookup = _load_feature_lookup(feature_parquet)
     predicate = _slice_predicate(slice_name, mismatch_thresh, close_thresh)
     if cluster_source_dir is None:
@@ -264,6 +281,25 @@ def reslice(eval_json_path: str, odds_json_path: str,
         enriched = dict(match)
         enriched["bet_placed"] = bet_team is not None
         enriched["bet_team"] = bet_team
+        if bet_team is None:
+            enriched["realized_pnl"] = match.get("realized_pnl")
+        elif not match.get("market_odds"):
+            # Backward compatibility for old summary-only fixtures that did
+            # not persist prices. New evaluator artifacts always carry them.
+            enriched["realized_pnl"] = match.get("realized_pnl")
+        else:
+            try:
+                odds = float((match.get("market_odds") or {})[bet_team])
+                if odds == 1.0 and cost_model == CostModel.none():
+                    enriched["realized_pnl"] = (
+                        0.0 if bet_team == match.get("actual_winner") else -1.0
+                    )
+                else:
+                    enriched["realized_pnl"] = settle_flat(
+                        bet_team, odds, match.get("actual_winner"), cost_model
+                    )
+            except (KeyError, TypeError, ValueError, InvalidMarketPriceError):
+                enriched["realized_pnl"] = 0.0
         cluster_id, resolution = cluster_id_with_resolution(
             match,
             cluster_lookup,
@@ -355,6 +391,9 @@ def reslice(eval_json_path: str, odds_json_path: str,
         'slice':          slice_tag,
         'slice_name':     slice_name,
         'min_volume':     min_volume,
+        'cost_model':     cost_model.as_dict(),
+        'price_basis':    'mid',
+        'volume_basis':   volume_basis,
         'mismatch_threshold': mismatch_thresh if slice_name == "mismatch" else None,
         'close_threshold':    close_thresh if slice_name == "close" else None,
         'stratify_by':    stratify_by,
@@ -411,6 +450,12 @@ def main():
     parser.add_argument('--in', dest='in_path', required=True, help='Path to eval results JSON to re-slice.')
     parser.add_argument('--odds', required=True, help='Polymarket-style odds JSON with polymarket_volume_usd.')
     parser.add_argument('--out-dir', required=True, help='Output directory for sliced JSONs.')
+    parser.add_argument('--spread-bps', type=float, default=0.0)
+    parser.add_argument('--fee-bps', type=float, default=0.0)
+    parser.add_argument('--fee-basis', choices=('winnings', 'stake'),
+                        default='winnings')
+    parser.add_argument('--volume-basis', choices=('event', 'market'),
+                        default='event')
     parser.add_argument(
         '--bootstrap-resamples',
         type=int,
@@ -453,6 +498,7 @@ def main():
                         'omitted, defaults to (None, 50000, 100000) — three '
                         'slices in one call (back-compat).')
     args = parser.parse_args()
+    cost_model = CostModel(args.spread_bps, args.fee_bps, args.fee_basis)
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -472,7 +518,9 @@ def main():
                          mismatch_thresh=args.mismatch_threshold,
                          close_thresh=args.close_threshold,
                          stratify_by=stratify,
-                         cluster_source_dir=args.cluster_source_dir)
+                         cluster_source_dir=args.cluster_source_dir,
+                         cost_model=cost_model,
+                         volume_basis=args.volume_basis)
         slice_tag = result['summary']['slice']
         out_path = out_dir / f"{src_stem}_{slice_tag}.json"
         with open(out_path, 'w') as f:

@@ -20,3 +20,30 @@ scope here.
 | B11 | Frozen evidence untouched | `git diff --stat main -- betting_odds_polymarket.json betting_odds_polymarket_v2.json data/golden/ data/forward_holdout/ reports/` | empty |
 | B12 | Full suite | `uv run --no-sync pytest -q` | 0 failures |
 | B13 | Reviewer passes | Astra light on `market_math.py` + its tests; Claude on the full diff | written, fixes re-run through B1–B12 |
+
+## Result (2026-09-10, steps 1–5)
+
+Implemented by Codex Sol (medium). Sol's sandbox could not write `.git`, so
+Claude made the two ordered commits after regenerating the parity fixture in
+a clean worktree at the pre-refactor HEAD: sha256 identical
+(`babb2be2…`), which is the B3 proof.
+
+Suite: 367 passed, 10 skipped (352 → 367: +15 item-2 tests).
+
+Flagged disagreements between today's arithmetic and plan §2 (parity wins,
+behaviour unchanged, listed here because Sol's report omitted them):
+
+1. Legacy `match_evaluator._calculate_realized_pnl` and
+   `sizing_rules._compute_pnl` accept decimal odds of exactly 1.0 (q = 1,
+   zero win return). `market_math` rejects q ≥ 1 per the plan, so both
+   callers keep a two-line boundary case for `odds == 1.0` under
+   `CostModel.none()`. This is the only arithmetic left outside the module.
+2. `predict_fixture.compute_bet` previously accepted `d == 1.0` and now
+   returns `suppression_reasons: ["invalid_odds"]` for it; all 29 tests pass
+   and the A7 policy is retired, so this is recorded, not reverted.
+3. Claude patch: at zero spread the effective odds returned the raw decimal
+   odds even when `q` exceeded the `1 - 1e-9` cap; now the raw odds are used
+   only when the cap did not bind.
+
+Step 6 (re-baseline on the production `test_predictions.json`) remains
+deferred to the Mac-mini pull (item 5 step 3).

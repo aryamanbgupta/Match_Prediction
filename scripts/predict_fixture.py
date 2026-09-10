@@ -67,6 +67,13 @@ from tracker_rehydration import (  # noqa: E402
     rehydrate_elo_tracker,
     rehydrate_venue_tracker,
 )
+from sim_eval.market_math import (  # noqa: E402
+    CostModel,
+    InvalidMarketPriceError,
+    edge as market_edge,
+    implied_probs,
+    settle_flat,
+)
 
 MODEL_DIR = REPO / "models" / "xgb_match_i7_swap_production"
 TRACKER_SNAPSHOT = REPO / "data" / "live_state_i7" / "tracker_snapshot.pkl"
@@ -953,14 +960,28 @@ def compute_bet(
             "error": "decimal odds must be finite and at least 1.0",
         }
 
-    inverse_t1 = 1.0 / d1
-    inverse_t2 = 1.0 / d2
-    overround = inverse_t1 + inverse_t2
-    market_t1 = inverse_t1 / overround
-    market_t2 = inverse_t2 / overround
+    try:
+        raw_market = implied_probs(
+            {team1: d1, team2: d2}, remove_margin=False
+        )
+        market = implied_probs({team1: d1, team2: d2}, remove_margin=True)
+    except InvalidMarketPriceError:
+        return {
+            "odds_provided": False,
+            "policy_id": A7_POLICY_ID,
+            "policy_status": "retired" if A7_POLICY_RETIRED else "active",
+            "mode": "shadow_only",
+            "execution_authorized": False,
+            "shadow_bet_placed": False,
+            "suppression_reasons": ["invalid_odds"],
+            "error": "decimal odds must imply prices strictly between zero and one",
+        }
+    market_t1 = market[team1]
+    market_t2 = market[team2]
+    overround = sum(raw_market.values())
     p_team2 = 1.0 - p_team1
-    edge_t1 = p_team1 - market_t1
-    edge_t2 = p_team2 - market_t2
+    edge_t1 = market_edge(p_team1, market_t1)
+    edge_t2 = market_edge(p_team2, market_t2)
     edges = {team1: edge_t1, team2: edge_t2}
     best_team = max(edges, key=edges.get)
     best_edge = edges[best_team]
@@ -1053,8 +1074,12 @@ def compute_bet(
         "bet_team": None,
         "suppression_reasons": suppression_reasons,
         "expected_pnl_per_unit_if_won": (
-            (d1 - 1) if (shadow_placed and best_team == team1)
-            else ((d2 - 1) if shadow_placed else 0.0)
+            settle_flat(
+                best_team,
+                d1 if best_team == team1 else d2,
+                best_team,
+                CostModel.none(),
+            ) if shadow_placed else 0.0
         ),
     }
 

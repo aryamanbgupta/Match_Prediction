@@ -26,6 +26,7 @@ from sim_eval.eval_statistics import (
     DEFAULT_BOOTSTRAP_SEED,
     load_competition_clusters,
 )
+from sim_eval.market_math import CostModel
 from match_identity import identity_contract
 
 
@@ -125,6 +126,10 @@ def main():
                        help='Drop matches whose polymarket_volume_usd is below this threshold. '
                             'Use for liquidity-sliced eval (e.g., 50000 / 100000). '
                             'Default: None (no filter; preserves non-polymarket odds files).')
+    parser.add_argument('--spread-bps', type=float, default=0.0)
+    parser.add_argument('--fee-bps', type=float, default=0.0)
+    parser.add_argument('--fee-basis', choices=('winnings', 'stake'),
+                        default='winnings')
     parser.add_argument(
         '--bootstrap-resamples',
         type=int,
@@ -479,6 +484,7 @@ def main():
             f"{cluster_coverage}/{len(loaded_ids)} loaded matches; unmatched "
             "fixtures will use team-pair-season blocks."
         )
+    cost_model = CostModel(args.spread_bps, args.fee_bps, args.fee_basis)
     evaluator = MatchLevelEvaluator(
         model=model,
         simulation_engine=engine,
@@ -486,6 +492,7 @@ def main():
         parallel=args.parallel,
         bootstrap_resamples=args.bootstrap_resamples,
         cluster_lookup=cluster_lookup,
+        cost_model=cost_model,
     )
     
     # Run evaluation (with or without match-level calibration)
@@ -535,6 +542,9 @@ def main():
                 'model_type': args.model_type,
                 'slice': slice_tag,
                 'min_volume': args.min_volume,
+                'cost_model': cost_model.as_dict(),
+                'price_basis': 'mid',
+                'volume_basis': 'event',
                 'n_matches_evaluated': results.n_matches,
                 'n_matches': results.n_matches,
                 'avg_log_loss': results.avg_log_loss,

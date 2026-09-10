@@ -19,6 +19,8 @@ import joblib
 import pandas as pd
 from sklearn.metrics import brier_score_loss, log_loss
 
+from sim_eval.market_math import CostModel
+
 
 def main() -> int:
     ap = argparse.ArgumentParser()
@@ -31,7 +33,12 @@ def main() -> int:
                     default=Path("data/xgb_match_data_i7_v2/golden_test.parquet"))
     ap.add_argument("--out-json", type=Path, default=None,
                     help="Default: <model-dir>/golden_predictions.json")
+    ap.add_argument('--spread-bps', type=float, default=0.0)
+    ap.add_argument('--fee-bps', type=float, default=0.0)
+    ap.add_argument('--fee-basis', choices=('winnings', 'stake'),
+                    default='winnings')
     args = ap.parse_args()
+    CostModel(args.spread_bps, args.fee_bps, args.fee_basis)
     if args.out_json is None:
         args.out_json = args.model_dir / "golden_predictions.json"
 

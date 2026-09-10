@@ -1,0 +1,214 @@
+{
+  "matches": [
+    {
+      "market_selection": {
+        "market_volume_usd": 100000
+      },
+      "match_id": "synthetic-000",
+      "polymarket_volume_usd": 100000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 10000
+      },
+      "match_id": "synthetic-001",
+      "polymarket_volume_usd": 100000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 100000
+      },
+      "match_id": "synthetic-002",
+      "polymarket_volume_usd": 100000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 10000
+      },
+      "match_id": "synthetic-003",
+      "polymarket_volume_usd": 100000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 100000
+      },
+      "match_id": "synthetic-004",
+      "polymarket_volume_usd": 100000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 10000
+      },
+      "match_id": "synthetic-005",
+      "polymarket_volume_usd": 100000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 100000
+      },
+      "match_id": "synthetic-006",
+      "polymarket_volume_usd": 100000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 10000
+      },
+      "match_id": "synthetic-007",
+      "polymarket_volume_usd": 100000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 100000
+      },
+      "match_id": "synthetic-008",
+      "polymarket_volume_usd": 100000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 10000
+      },
+      "match_id": "synthetic-009",
+      "polymarket_volume_usd": 100000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 100000
+      },
+      "match_id": "synthetic-010",
+      "polymarket_volume_usd": 100000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 10000
+      },
+      "match_id": "synthetic-011",
+      "polymarket_volume_usd": 100000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 100000
+      },
+      "match_id": "synthetic-012",
+      "polymarket_volume_usd": 100000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 10000
+      },
+      "match_id": "synthetic-013",
+      "polymarket_volume_usd": 100000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 100000
+      },
+      "match_id": "synthetic-014",
+      "polymarket_volume_usd": 100000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 10000
+      },
+      "match_id": "synthetic-015",
+      "polymarket_volume_usd": 100000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 100000
+      },
+      "match_id": "synthetic-016",
+      "polymarket_volume_usd": 100000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 10000
+      },
+      "match_id": "synthetic-017",
+      "polymarket_volume_usd": 100000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 100000
+      },
+      "match_id": "synthetic-018",
+      "polymarket_volume_usd": 100000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 10000
+      },
+      "match_id": "synthetic-019",
+      "polymarket_volume_usd": 100000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 100000
+      },
+      "match_id": "synthetic-020",
+      "polymarket_volume_usd": 10000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 10000
+      },
+      "match_id": "synthetic-021",
+      "polymarket_volume_usd": 10000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 100000
+      },
+      "match_id": "synthetic-022",
+      "polymarket_volume_usd": 10000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 10000
+      },
+      "match_id": "synthetic-023",
+      "polymarket_volume_usd": 10000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 100000
+      },
+      "match_id": "synthetic-024",
+      "polymarket_volume_usd": 10000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 10000
+      },
+      "match_id": "synthetic-025",
+      "polymarket_volume_usd": 10000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 100000
+      },
+      "match_id": "synthetic-026",
+      "polymarket_volume_usd": 10000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 10000
+      },
+      "match_id": "synthetic-027",
+      "polymarket_volume_usd": 10000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 100000
+      },
+      "match_id": "synthetic-028",
+      "polymarket_volume_usd": 10000
+    },
+    {
+      "market_selection": {
+        "market_volume_usd": 10000
+      },
+      "match_id": "synthetic-029",
+      "polymarket_volume_usd": 10000
+    }
+  ]
+}

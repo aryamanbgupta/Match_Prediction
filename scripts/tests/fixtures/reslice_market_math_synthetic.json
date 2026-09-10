@@ -1,0 +1,904 @@
+{
+  "matches": [
+    {
+      "actual_winner": "A",
+      "bet_placed": true,
+      "bet_team": "A",
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:00",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.5,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-000",
+      "realized_pnl": 1.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "B",
+      "bet_placed": true,
+      "bet_team": "A",
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:00",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.501,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-001",
+      "realized_pnl": -1.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "A",
+      "bet_placed": false,
+      "bet_team": null,
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:01",
+      "edge": {
+        "A": 0.0,
+        "B": 0.0
+      },
+      "log_loss": 0.502,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-002",
+      "realized_pnl": 0.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "B",
+      "bet_placed": false,
+      "bet_team": null,
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:01",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.503,
+      "market_odds": {
+        "A": 0.95,
+        "B": 4.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-003",
+      "realized_pnl": 0.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": null,
+      "bet_placed": false,
+      "bet_team": null,
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:02",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.504,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-004",
+      "realized_pnl": null,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "B",
+      "bet_placed": true,
+      "bet_team": "A",
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:02",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.505,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-005",
+      "realized_pnl": -1.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "A",
+      "bet_placed": true,
+      "bet_team": "A",
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:03",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.506,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-006",
+      "realized_pnl": 1.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "B",
+      "bet_placed": false,
+      "bet_team": null,
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:03",
+      "edge": {
+        "A": 0.0,
+        "B": 0.0
+      },
+      "log_loss": 0.507,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-007",
+      "realized_pnl": 0.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "A",
+      "bet_placed": false,
+      "bet_team": null,
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:04",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.508,
+      "market_odds": {
+        "A": 0.95,
+        "B": 4.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-008",
+      "realized_pnl": 0.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": null,
+      "bet_placed": false,
+      "bet_team": null,
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:04",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.509,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-009",
+      "realized_pnl": null,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "A",
+      "bet_placed": true,
+      "bet_team": "A",
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:05",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.51,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-010",
+      "realized_pnl": 1.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "B",
+      "bet_placed": true,
+      "bet_team": "A",
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:05",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.511,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-011",
+      "realized_pnl": -1.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "A",
+      "bet_placed": false,
+      "bet_team": null,
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:06",
+      "edge": {
+        "A": 0.0,
+        "B": 0.0
+      },
+      "log_loss": 0.512,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-012",
+      "realized_pnl": 0.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "B",
+      "bet_placed": false,
+      "bet_team": null,
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:06",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.513,
+      "market_odds": {
+        "A": 0.95,
+        "B": 4.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-013",
+      "realized_pnl": 0.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": null,
+      "bet_placed": false,
+      "bet_team": null,
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:07",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.514,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-014",
+      "realized_pnl": null,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "B",
+      "bet_placed": true,
+      "bet_team": "A",
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:07",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.515,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-015",
+      "realized_pnl": -1.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "A",
+      "bet_placed": true,
+      "bet_team": "A",
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:08",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.516,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-016",
+      "realized_pnl": 1.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "B",
+      "bet_placed": false,
+      "bet_team": null,
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:08",
+      "edge": {
+        "A": 0.0,
+        "B": 0.0
+      },
+      "log_loss": 0.517,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-017",
+      "realized_pnl": 0.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "A",
+      "bet_placed": false,
+      "bet_team": null,
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:09",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.518,
+      "market_odds": {
+        "A": 0.95,
+        "B": 4.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-018",
+      "realized_pnl": 0.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": null,
+      "bet_placed": false,
+      "bet_team": null,
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:09",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.519,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-019",
+      "realized_pnl": null,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "A",
+      "bet_placed": true,
+      "bet_team": "A",
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:10",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.52,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-020",
+      "realized_pnl": 1.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "B",
+      "bet_placed": true,
+      "bet_team": "A",
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:10",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.521,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-021",
+      "realized_pnl": -1.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "A",
+      "bet_placed": false,
+      "bet_team": null,
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:11",
+      "edge": {
+        "A": 0.0,
+        "B": 0.0
+      },
+      "log_loss": 0.522,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-022",
+      "realized_pnl": 0.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "B",
+      "bet_placed": false,
+      "bet_team": null,
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:11",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.523,
+      "market_odds": {
+        "A": 0.95,
+        "B": 4.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-023",
+      "realized_pnl": 0.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": null,
+      "bet_placed": false,
+      "bet_team": null,
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:12",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.524,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-024",
+      "realized_pnl": null,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "B",
+      "bet_placed": true,
+      "bet_team": "A",
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:12",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.525,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-025",
+      "realized_pnl": -1.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "A",
+      "bet_placed": true,
+      "bet_team": "A",
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:13",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.526,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-026",
+      "realized_pnl": 1.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "B",
+      "bet_placed": false,
+      "bet_team": null,
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:13",
+      "edge": {
+        "A": 0.0,
+        "B": 0.0
+      },
+      "log_loss": 0.527,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-027",
+      "realized_pnl": 0.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": "A",
+      "bet_placed": false,
+      "bet_team": null,
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:14",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.528,
+      "market_odds": {
+        "A": 0.95,
+        "B": 4.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-028",
+      "realized_pnl": 0.0,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "actual_winner": null,
+      "bet_placed": false,
+      "bet_team": null,
+      "brier_score": 0.2,
+      "competition_cluster_id": "event:14",
+      "edge": {
+        "A": 0.1,
+        "B": -0.1
+      },
+      "log_loss": 0.529,
+      "market_odds": {
+        "A": 2.0,
+        "B": 2.0
+      },
+      "market_prob": {
+        "A": 0.5,
+        "B": 0.5
+      },
+      "match_id": "synthetic-029",
+      "realized_pnl": null,
+      "simulated_prob": {
+        "A": 0.6,
+        "B": 0.4
+      },
+      "teams": [
+        "A",
+        "B"
+      ]
+    }
+  ]
+}

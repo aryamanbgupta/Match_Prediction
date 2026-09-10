@@ -44,6 +44,8 @@ import json
 import math
 from pathlib import Path
 
+from sim_eval.market_math import CostModel, settle_flat
+
 REPO = Path(__file__).resolve().parent.parent
 
 COINFLIP_LL = -math.log(0.5)
@@ -141,8 +143,8 @@ def load_fixture_pred(path: Path) -> dict:
 # ---------------------------------------------------------------- the rule
 
 
-def settle(p_model: float, q_market: float, team1: str, team2: str,
-           winner: str | None) -> dict | None:
+def _settle_with_cost(p_model: float, q_market: float, team1: str, team2: str,
+                      winner: str | None, cost: CostModel) -> dict | None:
     """Apply the predeclared rule to one fixture. None = no bet / not settled."""
     if q_market is None or p_model is None:
         return None
@@ -163,8 +165,18 @@ def settle(p_model: float, q_market: float, team1: str, team2: str,
     }
     if winner is not None:
         row["won"] = winner == side
-        row["pnl"] = (1.0 / price - 1.0) if row["won"] else -1.0
+        row["pnl"] = settle_flat(
+            side, row["decimal_odds"], winner, cost
+        )
     return row
+
+
+def settle(p_model: float, q_market: float, team1: str, team2: str,
+           winner: str | None) -> dict | None:
+    """Compatibility entry point using the historical zero-cost basis."""
+    return _settle_with_cost(
+        p_model, q_market, team1, team2, winner, CostModel.none()
+    )
 
 
 # ---------------------------------------------------------------- metrics
@@ -333,6 +345,7 @@ def build_ledger(rows: list[dict], by_id: dict, by_key: dict,
                  aliases: dict[str, str],
                  res_by_id: dict | None = None,
                  res_by_key: dict | None = None,
+                 cost: CostModel | None = None,
                  ) -> tuple[list[dict], list[dict]]:
     ledger, unjoined = [], []
     for row in rows:
@@ -409,9 +422,11 @@ def build_ledger(rows: list[dict], by_id: dict, by_key: dict,
             if key in row:
                 entry[extra] = row[key]
         for basis in ("pretoss", "posttoss"):
-            entry[basis] = settle(entry["p_team1"],
-                                  entry["market_prob_team1"][basis],
-                                  entry["team1"], entry["team2"], winner)
+            entry[basis] = _settle_with_cost(
+                entry["p_team1"], entry["market_prob_team1"][basis],
+                entry["team1"], entry["team2"], winner,
+                cost or CostModel.none(),
+            )
         ledger.append(entry)
     return ledger, unjoined
 
@@ -438,7 +453,12 @@ def main() -> int:
                          "only -- it can never change a sealed probability or "
                          "a recorded price.")
     ap.add_argument("--out-json", type=Path, required=True)
+    ap.add_argument('--spread-bps', type=float, default=0.0)
+    ap.add_argument('--fee-bps', type=float, default=0.0)
+    ap.add_argument('--fee-basis', choices=('winnings', 'stake'),
+                    default='winnings')
     args = ap.parse_args()
+    cost_model = CostModel(args.spread_bps, args.fee_bps, args.fee_basis)
 
     aliases = load_aliases(args.aliases)
     by_id, by_key = load_odds(args.odds, aliases)
@@ -484,6 +504,9 @@ def main() -> int:
             "fixture_preds": {k: [str(p) for p in v]
                               for k, v in fixture_by_arm.items()},
         },
+        "cost_model": cost_model.as_dict(),
+        "price_basis": "mid",
+        "volume_basis": "market",
         "arms": {},
         "unjoined": [],
     }
@@ -500,9 +523,9 @@ def main() -> int:
         fwd_rows.sort(key=lambda r: (r["date"], str(r.get("match_id") or "")))
 
         bt_ledger, bt_bad = build_ledger(backtest_rows, by_id, by_key, aliases,
-                                         res_by_id, res_by_key)
+                                         res_by_id, res_by_key, cost_model)
         fw_ledger, fw_bad = build_ledger(fwd_rows, by_id, by_key, aliases,
-                                         res_by_id, res_by_key)
+                                         res_by_id, res_by_key, cost_model)
         result["unjoined"].extend(
             [{**b, "arm": name, "slice": "backtest"} for b in bt_bad] +
             [{**b, "arm": name, "slice": "forward"} for b in fw_bad])
@@ -513,8 +536,18 @@ def main() -> int:
             "ledger": {"backtest": bt_ledger, "forward": fw_ledger},
             "summary": {
                 slice_name: {
-                    "pretoss_HEADLINE": summarize(led, "pretoss"),
-                    "posttoss_DIAGNOSTIC": summarize(led, "posttoss"),
+                    "pretoss_HEADLINE": {
+                        **summarize(led, "pretoss"),
+                        "cost_model": cost_model.as_dict(),
+                        "price_basis": "mid",
+                        "volume_basis": "market",
+                    },
+                    "posttoss_DIAGNOSTIC": {
+                        **summarize(led, "posttoss"),
+                        "cost_model": cost_model.as_dict(),
+                        "price_basis": "mid",
+                        "volume_basis": "market",
+                    },
                 }
                 for slice_name, led in (("backtest", bt_ledger),
                                         ("forward", fw_ledger),

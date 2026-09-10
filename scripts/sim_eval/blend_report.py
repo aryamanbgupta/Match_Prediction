@@ -27,8 +27,20 @@ import argparse
 import json
 import math
 import re
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+
+from sim_eval.eval_statistics import flat_bet_team
+from sim_eval.market_math import (
+    DEFAULT_SCENARIOS,
+    CostModel,
+    InvalidMarketPriceError,
+    settle_flat,
+)
 
 # Hardcoded reference baselines from CLAUDE.md / TODO.md.
 COINFLIP_LL = 0.6931
@@ -70,6 +82,46 @@ SLICE_LABEL = {
 SLICE_ORDER = ["all", "min_volume_50000", "min_volume_100000"]
 
 W_TAG_RE = re.compile(r"_w(\d+)p(\d+)_(all|min_volume_\d+)\.json$")
+
+
+def _scenario_spec(costs: List[CostModel]) -> str:
+    return ",".join(
+        f"{c.spread_bps:g}:{c.fee_bps:g}:{c.fee_basis}" for c in costs
+    )
+
+
+def _parse_cost_scenarios(value: str) -> List[CostModel]:
+    costs = []
+    for item in value.split(","):
+        fields = item.strip().split(":")
+        if len(fields) != 3:
+            raise ValueError(
+                "cost scenarios use spread_bps:fee_bps:fee_basis"
+            )
+        costs.append(CostModel(float(fields[0]), float(fields[1]), fields[2]))
+    zero = CostModel.none()
+    return [zero] + [cost for cost in costs if cost != zero]
+
+
+def _scenario_roi(matches: List[dict], cost: CostModel) -> float:
+    returns = []
+    for match in matches:
+        team = flat_bet_team(match)
+        if team is None:
+            continue
+        try:
+            odds = float((match.get("market_odds") or {})[team])
+            if odds == 1.0 and cost == CostModel.none():
+                pnl = 0.0 if team == match.get("actual_winner") else -1.0
+            else:
+                pnl = settle_flat(
+                    team, odds, match.get("actual_winner"), cost
+                )
+        except (KeyError, TypeError, ValueError, InvalidMarketPriceError):
+            continue
+        if pnl is not None:
+            returns.append(pnl)
+    return 100.0 * sum(returns) / len(returns) if returns else 0.0
 
 
 def _parse_w_slice(filename: str):
@@ -142,7 +194,9 @@ def _build_grid(
             continue
         with open(path) as f:
             data = json.load(f)
-        grid[slice_tag][w] = data["summary"]
+        summary = dict(data["summary"])
+        summary["_matches"] = data.get("matches", [])
+        grid[slice_tag][w] = summary
         if market is not None and slice_tag not in market:
             # Blending rescales the model probability only — `market_prob` is
             # identical across w — so any one file per slice is enough.
@@ -303,7 +357,12 @@ def _gate_check(grid: Dict[str, Dict[float, dict]],
     }
 
 
-def render_markdown(sliced_dir: Path, direct_json: Path) -> str:
+def render_markdown(
+    sliced_dir: Path,
+    direct_json: Path,
+    cost_scenarios: Optional[List[CostModel]] = None,
+) -> str:
+    cost_scenarios = cost_scenarios or list(DEFAULT_SCENARIOS)
     market: Dict[str, dict] = {}
     grid = _build_grid(sliced_dir, market=market)
     out = []
@@ -353,6 +412,21 @@ def render_markdown(sliced_dir: Path, direct_json: Path) -> str:
         for w in W_VALUES:
             if w in sub:
                 out.append(_format_row(w, sub[w]))
+        out.append("\nCost scenarios (ROI on the same placed bets; zero cost is the gate's safety check):")
+        scenario_headers = []
+        for index, cost in enumerate(cost_scenarios):
+            label = f"{cost.spread_bps:g}/{cost.fee_bps:g} bps {cost.fee_basis}"
+            if index == 0:
+                label += " (gate safety check)"
+            scenario_headers.append(label)
+        out.append("| w | " + " | ".join(scenario_headers) + " |")
+        out.append("|---|" + "---|" * len(scenario_headers))
+        for w in W_VALUES:
+            if w not in sub:
+                continue
+            matches = sub[w].get("_matches", [])
+            values = [f"{_scenario_roi(matches, cost):+.2f}%" for cost in cost_scenarios]
+            out.append(f"| {W_LABEL[w]} | " + " | ".join(values) + " |")
 
     # Decision-tree characterization on ≥$50k.
     out.append("\n## Curve characterization (≥$50k slice)\n")
@@ -430,9 +504,23 @@ def main():
     ap.add_argument("--sliced-dir", required=True, type=Path)
     ap.add_argument("--direct-json", required=True, type=Path)
     ap.add_argument("--out", type=Path, default=Path("reports/blend_a1_report.md"))
+    ap.add_argument('--spread-bps', type=float, default=0.0)
+    ap.add_argument('--fee-bps', type=float, default=0.0)
+    ap.add_argument('--fee-basis', choices=('winnings', 'stake'),
+                    default='winnings')
+    ap.add_argument(
+        '--cost-scenarios',
+        default=_scenario_spec(DEFAULT_SCENARIOS),
+        help='Comma-separated spread_bps:fee_bps:fee_basis scenarios; '
+             'zero cost is always reported first.',
+    )
     args = ap.parse_args()
 
-    md = render_markdown(args.sliced_dir, args.direct_json)
+    costs = _parse_cost_scenarios(args.cost_scenarios)
+    requested = CostModel(args.spread_bps, args.fee_bps, args.fee_basis)
+    if requested != CostModel.none() and requested not in costs:
+        costs.insert(1, requested)
+    md = render_markdown(args.sliced_dir, args.direct_json, costs)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(md)
     print(md)

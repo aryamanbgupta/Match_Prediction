@@ -18,6 +18,15 @@ from .eval_statistics import (
     flat_bet_team,
     flat_bet_won,
 )
+from .market_math import (
+    CostModel,
+    InvalidMarketPriceError,
+    edge as market_edge,
+    expected_value,
+    kelly_fraction,
+    settle_flat,
+    settle_kelly,
+)
 
 # Betting configuration
 BET_EDGE_THRESHOLD = 0.0  # Minimum edge required to place bet (0 = any positive edge)
@@ -139,7 +148,8 @@ class MatchLevelEvaluator:
     def __init__(self, model, simulation_engine: SimulationEngine,
                  n_simulations: int = 1000, parallel: bool = True,
                  bootstrap_resamples: int = DEFAULT_BOOTSTRAP_RESAMPLES,
-                 cluster_lookup: Optional[Dict[str, str]] = None):
+                 cluster_lookup: Optional[Dict[str, str]] = None,
+                 cost_model: Optional[CostModel] = None):
         """
         Args:
             model: The prediction model (XGBoost, etc.)
@@ -157,6 +167,7 @@ class MatchLevelEvaluator:
         self.parallel = parallel
         self.bootstrap_resamples = bootstrap_resamples
         self.cluster_lookup = dict(cluster_lookup or {})
+        self.cost_model = cost_model or CostModel.none()
 
     @staticmethod
     def _resolve_odds_row(
@@ -752,7 +763,7 @@ class MatchLevelEvaluator:
         edge = {}
         for team in sim_prob:
             if team in market_prob:
-                edge[team] = sim_prob[team] - market_prob[team]
+                edge[team] = market_edge(sim_prob[team], market_prob[team])
             else:
                 edge[team] = 0.0
         
@@ -792,14 +803,15 @@ class MatchLevelEvaluator:
             return 0.0
         if not np.isfinite(odds) or odds < 1.0:
             return 0.0
+        # Legacy policy accepts the zero-return boundary; the strict numeric
+        # primitive correctly rejects q == 1 under the new contract.
+        if odds == 1.0:
+            return 0.0 if best_team == actual_winner else -1.0
         
-        # Calculate P&L
-        if best_team == actual_winner:
-            # Win: Return is (odds - 1) since stake is returned
-            return odds - 1.0
-        else:
-            # Loss: Lose the stake
-            return -1.0
+        return settle_flat(
+            best_team, odds, actual_winner,
+            getattr(self, "cost_model", CostModel.none()),
+        )
 
     def _calculate_expected_value(self, win_prob: float, odds: float) -> float:
         """Calculate expected value of a bet
@@ -817,13 +829,13 @@ class MatchLevelEvaluator:
         """
         if odds <= 1.0:
             return 0.0
-
-        # EV = probability × profit - (1 - probability) × loss
-        profit = odds - 1.0  # Net profit if win (odds - stake)
-        loss = 1.0  # Lose the stake
-
-        ev = (win_prob * profit) - ((1 - win_prob) * loss)
-        return ev
+        try:
+            return expected_value(
+                win_prob, odds,
+                getattr(self, "cost_model", CostModel.none()),
+            )
+        except InvalidMarketPriceError:
+            return 0.0
 
     def _calculate_kelly_fraction(self, win_prob: float, odds: float) -> float:
         """Calculate Kelly Criterion optimal stake fraction
@@ -845,19 +857,13 @@ class MatchLevelEvaluator:
         if odds <= 1.0 or win_prob <= 0 or win_prob >= 1:
             return 0.0
 
-        b = odds - 1.0  # Net odds
-        p = win_prob
-        q = 1.0 - p
-
-        # Kelly fraction
-        kelly = (b * p - q) / b
-
-        # Only bet if Kelly is positive (we have edge)
-        if kelly <= 0:
+        try:
+            return kelly_fraction(
+                win_prob, odds,
+                getattr(self, "cost_model", CostModel.none()),
+            )
+        except InvalidMarketPriceError:
             return 0.0
-
-        # Return full Kelly (no cap as requested)
-        return kelly
 
     def _calculate_kelly_pnl(self, kelly_fraction: float, odds: float,
                              bet_team: str, actual_winner: Optional[str]) -> Optional[float]:
@@ -875,13 +881,13 @@ class MatchLevelEvaluator:
         if kelly_fraction <= 0 or not actual_winner:
             return None
 
-        # Calculate P&L
-        if bet_team == actual_winner:
-            # Win: profit = stake × (odds - 1)
-            return kelly_fraction * (odds - 1.0)
-        else:
-            # Loss: lose the stake
-            return -kelly_fraction
+        try:
+            return settle_kelly(
+                kelly_fraction, odds, bet_team, actual_winner,
+                getattr(self, "cost_model", CostModel.none()),
+            )
+        except InvalidMarketPriceError:
+            return None
 
     def _bootstrap_ci(self, values: List[float], n_resamples: int = None,
                       ci: float = 0.95, seed: int = DEFAULT_BOOTSTRAP_SEED,

@@ -29,6 +29,13 @@ from datetime import datetime
 from pathlib import Path
 
 from identity_maps import canonicalize_match_id, canonicalize_venue
+from sim_eval.market_math import (
+    CostModel,
+    InvalidMarketPriceError,
+    edge as market_edge,
+    implied_probs,
+    settle_flat,
+)
 
 REPO = Path(__file__).resolve().parent.parent
 LIVE_POOL = REPO / 'data' / 't20s_json'
@@ -226,13 +233,17 @@ def compute_bet(pred: dict, odds_entry: dict) -> dict:
     p1 = pred['p_team1']
     p2 = pred['p_team2']
     odds = odds_entry['odds']['winner']
-    market_t1 = 1.0 / odds[team1] if odds.get(team1) else None
-    market_t2 = 1.0 / odds[team2] if odds.get(team2) else None
-    if market_t1 is None or market_t2 is None:
+    try:
+        market = implied_probs(
+            {team1: odds[team1], team2: odds[team2]}, remove_margin=True
+        )
+        market_t1 = market[team1]
+        market_t2 = market[team2]
+    except (KeyError, InvalidMarketPriceError):
         return {'bet_team': None, 'best_edge': None, 'placed': False,
                 'pnl': None, 'note': 'missing market price'}
-    edge_t1 = p1 - market_t1
-    edge_t2 = p2 - market_t2
+    edge_t1 = market_edge(p1, market_t1)
+    edge_t2 = market_edge(p2, market_t2)
     edges = {team1: edge_t1, team2: edge_t2}
     best_team = max(edges, key=edges.get)
     best_edge = edges[best_team]
@@ -245,10 +256,7 @@ def compute_bet(pred: dict, odds_entry: dict) -> dict:
         return {'bet_team': best_team, 'best_edge': best_edge, 'edges': edges,
                 'placed': True, 'pnl': None, 'note': 'no resolved winner',
                 'market_prob': {team1: market_t1, team2: market_t2}}
-    if actual == best_team:
-        pnl = float(odds[best_team]) - 1.0
-    else:
-        pnl = -1.0
+    pnl = settle_flat(best_team, odds[best_team], actual, CostModel.none())
     return {'bet_team': best_team, 'best_edge': best_edge, 'edges': edges,
             'placed': True, 'pnl': pnl, 'note': '',
             'market_prob': {team1: market_t1, team2: market_t2}}

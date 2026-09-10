@@ -2089,6 +2089,16 @@ online EB overlay's extras counting matches the legacy training path
 exactly; one-predict-one-update engine contract sound; softmax sampling
 un-tempered; no batch-statistic or y-derived leakage in any arm.
 
+### Intentional changes — 2026-09-10, Item 2
+
+`build_ipl_dashboard.compute_bet` now removes the two-outcome bookmaker
+margin before comparing model and market probabilities. This intentionally
+changes dashboard placement when raw and de-vigged edges straddle zero; the
+fixed regression in `scripts/tests/test_build_ipl_dashboard_market_math.py`
+records that decision flip. All other placement policies retain their prior
+scope, suppression, side-selection, and sizing rules while using the shared
+`sim_eval.market_math` arithmetic.
+
 ## What NOT To Do
 
 - Don't chase ball-level accuracy beyond ~60% — individual balls are inherently noisy.

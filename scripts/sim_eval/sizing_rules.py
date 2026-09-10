@@ -50,6 +50,12 @@ from eval_statistics import (  # noqa: E402
     cluster_id_for_record,
     load_competition_clusters,
 )
+from sim_eval.market_math import (  # noqa: E402
+    CostModel,
+    InvalidMarketPriceError,
+    settle_flat,
+    settle_kelly,
+)
 
 
 def _bet_team_and_edge(match: dict) -> Tuple[Optional[str], float]:
@@ -88,10 +94,15 @@ def _compute_pnl(match: dict, sizing: str, kelly_mult: float, cap: float
     if not np.isfinite(odds) or odds < 1.0:
         return None
     actual_winner = match.get("actual_winner")
-    won = (actual_winner == best_team)
+    cost = CostModel.none()
 
     if sizing == "flat":
-        return odds - 1.0 if won else -1.0
+        if odds == 1.0 and cost == CostModel.none():
+            return 0.0 if actual_winner == best_team else -1.0
+        try:
+            return settle_flat(best_team, odds, actual_winner, cost)
+        except InvalidMarketPriceError:
+            return None
 
     if sizing == "kelly":
         full_k = float(match.get("full_kelly_fraction", 0.0))
@@ -99,7 +110,10 @@ def _compute_pnl(match: dict, sizing: str, kelly_mult: float, cap: float
             return None
         capped = min(full_k, cap)
         stake = capped * kelly_mult
-        return stake * (odds - 1.0) if won else -stake
+        try:
+            return settle_kelly(stake, odds, best_team, actual_winner, cost)
+        except InvalidMarketPriceError:
+            return None
 
     raise ValueError(f"Unknown sizing: {sizing}")
 
@@ -166,6 +180,9 @@ def evaluate(matches: List[dict], vol_by_id: Dict[str, Optional[float]],
         "kelly_mult": kelly_mult if sizing == "kelly" else None,
         "cap": cap if sizing == "kelly" else None,
         "slice": slice_name, "min_volume": min_volume,
+        "cost_model": CostModel.none().as_dict(),
+        "price_basis": "mid",
+        "volume_basis": "event",
         "n_eligible": n_eligible,
         "n_bets": n_bets,
         "skipped_under_threshold": skipped_under_threshold,

@@ -38,6 +38,14 @@ from sim_eval.eval_statistics import (  # noqa: E402
     flat_bet_team,
 )
 from match_identity import build_compatibility_alias_lookup  # noqa: E402
+from sim_eval.market_math import (  # noqa: E402
+    CostModel,
+    InvalidMarketPriceError,
+    expected_value,
+    kelly_fraction,
+    settle_flat,
+    settle_kelly,
+)
 
 # Match the existing eval pipeline's edge threshold so realized_pnl is
 # computed identically.
@@ -86,9 +94,10 @@ def _recompute_realized_pnl(edge: Dict[str, float],
         return 0.0
     if not math.isfinite(odds) or odds < 1.0:
         return 0.0
-    if best_team == actual_winner:
-        return odds - 1.0
-    return -1.0
+    try:
+        return settle_flat(best_team, odds, actual_winner, CostModel.none())
+    except InvalidMarketPriceError:
+        return 0.0
 
 
 def _persist_bet_contract(record: dict, *, recompute: bool) -> dict:
@@ -185,20 +194,16 @@ def _blend_match(match: dict, p_direct_team1: Optional[float], w: float) -> dict
         odds = float(market_odds[best_team])
         win_prob = new_sim[best_team]
         if odds > 1.0:
-            out["expected_value"] = win_prob * (odds - 1.0) - (1.0 - win_prob) * 1.0
-            b = odds - 1.0
-            kelly = (b * win_prob - (1 - win_prob)) / b if 0 < win_prob < 1 else 0.0
-            kelly = max(kelly, 0.0)
+            cost = CostModel.none()
+            out["expected_value"] = expected_value(win_prob, odds, cost)
+            kelly = kelly_fraction(win_prob, odds, cost)
             out["full_kelly_fraction"] = kelly
-            if actual_winner == best_team:
-                out["full_kelly_pnl"] = kelly * (odds - 1.0)
-                out["fractional_kelly_pnl"] = (kelly * 0.25) * (odds - 1.0)
-            elif actual_winner is not None:
-                out["full_kelly_pnl"] = -kelly
-                out["fractional_kelly_pnl"] = -(kelly * 0.25)
-            else:
-                out["full_kelly_pnl"] = None
-                out["fractional_kelly_pnl"] = None
+            out["full_kelly_pnl"] = settle_kelly(
+                kelly, odds, best_team, actual_winner, cost
+            )
+            out["fractional_kelly_pnl"] = settle_kelly(
+                kelly * 0.25, odds, best_team, actual_winner, cost
+            )
         else:
             out["expected_value"] = 0.0
             out["full_kelly_fraction"] = 0.0
@@ -295,6 +300,9 @@ def blend(sim_json: dict, direct_preds: dict, w: float) -> dict:
             "n_matches_total": len(matches),
             "n_matches_blended": n_blended,
             "n_matches_passthrough": n_passthrough,
+            "cost_model": CostModel.none().as_dict(),
+            "price_basis": "mid",
+            "volume_basis": "event",
             "source_summary": sim_json.get("summary", {}),
         },
         "matches": out_matches,
