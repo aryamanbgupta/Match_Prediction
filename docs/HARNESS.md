@@ -112,3 +112,30 @@ status, estimators, confidence intervals, the LL floor, profit safety, and
 descriptive demotions belong to `claim_gate.py`. Fold means and ensemble
 per-seed comparisons are diagnostics; production re-selection and promotion
 remain human decisions.
+
+## Rolling-origin hyperparameter sweep
+
+Candidate C uses a separate selection-only command:
+
+```bash
+uv run --no-sync python scripts/experiment_harness.py sweep experiments/harness/c_rolling_grid.yaml --allow-long
+```
+
+The sweep configuration supplies `frame`, base `trainer_args`, a Cartesian
+`grid`, `folds`, the `reference` point, one `seed` (default 29), and `out_dir`.
+`expected_minutes_per_fold` defaults to 18 and `ceiling_minutes` to 240. The
+budget guard counts every grid-point/fold training run, so the 12-by-3 Candidate
+C grid requires `--allow-long` at the default ceiling.
+
+Each fold is built by the existing `match_date` masks. Its validation and test
+files are the selection rows, so those rows drive early stopping and select-set
+log loss, while `--fit-encoders-on train` refits encoders only on that fold's
+training rows. Completed folds resume only when their existing
+`harness_run.json` identity and prediction digest reverify.
+
+The command writes `sweep.json` and a fold-mean-sorted `sweep.md`, including all
+per-fold losses and a marked M7 reference row. The raw minimum is reported, but
+M7 is the tie-aware argmin whenever its fold mean is within 0.002 of the raw
+minimum. Only a non-reference winner beyond that tolerance emits the adjacent
+`experiments/harness/c_confirm.yaml` five-seed, zero-cost gate configuration and
+prints its run command. The sweep itself never invokes the claim gate.

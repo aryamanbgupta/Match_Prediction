@@ -73,6 +73,61 @@ def _config(tmp_path: Path, *, seeds=1, kind="trainer", folds=None,
     return path
 
 
+def _sweep_config(tmp_path: Path, *, expected=0, ceiling=240) -> Path:
+    frame = _frame(tmp_path / "sweep_frame")
+    combined = pd.concat([
+        pd.read_parquet(frame / f"{name}.parquet")
+        for name in ("train", "validation", "test")
+    ], ignore_index=True).drop_duplicates(subset=["match_id"])
+    combined["match_date"] = [
+        "2022-06-01", "2022-07-01", "2023-06-01", "2023-07-01",
+        "2024-06-01", "2024-07-01", "2025-03-01", "2025-04-01",
+        "2025-08-01", "2025-09-01", "2025-10-01", "2025-11-01",
+    ]
+    combined.iloc[:4].to_parquet(frame / "train.parquet", index=False)
+    combined.iloc[4:8].to_parquet(frame / "validation.parquet", index=False)
+    combined.iloc[8:].to_parquet(frame / "test.parquet", index=False)
+    payload = {
+        "name": "HC_TEST", "frame": str(frame),
+        "trainer_args": {"monotone": True, "swap_augment": True},
+        "grid": {"learning_rate": [0.03, 0.05]},
+        "reference": {"learning_rate": 0.05},
+        "folds": [
+            {"train_until": "2022-12-31", "select_from": "2023-01-01",
+             "select_until": "2023-12-31"},
+            {"train_until": "2023-12-31", "select_from": "2024-01-01",
+             "select_until": "2024-12-31"},
+            {"train_until": "2024-12-31", "select_from": "2025-01-01",
+             "select_until": "2025-06-30"},
+        ],
+        "expected_minutes_per_fold": expected, "ceiling_minutes": ceiling,
+        "out_dir": str(tmp_path / "sweep_out"),
+    }
+    path = tmp_path / "grid.yaml"
+    path.write_text(yaml.safe_dump(payload, sort_keys=False))
+    return path
+
+
+def _point_loss_stub(losses, calls=None):
+    def run(config, arm, seed, frame, model_dir, dry_run):
+        assert dry_run is True
+        index = config.candidate_args.index("--learning-rate")
+        learning_rate = float(config.candidate_args[index + 1])
+        if calls is not None:
+            calls.append((learning_rate, frame.name))
+        path = harness._stub_train(frame, model_dir, seed, arm, config.config_hash)
+        summary, rows = harness._prediction_parts(path)
+        correct_probability = float(np.exp(-losses[learning_rate]))
+        for row in rows.values():
+            row["p_team1"] = (
+                correct_probability if row["team1_wins"] else 1 - correct_probability
+            )
+            row["p_team2"] = 1 - row["p_team1"]
+        harness._write_predictions(path, summary, rows)
+        return path
+    return run
+
+
 def test_h1_schema_defaults_integer_seed_and_named_errors(tmp_path):
     config = harness.load_config(_config(tmp_path))
     assert config.seeds == [29]
@@ -597,6 +652,79 @@ def test_h10_fold_masks_and_means(tmp_path):
     fold_frame = config.out_dir / "fold_frames/fold0"
     assert set(pd.read_parquet(fold_frame / "train.parquet").venue) == {"V0", "V1"}
     assert pd.to_datetime(pd.read_parquet(fold_frame / "validation.parquet").match_date).min() >= pd.Timestamp("2025-01-05")
+
+
+def test_hc1_grid_expansion_and_hc3_fold_mean_ordering(tmp_path, monkeypatch):
+    assert len(harness._grid_points({
+        "learning_rate": [0.03, 0.05, 0.08],
+        "colsample_bytree": [0.7, 0.9],
+        "max_depth": [3, 4],
+    })) == 12
+    path = _sweep_config(tmp_path)
+    config = harness.load_sweep_config(path)
+    monkeypatch.setattr(harness, "_run_trainer", _point_loss_stub({0.03: .45, 0.05: .50}))
+    report = harness.sweep(config, config_path=path, dry_run=True)
+    assert [row["params"]["learning_rate"] for row in report["rows"]] == [.03, .05]
+    assert report["rows"][0]["fold_log_loss"] == pytest.approx([.45, .45, .45])
+    assert report["rows"][0]["fold_mean_log_loss"] == pytest.approx(.45)
+    assert report["grid_point_count"] == 2
+    assert report["fold_run_count"] == 6
+    assert (config.out_dir / "sweep.json").is_file()
+    markdown = (config.out_dir / "sweep.md").read_text()
+    assert "| M7 |" in markdown
+
+
+def test_hc3_tie_within_point_002_retains_reference(tmp_path, monkeypatch):
+    path = _sweep_config(tmp_path)
+    config = harness.load_sweep_config(path)
+    monkeypatch.setattr(harness, "_run_trainer", _point_loss_stub({0.03: .499, 0.05: .500}))
+    report = harness.sweep(config, config_path=path, dry_run=True)
+    assert report["raw_argmin"] == {"learning_rate": .03}
+    assert report["argmin"] == {"learning_rate": .05}
+    assert report["reference_retained"] is True
+    assert report["confirm_config"] is None
+    assert not path.with_name("c_confirm.yaml").exists()
+
+
+def test_hc4_confirm_config_emitted_only_for_material_winner(
+    tmp_path, monkeypatch, capsys
+):
+    path = _sweep_config(tmp_path)
+    config = harness.load_sweep_config(path)
+    monkeypatch.setattr(harness, "_run_trainer", _point_loss_stub({0.03: .49, 0.05: .50}))
+    report = harness.sweep(config, config_path=path, dry_run=True)
+    confirm = path.with_name("c_confirm.yaml")
+    assert report["argmin"] == {"learning_rate": .03}
+    assert confirm.is_file()
+    payload = yaml.safe_load(confirm.read_text())
+    assert payload["baseline"]["trainer_args"]["learning_rate"] == .05
+    assert payload["candidate"]["trainer_args"]["learning_rate"] == .03
+    assert payload["seeds"] == [29, 7, 13, 42, 101]
+    assert payload["cost"] == {
+        "spread_bps": 0, "fee_bps": 0, "fee_basis": "winnings",
+    }
+    assert "experiment_harness.py run" in capsys.readouterr().out
+
+
+def test_hc4_sweep_resume_uses_harness_run_identity(tmp_path, monkeypatch):
+    path = _sweep_config(tmp_path)
+    config = harness.load_sweep_config(path)
+    calls = []
+    monkeypatch.setattr(
+        harness, "_run_trainer", _point_loss_stub({0.03: .499, 0.05: .500}, calls)
+    )
+    harness.sweep(config, config_path=path, dry_run=True)
+    assert len(calls) == 6
+    calls.clear()
+    harness.sweep(config, config_path=path, dry_run=True)
+    assert calls == []
+
+
+def test_hc1_sweep_budget_counts_grid_points_times_folds(tmp_path):
+    path = _sweep_config(tmp_path, expected=2, ceiling=11)
+    config = harness.load_sweep_config(path)
+    with pytest.raises(RuntimeError, match=r"6 fold runs \* 2 minutes = 12"):
+        harness.sweep(config, config_path=path, dry_run=True)
 
 
 def test_h11_all_verify_hooks(tmp_path):

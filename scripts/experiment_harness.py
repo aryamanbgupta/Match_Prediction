@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import itertools
 import json
 import math
 import shutil
@@ -62,6 +63,22 @@ class HarnessConfig:
     verify: list[str]
     out_dir: Path
     config_hash: str
+
+
+@dataclass(frozen=True)
+class SweepConfig:
+    raw: dict[str, Any]
+    name: str
+    frame: Path
+    frame_hash: str
+    trainer_args: dict[str, Any]
+    grid: dict[str, list[Any]]
+    reference: dict[str, Any]
+    folds: list[dict[str, str]]
+    seed: int
+    expected_minutes_per_fold: float
+    ceiling_minutes: float
+    out_dir: Path
 
 
 def _error(field: str, message: str) -> ConfigError:
@@ -136,6 +153,30 @@ def _canonical_hash(payload: dict[str, Any], frame: Path, frame_hash: str) -> st
     digest.update(b"\0trainer_sha256\0")
     digest.update(_sha256_file(SCRIPTS / "xgboost_match_v1.py").encode("ascii"))
     return digest.hexdigest()
+
+
+def _normalize_folds(value: Any) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        raise _error("folds", "must be a list")
+    normalized = []
+    for index, fold in enumerate(value):
+        required = {"train_until", "select_from", "select_until"}
+        if not isinstance(fold, dict) or not required.issubset(fold):
+            raise _error(f"folds[{index}]", f"requires {sorted(required)}")
+        parsed = {key: str(fold[key]) for key in required}
+        try:
+            ordered = (pd.Timestamp(parsed["train_until"]),
+                       pd.Timestamp(parsed["select_from"]),
+                       pd.Timestamp(parsed["select_until"]))
+        except (TypeError, ValueError) as exc:
+            raise _error(f"folds[{index}]", "contains an invalid date") from exc
+        if not ordered[0] < ordered[1] <= ordered[2]:
+            raise _error(
+                f"folds[{index}]",
+                "dates must satisfy train_until < select_from <= select_until",
+            )
+        normalized.append(parsed)
+    return normalized
 
 
 def load_config(path: Path) -> HarnessConfig:
@@ -265,24 +306,7 @@ def load_config(path: Path) -> HarnessConfig:
         raise _error("expected_minutes_per_seed/ceiling_minutes", "must be numeric") from exc
     if expected < 0 or ceiling <= 0:
         raise _error("expected_minutes_per_seed/ceiling_minutes", "must be non-negative/positive")
-    folds = raw.get("folds", [])
-    if not isinstance(folds, list):
-        raise _error("folds", "must be a list")
-    normalized_folds = []
-    for index, fold in enumerate(folds):
-        required = {"train_until", "select_from", "select_until"}
-        if not isinstance(fold, dict) or not required.issubset(fold):
-            raise _error(f"folds[{index}]", f"requires {sorted(required)}")
-        parsed = {key: str(fold[key]) for key in required}
-        try:
-            ordered = (pd.Timestamp(parsed["train_until"]),
-                       pd.Timestamp(parsed["select_from"]),
-                       pd.Timestamp(parsed["select_until"]))
-        except (TypeError, ValueError) as exc:
-            raise _error(f"folds[{index}]", "contains an invalid date") from exc
-        if not ordered[0] < ordered[1] <= ordered[2]:
-            raise _error(f"folds[{index}]", "dates must satisfy train_until < select_from <= select_until")
-        normalized_folds.append(parsed)
+    normalized_folds = _normalize_folds(raw.get("folds", []))
     if kind == "ensemble" and normalized_folds:
         raise _error("folds", "are not supported for an immutable production baseline")
     verify = raw.get("verify", [])
@@ -304,6 +328,74 @@ def load_config(path: Path) -> HarnessConfig:
         odds_role=str(raw.get("odds_role", "odds_iteration_v2")),
         folds=normalized_folds, verify=verify, out_dir=out,
         config_hash=_canonical_hash(raw, frame, frame_hash),
+    )
+
+
+def load_sweep_config(path: Path) -> SweepConfig:
+    try:
+        raw = yaml.safe_load(path.read_text())
+    except (OSError, yaml.YAMLError) as exc:
+        raise ConfigError(f"config: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise _error("config", "top level must be a mapping")
+    for field in ("frame", "trainer_args", "grid", "folds", "reference", "out_dir"):
+        if field not in raw:
+            raise _error(field, "is required")
+    frame, frame_hash = _resolve_frame(raw["frame"], "frame")
+    trainer_args = raw["trainer_args"]
+    if not isinstance(trainer_args, dict):
+        raise _error("trainer_args", "must be a flag/value mapping")
+    _trainer_args(trainer_args, "trainer_args")
+    grid = raw["grid"]
+    if not isinstance(grid, dict) or not grid:
+        raise _error("grid", "must be a non-empty mapping")
+    normalized_grid: dict[str, list[Any]] = {}
+    for key, values in grid.items():
+        if not isinstance(key, str) or not key:
+            raise _error("grid", "keys must be non-empty strings")
+        if not isinstance(values, list) or not values:
+            raise _error(f"grid.{key}", "must be a non-empty list")
+        if any(isinstance(value, (dict, list)) for value in values):
+            raise _error(f"grid.{key}", "values must be scalars")
+        normalized_grid[key] = list(values)
+    reference = raw["reference"]
+    if not isinstance(reference, dict) or set(reference) != set(normalized_grid):
+        raise _error("reference", "must contain exactly the grid keys")
+    for key, value in reference.items():
+        if value not in normalized_grid[key]:
+            raise _error(f"reference.{key}", "must be one of the grid values")
+    folds = _normalize_folds(raw["folds"])
+    if not folds:
+        raise _error("folds", "must contain at least one fold")
+    seed = raw.get("seed", 29)
+    if not isinstance(seed, int) or isinstance(seed, bool):
+        raise _error("seed", "must be a single integer")
+    try:
+        expected = float(raw.get("expected_minutes_per_fold", 18))
+        ceiling = float(raw.get("ceiling_minutes", 240))
+    except (TypeError, ValueError) as exc:
+        raise _error(
+            "expected_minutes_per_fold/ceiling_minutes", "must be numeric"
+        ) from exc
+    if expected < 0 or ceiling <= 0:
+        raise _error(
+            "expected_minutes_per_fold/ceiling_minutes",
+            "must be non-negative/positive",
+        )
+    out = raw["out_dir"]
+    if not isinstance(out, str) or not out:
+        raise _error("out_dir", "must be a non-empty path string")
+    out_dir = Path(out)
+    out_dir = out_dir if out_dir.is_absolute() else ROOT / out_dir
+    name = raw.get("name", path.stem)
+    if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+", name):
+        raise _error("name", "must contain only letters, numbers, '.', '_' or '-'")
+    return SweepConfig(
+        raw=raw, name=name, frame=frame, frame_hash=frame_hash,
+        trainer_args=dict(trainer_args), grid=normalized_grid,
+        reference=dict(reference), folds=folds, seed=seed,
+        expected_minutes_per_fold=expected, ceiling_minutes=ceiling,
+        out_dir=out_dir,
     )
 
 
@@ -454,7 +546,8 @@ def _calibration_argv(config: HarnessConfig, model_dir: Path,
 
 
 def _write_completion(config: HarnessConfig, arm: str, seed: int, frame: Path,
-                      model_dir: Path, *, dry_run: bool) -> None:
+                      model_dir: Path, *, dry_run: bool,
+                      evaluated: bool = True) -> None:
     argv = _trainer_argv(config, arm, seed, frame, model_dir, dry_run)
     calibration = _calibration_stamp(config, arm)
     calibration_argv = (
@@ -467,6 +560,7 @@ def _write_completion(config: HarnessConfig, arm: str, seed: int, frame: Path,
         "seed": seed,
         "config_hash": config.config_hash,
         "dry_run": dry_run,
+        "evaluated": evaluated,
         "trainer_argv": argv,
         "trainer_argv_sha256": _sha256_argv(argv),
         "calibration": calibration,
@@ -486,7 +580,7 @@ def _write_completion(config: HarnessConfig, arm: str, seed: int, frame: Path,
         "sliced_sha256": {
             str(value): _sha256_file(model_dir / f"sliced_{value}.json")
             for value in config.slices
-        },
+        } if evaluated else {},
     }
     (model_dir / "harness_run.json").write_text(json.dumps(record, indent=2))
 
@@ -501,7 +595,8 @@ def _summary_matches(path: Path, arm: str, seed: int, config_hash: str) -> bool:
 
 
 def _completed(config: HarnessConfig, arm: str, seed: int, frame: Path,
-               model_dir: Path, *, dry_run: bool) -> bool:
+               model_dir: Path, *, dry_run: bool,
+               evaluated: bool = True) -> bool:
     completion_path = model_dir / "harness_run.json"
     prediction_path = model_dir / "test_predictions.json"
     blended_path = model_dir / "blended.json"
@@ -529,6 +624,8 @@ def _completed(config: HarnessConfig, arm: str, seed: int, frame: Path,
     }
     if any(record.get(key) != value for key, value in expected_identity.items()):
         return False
+    if record.get("evaluated", True) is not evaluated:
+        return False
     if not _summary_matches(prediction_path, arm, seed, config.config_hash):
         return False
     try:
@@ -542,7 +639,7 @@ def _completed(config: HarnessConfig, arm: str, seed: int, frame: Path,
         _validate_calibration_contract(
             model_dir, validation, calibration["calib_after"]
         )
-    if not _summary_matches(blended_path, arm, seed, config.config_hash):
+    if evaluated and not _summary_matches(blended_path, arm, seed, config.config_hash):
         return False
     if dry_run:
         try:
@@ -581,6 +678,8 @@ def _completed(config: HarnessConfig, arm: str, seed: int, frame: Path,
     recorded_slices = record.get("sliced_sha256")
     if not isinstance(recorded_slices, dict):
         return False
+    if not evaluated:
+        return recorded_slices == {}
     for value in config.slices:
         sliced = model_dir / f"sliced_{value}.json"
         if not _summary_matches(sliced, arm, seed, config.config_hash):
@@ -910,6 +1009,197 @@ def _run_folds(config: HarnessConfig, dry_run: bool) -> list[dict[str, Any]]:
     return results
 
 
+def _grid_points(grid: dict[str, list[Any]]) -> list[dict[str, Any]]:
+    keys = list(grid)
+    return [dict(zip(keys, values)) for values in itertools.product(
+        *(grid[key] for key in keys)
+    )]
+
+
+def _sweep_point_config(sweep_config: SweepConfig, point: dict[str, Any],
+                        point_dir: Path) -> HarnessConfig:
+    trainer_args = {**sweep_config.trainer_args, **point}
+    raw = {
+        "name": f"{sweep_config.name}_point",
+        "frame": sweep_config.raw["frame"],
+        "baseline": {"trainer_args": trainer_args},
+        "candidate": {"kind": "trainer", "trainer_args": trainer_args},
+        "seeds": [sweep_config.seed],
+        "slices": ["all", 50000, 100000],
+        "cost": {"spread_bps": 0, "fee_bps": 0, "fee_basis": "winnings"},
+        "expected_minutes_per_seed": sweep_config.expected_minutes_per_fold,
+        "ceiling_minutes": sweep_config.ceiling_minutes,
+        "folds": sweep_config.folds,
+        "out_dir": str(point_dir),
+    }
+    args = _trainer_args(trainer_args, "trainer_args")
+    return HarnessConfig(
+        raw=raw, name=raw["name"], frame=sweep_config.frame,
+        baseline_args=args, candidate_kind="trainer", candidate_args=args,
+        calib_after=None, calibration_method=None, seeds=[sweep_config.seed],
+        slices=["all", 50000, 100000], cost=CostModel(0, 0, "winnings"),
+        expected_minutes_per_seed=sweep_config.expected_minutes_per_fold,
+        ceiling_minutes=sweep_config.ceiling_minutes,
+        odds_role="odds_iteration_v2", folds=sweep_config.folds, verify=[],
+        out_dir=point_dir,
+        config_hash=_canonical_hash(raw, sweep_config.frame, sweep_config.frame_hash),
+    )
+
+
+def _selection_log_loss(path: Path) -> float:
+    _, rows = _prediction_parts(path)
+    if not rows:
+        raise ValueError("sweep selection predictions are empty")
+    losses = [
+        -math.log(max(min(
+            row["p_team1"] if row["team1_wins"] else row["p_team2"],
+            1 - 1e-9,
+        ), 1e-9))
+        for row in rows.values()
+    ]
+    return float(np.mean(losses))
+
+
+def _write_sweep_markdown(path: Path, rows: list[dict[str, Any]],
+                          keys: list[str], argmin: dict[str, Any],
+                          reference_retained: bool) -> None:
+    headings = ["rank", "reference", *keys, *[
+        f"fold {index + 1} LL" for index in range(len(rows[0]["fold_log_loss"]))
+    ], "fold-mean LL"]
+    lines = ["# Rolling-origin hyperparameter sweep", "",
+             "| " + " | ".join(headings) + " |",
+             "| " + " | ".join(["---"] * len(headings)) + " |"]
+    for rank, row in enumerate(rows, 1):
+        values = [str(rank), "M7" if row["is_reference"] else "", *[
+            str(row["params"][key]) for key in keys
+        ], *[f"{value:.6f}" for value in row["fold_log_loss"]],
+            f"{row['fold_mean_log_loss']:.6f}"]
+        lines.append("| " + " | ".join(values) + " |")
+    result = "M7 retained" if reference_retained else "confirmation required"
+    params = ", ".join(f"{key}={argmin[key]}" for key in keys)
+    lines.extend(["", f"Tie-aware argmin: `{params}` ({result}).", ""])
+    path.write_text("\n".join(lines))
+
+
+def _write_confirm_config(path: Path, sweep_config: SweepConfig,
+                          candidate: dict[str, Any]) -> None:
+    payload = {
+        "name": "ITEM6_C_CONFIRM",
+        "frame": sweep_config.raw["frame"],
+        "baseline": {"trainer_args": {
+            **sweep_config.trainer_args, **sweep_config.reference,
+        }},
+        "candidate": {"kind": "trainer", "trainer_args": {
+            **sweep_config.trainer_args, **candidate,
+        }},
+        "seeds": DEFAULT_SEEDS,
+        "slices": ["all", 50000, 100000],
+        "cost": {"spread_bps": 0, "fee_bps": 0, "fee_basis": "winnings"},
+        "expected_minutes_per_seed": 18,
+        "ceiling_minutes": 240,
+        "odds_role": "odds_iteration_v2",
+        "out_dir": "experiments/results/item6_c_confirm",
+    }
+    path.write_text(yaml.safe_dump(payload, sort_keys=False))
+
+
+def sweep(config: SweepConfig, *, config_path: Path,
+          dry_run: bool = False, allow_long: bool = False) -> dict[str, Any]:
+    points = _grid_points(config.grid)
+    run_count = len(points) * len(config.folds)
+    estimate = run_count * config.expected_minutes_per_fold
+    if estimate > config.ceiling_minutes and not allow_long:
+        raise RuntimeError(
+            f"budget guard: {run_count} fold runs * "
+            f"{config.expected_minutes_per_fold:g} minutes = {estimate:g} expected "
+            f"minutes exceeds ceiling_minutes={config.ceiling_minutes:g}; pass --allow-long"
+        )
+    config.out_dir.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for point_index, point in enumerate(points):
+        point_key = hashlib.sha256(
+            yaml.safe_dump(point, sort_keys=True).encode("utf-8")
+        ).hexdigest()[:12]
+        point_dir = config.out_dir / "points" / f"point{point_index:03d}_{point_key}"
+        point_config = _sweep_point_config(config, point, point_dir)
+        fold_losses = []
+        for fold_index, fold in enumerate(config.folds):
+            frame = _make_fold_frame(point_config, fold_index, fold)
+            model_dir = point_dir / "folds" / f"fold{fold_index}"
+            resumed = _completed(
+                point_config, "candidate", config.seed, frame, model_dir,
+                dry_run=dry_run, evaluated=False,
+            )
+            if resumed:
+                print(f"resume: grid point {point_index} fold {fold_index} (matching harness_run identity)")
+                prediction = model_dir / "test_predictions.json"
+            else:
+                prediction = _run_trainer(
+                    point_config, "candidate", config.seed, frame, model_dir, dry_run
+                )
+            fold_loss = _selection_log_loss(prediction)
+            if not resumed:
+                _write_completion(
+                    point_config, "candidate", config.seed, frame, model_dir,
+                    dry_run=dry_run, evaluated=False,
+                )
+            fold_losses.append(fold_loss)
+        rows.append({
+            "params": point,
+            "trainer_args": {**config.trainer_args, **point},
+            "is_reference": point == config.reference,
+            "fold_log_loss": fold_losses,
+            "folds": [
+                {**fold, "fold": index, "select_log_loss": fold_losses[index]}
+                for index, fold in enumerate(config.folds)
+            ],
+            "fold_mean_log_loss": float(np.mean(fold_losses)),
+            "config_hash": point_config.config_hash,
+            "point_dir": str(point_dir),
+        })
+    rows.sort(key=lambda row: row["fold_mean_log_loss"])
+    raw_argmin = rows[0]
+    reference = next(row for row in rows if row["is_reference"])
+    improvement = reference["fold_mean_log_loss"] - raw_argmin["fold_mean_log_loss"]
+    selected = raw_argmin if (
+        not raw_argmin["is_reference"] and improvement > .002 + 1e-12
+    ) else reference
+    confirm_path = config_path.with_name("c_confirm.yaml")
+    confirm_warranted = not selected["is_reference"]
+    if confirm_warranted:
+        _write_confirm_config(confirm_path, config, selected["params"])
+        shown_path = confirm_path.relative_to(ROOT) if confirm_path.is_relative_to(ROOT) else confirm_path
+        confirm_command = f"uv run --no-sync python scripts/experiment_harness.py run {shown_path}"
+        print(confirm_command)
+    else:
+        confirm_command = None
+        confirm_path.unlink(missing_ok=True)
+    report = {
+        "name": config.name,
+        "config": config.raw,
+        "seed": config.seed,
+        "grid_point_count": len(points),
+        "fold_run_count": run_count,
+        "rows": rows,
+        "raw_argmin": raw_argmin["params"],
+        "argmin": selected["params"],
+        "reference": reference["params"],
+        "reference_fold_mean_log_loss": reference["fold_mean_log_loss"],
+        "argmin_fold_mean_log_loss": selected["fold_mean_log_loss"],
+        "raw_improvement_over_reference": improvement,
+        "tie_tolerance": .002,
+        "reference_retained": selected["is_reference"],
+        "confirm_config": str(confirm_path) if confirm_warranted else None,
+        "confirm_command": confirm_command,
+    }
+    (config.out_dir / "sweep.json").write_text(json.dumps(report, indent=2))
+    _write_sweep_markdown(
+        config.out_dir / "sweep.md", rows, list(config.grid),
+        selected["params"], selected["is_reference"],
+    )
+    return report
+
+
 def run(config: HarnessConfig, *, dry_run: bool = False,
         allow_long: bool = False) -> dict[str, Any]:
     estimate = len(config.seeds) * config.expected_minutes_per_seed
@@ -1032,10 +1322,21 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("config", type=Path)
     run_parser.add_argument("--dry-run", action="store_true")
     run_parser.add_argument("--allow-long", action="store_true")
+    sweep_parser = sub.add_parser("sweep")
+    sweep_parser.add_argument("config", type=Path)
+    sweep_parser.add_argument("--dry-run", action="store_true")
+    sweep_parser.add_argument("--allow-long", action="store_true")
     args = parser.parse_args(argv)
     try:
-        config = load_config(args.config)
-        run(config, dry_run=args.dry_run, allow_long=args.allow_long)
+        if args.command == "sweep":
+            sweep_config = load_sweep_config(args.config)
+            sweep(
+                sweep_config, config_path=args.config,
+                dry_run=args.dry_run, allow_long=args.allow_long,
+            )
+        else:
+            config = load_config(args.config)
+            run(config, dry_run=args.dry_run, allow_long=args.allow_long)
     except (ConfigError, RuntimeError, ValueError, AssertionError,
             FileNotFoundError, subprocess.CalledProcessError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
