@@ -1393,34 +1393,43 @@ their source-match counts to agree. By default it fails when either component
 is more than 14 days behind the fixture. State newer than the fixture is safe:
 all feature and tracker queries remain filtered by the fixture date.
 
-**Defaults (post 2026-07-31 promotion).** The live command serves
-`models/xgb_match_i7_swap_production` in `i7` identity mode from
-`data/live_state_i7/` (`player_stats_cache_i7.sqlite` +
-`tracker_snapshot.pkl`, currently through 2026-07-13). The default tracker
-sources are `data/t20s_json` plus the consumed forward context dir, and the
-SQLite and tracker must both report 9,920 source matches. For a diagnostic
+**Defaults (manifest-backed).** `predict_fixture.py` resolves the model role
+`match_model_prod` and serving-state role `live_state_i7` from
+`models/MANIFEST.yaml`. `data/live_state_i7` is the stable symlink; its
+manifest-recorded target is a versioned build directory sealed by a `BUILT`
+marker ([item 5 acceptance](remediation/item5_acceptance.md)). An explicit
+`--model-dir` or `--state-dir` wins over the selected role. For a diagnostic
 probability only, `--allow-stale-state` bypasses the age failure, marks the
 output `stale_override`, and suppresses every A7 shadow candidate.
 
-**Rebuilding the default serving state** (after a cricsheet refresh, or to
-reproduce `data/live_state_i7/` from scratch):
+**Refreshing serving state.** Never write through `data/live_state_i7` and
+never modify a directory carrying `BUILT`. Create a new sibling, build both
+state files there, then seal it and atomically move the symlink:
 
 ```bash
-uv run python scripts/build_stats_cache.py \
+build_dir="data/live_state_i7_$(date -u +%Y-%m-%d_%Y%m%dT%H%M%SZ)"
+uv run --no-sync python scripts/build_stats_cache.py \
   --source-dir data/t20s_json \
   --extra-source-dir \
     data/forward_holdout/2026-06-01_2026-07-13/context_t20s_json \
   --extra-source-dir <new_context_dir_if_any> \
-  --out data/live_state_i7/player_stats_cache_i7.sqlite \
+  --out "$build_dir/player_stats_cache_i7.sqlite" \
   --metadata-csv data/all_players_enriched.csv \
   --prior-source-sqlite models/player_stats_cache_i7.sqlite \
   --force-rebuild
 
-# then rebuild the matching snapshot once:
-uv run python scripts/predict_fixture.py \
+uv run --no-sync python scripts/predict_fixture.py \
   --fixture fixtures/<id>.json \
+  --state-dir "$build_dir" \
+  --tracker-snapshot "$build_dir/tracker_snapshot.pkl" \
   --tracker-source-dir <new_context_dir_if_any> \
   --rebuild-snapshot
+
+BUILD_DIR="$build_dir" uv run --no-sync python - <<'PY'
+import os
+from scripts.artifacts import promote_live_state
+promote_live_state(os.environ["BUILD_DIR"])
+PY
 ```
 
 Newly completed Cricsheet matches go in a separate non-overlapping context
@@ -1428,8 +1437,9 @@ directory passed via `--extra-source-dir` / `--tracker-source-dir`. The
 discipline: never add post-2026-04-16 files to `data/t20s_json`, and never
 rebuild `models/player_stats_cache_v3.sqlite` or
 `models/player_stats_cache_i7.sqlite` in place — those document the
-iteration + golden numbers. `data/live_state_i7/` is the only
-serving-state directory that gets rebuilt.
+iteration + golden numbers. After promotion, update the `live_state_i7`
+manifest target and hash as part of the reviewed artifact change; until then,
+`scripts/artifacts.py verify live_state_i7` correctly reports a mismatch.
 
 **Legacy replay** (pre-I7 production family, frozen state through
 2026-04-16): pass `--venue-identity-mode legacy
@@ -1619,7 +1629,112 @@ stats and ELO, which drags their whole side toward the default-rated baseline
 and produces a confident, wrong probability. Names may be the canonical display
 name, Cricsheet's initials form ("WG Jacks"), the full name, or the 8-char ID.
 
-### Operation 8: Reproduce the I9 provisional-ELO experiment
+### Operation 8: Running the tests
+
+Pytest discovers both `tests/` and `scripts/tests/` through
+`pyproject.toml`. `needs_artifacts` and `slow` are registered markers; CI runs
+the artifact-free selection on every push and pull request
+([item 1 acceptance](remediation/item1_acceptance.md)).
+
+```bash
+uv run --no-sync pytest -q
+uv run --no-sync pytest -q --strict-markers -m "not needs_artifacts"
+```
+
+For artifact-free collection parity, capture the normal IDs, temporarily move
+the two artifact trees, collect the CI selection again, and restore via the
+trap even if collection fails:
+
+```bash
+before_ids="$(mktemp)"
+after_ids="$(mktemp)"
+uv run --no-sync pytest --collect-only -q -m "not needs_artifacts" >"$before_ids"
+(
+  mv models models.docs-pass-held
+  mv data data.docs-pass-held
+  trap 'mv models.docs-pass-held models; mv data.docs-pass-held data' EXIT
+  uv run --no-sync pytest --collect-only -q -m "not needs_artifacts" >"$after_ids"
+)
+diff -u "$before_ids" "$after_ids"
+```
+
+### Operation 9: Cost model and volume basis
+
+`run_sim_eval.py`, `reslice_eval_json.py`, `blend_report.py`,
+`predict_golden.py`, and `hundred_roi_eval.py` accept `--spread-bps`,
+`--fee-bps`, and `--fee-basis {winnings,stake}`. Reslice also accepts
+`--volume-basis {event,market}`. Summaries stamp `cost_model`, `price_basis`,
+and `volume_basis`; rejected prices and unavailable recomputation stamp
+`price_rejected` and `pnl_unrecomputable` ([item 2 acceptance](remediation/item2_acceptance.md)).
+
+The configured default scenarios are `(0, 0, winnings)`, `(100, 0,
+winnings)`, `(200, 0, winnings)`, `(100, 100, winnings)`, and `(100, 100,
+stake)`. Zero cost remains the decision safety check and is printed first;
+the other scenarios are diagnostics ([item 2 acceptance](remediation/item2_acceptance.md)).
+
+For new work, the input evaluation JSON must already contain the registered
+raw odds; passing a registered odds file to reslice changes volume membership,
+not stored prices. Inspect the five live interfaces before composing a run:
+
+```bash
+uv run --no-sync python scripts/sim_eval/run_sim_eval.py --help
+uv run --no-sync python scripts/sim_eval/reslice_eval_json.py --help
+uv run --no-sync python scripts/sim_eval/blend_report.py --help
+uv run --no-sync python scripts/predict_golden.py --help
+uv run --no-sync python scripts/hundred_roi_eval.py --help
+```
+
+### Operation 10: Artifacts of record
+
+Before any evaluation, verify `models/MANIFEST.yaml`. A role beats the
+loader's default; an explicit path beats the role. Live state uses the
+versioned-target and `BUILT` contract in Operation 6
+([item 5 acceptance](remediation/item5_acceptance.md)).
+
+```bash
+uv run --no-sync python scripts/artifacts.py verify
+uv run --no-sync python scripts/artifacts.py verify match_model_prod
+uv run --no-sync python scripts/artifacts.py path match_model_prod
+uv run --no-sync python scripts/artifacts.py rebuild match_model_prod --dry-run
+uv run --no-sync python scripts/artifacts.py pull --help
+```
+
+`pull` uses rsync and then verifies; it refuses to overwrite a matching local
+role unless `--force` is explicit. For a missing role, use
+`scripts/artifacts.py pull --from mac-mini <role>`. To add a role, add one manifest entry with
+`role`, repo-relative `path`, `kind`, `hash`, `producing_command`,
+`input_roles`, and `promoting_doc`, then add or update the manifest contract
+test and run `verify <role>`.
+
+### Operation 11: Claim gate
+
+Automated match-model claims take paired sliced JSONs. Betting-layer claims
+add one placements JSON per aligned seed. Sim/prop claims are manual records
+of their pre-committed gate script and detail JSON. Exact argument forms:
+
+- `claim_gate.py --kind match_model --candidate ... --baseline ... --odds-role ... --out ...`
+- `claim_gate.py --kind betting_layer --candidate ... --baseline ... --metrics-json ... --odds-role ... --out ...`
+- `claim_gate.py record-manual --kind sim_prop --idea ... --gate-script ... --detail-json ... --verdict ... --note ... --out ...`
+
+The output is the gate JSON; do not edit it. Inspect the implemented interfaces
+with commands that are safe on every checkout:
+
+```bash
+uv run --no-sync python scripts/sim_eval/claim_gate.py --help
+uv run --no-sync python scripts/sim_eval/claim_gate.py record-manual --help
+uv run --no-sync python research/log_verdict.py --help
+```
+
+Logging requires `research/log_verdict.py verdict ... --gate-json <gate.json>`.
+`reassess` appends a dated reassessment and revision row without rewriting the
+original; `queue-confirm` creates the confirmation only after PROMISING is
+logged; `review-done` resets the standing-review counter and advances its due
+date. Use each subcommand's `--help` before writing. Refusals mean an evidence
+hash, registered-odds, cluster, status-transition, or append-only contract did
+not pass; fix the source condition, never the gate JSON
+([item 4 acceptance](remediation/item4_acceptance.md)).
+
+### Operation 12: Reproduce the I9 provisional-ELO experiment
 
 I9 is a closed, failed experiment—not a live option. Its isolated control and
 candidate can be reproduced with:
@@ -1644,7 +1759,7 @@ guardrail regressed. Full commands and metrics are in
 `docs/I9_PROVISIONAL_ELO_EXPERIMENT.md` and
 `reports/i9_provisional_elo_checkpoint_20260730.md`.
 
-### Operation 9: Refresh the women's tracks (w1 T20I / w2 leagues)
+### Operation 13: Refresh the women's tracks (w1 T20I / w2 leagues)
 
 Two isolated women's families. Neither is production and neither carries a
 betting claim — see `docs/I12_WOMENS_TRACK_SCOPING.md` for the verdicts.

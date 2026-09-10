@@ -131,6 +131,13 @@ newer same-simulator paired results and liquidity slices.
 All scripts run via `uv run` to pick up the pinned environment.
 
 ```bash
+# Verify artifacts before evaluation; fail on MISSING or MISMATCH.
+uv run --no-sync python scripts/artifacts.py verify
+
+# Both configured suites. CI runs the artifact-free selection on every push.
+uv run --no-sync pytest -q
+uv run --no-sync pytest -q -m "not needs_artifacts"
+
 # One-command run: cache → parquet → train → eval.
 # Each step is skipped if its artifact is already current.
 uv run python scripts/run_experiment.py \

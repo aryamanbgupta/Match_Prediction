@@ -7,7 +7,8 @@ Monte Carlo, evaluate vs market odds (Polymarket primary, bookmaker legacy).
 **Active models** (two production models with complementary roles):
 
 1. **Match-level direct (winner-market predictor)** — XGBoost binary classifier
-   on 49 match-level features (M1 baseline + 3 venue outcome-dist).
+   on 48 match-level features: 46 numeric + 2 encoded. The previous 49 was a
+   documentation error ([docs-pass acceptance G1](docs/remediation/docs_pass_acceptance.md)).
    Trained on `team1_wins`. **Production variant of record (post I17/I18/I19
    promotion, 2026-07-31): `models/xgb_match_i7_swap_production/`** —
    the M7 config plus train-time team-swap symmetry augmentation
@@ -348,6 +349,13 @@ including squashed sync-to-main commits.
 ## Quick start
 
 ```bash
+# Preflight before any evaluation: verify every artifact of record.
+uv run --no-sync python scripts/artifacts.py verify
+
+# Both pytest suites are configured in pyproject.toml; CI runs this on every push.
+uv run --no-sync pytest -q
+uv run --no-sync pytest -q --strict-markers -m "not needs_artifacts"
+
 # === Match-level direct model (active winner-market predictor) ===
 # Materialize one-row-per-match parquet, train, predict on test:
 uv run python scripts/materialize_match_features.py \
@@ -364,26 +372,28 @@ uv run python scripts/sim_eval/blend_eval_json.py \
     --w 0.0 0.2 0.5 0.8 1.0 \
     --out-dir eval_out/blend_a2_clean
 for w in w0p00 w0p20 w0p50 w0p80 w1p00; do
-  uv run python scripts/sim_eval/reslice_eval_json.py \
+  uv run --no-sync python scripts/sim_eval/reslice_eval_json.py \
     --in eval_out/blend_a2_clean/hier_all_20260425_165622_${w}.json \
     --odds betting_odds_polymarket_v2.json \
     --cluster-source-dir data/polymarket_test_v2 \
+    --spread-bps 0 --fee-bps 0 --fee-basis winnings \
     --out-dir eval_out/blend_a2_clean/sliced
 done
-uv run python scripts/sim_eval/blend_report.py \
+uv run --no-sync python scripts/sim_eval/blend_report.py \
     --sliced-dir eval_out/blend_a2_clean/sliced \
     --direct-json models/xgb_match_v2_clean/test_predictions.json \
+    --spread-bps 0 --fee-bps 0 --fee-basis winnings \
     --out reports/blend_a2_clean_report.md
 
 # === Predict an upcoming fixture ===
 # Hand-write fixtures/<match>.json (see fixtures/_template.json), then:
 uv run python scripts/predict_fixture.py --fixture fixtures/<match>.json
 # Defaults (post 2026-07-31 promotion): models/xgb_match_i7_swap_production,
-# i7 identity mode, state in data/live_state_i7/ (cache + tracker snapshot,
-# currently through 2026-07-13). Add --rebuild-snapshot once after any cache
-# refresh. State >14 days behind the fixture still fails loudly — refresh
-# cricsheet + rebuild data/live_state_i7 before a live fixture (OPERATIONS
-# § "Operation 6"). Legacy replay of the pre-I7 production family needs
+# i7 identity mode, state at the data/live_state_i7 symlink (cache + tracker
+# snapshot). Its manifest-recorded target is a sealed, versioned build dir;
+# BUILT dirs are immutable. Build a new target, move the symlink, then use
+# --rebuild-snapshot only while creating that unsealed target. The age guard
+# still fails loudly — see OPERATIONS § "Operation 6". Legacy replay needs
 # explicit --venue-identity-mode legacy + the old model/state paths.
 # A7 is RETIRED (2026-08-07 v2-price re-derivation; see
 # reports/a7_m8_rederivation_v2_20260807.md): predict_fixture suppresses the
@@ -417,9 +427,10 @@ uv run python scripts/sim_eval/blend_eval_json.py \
     --sim-json data/golden/golden_sim_envelope.json \
     --direct-json models/xgb_match_v2_clean/golden_predictions.json \
     --w 0.0 --out-dir data/golden/blended_clean_retrained
-uv run python scripts/sim_eval/reslice_eval_json.py \
+uv run --no-sync python scripts/sim_eval/reslice_eval_json.py \
     --in data/golden/blended_clean_retrained/golden_sim_envelope_w0p00.json \
     --odds data/golden/betting_odds_golden_v2.json \
+    --spread-bps 0 --fee-bps 0 --fee-basis winnings \
     --out-dir data/golden/sliced_clean_retrained
 # 5. Per-match audit:
 uv run python scripts/build_ipl_dashboard.py
@@ -466,6 +477,10 @@ Step-by-step v7 sim equivalent: `build_stats_cache.py` → `materialize_features
 | What features exist? Implementation status? | [docs/feature_roadmap.md](docs/feature_roadmap.md) |
 | What's the current research log / past experiment results? | [IMPROVEMENTS.md](IMPROVEMENTS.md) |
 | What's actively being worked on? Eval gates? | [TODO.md](TODO.md) |
+| What is being remediated, and in what order? | [docs/REMEDIATION_PLAN_2026-09-09.md](docs/REMEDIATION_PLAN_2026-09-09.md) |
+| What is the sealed daily-prediction protocol? | [docs/DAILY_PREDICTION_PROTOCOL.md](docs/DAILY_PREDICTION_PROTOCOL.md) |
+| Which artifacts and odds evidence are authoritative? | [models/MANIFEST.yaml](models/MANIFEST.yaml) + [docs/registered_odds.json](docs/registered_odds.json) |
+| What are the remediation acceptance checks and landed results? | [docs/remediation/](docs/remediation/) |
 | How is the sealed forward set built and protected? | [docs/FORWARD_HOLDOUT.md](docs/FORWARD_HOLDOUT.md) |
 | What exactly changed in deterministic same-day state? | [docs/I6_SAME_DAY_ORDERING_AUDIT.md](docs/I6_SAME_DAY_ORDERING_AUDIT.md) |
 | What did the system look like historically? | [docs/archive/](docs/archive/) |
@@ -510,6 +525,18 @@ Step-by-step v7 sim equivalent: `build_stats_cache.py` → `materialize_features
    `tournament_time_block_v1`: 10,000 seed-42 whole-event resamples, explicit
    bet placement, and `<10 blocks = descriptive`. Historical i.i.d. CI-clean
    claims are superseded.
+8. **Artifacts are resolved by manifest role.** `models/MANIFEST.yaml` names
+   every artifact of record; `scripts/artifacts.py` verifies its recorded hash.
+   `data/live_state_i7` points to one versioned build directory, and a `BUILT`
+   marker makes that target immutable ([item 5 acceptance](docs/remediation/item5_acceptance.md)).
+9. **Verdicts are written only through the gate.** `research/log_verdict.py`
+   requires the unchanged gate JSON. The current `program.md` rule is:
+   > - **LANDED** — a non-provisional match-model claim whose paired ΔLL interval excludes zero favourably and whose paired Δprofit interval does not exclude zero unfavourably. A betting-layer claim requires the ΔROI interval to exclude zero favourably. A manual sim/prop LANDED is reviewed by the standing review rather than inferred by this automated rule.
+   Provisional evidence can never be LANDED ([item 4 acceptance](docs/remediation/item4_acceptance.md)).
+10. **Reslicing never makes stored prices evidence.**
+    `scripts/sim_eval/reslice_eval_json.py` does not reprice stored records.
+    Market comparisons use roles in `docs/registered_odds.json`; the gate
+    recomputes prices, placement, and profit ([item 4 acceptance](docs/remediation/item4_acceptance.md)).
 
 ---
 

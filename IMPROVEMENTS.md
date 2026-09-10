@@ -1,6 +1,30 @@
 # CricML Improvements & Research Findings
 
-**Last Updated**: March 2025
+**Last Updated**: 2026-09-10
+
+---
+
+## Remediation plan progress (2026-09-10)
+
+- **Item 1 — CI/test hygiene:** both suites now share the pytest config and
+  registered markers; CI runs the artifact-free selection on every push and
+  pull request. The first green CI run and the later zero-failure local suite
+  are recorded in [item 1 acceptance](docs/remediation/item1_acceptance.md)
+  and [item 5 acceptance](docs/remediation/item5_acceptance.md).
+- **Item 2 — betting math:** six arithmetic call sites now route through
+  `scripts/sim_eval/market_math.py`; cost and volume bases are stamped, and
+  the production re-baseline found zero zero-cost numeric or per-record profit
+  differences. See [item 2 acceptance](docs/remediation/item2_acceptance.md).
+- **Item 4 — verdict gate:** the reviewed gate reconstructs prices, placement,
+  settlement, and clusters from registered evidence; gate payloads are
+  hash-checked and replayed before append-only logging. Sim/prop evidence uses
+  the manual record path. Steps 1–4 and review closure are recorded in
+  [item 4 acceptance](docs/remediation/item4_acceptance.md).
+- **Item 5 — artifact control:** `models/MANIFEST.yaml` and
+  `scripts/artifacts.py` now own role resolution, hashes, pulls, rebuild order,
+  and immutable versioned live state; all registered roles verify on this
+  checkout after the recorded corpus swap. See
+  [item 5 acceptance](docs/remediation/item5_acceptance.md).
 
 ---
 

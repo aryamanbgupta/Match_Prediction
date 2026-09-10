@@ -14,6 +14,27 @@
 > **A7 and M8's edge threshold are retracted**. See
 > `reports/market_benchmark_toss_defect_20260805.md`.
 
+> **Remediation status (2026-09-10).** The ordered scope is
+> [the remediation plan](docs/REMEDIATION_PLAN_2026-09-09.md); predeclared
+> checks and exact results live under [docs/remediation/](docs/remediation/).
+
+| Item | State | Commit(s) / evidence |
+|---:|---|---|
+| 1 | DONE | `ae1588c`, `c2847a0`, `4b48810`; [acceptance](docs/remediation/item1_acceptance.md) |
+| 2 | DONE | `0aa69ac`, `9097b8b`, `014328a`, `3f2567b`; [acceptance](docs/remediation/item2_acceptance.md) |
+| 3 | IN PROGRESS — protocol step complete | `0a32082`; [acceptance](docs/remediation/item3_acceptance.md) |
+| 4 | DONE through steps 1–4; later steps wait on item 6 | `bb1cf4e`, `2e25db5`; [acceptance](docs/remediation/item4_acceptance.md) |
+| 5 | DONE through steps 1–4 | `c31c43e`, `a2e8413`; [acceptance](docs/remediation/item5_acceptance.md) |
+| 6 | IN PROGRESS — acceptance committed, harness work active | `8c8c7bb`; [acceptance](docs/remediation/item6_acceptance.md) |
+| 7 | NOT STARTED | [plan §7](docs/REMEDIATION_PLAN_2026-09-09.md#7-simulator-feature-builder-consolidation) |
+| 8 | IN PROGRESS — rolling docs pass | `35dc740` acceptance baseline; [checks](docs/remediation/docs_pass_acceptance.md) |
+
+> **Corpus swap:** with approval, the fresh Cricsheet export was kept aside
+> and `data/t20s_json` was replaced by the frozen corpus of record from the
+> Mac mini; the first zero-failure suite on this checkout is recorded in
+> [item 5 acceptance](docs/remediation/item5_acceptance.md) and commit
+> `a2e8413`.
+
 > **Current evaluation note (I3, 2026-07-23):** match-winner headline
 > intervals now use 10,000 seed-42 whole-competition resamples, not
 > per-match i.i.d. bootstrap. The old positive ROI lower bounds in this
@@ -33,7 +54,7 @@ consolidation. IDs below reference that catalog.
 **Validation protocol (every fix):**
 1. Regression test first (red → green) wherever the bug is testable; tests
    live next to the existing suites (`scripts/tests/`, `tests/`).
-2. Full `uv run pytest scripts/tests/ tests/` green before and after each
+2. Full `uv run --no-sync pytest -q` green before and after each
    phase (Phase 0 exists to make "green" meaningful again).
 3. Behavior-affecting sim/eval fixes get a fixed-seed before/after A/B on a
    small match sample; deltas recorded in IMPROVEMENTS.md. Numbers moving
@@ -790,7 +811,11 @@ Full reference: `reports/m6_conditions_captain_eval.md`.
 
 **Discipline upgrade**: dual-condition correlation check now required (redundancy AND target-floor). Memory file `feedback_correlation_check_before_features.md` updated.
 
-**5 of 5 named v3 feature phases now DROPPED**. The match-level model at M2 v.o. (49 features) is at a local LL optimum given the pre-match signal available. Feature-engineering frontier exhausted; M7 should be ARCHITECTURE work.
+**5 of 5 named v3 feature phases now DROPPED**. The match-level model at M2
+v.o. (48 features; the prior 49 was a documentation error per
+[docs-pass acceptance G1](docs/remediation/docs_pass_acceptance.md)) is at a
+local LL optimum given the pre-match signal available. Feature-engineering
+frontier exhausted; M7 should be ARCHITECTURE work.
 
 ### M7 — Architecture sweep ✅ LANDED 2026-05-10
 Full reference: `reports/m7_architecture_eval.md`.

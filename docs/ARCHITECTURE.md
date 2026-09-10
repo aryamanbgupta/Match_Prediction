@@ -151,6 +151,8 @@ quick "scope sniff."
 | `run_sim_eval_i8.py` | — | Fail-closed I8 evaluation entry point. Requires schema v5 and the exact I8 model sidecars; never falls back to legacy state or a dummy model. |
 | `prop_backtest.py` | ~1100 | Prop-bet backtest harness (2026-05-12). Simulates each test match, aggregates ~25 prop families (top batter/bowler, innings/PP totals, team top-scorer, sixes/fours counts, first-wicket runs, bowler wickets/economy, tie), scores Brier-skill + MAE vs cricsheet actuals with bootstrap CIs. |
 | `eval_statistics.py` | ~280 | I3 match-winner statistics contract: explicit flat-bet decisions, Cricsheet event time blocks with team-pair fallback, and deterministic whole-block LL/ROI bootstrap intervals. |
+| `market_math.py` | — | Numeric betting primitives and `CostModel`; placement policies remain in their callers. |
+| `claim_gate.py` | — | Rebuilds decision evidence from registered odds and cluster sources, then emits the replayable verdict JSON. |
 | `render_prop_per_match.py` / `compare_selector_eval.py` / `check_bowler_coverage.py` | — | Prop drilldown renderer (per-match markdown + index), empirical-vs-random selector A/B with gate verdicts, and bowler-coverage (G5) diagnostic. |
 
 ### 2.6 Experiment infrastructure
@@ -158,6 +160,7 @@ quick "scope sniff."
 | File | Role |
 |---|---|
 | `scripts/run_experiment.py` | YAML-driven pipeline runner. Smart-cache acceptance validates the config's required SQLite schema, exact source membership/order metadata, feature hash, split contract, gender filter, and artifact freshness. Dispatches `build_stats_cache.py` / `materialize_features.py` independently. |
+| `scripts/artifacts.py` | Resolves manifest roles and verifies, pulls, or topologically rebuilds artifacts of record from `models/MANIFEST.yaml`. |
 | `scripts/experiment_tracker.py` | Per-experiment directory under `experiments/results/<name>_<ts>_<git>/` with `config.yaml`, `metadata.json`, `metrics.json`, `console_output.log`. |
 | `scripts/compare_experiments.py` | List / filter / show / side-by-side compare experiments. |
 | `experiments/configs/*.yaml` | Declarative experiment definitions. Active: `xgb_v3_baseline`, `xgb_v6_outcome_dist`, `lstm_v1_baseline`, `transformer_v1_baseline`. Others kept for reproducibility of past experiments. |
@@ -678,7 +681,10 @@ frozen source artifact. See `I7_VENUE_IDENTITY_CONTRACT.md`.
 `match_evaluation_results_<model>_<timestamp>.json` written by
 `scripts/sim_eval/run_sim_eval.py`. Top-level `summary` block + per-match
 `matches[]` array; see `OverallEvaluationResults` and `MatchEvaluationResult`
-dataclasses in §4.6 for field definitions.
+dataclasses in §4.6 for field definitions. Current summaries identify
+`cost_model`, `price_basis`, and `volume_basis`; reslices also stamp
+`pnl_unrecomputable` and `price_rejected`, and block-bootstrap output carries
+`cluster_resolution` ([docs-pass acceptance G6](remediation/docs_pass_acceptance.md)).
 
 ### 5.6 Experiment artifacts
 
@@ -1017,7 +1023,7 @@ get clean cache hits; busy ICC days will partially invalidate.
   considers it.
 - **Real-time streaming**: out of scope. Eval on captured pre-match odds.
 
-### 6.15 Phase-aware bowler selection (2026-05-12)
+### Phase-aware bowler selection (2026-05-12)
 
 The sim originally picked each over's bowler uniformly at random from the
 available set (`RandomBowlerSelector`). For winner-market eval this barely
@@ -1045,6 +1051,22 @@ bowl is governed by the ball-level wicket model, not the selector. The
 continuous-prop MAE wins are significant and the team-fours over-count
 bias halved. Pass `RandomBowlerSelector()` to `T20Rules(...)` (or
 `--bowler-selector random` to `run_sim_eval.py`) to recover the baseline.
+
+### 6.15 One home per job
+
+`scripts/sim_eval/market_math.py` owns betting arithmetic; placement policy
+stays with each caller. `scripts/sim_eval/eval_statistics.py` owns the legacy
+zero-cost price boundary and shared evaluation policies. Verdict classification,
+registered-price reconstruction, and evidence replay live in
+`scripts/sim_eval/claim_gate.py` ([item 2](remediation/item2_acceptance.md), [item 4](remediation/item4_acceptance.md)).
+
+### 6.16 Evidence of record
+
+`docs/registered_odds.json` registers each admissible odds file, its hash, and
+its cluster source. `models/MANIFEST.yaml` registers model, state, frame, and
+evidence roles with their hashes and provenance. Stored `market_prob` and
+`realized_pnl` are never decision evidence: the claim gate verifies raw odds
+and recomputes price, placement, and settlement ([item 4 acceptance](remediation/item4_acceptance.md)).
 
 ---
 
