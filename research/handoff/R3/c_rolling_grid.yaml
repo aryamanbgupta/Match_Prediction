@@ -1,0 +1,27 @@
+name: ITEM6_C_ROLLING_GRID
+frame: match_frame_i7_v2
+trainer_args:
+  monotone: true
+  swap_augment: true
+grid:
+  learning_rate: [0.03, 0.05, 0.08]
+  colsample_bytree: [0.7, 0.9]
+  max_depth: [3, 4]
+folds:
+  - train_until: "2022-12-31"
+    select_from: "2023-01-01"
+    select_until: "2023-12-31"
+  - train_until: "2023-12-31"
+    select_from: "2024-01-01"
+    select_until: "2024-12-31"
+  - train_until: "2024-12-31"
+    select_from: "2025-01-01"
+    select_until: "2025-06-30"
+reference:
+  learning_rate: 0.05
+  colsample_bytree: 0.9
+  max_depth: 4
+seed: 29
+expected_minutes_per_fold: 18
+ceiling_minutes: 240
+out_dir: experiments/results/item6_c_sweep

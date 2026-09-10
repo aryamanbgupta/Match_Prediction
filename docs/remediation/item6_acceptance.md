@@ -150,3 +150,18 @@ baseline arm reproduces the production headline exactly, confirming the
 drop recovered the served feature set (HD2). HD1–HD4 met; frame built by
 joining the 12 E4 columns onto the v2 frame (row counts, ids and existing
 columns asserted identical); evidence in `research/handoff/R4/`.
+
+### Candidate C result (2026-09-10): DESCRIPTIVE, M7 retained
+
+Idea R3. Twelve configs × three rolling folds; fold-mean select LL
+0.6344–0.6377; M7 10th at 0.6361; argmin 0.6344 beats it by 0.0017, under the
+0.002 tie rule (HC3), so no `c_confirm.yaml` was emitted and no gate run
+happened (HC4). Recorded as a closed descriptive IDEAS entry with the table
+in `research/handoff/R3/` (HC5); no results.tsv verdict row because the
+sweep is a selection procedure, not a paired claim. HC1–HC5 met.
+
+**Item 6 candidates A–D complete.** Three gate verdicts (R1, R2, R4: all
+FAILED) and one descriptive selection (R3: M7 retained). No candidate
+displaces the production model; the standing review at
+`review_due: 2026-12-09` (or after ten verdicts) is where R2's consistent
+sub-floor Platt effect should be reconsidered.

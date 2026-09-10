@@ -2839,3 +2839,18 @@ the validation rule, improve paired ≥$50k log loss over the production
 match_model, five aligned seeds, zero-cost decision, registered iteration
 odds v2. **Budget:** ~10 fits.
 **Result:** FAILED 2026-09-10 (gate). Five aligned seeds, non-provisional. ≥$50k paired ΔLL +0.0003 [−0.0057, +0.0073]: null; seeds split (29 +0.0043, 7 +0.0017, 13 +0.0023, 42 −0.0030, 101 −0.0038). Δprofit +0.005 [−0.098, +0.067] is noise. The baseline arm (60 → 48 features via drop_features elo_max,elo_spread,elo_top2) reproduces the production seed-29 headline exactly (LL 0.6249, ROI +3.38%), so the comparison is against the served feature set. Reading: quantile pooling adds nothing the mean-pooled and ELO features do not already carry on this frame; consistent with the June discard and with M3–M6's finding that feature work is exhausted at this signal level. Artifacts: experiments/results/item6_d_e4/{gate,harness}.json; evidence in research/handoff/R4/.
+
+## R3 [DONE 2026-09-10 — DESCRIPTIVE, M7 retained] Item 6 candidate C: rolling-origin hyperparameter re-selection
+*(remediation plan §6 step 5; a selection sweep, not a paired claim, so no gate verdict and no results.tsv row)*
+**Setup:** 12 configs (learning rate {0.03, 0.05, 0.08} × colsample {0.7, 0.9}
+× depth {3, 4}, monotone + swap, seed 29) × the plan's three rolling folds
+(train ≤2022 / select 2023; ≤2023 / 2024; ≤2024 / 2025-H1), encoders refit
+per fold, early stopping on the select rows. Statistic: fold-mean select-set
+LL; ties within 0.002 go to the reference M7.
+**Result:** fold-mean LL spans 0.6344–0.6377 across the grid. M7 (0.05 / 0.9
+/ 4) ranks 10th of 12 at 0.6361; the argmin (0.05 / 0.7 / 3) is 0.6344,
+better by 0.0017 — inside the tie rule and inside the 0.007 seed floor. **M7
+retained; no confirmation run.** Reading: the M7 sweep's conclusion that the
+config sits on a flat optimum holds under rolling-origin selection; the
+0.0034 grid spread is smaller than one seed's noise. Table and config in
+`research/handoff/R3/` (`sweep.md`, `sweep.json`, `c_rolling_grid.yaml`).
