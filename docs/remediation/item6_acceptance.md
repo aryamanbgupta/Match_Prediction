@@ -76,3 +76,19 @@ passed, 0 failed. Candidates A–D follow with their own check blocks.
 | HA2 | Estimand | gate runs under the 1-seed rule, so the best verdict is PROMISING; the 0.007 point floor applies; per-seed diagnostics reported only |
 | HA3 | Record | harness.json + gate.json under `experiments/results/`; IDEAS.md entry and results.tsv row written only through `log_verdict --gate-json` with the reassess/queue-confirm semantics; the verdict is whatever the gate says |
 | HA4 | Resources | run on this laptop (frame 8.6 MB in memory); seeds sequential; no mini load |
+
+### HA0 result (2026-09-10): harness reproduces the I17 swap transfer
+
+`swap_smoke.yaml` on this laptop (base vs swap, M7 config, seeds 29/7/13/42/101,
+zero-cost decision, registered iteration odds v2). Gate: **LANDED**, five
+non-provisional seeds, ≥$50k paired ΔLL **−0.0135** [−0.0256, −0.0010],
+Δprofit +0.041 [−0.0006, +0.083], 18 tournament blocks, 18 profit blocks,
+zero cluster fallbacks, n=167 with 5 dropped symmetrically; per-seed rows in
+`experiments/results/item6_swap_smoke/harness.json`. I17 recorded −0.0144 on
+the same comparison; the difference is inside the 0.007 seed floor. The run is
+a harness validation, not an idea: no IDEAS.md or results.tsv entry.
+
+Harness fix found by the run: the direct-only envelope refused a test frame
+with more matches than the registered odds cover (798 vs 255). It now
+evaluates the covered set and stamps `coverage`, matching the blend/reslice
+chain; the id-set assertion compares against the covered set.

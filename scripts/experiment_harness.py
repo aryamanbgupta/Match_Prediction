@@ -538,9 +538,12 @@ def _direct_envelope(prediction_rows: dict[str, dict[str, Any]], odds_path: Path
             "market_prob": market_prob, "market_odds": raw_odds,
             "edge": {team: .5 - market_prob[team] for team in teams},
         })
-    if len(matches) != len(prediction_rows):
-        raise ValueError("registered odds do not cover every test prediction")
-    return {"summary": {"envelope_for": "direct-only"}, "matches": matches}
+    if not matches:
+        raise ValueError("registered odds cover none of the test predictions")
+    # The evaluated set is the predictions that have a registered market, as
+    # in the blend/reslice chain; coverage is recorded, never silently 100%.
+    coverage = {"n_predictions": len(prediction_rows), "n_with_registered_odds": len(matches)}
+    return {"summary": {"envelope_for": "direct-only", "coverage": coverage}, "matches": matches}
 
 
 def _evaluate(config: HarnessConfig, model_dir: Path, arm: str, seed: int | str,
@@ -549,10 +552,12 @@ def _evaluate(config: HarnessConfig, model_dir: Path, arm: str, seed: int | str,
     _, rows = _prediction_parts(model_dir / "test_predictions.json")
     envelope = _direct_envelope(rows, odds_path)
     blended = blend_eval_json.blend(envelope, rows, 0.0)
-    prediction_ids = set(map(str, rows))
+    covered_ids = {str(row["match_id"]) for row in envelope["matches"]}
     blended_ids = {str(row["match_id"]) for row in blended["matches"]}
-    if blended_ids != prediction_ids:
-        raise AssertionError("blended match-id set differs from prediction set")
+    if blended_ids != covered_ids:
+        raise AssertionError("blended match-id set differs from the registered-odds-covered prediction set")
+    if not covered_ids <= set(map(str, rows)):
+        raise AssertionError("envelope contains a match without a prediction")
     stamp_hash = config_hash or config.config_hash
     blended.setdefault("summary", {}).update({
         "arm": arm, "model_seed": seed, "config_hash": stamp_hash,
