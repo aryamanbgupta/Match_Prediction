@@ -336,6 +336,15 @@ The `.venv` shipped with the repo is the source of truth.
 
 ---
 
+## Git commit convention
+
+Do not add `Co-Authored-By: Claude ...` or `Claude-Session: ...` trailers to
+commit messages in this repo. Write commits as authored solely by the user —
+summary + body, no AI-attribution footer. This applies to every commit,
+including squashed sync-to-main commits.
+
+---
+
 ## Quick start
 
 ```bash
