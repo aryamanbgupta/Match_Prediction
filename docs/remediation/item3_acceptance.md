@@ -102,3 +102,14 @@ Before going live the two context dirs the production state was built
 from (sealed forward context and `live_context_20260801`) must be seeded
 into `daily/context/` under their dates, or no daily build can ever be
 non-regressive.
+
+C24 met on the second dry day (2026-09-10): the 2026-04-16 build was sealed
+and refused ("as_of 2026-04-16 < current 2026-07-30"); the served state is
+unchanged; fetch → lineups → predict (expired fixtures skipped, counted) →
+settle → score all ran offline and produced their artifacts under `daily/`.
+The two context directories the production state was built from were then
+seeded into `daily/context/2026-07-13/` (sealed forward context, 137
+matches) and `daily/context/2026-07-30/` (`live_context_20260801`), disjoint
+from the base pool and from each other, so the first live refresh starts
+non-regressive. Remaining: C22/C23 installation of the launchd agent (user
+go-ahead required: it starts live collection) and C25's ten-day run.
