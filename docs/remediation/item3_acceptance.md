@@ -33,3 +33,27 @@ Checks for steps 2–8 will be appended before each is started.
 | C18 | `scripts/daily/run_daily.sh` | runs a→f idempotently for the `t60` schedule; a dry run on the mini corpus + a recorded Gamma response produces a fixtures file, a prediction line and a scored (descriptive) output without network |
 | C19 | Protocol conformance | every field name matches `docs/DAILY_PREDICTION_PROTOCOL.md`; `cohort_id` is `daily_v1`; the doc precedes every `daily/` file in git history |
 | C20 | Suite 0 failures; frozen evidence untouched; no edits to program.md/research/ |
+
+## Fix pass (2026-09-10)
+
+| Finding | Fixed contract | Regression evidence |
+|---|---|---|
+| K1 + K2 | Dated contexts contain only IDs absent from the base and earlier contexts; every build receives base plus all contexts in date order, including an empty current context. | `test_refresh_accumulates_contexts_filters_duplicates_and_promotes` |
+| K3 | Refresh rejects context/state destinations inside the base corpus, a state parent other than the base's `data/` parent, and destinations below a `BUILT` marker before mutation. | `test_refresh_path_guards_run_before_mutation` |
+| K4 | Fixture captures are deduped per `fixture_id`; revision allocation observes existing and same-call allocations; unchanged outcomes no-op. | `test_repeated_fixture_captures_allocate_only_one_revision_one` |
+| K5 | Settlement consumes all `daily/fixtures/*.jsonl`; the driver supplies every dated context as an outcome source. | `test_day_one_fixture_settles_when_result_arrives_on_day_three` |
+| K6 | Prediction append locks the JSONL exclusively, reads identities while locked, stamps and checks `attempt_ts` at the write boundary, writes, flushes and `fsync`s. | `test_concurrent_identical_appends_are_serialized`; `test_append_refuses_at_or_after_start` |
+| K7 | `records_from_gamma` emits no timestamp; `append_fixtures` owns `quote_ts`, rejects caller timestamps, and stamps null for a null quote. | `test_append_owns_quote_timestamp_and_null_quote_has_null_timestamp` |
+| K8 | Settlement maxima are determined before conflicts are checked, so superseded lower-revision conflicts are ignored regardless of input order. | `test_settlement_conflicts_only_apply_to_highest_revision_order_independent` |
+| K9 | The structural H2H classifier has one repository home in `scripts/sim_eval/market_selection.py`; daily fixture selection imports it and the toss conflict remains fail-closed. The separately operated strict extractor is not present in this repository checkout. | `test_recorded_gamma_selects_moneyline_and_rejects_toss`; `test_moneyline_identity_conflict_fails_closed` |
+| K10 | The offline test executes `run_daily.sh`; Gamma fetch is recorded and expensive refresh/model work is stubbed while real daily writers, settlement and scoring run. It asserts fixtures, one prediction, one settlement, and a descriptive score with protocol fields. | `test_daily_driver_executes_offline_end_to_end` |
+
+## Step 8 (scheduler on the Mac mini; written before implementation)
+
+| # | Check | Pass condition |
+|---|---|---|
+| C21 | Branch on the mini | `embeddings-ladder` checked out at the commit that contains steps 2–7; `artifacts.py verify` OK there (live state resolved through the symlink; the mini's current flat `data/live_state_i7/` is migrated the same way as here, with its own `BUILT` dir) |
+| C22 | Plist | `launchd` agent runs `scripts/daily/run_daily.sh` at fixed UTC times covering T−60 for the day's fixtures (a single daily fetch at 00:30 UTC plus per-fixture `t60` attempts scheduled from `scheduled_start`, or a fixed 30-minute cadence if per-fixture scheduling is out of scope; the choice is recorded); logs to `daily/logs/`; never runs the `toss` kind |
+| C23 | Resource limits | `OMP_NUM_THREADS=2`; refresh runs once a day; no simulator eval; disk check before the cricsheet fetch (refuse under 5 GB free) |
+| C24 | Dry day | one full run on the mini in dry mode (recorded Gamma response) before the first live day; outputs under `daily/` reviewed |
+| C25 | Ten-day acceptance | ten consecutive days of `t60` lines with no manual edits (`git log -- daily/` shows only the job's commits, if `daily/` is committed; otherwise file mtimes and the append-only structure) |
