@@ -17,8 +17,9 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
 from parsing_v2 import (
     _classify_phase_pre_ball,
@@ -183,15 +184,17 @@ def test_inn_agg_phase_conservation():
 
 
 # ─── 5. SQLite backend get_phase_outcome_dist ─────────────────────────────
+@pytest.mark.needs_artifacts
+@pytest.mark.skipif(
+    not (PROJECT_ROOT / "models" / "player_stats_cache_v3.sqlite").exists(),
+    reason="player stats SQLite cache not present on this checkout",
+)
 def test_sqlite_phase_getter_pre_phase3_fallback():
     """On a pre-Phase-3 cache (no prior_pp_p* / prior_mid_p* / prior_death_p*
     in _meta), every phase falls back to the global prior π. The getter
     still returns 6 keys with sane (sum-to-1) values."""
     from stats_sqlite_backend import _SQLiteBackend
     sqlite_path = PROJECT_ROOT / "models" / "player_stats_cache_v3.sqlite"
-    if not sqlite_path.exists():
-        print(f"[SKIP] {sqlite_path} not present")
-        return
     backend = _SQLiteBackend(str(sqlite_path))
     backend._ensure_conn()
     for bb in (0, 50, 100):
@@ -208,14 +211,16 @@ def test_sim_outcome_dist_zero_includes_phase():
     assert len(phase_keys) == 6, f"expected 6 phase keys, got {phase_keys}"
 
 
+@pytest.mark.needs_artifacts
+@pytest.mark.skipif(
+    not (PROJECT_ROOT / "models" / "player_stats_cache_v3.sqlite").exists(),
+    reason="player stats SQLite cache not present on this checkout",
+)
 def test_fill_outcome_dists_threads_balls_bowled():
     from sim_v1_2 import _fill_outcome_dists
     from stats_sqlite_backend import _SQLiteBackend
 
     sqlite_path = PROJECT_ROOT / "models" / "player_stats_cache_v3.sqlite"
-    if not sqlite_path.exists():
-        print(f"[SKIP] {sqlite_path} not present")
-        return
     backend = _SQLiteBackend(str(sqlite_path))
     backend._ensure_conn()
 
@@ -229,14 +234,16 @@ def test_fill_outcome_dists_threads_balls_bowled():
     assert abs(s - 1.0) < 1e-6
 
 
+@pytest.mark.needs_artifacts
+@pytest.mark.skipif(
+    not (PROJECT_ROOT / "models" / "player_stats_cache_v3.sqlite").exists(),
+    reason="player stats SQLite cache not present on this checkout",
+)
 def test_fill_outcome_dists_zero_when_balls_bowled_none():
     from sim_v1_2 import _fill_outcome_dists
     from stats_sqlite_backend import _SQLiteBackend
 
     sqlite_path = PROJECT_ROOT / "models" / "player_stats_cache_v3.sqlite"
-    if not sqlite_path.exists():
-        print(f"[SKIP] {sqlite_path} not present")
-        return
     backend = _SQLiteBackend(str(sqlite_path))
     backend._ensure_conn()
 

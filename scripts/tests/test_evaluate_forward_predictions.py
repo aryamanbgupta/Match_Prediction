@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(ROOT / "scripts"))
 
 import evaluate_forward_predictions as evaluator_module  # noqa: E402
 from evaluate_forward_predictions import (  # noqa: E402

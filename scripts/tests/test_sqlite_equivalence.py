@@ -29,8 +29,9 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / 'scripts'))
 
 from stats_provider import StatsProvider  # noqa: E402
 from stats_sqlite_backend import _SQLiteBackend  # noqa: E402
@@ -151,6 +152,11 @@ def _stratified_cases(chunks: StatsProvider, sql: _SQLiteBackend):
     return cases
 
 
+@pytest.mark.needs_artifacts
+@pytest.mark.skipif(
+    not DB_PATH.is_file(),
+    reason="v3 SQLite/cache artifacts not present on this checkout",
+)
 def test_stratified():
     chunks, sql = _load_both()
     cases = _stratified_cases(chunks, sql)
@@ -175,6 +181,11 @@ def test_stratified():
 # ---------------------------------------------------------------------------
 # Random sample
 
+@pytest.mark.needs_artifacts
+@pytest.mark.skipif(
+    not DB_PATH.is_file(),
+    reason="v3 SQLite/cache artifacts not present on this checkout",
+)
 def test_random_sample():
     chunks, sql = _load_both()
 

@@ -9,9 +9,9 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
 
 from sim_eval.loaders import TestMatchLoader  # noqa: E402
+from cricsheet_fixtures import innings  # noqa: E402
 
 
 TEAM_A = "Team A"
@@ -19,27 +19,6 @@ TEAM_B = "Team B"
 ROSTER_A = [f"A{i}" for i in range(1, 12)]  # A1..A11
 ROSTER_B = [f"B{i}" for i in range(1, 12)]  # B1..B11
 REGISTRY = {name: f"id_{name}" for name in ROSTER_A + ROSTER_B}
-
-
-def _make_delivery(batter, non_striker, bowler, wickets=None):
-    d = {"batter": batter, "non_striker": non_striker, "bowler": bowler}
-    if wickets is not None:
-        d["wickets"] = wickets
-    return d
-
-
-def _make_over(deliveries):
-    return {"deliveries": deliveries}
-
-
-def _innings_from_pairs(batting_team, pairs_and_bowlers):
-    """Build an innings where `pairs_and_bowlers` is a list of
-    (batter, non_striker, bowler, wicket_out_batter_or_None)."""
-    deliveries = []
-    for batter, ns, bowler, wicket_on in pairs_and_bowlers:
-        wickets = [{"player_out": wicket_on}] if wicket_on else None
-        deliveries.append(_make_delivery(batter, ns, bowler, wickets))
-    return {"team": batting_team, "overs": [_make_over(deliveries)]}
 
 
 def _base_info(roster_a=None, roster_b=None):
@@ -74,8 +53,8 @@ def test_full_match_all_batted(loader):
     data = {
         "info": _base_info(),
         "innings": [
-            _innings_from_pairs(TEAM_A, pairs_a),
-            _innings_from_pairs(TEAM_B, pairs_b),
+            innings(TEAM_A, pairs_and_bowlers=pairs_a),
+            innings(TEAM_B, pairs_and_bowlers=pairs_b),
         ],
     }
     team_a = loader._extract_team_players(data, TEAM_A, REGISTRY, ROSTER_A)
@@ -96,8 +75,8 @@ def test_chase_won_early(loader):
     data = {
         "info": _base_info(),
         "innings": [
-            _innings_from_pairs(TEAM_B, pairs_b),
-            _innings_from_pairs(TEAM_A, pairs_a),
+            innings(TEAM_B, pairs_and_bowlers=pairs_b),
+            innings(TEAM_A, pairs_and_bowlers=pairs_a),
         ],
     }
     team_a = loader._extract_team_players(data, TEAM_A, REGISTRY, ROSTER_A)
@@ -117,8 +96,8 @@ def test_setting_team_five_down(loader):
     data = {
         "info": _base_info(),
         "innings": [
-            _innings_from_pairs(TEAM_A, pairs_a),
-            _innings_from_pairs(TEAM_B, pairs_b),
+            innings(TEAM_A, pairs_and_bowlers=pairs_a),
+            innings(TEAM_B, pairs_and_bowlers=pairs_b),
         ],
     }
     team_a = loader._extract_team_players(data, TEAM_A, REGISTRY, ROSTER_A)
@@ -134,7 +113,7 @@ def test_no_result_abandoned(loader):
     info["outcome"] = {"result": "no result"}
     data = {
         "info": info,
-        "innings": [_innings_from_pairs(TEAM_A, pairs_a)],
+        "innings": [innings(TEAM_A, pairs_and_bowlers=pairs_a)],
     }
     team_b = loader._extract_team_players(data, TEAM_B, REGISTRY, ROSTER_B)
     assert len(team_b) >= 11
@@ -148,7 +127,7 @@ def test_missing_info_players_falls_back_to_dummy(loader, capsys):
     pairs_a = [(ROSTER_A[0], ROSTER_A[1], ROSTER_B[0], None)]
     info = _base_info()
     info.pop("players")
-    data = {"info": info, "innings": [_innings_from_pairs(TEAM_A, pairs_a)]}
+    data = {"info": info, "innings": [innings(TEAM_A, pairs_and_bowlers=pairs_a)]}
     match_id, state = loader._create_match_state(data)
     captured = capsys.readouterr().out
     assert state is not None
@@ -168,8 +147,8 @@ def test_roster_size_ten_fallback(loader, capsys):
     data = {
         "info": info,
         "innings": [
-            _innings_from_pairs(TEAM_A, pairs_a),
-            _innings_from_pairs(TEAM_B, [(ROSTER_B[0], ROSTER_B[1], ROSTER_A[0], None)]),
+            innings(TEAM_A, pairs_and_bowlers=pairs_a),
+            innings(TEAM_B, pairs_and_bowlers=[(ROSTER_B[0], ROSTER_B[1], ROSTER_A[0], None)]),
         ],
     }
     match_id, state = loader._create_match_state(data)
@@ -188,7 +167,7 @@ def test_name_not_in_registry(loader):
     pairs_a = [(ROSTER_A[0], ROSTER_A[1], ROSTER_B[0], None)]
     data = {
         "info": _base_info(roster_a=roster),
-        "innings": [_innings_from_pairs(TEAM_A, pairs_a)],
+        "innings": [innings(TEAM_A, pairs_and_bowlers=pairs_a)],
     }
     team_a = loader._extract_team_players(data, TEAM_A, REGISTRY, roster)
     last = next(p for p in team_a if p.name == missing)
@@ -207,7 +186,7 @@ def test_appearance_order_preserved(loader):
     ]
     data = {
         "info": _base_info(),
-        "innings": [_innings_from_pairs(TEAM_A, pairs_a)],
+        "innings": [innings(TEAM_A, pairs_and_bowlers=pairs_a)],
     }
     team_a = loader._extract_team_players(data, TEAM_A, REGISTRY, ROSTER_A)
     assert _names(team_a)[:4] == ["A3", "A7", "A1", "A5"]
@@ -238,8 +217,8 @@ def test_twelve_man_squad_preserved(loader):
     data = {
         "info": info,
         "innings": [
-            _innings_from_pairs(TEAM_A, pairs_a),
-            _innings_from_pairs(TEAM_B, pairs_b),
+            innings(TEAM_A, pairs_and_bowlers=pairs_a),
+            innings(TEAM_B, pairs_and_bowlers=pairs_b),
         ],
     }
     team_a = loader._extract_team_players(data, TEAM_A, REGISTRY_12, ROSTER_A_12)
@@ -274,8 +253,8 @@ def test_impact_sub_in_deliveries_and_roster(loader):
     data = {
         "info": info,
         "innings": [
-            _innings_from_pairs(TEAM_A, pairs_a),
-            _innings_from_pairs(TEAM_B, pairs_b),
+            innings(TEAM_A, pairs_and_bowlers=pairs_a),
+            innings(TEAM_B, pairs_and_bowlers=pairs_b),
         ],
     }
     team_a = loader._extract_team_players(data, TEAM_A, REGISTRY_12, ROSTER_A_12)

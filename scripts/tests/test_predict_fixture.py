@@ -13,7 +13,6 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(ROOT / "scripts"))
 
 from predict_fixture import (  # noqa: E402
     _resolve_player_ids,
@@ -25,6 +24,7 @@ from predict_fixture import (  # noqa: E402
     read_sqlite_state_metadata,
     read_tracker_state_metadata,
 )
+from cricsheet_fixtures import match_json  # noqa: E402
 from identity_maps import venue_alias_contract  # noqa: E402
 
 
@@ -278,19 +278,6 @@ def test_a7_missing_volume_or_elo_suppresses_shadow_candidate():
     ]
 
 
-def _match_json(match_id: str, date: str, teams: list[str], winner: str,
-                venue: str = "Kennington Oval, London") -> str:
-    return json.dumps({
-        "info": {
-            "dates": [date],
-            "gender": "male",
-            "teams": teams,
-            "venue": venue,
-            "outcome": {"winner": winner},
-        }
-    })
-
-
 def test_auxiliary_pool_feeds_trackers_without_inflating_state_count(
     tmp_path: Path,
 ):
@@ -303,11 +290,14 @@ def test_auxiliary_pool_feeds_trackers_without_inflating_state_count(
     primary.mkdir()
     aux.mkdir()
     (primary / "1.json").write_text(
-        _match_json("1", "2026-06-01", ["Alpha", "Beta"], "Alpha"))
+        match_json("2026-06-01", teams=["Alpha", "Beta"], winner="Alpha",
+                   match_id="1", venue="Kennington Oval, London", serialize=True))
     (primary / "2.json").write_text(
-        _match_json("2", "2026-06-02", ["Alpha", "Beta"], "Beta"))
+        match_json("2026-06-02", teams=["Alpha", "Beta"], winner="Beta",
+                   match_id="2", venue="Kennington Oval, London", serialize=True))
     (aux / "9001.json").write_text(
-        _match_json("9001", "2026-07-20", ["Gamma", "Delta"], "Gamma"))
+        match_json("2026-07-20", teams=["Gamma", "Delta"], winner="Gamma",
+                   match_id="9001", venue="Kennington Oval, London", serialize=True))
 
     snapshot_path = tmp_path / "snapshot.pkl"
     snapshot = build_tracker_snapshot(primary, snapshot_path, aux)
@@ -331,9 +321,11 @@ def test_team_aliases_fold_renamed_franchise_history(tmp_path: Path):
     source = tmp_path / "pool"
     source.mkdir()
     (source / "1.json").write_text(
-        _match_json("1", "2026-06-01", ["Old Name", "Rival"], "Old Name"))
+        match_json("2026-06-01", teams=["Old Name", "Rival"], winner="Old Name",
+                   match_id="1", venue="Kennington Oval, London", serialize=True))
     (source / "2.json").write_text(
-        _match_json("2", "2026-06-02", ["Old Name", "Rival"], "Rival"))
+        match_json("2026-06-02", teams=["Old Name", "Rival"], winner="Rival",
+                   match_id="2", venue="Kennington Oval, London", serialize=True))
     snapshot_path = tmp_path / "snapshot.pkl"
     build_tracker_snapshot(source, snapshot_path)
 

@@ -18,7 +18,6 @@ import pytest
 import torch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
 
 from sim_t1 import BOS, TransformerT1SimModel  # noqa: E402
 from transformer_t1 import T1Model  # noqa: E402

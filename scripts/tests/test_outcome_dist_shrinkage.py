@@ -15,7 +15,6 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
 
 from parsing_v2 import PlayerStatsTracker, VenueStatsTracker, _shrink_counts
 from stats_sqlite_backend import _SQLiteBackend

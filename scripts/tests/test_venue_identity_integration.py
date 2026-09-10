@@ -6,7 +6,6 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(ROOT / "scripts"))
 
 from build_polymarket_odds import build_match_id  # noqa: E402
 from identity_maps import load_venue_aliases  # noqa: E402

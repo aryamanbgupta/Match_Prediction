@@ -86,3 +86,11 @@ llm = [
 dev = [
     "pytest>=8.4.2",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "scripts/tests"]
+pythonpath = ["scripts"]
+markers = [
+    "needs_artifacts: requires repository model or data artifacts",
+    "slow: marks tests that are slow to execute",
+]

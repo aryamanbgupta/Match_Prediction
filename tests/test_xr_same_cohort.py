@@ -4,7 +4,6 @@ from pathlib import Path
 import numpy as np
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
-sys.path.insert(0, str(SCRIPTS))
 
 from run_xr_same_cohort import (  # noqa: E402
     ARMS,

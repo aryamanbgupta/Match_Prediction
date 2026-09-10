@@ -7,8 +7,9 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(ROOT / "scripts"))
 
 from build_stats_cache import build  # noqa: E402
 from stats_provider import StatsProvider  # noqa: E402
@@ -64,6 +65,11 @@ def _match(date: str) -> dict:
     }
 
 
+@pytest.mark.needs_artifacts
+@pytest.mark.skipif(
+    not (ROOT / "data" / "all_players_enriched.csv").is_file(),
+    reason="player metadata artifact not present on this checkout",
+)
 def test_schema_v5_builder_persists_phase_and_h2h_counts(tmp_path: Path):
     source = tmp_path / "json"
     source.mkdir()

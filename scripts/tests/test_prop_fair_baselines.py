@@ -4,9 +4,8 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "sim_eval"))
 
-from prop_fair_baselines import AsOf, baseline_rows, poisson_at_least
+from sim_eval.prop_fair_baselines import AsOf, baseline_rows, poisson_at_least
 
 
 def _logs(usage, bowler=None):

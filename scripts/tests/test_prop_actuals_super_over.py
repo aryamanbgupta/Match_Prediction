@@ -14,38 +14,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
 
 from sim_eval.prop_backtest import compute_actuals  # noqa: E402
-
-
-def _delivery(batter, bowler, batter_runs, extras=None):
-    total = batter_runs + sum((extras or {}).values())
-    d = {
-        "batter": batter,
-        "bowler": bowler,
-        "non_striker": "NS",
-        "runs": {"batter": batter_runs, "extras": total - batter_runs,
-                 "total": total},
-    }
-    if extras:
-        d["extras"] = extras
-    return d
-
-
-def _innings(team, batter, bowler, runs_per_over, super_over=False):
-    inn = {
-        "team": team,
-        "overs": [
-            {"over": i, "deliveries": [
-                _delivery(batter, bowler, r) for r in over_runs
-            ]}
-            for i, over_runs in enumerate(runs_per_over)
-        ],
-    }
-    if super_over:
-        inn["super_over"] = True
-    return inn
+from cricsheet_fixtures import delivery, innings  # noqa: E402
 
 
 def _tied_match_with_super_over():
@@ -54,12 +25,12 @@ def _tied_match_with_super_over():
     # and rewrote A's powerplay/first-over actuals with the super over's.
     return {
         "innings": [
-            _innings("A", "A1", "B1", [[1] * 6, [1] * 6]),
-            _innings("B", "B2", "A2", [[1] * 6, [1] * 6]),
-            _innings("A", "A1", "B1", [[4, 4, 0, 0, 0, 0]],
-                     super_over=True),
-            _innings("B", "B2", "A2", [[1, 1, 1, 0, 0, 0]],
-                     super_over=True),
+            innings("A", batter="A1", bowler="B1", runs_per_over=[[1] * 6, [1] * 6]),
+            innings("B", batter="B2", bowler="A2", runs_per_over=[[1] * 6, [1] * 6]),
+            innings("A", batter="A1", bowler="B1", runs_per_over=[[4, 4, 0, 0, 0, 0]],
+                    super_over=True),
+            innings("B", batter="B2", bowler="A2", runs_per_over=[[1, 1, 1, 0, 0, 0]],
+                    super_over=True),
         ],
     }
 
@@ -90,18 +61,18 @@ def test_dismissal_kinds_follow_settlement_conventions():
     field are NOT bowler wickets); runs-before-first-wicket settles on any
     actual dismissal (run out included) but not on a retirement."""
     def _wicket_delivery(batter, bowler, runs, kind):
-        d = _delivery(batter, bowler, runs)
+        d = delivery(batter, bowler, runs, non_striker="NS")
         d["wickets"] = [{"kind": kind, "player_out": batter}]
         return d
 
     match = {"innings": [{
         "team": "A",
         "overs": [{"over": 0, "deliveries": [
-            _delivery("A1", "B1", 1),           # 1 run
+            delivery("A1", "B1", 1, non_striker="NS"),           # 1 run
             _wicket_delivery("A1", "B1", 1, "retired hurt"),   # 2 runs
             _wicket_delivery("A2", "B1", 0, "run out"),        # first wicket
             _wicket_delivery("A3", "B1", 0, "bowled"),
-            _delivery("A4", "B1", 4),
+            delivery("A4", "B1", 4, non_striker="NS"),
         ]}],
     }]}
     actuals = compute_actuals(match)

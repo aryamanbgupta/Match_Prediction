@@ -66,7 +66,6 @@ from typing import Iterator, Optional
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "scripts"))
 
 from loaders_common import (  # noqa: E402
     extract_match_metadata,

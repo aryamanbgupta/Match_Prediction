@@ -26,9 +26,9 @@ import time
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / 'scripts'))
 
 from stats_provider import StatsProvider  # noqa: E402
 
@@ -141,6 +141,12 @@ def _assert_bowling(provider: StatsProvider, df: pd.DataFrame, rng: random.Rando
     print(f"  PASS {len(sample):,} bowling rows")
 
 
+@pytest.mark.needs_artifacts
+@pytest.mark.skipif(
+    not PARQUET_PATH.is_file()
+    or not (ROOT / "models" / "player_stats_cache_v3.sqlite").is_file(),
+    reason="v3 parquet/cache artifacts not present on this checkout",
+)
 def test_recent_form_parquet_parity():
     rng = random.Random(RANDOM_SEED)
     df = _load_parquet_slim()

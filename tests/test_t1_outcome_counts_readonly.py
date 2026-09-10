@@ -14,7 +14,6 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
 
 from parsing_v2 import PlayerStatsTracker  # noqa: E402
 from sim_eval.same_day_stats import _TrackerStatsView  # noqa: E402

@@ -7,7 +7,6 @@ from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
 
 from i5_extras import (  # noqa: E402
     EmpiricalExtrasProcess,
@@ -22,55 +21,23 @@ from sim_v1_2 import (  # noqa: E402
     T20Rules,
     TeamLineup,
 )
-
-
-def _delivery(*, batter=0, extras=None, wicket=False):
-    extras = extras or {}
-    delivery = {
-        "batter": "A0",
-        "non_striker": "A1",
-        "bowler": "B0",
-        "runs": {
-            "batter": batter,
-            "extras": sum(extras.values()),
-            "total": batter + sum(extras.values()),
-        },
-    }
-    if extras:
-        delivery["extras"] = extras
-    if wicket:
-        delivery["wickets"] = [{
-            "player_out": "A0",
-            "kind": "bowled",
-        }]
-    return delivery
-
-
-def _write_match(path: Path, deliveries) -> None:
-    match = {
-        "info": {
-            "dates": ["2025-01-15"],
-            "gender": "male",
-            "teams": ["A", "B"],
-        },
-        "innings": [{
-            "team": "A",
-            "overs": [{"over": 0, "deliveries": deliveries}],
-        }],
-    }
-    path.write_text(json.dumps(match))
+from cricsheet_fixtures import delivery, innings, match_json  # noqa: E402
 
 
 def test_extras_builder_uses_validation_only_and_preserves_channels(tmp_path):
-    _write_match(tmp_path / "validation.json", [
-        _delivery(extras={"wides": 2}),
-        _delivery(batter=4, extras={"noballs": 1}),
-        _delivery(extras={"byes": 2}),
-        _delivery(extras={"legbyes": 1}),
-        _delivery(),
-        _delivery(batter=1),
-        _delivery(wicket=True),
-    ])
+    deliveries = [
+        delivery("A0", "B0", non_striker="A1", extras={"wides": 2}),
+        delivery("A0", "B0", batter_runs=4, non_striker="A1", extras={"noballs": 1}),
+        delivery("A0", "B0", non_striker="A1", extras={"byes": 2}),
+        delivery("A0", "B0", non_striker="A1", extras={"legbyes": 1}),
+        delivery("A0", "B0", non_striker="A1"),
+        delivery("A0", "B0", batter_runs=1, non_striker="A1"),
+        delivery("A0", "B0", non_striker="A1", wicket=True),
+    ]
+    (tmp_path / "validation.json").write_text(json.dumps(match_json(
+        info={"dates": ["2025-01-15"], "gender": "male", "teams": ["A", "B"]},
+        innings_data=[innings("A", overs=[{"over": 0, "deliveries": deliveries}])],
+    )))
 
     model = build_i5_extras_model(tmp_path)
 

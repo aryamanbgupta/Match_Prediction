@@ -13,8 +13,9 @@ Covers:
 import sys
 from pathlib import Path
 
+import pytest
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
 from parsing_v2 import PlayerStatsTracker, _shrink_counts
 
@@ -96,15 +97,16 @@ def test_distribution_sums_to_one():
 
 
 # ─── 4. Backend ≡ Tracker (live ≡ SQLite read-side) ───────────────────────
+@pytest.mark.needs_artifacts
+@pytest.mark.skipif(
+    not (PROJECT_ROOT / "models" / "player_stats_cache_v3.sqlite").exists(),
+    reason="player stats SQLite cache not present on this checkout",
+)
 def test_backend_equiv_tracker_hierarchical():
     """The SQLite getter and the live tracker getter must produce
     bit-identical outputs given the same counts. Rebuilds an in-memory
     SQLite-equivalent backend by injecting counts directly."""
     sqlite_path = PROJECT_ROOT / "models" / "player_stats_cache_v3.sqlite"
-    if not sqlite_path.exists():
-        print(f"[SKIP] {sqlite_path} not present")
-        return
-
     from stats_sqlite_backend import _SQLiteBackend
     backend = _SQLiteBackend(str(sqlite_path))
     backend._ensure_conn()

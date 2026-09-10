@@ -13,7 +13,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
 
 from sim_eval.run_sim_eval_t1 import _T1ReplayEvaluator  # noqa: E402
 

@@ -8,7 +8,6 @@ import numpy as np
 import torch
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
-sys.path.insert(0, str(SCRIPTS))
 
 import json  # noqa: E402
 

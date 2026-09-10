@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
 
 from parsing_v2 import (  # noqa: E402
     I5_DELIVERY_SEMANTICS,
@@ -15,6 +14,7 @@ from parsing_v2 import (  # noqa: E402
     parse_match_data_v2,
 )
 from build_stats_cache import _has_nonzero_match_stats  # noqa: E402
+from cricsheet_fixtures import delivery, innings, match_json  # noqa: E402
 
 
 REGISTRY = {
@@ -24,53 +24,24 @@ REGISTRY = {
 }
 
 
-def _delivery(*, batter_runs=0, extras=None, wickets=None, non_boundary=False):
-    extras = extras or {}
-    total = batter_runs + sum(extras.values())
-    delivery = {
-        "batter": "Batter",
-        "non_striker": "Non Striker",
-        "bowler": "Bowler",
-        "runs": {
-            "batter": batter_runs,
-            "extras": sum(extras.values()),
-            "total": total,
-        },
-    }
-    if extras:
-        delivery["extras"] = extras
-    if wickets:
-        delivery["wickets"] = wickets
-    if non_boundary:
-        delivery["runs"]["non_boundary"] = True
-    return delivery
-
-
-def _match(deliveries):
-    return {
-        "info": {
-            "dates": ["2026-01-01"],
-            "venue": "Test Ground",
-            "teams": ["Team A", "Team B"],
-            "team_type": "international",
-            "registry": {"people": REGISTRY},
-            "players": {
-                "Team A": ["Batter", "Non Striker"],
-                "Team B": ["Bowler"],
-            },
-            "toss": {"winner": "Team A", "decision": "bat"},
-            "event": {"name": "Test Series"},
-        },
-        "innings": [{
-            "team": "Team A",
-            "overs": [{"over": 0, "deliveries": deliveries}],
-        }],
-    }
+MATCH_INFO = {
+    "dates": ["2026-01-01"],
+    "venue": "Test Ground",
+    "teams": ["Team A", "Team B"],
+    "team_type": "international",
+    "registry": {"people": REGISTRY},
+    "players": {
+        "Team A": ["Batter", "Non Striker"],
+        "Team B": ["Bowler"],
+    },
+    "toss": {"winner": "Team A", "decision": "bat"},
+    "event": {"name": "Test Series"},
+}
 
 
 def test_extract_delivery_semantics_separates_run_channels():
     no_ball_four = extract_delivery_semantics(
-        _delivery(batter_runs=4, extras={"noballs": 1}), REGISTRY)
+        delivery(batter_runs=4, extras={"noballs": 1}, non_striker="Non Striker"), REGISTRY)
     assert no_ball_four["team_runs"] == 5
     assert no_ball_four["batter_runs"] == 4
     assert no_ball_four["bowler_runs"] == 5
@@ -79,14 +50,14 @@ def test_extract_delivery_semantics_separates_run_channels():
     assert no_ball_four["is_boundary"] is True
 
     byes = extract_delivery_semantics(
-        _delivery(extras={"byes": 2}), REGISTRY)
+        delivery(extras={"byes": 2}, non_striker="Non Striker"), REGISTRY)
     assert byes["team_runs"] == 2
     assert byes["batter_runs"] == 0
     assert byes["bowler_runs"] == 0
     assert byes["is_legal"] is True
 
     legbyes = extract_delivery_semantics(
-        _delivery(extras={"legbyes": 1}), REGISTRY)
+        delivery(extras={"legbyes": 1}, non_striker="Non Striker"), REGISTRY)
     assert legbyes["team_runs"] == 1
     assert legbyes["batter_runs"] == 0
     assert legbyes["bowler_runs"] == 0
@@ -95,7 +66,7 @@ def test_extract_delivery_semantics_separates_run_channels():
 
 def test_non_boundary_flag_prevents_false_boundary():
     semantics = extract_delivery_semantics(
-        _delivery(batter_runs=4, non_boundary=True), REGISTRY)
+        delivery(batter_runs=4, non_boundary=True, non_striker="Non Striker"), REGISTRY)
     assert semantics["is_boundary"] is False
 
 
@@ -106,17 +77,22 @@ def test_parser_excludes_illegal_rows_and_uses_off_bat_target():
         "fielders": [{"name": "Bowler"}],
     }]
     deliveries = [
-        _delivery(extras={"wides": 1}),
-        _delivery(batter_runs=4, extras={"noballs": 1}),
-        _delivery(extras={"byes": 2}),
-        _delivery(extras={"legbyes": 1}),
-        _delivery(batter_runs=3),
-        _delivery(batter_runs=1, wickets=nonstriker_runout),
+        delivery(extras={"wides": 1}),
+        delivery(batter_runs=4, extras={"noballs": 1}),
+        delivery(extras={"byes": 2}),
+        delivery(extras={"legbyes": 1}),
+        delivery(batter_runs=3),
+        delivery(batter_runs=1, wickets=nonstriker_runout),
     ]
     tracker = PlayerStatsTracker()
 
     rows, totals, _, details, _ = parse_match_data_v2(
-        json.dumps(_match(deliveries)),
+        json.dumps(match_json(
+            info=MATCH_INFO,
+            innings_data=[innings(
+                "Team A", overs=[{"over": 0, "deliveries": deliveries}]
+            )],
+        )),
         tracker,
         match_ref="i5_test",
         delivery_semantics=I5_DELIVERY_SEMANTICS,
@@ -160,14 +136,19 @@ def test_parser_excludes_illegal_rows_and_uses_off_bat_target():
 
 def test_legacy_parser_contract_remains_the_default():
     deliveries = [
-        _delivery(extras={"wides": 1}),
-        _delivery(batter_runs=4, extras={"noballs": 1}),
-        _delivery(extras={"byes": 2}),
+        delivery(extras={"wides": 1}),
+        delivery(batter_runs=4, extras={"noballs": 1}),
+        delivery(extras={"byes": 2}),
     ]
     tracker = PlayerStatsTracker()
 
     rows, totals, _, details, _ = parse_match_data_v2(
-        json.dumps(_match(deliveries)),
+        json.dumps(match_json(
+            info=MATCH_INFO,
+            innings_data=[innings(
+                "Team A", overs=[{"over": 0, "deliveries": deliveries}]
+            )],
+        )),
         tracker,
         match_ref="legacy_test",
     )

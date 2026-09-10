@@ -29,7 +29,6 @@ from pathlib import Path
 import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
 from sim_eval.match_evaluator import (  # noqa: E402
     BET_EDGE_THRESHOLD,

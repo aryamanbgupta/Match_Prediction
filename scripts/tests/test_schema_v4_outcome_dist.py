@@ -23,7 +23,6 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "scripts"))
 
 from stats_sqlite_backend import (  # noqa: E402
     QUERY_PLAN_CASES,

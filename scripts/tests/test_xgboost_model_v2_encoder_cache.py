@@ -21,7 +21,6 @@ import numpy as np
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
 
 from sim_v1_2 import XGBoostModelV2  # noqa: E402
 from stats_provider import StatsProvider  # noqa: E402
@@ -37,11 +36,14 @@ MODEL_PATHS = {
     'matchup_encoder_path': 'models/xgb_v3/matchup_encoder_v3.pkl',
 }
 
-pytestmark = pytest.mark.skipif(
-    not Path(MODEL_PATHS['model_path']).is_file()
-    or not Path('data/betting_test').is_dir(),
-    reason="legacy v3 ball artifacts / betting_test data not on this checkout",
-)
+pytestmark = [
+    pytest.mark.needs_artifacts,
+    pytest.mark.skipif(
+        not Path(MODEL_PATHS['model_path']).is_file()
+        or not Path('data/betting_test').is_dir(),
+        reason="legacy v3 ball artifacts / betting_test data not on this checkout",
+    ),
+]
 
 
 def banner(msg):

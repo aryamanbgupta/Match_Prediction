@@ -9,7 +9,6 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "scripts"))
 
 import build_stats_cache as cache_builder  # noqa: E402
 import run_experiment  # noqa: E402

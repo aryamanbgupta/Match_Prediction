@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(ROOT / "scripts"))
 
 from match_identity import (  # noqa: E402
     MATCH_IDENTITY_VERSION,

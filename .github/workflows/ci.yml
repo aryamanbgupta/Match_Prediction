@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      # 3.9 matches .python-version and the uv.lock wheel set: the pinned
+      # numpy 1.24.3 has no cp312 wheel, so a 3.12 runner would source-build
+      # and fail (Astra review, item 1, 2026-09-10).
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: Install locked dependencies
+        # mlx/mlx-metal ship macOS-only wheels; rpy2-rinterface has no
+        # manylinux wheel and needs an R toolchain the runner lacks. None of
+        # the contract tests import them.
+        run: >-
+          uv sync --frozen --group dev
+          --no-install-package mlx
+          --no-install-package mlx-metal
+          --no-install-package rpy2
+          --no-install-package rpy2-rinterface
+          --no-install-package rpy2-robjects
+      - name: Run tests that do not require repository artifacts
+        run: uv run --no-sync pytest -q -m "not needs_artifacts"

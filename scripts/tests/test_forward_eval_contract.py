@@ -10,7 +10,6 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 SCRIPTS = ROOT / "scripts"
-sys.path.insert(0, str(SCRIPTS))
 
 import forward_eval_contract as contract_module  # noqa: E402
 from forward_eval_contract import (  # noqa: E402
@@ -37,6 +36,7 @@ requires_sealed_holdout = pytest.mark.skipif(
 
 
 @requires_sealed_holdout
+@pytest.mark.needs_artifacts
 def test_consumed_preflight_fails_closed_after_source_drift():
     assert load_protocol(PROTOCOL)["status"] == "FROZEN"
     with pytest.raises(RuntimeError, match="artifact hash mismatch"):
@@ -44,6 +44,7 @@ def test_consumed_preflight_fails_closed_after_source_drift():
 
 
 @requires_sealed_holdout
+@pytest.mark.needs_artifacts
 def test_require_frozen_fails_closed_on_draft(tmp_path, monkeypatch):
     protocol = load_protocol(PROTOCOL)
     protocol["status"] = "DRAFT"
@@ -86,6 +87,7 @@ def test_protocol_paths_cannot_escape_repository():
 
 
 @requires_sealed_holdout
+@pytest.mark.needs_artifacts
 def test_tampered_fingerprint_is_rejected(tmp_path: Path):
     tampered = tmp_path / "protocol.yaml"
     text = PROTOCOL.read_text().replace(

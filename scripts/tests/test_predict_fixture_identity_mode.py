@@ -10,7 +10,6 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(ROOT / "scripts"))
 
 import predict_fixture  # noqa: E402
 from elo_update import (  # noqa: E402

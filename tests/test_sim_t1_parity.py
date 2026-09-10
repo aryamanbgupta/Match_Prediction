@@ -13,7 +13,6 @@ import pandas as pd
 import pytest
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
-sys.path.insert(0, str(SCRIPTS))
 
 import sim_t1  # noqa: E402
 from embeddings_e1 import (EB_BAT_COLS, EB_BOWL_COLS, VENUE_COLS,  # noqa: E402

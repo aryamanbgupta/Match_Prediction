@@ -21,7 +21,6 @@ from typing import List
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
 
 # Importing sim_v1_2 loads heavy modules; import only the selector pieces.
 from sim_v1_2 import EmpiricalBowlerSelector  # noqa: E402

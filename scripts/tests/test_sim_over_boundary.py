@@ -18,7 +18,6 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
 
 from sim_v1_2 import (  # noqa: E402
     BowlerSelector,
@@ -124,6 +123,7 @@ _V3_MODEL = ROOT.parent / "models" / "xgb_v3" / "xgboost_model_v3.pkl"
     or not (ROOT.parent / "data" / "betting_test").is_dir(),
     reason="legacy v3 ball artifacts / betting_test data not on this checkout",
 )
+@pytest.mark.needs_artifacts
 def test_extract_features_covers_toss_columns():
     """Artifact-gated end-to-end check: an innings-1 state must score
     is_batting_first = 1 (it was silently zero-filled pre-fix)."""

@@ -25,6 +25,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 DB_PATH = ROOT / "models" / "player_stats_cache_v3.sqlite"
 
@@ -71,11 +73,12 @@ def check_consistency(conn, sample_n: int = 500, seed: int = 0xC0FFEE) -> int:
     return total_checked
 
 
+@pytest.mark.needs_artifacts
+@pytest.mark.skipif(
+    not DB_PATH.exists(),
+    reason="player stats SQLite cache not present on this checkout",
+)
 def test_build_consistency():
-    assert DB_PATH.exists(), (
-        f"expected SQLite cache at {DB_PATH}. Run "
-        f"`uv run python scripts/build_stats_cache.py` first."
-    )
     conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
     try:
         n = check_consistency(conn, sample_n=500)

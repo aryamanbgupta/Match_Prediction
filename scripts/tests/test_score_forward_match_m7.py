@@ -12,7 +12,6 @@ import pytest
 from sklearn.preprocessing import LabelEncoder
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(ROOT / "scripts"))
 
 from forward_eval_contract import load_protocol  # noqa: E402
 import score_forward_match_m7 as scorer_module  # noqa: E402
@@ -94,6 +93,7 @@ def _synthetic_inputs():
     ).is_dir(),
     reason="legacy production artifacts / sealed holdout not on this checkout",
 )
+@pytest.mark.needs_artifacts
 def test_actual_input_selection_loads_no_outcomes_and_exact_holdout():
     protocol = load_protocol(PROTOCOL_PATH)
     feature_path = (

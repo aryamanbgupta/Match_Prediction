@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(ROOT / "scripts"))
 
 from stats_sqlite_backend import (  # noqa: E402
     I8_SCHEMA_VERSION,

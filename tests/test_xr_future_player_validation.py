@@ -8,7 +8,6 @@ import pandas as pd
 import pytest
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
-sys.path.insert(0, str(SCRIPTS))
 
 from run_xr_future_player_validation import (  # noqa: E402
     build_examples, estimates, reject_sealed)
@@ -56,4 +55,3 @@ def test_delta_shrinks_execution_residual_around_shot_xr():
 def test_sealed_paths_fail_closed():
     with pytest.raises(SystemExit, match="refusing sealed path"):
         reject_sealed("data/golden/player_rows.parquet")
-

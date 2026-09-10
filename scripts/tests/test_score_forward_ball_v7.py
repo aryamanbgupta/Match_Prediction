@@ -10,7 +10,6 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(ROOT / "scripts"))
 
 from forward_eval_contract import load_protocol  # noqa: E402
 import score_forward_ball_v7 as scorer_module  # noqa: E402
@@ -27,42 +26,12 @@ from score_forward_ball_v7 import (  # noqa: E402
     walk_context_and_score,
 )
 from score_forward_match_m7 import write_locked_artifact  # noqa: E402
+from cricsheet_fixtures import match_json  # noqa: E402
 
 
 PROTOCOL_PATH = (
     ROOT / "evaluation" / "forward_protocol_2026-06-01_2026-07-13.yaml"
 )
-
-
-def _match(
-    match_id="001",
-    date="2026-01-01",
-    teams=("A", "B"),
-    venue="Ground",
-):
-    names = {
-        teams[0]: [f"{teams[0]} Player {index}" for index in range(11)],
-        teams[1]: [f"{teams[1]} Player {index}" for index in range(11)],
-    }
-    registry = {
-        name: f"{team.lower()}_{index}"
-        for team, roster in names.items()
-        for index, name in enumerate(roster)
-    }
-    return {
-        "_test_id": match_id,
-        "info": {
-            "dates": [date],
-            "teams": list(teams),
-            "venue": venue,
-            "team_type": "international",
-            "event": {"name": "Synthetic"},
-            "toss": {"winner": teams[0], "decision": "field"},
-            "registry": {"people": registry},
-            "players": names,
-        },
-        "innings": [{"forbidden": "outcome-bearing"}],
-    }
 
 
 def _selected(match_id="002", date="2026-01-01"):
@@ -97,7 +66,8 @@ def test_context_walk_scores_before_lock_and_replays_after_lock():
     batches = [
         (
             "2026-01-01",
-            [("001", _match("001")), ("002", _match("002"))],
+            [("001", match_json(match_id="001", teams=("A", "B"), venue="Ground", forward_stub=True)),
+             ("002", match_json(match_id="002", teams=("A", "B"), venue="Ground", forward_stub=True))],
         )
     ]
 
@@ -141,7 +111,7 @@ def test_context_walk_scores_before_lock_and_replays_after_lock():
 
 
 def test_pre_match_state_uses_roster_and_never_reads_innings():
-    match = _match()
+    match = match_json(match_id="001", teams=("A", "B"), venue="Ground", forward_stub=True)
 
     class _ForbiddenInnings:
         def __iter__(self):
@@ -186,13 +156,13 @@ def test_pre_match_state_uses_roster_and_never_reads_innings():
 
 
 def test_team_orientation_mismatch_fails_closed():
-    match = _match(teams=("B", "A"))
+    match = match_json(match_id="001", teams=("B", "A"), venue="Ground", forward_stub=True)
     with pytest.raises(RuntimeError, match="team order mismatch"):
         validate_selected_identity(_selected(), "002", match)
 
 
 def test_roster_integrity_fails_closed():
-    match = _match()
+    match = match_json(match_id="001", teams=("A", "B"), venue="Ground", forward_stub=True)
     match["info"]["players"]["A"] = match["info"]["players"]["A"][:10]
     with pytest.raises(ValueError, match="at least 11"):
         pre_match_spec(match)
@@ -212,6 +182,7 @@ def test_winner_probability_postprocess_matches_landed_evaluator():
     not (ROOT / "data" / "forward_holdout" / "2026-06-01_2026-07-13").is_dir(),
     reason="sealed forward holdout not present on this checkout",
 )
+@pytest.mark.needs_artifacts
 def test_actual_context_is_complete_and_version_ordered():
     protocol = load_protocol(PROTOCOL_PATH)
     batches = load_context_batches(protocol)

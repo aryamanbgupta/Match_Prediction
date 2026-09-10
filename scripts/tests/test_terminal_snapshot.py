@@ -13,66 +13,33 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
 
 from build_stats_cache import build  # noqa: E402
 from stats_sqlite_backend import _SQLiteBackend  # noqa: E402
-
-
-def _delivery(batter, bowler, runs):
-    return {
-        "batter": batter,
-        "bowler": bowler,
-        "non_striker": "NS X",
-        "runs": {"batter": runs, "extras": 0, "total": runs},
-    }
-
-
-def _match_json(date, star_runs):
-    """Minimal male T20 with one star batter scoring `star_runs`."""
-    deliveries = [_delivery("Star Batter", "Some Bowler", 1)] * star_runs
-    return {
-        "info": {
-            "match_type": "T20",
-            "gender": "male",
-            "dates": [date],
-            "teams": ["Alpha", "Beta"],
-            "players": {
-                "Alpha": ["Star Batter", "NS X"],
-                "Beta": ["Some Bowler"],
-            },
-            "registry": {"people": {
-                "Star Batter": "p_star", "NS X": "p_ns",
-                "Some Bowler": "p_bowl",
-            }},
-            "venue": "Test Oval",
-            "outcome": {"winner": "Alpha"},
-            "toss": {"winner": "Alpha", "decision": "bat"},
-        },
-        "innings": [
-            {"team": "Alpha",
-             "overs": [{"over": 0, "deliveries": deliveries}]},
-            {"team": "Beta",
-             "overs": [{"over": 0, "deliveries": [
-                 _delivery("Some Bowler", "Star Batter", 1)]}]},
-        ],
-    }
+from cricsheet_fixtures import match_json  # noqa: E402
 
 
 def _build_mini_cache(tmp_path):
     corpus = tmp_path / "corpus"
     corpus.mkdir()
     (corpus / "1001.json").write_text(
-        json.dumps(_match_json("2026-05-01", 10)))
+        json.dumps(match_json("2026-05-01", star_runs=10)))
     (corpus / "1002.json").write_text(
-        json.dumps(_match_json("2026-05-02", 25)))
+        json.dumps(match_json("2026-05-02", star_runs=25)))
     out = tmp_path / "cache.sqlite"
     build([corpus], out, gender="male",
           metadata_csv=ROOT.parent / "data" / "all_players_enriched.csv")
     return out
 
 
+@pytest.mark.needs_artifacts
+@pytest.mark.skipif(
+    not (ROOT.parent / "data" / "all_players_enriched.csv").is_file(),
+    reason="player metadata artifact not present on this checkout",
+)
 def test_terminal_snapshot_serves_the_final_corpus_day(tmp_path):
     out = _build_mini_cache(tmp_path)
     backend = _SQLiteBackend(out)
@@ -93,6 +60,11 @@ def test_terminal_snapshot_serves_the_final_corpus_day(tmp_path):
     assert meta.get("terminal_snapshot_date") == "2026-05-03"
 
 
+@pytest.mark.needs_artifacts
+@pytest.mark.skipif(
+    not (ROOT.parent / "data" / "all_players_enriched.csv").is_file(),
+    reason="player metadata artifact not present on this checkout",
+)
 def test_terminal_snapshot_matches_match_log_information_set(tmp_path):
     """Career state and recent-form logs must describe the same set of
     matches for a beyond-corpus as-of."""
