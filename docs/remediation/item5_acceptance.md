@@ -114,3 +114,13 @@ engine, both arms re-run. G5 read 89.7% on 3,061 slots (2025: 90.5%, 2026:
 89.3%), below the 90% bar as the plan anticipated; that requires a written
 user exception or a separate debutant-fallback change, never a
 reinterpreted bar.
+
+### Gate-matrix run 2 (2026-09-10): readings
+
+| Gate | Result | Reading |
+|---|---|---|
+| prop A/B (255 matches × 100 sims, paired on the display id vs the recorded n=261 detail, 250 paired) | **PASS** | 20 families CI-clean better, 8 tied, 0 regressions. `p_tie` reads "recorded better" (+0.0118 [+0.0002, +0.0237]) only because the recorded detail carries zero tie labels and the new one carries three (the PROP3 super-over relabel); the new engine's mean tie probability 0.0116 sits at the 0.012 base rate. Movement where PROP3 fires, as the plan allows. |
+| G1 (empirical vs random selector, same population, fixed engine) | **PASS** | ΔLL −0.0251 (all, n=255), −0.0177 (≥$50k, n=168), −0.0033 (≥$100k, n=110); bar ≤ +0.002. Ball-sim ≥$50k LL 0.7022, in line with the known ~0.07 gap to the direct model; bets 252/167/110 placed after the odds-guard fix. |
+| G3 top_batter | **PASS** | Δ Brier −0.0017 (bar ≤ +0.003), n=5,593 paired batter rows |
+| G5 bowler coverage | **FAIL as measured** | 89.7% (2,746 / 3,061 slots; 2025 90.5%, 2026 89.3%) against 90%. Requires the user's written exception or a separate debutant-fallback change. |
+| E2 | pending restatement (`eval_out/br2_gates/e2_restated.md`) | cannot block |
