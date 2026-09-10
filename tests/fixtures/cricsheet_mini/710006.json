@@ -1,0 +1,758 @@
+{
+  "info": {
+    "cricsheet_id": "710006",
+    "dates": [
+      "2025-01-07"
+    ],
+    "event": {
+      "name": "Indian Premier League"
+    },
+    "gender": "male",
+    "match_type": "T20",
+    "outcome": {
+      "winner": "Alpha CC"
+    },
+    "players": {
+      "Alpha CC": [
+        "Alpha P1",
+        "Alpha P2",
+        "Alpha P3",
+        "Alpha P4",
+        "Alpha P5",
+        "Alpha P6",
+        "Alpha P7",
+        "Alpha P8",
+        "Alpha P9",
+        "Alpha P10",
+        "Alpha P11"
+      ],
+      "Beta CC": [
+        "Beta P1",
+        "Beta P2",
+        "Beta P3",
+        "Beta P4",
+        "Beta P5",
+        "Beta P6",
+        "Beta P7",
+        "Beta P8",
+        "Beta P9",
+        "Beta P10",
+        "Beta P11"
+      ]
+    },
+    "registry": {
+      "people": {
+        "Alpha P1": "a01",
+        "Alpha P10": "a10",
+        "Alpha P11": "a11",
+        "Alpha P2": "a02",
+        "Alpha P3": "a03",
+        "Alpha P4": "a04",
+        "Alpha P5": "a05",
+        "Alpha P6": "a06",
+        "Alpha P7": "a07",
+        "Alpha P8": "a08",
+        "Alpha P9": "a09",
+        "Beta P1": "b01",
+        "Beta P10": "b10",
+        "Beta P11": "b11",
+        "Beta P2": "b02",
+        "Beta P3": "b03",
+        "Beta P4": "b04",
+        "Beta P5": "b05",
+        "Beta P6": "b06",
+        "Beta P7": "b07",
+        "Beta P8": "b08",
+        "Beta P9": "b09"
+      }
+    },
+    "team_type": "club",
+    "teams": [
+      "Alpha CC",
+      "Beta CC"
+    ],
+    "toss": {
+      "decision": "bat",
+      "winner": "Beta CC"
+    },
+    "venue": "Parity Park"
+  },
+  "innings": [
+    {
+      "overs": [
+        {
+          "deliveries": [
+            {
+              "batter": "Beta P1",
+              "bowler": "Alpha P8",
+              "non_striker": "Beta P1",
+              "runs": {
+                "batter": 1,
+                "extras": 0,
+                "total": 1
+              }
+            },
+            {
+              "batter": "Beta P1",
+              "bowler": "Alpha P8",
+              "non_striker": "Beta P1",
+              "runs": {
+                "batter": 2,
+                "extras": 0,
+                "total": 2
+              }
+            },
+            {
+              "batter": "Beta P1",
+              "bowler": "Alpha P8",
+              "non_striker": "Beta P1",
+              "runs": {
+                "batter": 4,
+                "extras": 0,
+                "total": 4
+              }
+            },
+            {
+              "batter": "Beta P1",
+              "bowler": "Alpha P8",
+              "non_striker": "Beta P1",
+              "runs": {
+                "batter": 6,
+                "extras": 0,
+                "total": 6
+              }
+            },
+            {
+              "batter": "Beta P1",
+              "bowler": "Alpha P8",
+              "non_striker": "Beta P1",
+              "runs": {
+                "batter": 1,
+                "extras": 0,
+                "total": 1
+              }
+            },
+            {
+              "batter": "Beta P1",
+              "bowler": "Alpha P8",
+              "non_striker": "Beta P1",
+              "runs": {
+                "batter": 0,
+                "extras": 0,
+                "total": 0
+              }
+            }
+          ],
+          "over": 0
+        },
+        {
+          "deliveries": [
+            {
+              "batter": "Beta P2",
+              "bowler": "Alpha P9",
+              "non_striker": "Beta P2",
+              "runs": {
+                "batter": 1,
+                "extras": 0,
+                "total": 1
+              }
+            },
+            {
+              "batter": "Beta P2",
+              "bowler": "Alpha P9",
+              "non_striker": "Beta P2",
+              "runs": {
+                "batter": 2,
+                "extras": 0,
+                "total": 2
+              }
+            },
+            {
+              "batter": "Beta P2",
+              "bowler": "Alpha P9",
+              "non_striker": "Beta P2",
+              "runs": {
+                "batter": 4,
+                "extras": 0,
+                "total": 4
+              }
+            },
+            {
+              "batter": "Beta P2",
+              "bowler": "Alpha P9",
+              "non_striker": "Beta P2",
+              "runs": {
+                "batter": 6,
+                "extras": 0,
+                "total": 6
+              }
+            },
+            {
+              "batter": "Beta P2",
+              "bowler": "Alpha P9",
+              "non_striker": "Beta P2",
+              "runs": {
+                "batter": 1,
+                "extras": 0,
+                "total": 1
+              }
+            },
+            {
+              "batter": "Beta P2",
+              "bowler": "Alpha P9",
+              "non_striker": "Beta P2",
+              "runs": {
+                "batter": 0,
+                "extras": 0,
+                "total": 0
+              }
+            }
+          ],
+          "over": 1
+        },
+        {
+          "deliveries": [
+            {
+              "batter": "Beta P3",
+              "bowler": "Alpha P10",
+              "non_striker": "Beta P3",
+              "runs": {
+                "batter": 1,
+                "extras": 0,
+                "total": 1
+              }
+            },
+            {
+              "batter": "Beta P3",
+              "bowler": "Alpha P10",
+              "non_striker": "Beta P3",
+              "runs": {
+                "batter": 2,
+                "extras": 0,
+                "total": 2
+              }
+            },
+            {
+              "batter": "Beta P3",
+              "bowler": "Alpha P10",
+              "non_striker": "Beta P3",
+              "runs": {
+                "batter": 4,
+                "extras": 0,
+                "total": 4
+              }
+            },
+            {
+              "batter": "Beta P3",
+              "bowler": "Alpha P10",
+              "non_striker": "Beta P3",
+              "runs": {
+                "batter": 6,
+                "extras": 0,
+                "total": 6
+              }
+            },
+            {
+              "batter": "Beta P3",
+              "bowler": "Alpha P10",
+              "non_striker": "Beta P3",
+              "runs": {
+                "batter": 1,
+                "extras": 0,
+                "total": 1
+              }
+            },
+            {
+              "batter": "Beta P3",
+              "bowler": "Alpha P10",
+              "non_striker": "Beta P3",
+              "runs": {
+                "batter": 0,
+                "extras": 0,
+                "total": 0
+              }
+            }
+          ],
+          "over": 2
+        },
+        {
+          "deliveries": [
+            {
+              "batter": "Beta P4",
+              "bowler": "Alpha P11",
+              "non_striker": "Beta P4",
+              "runs": {
+                "batter": 1,
+                "extras": 0,
+                "total": 1
+              }
+            },
+            {
+              "batter": "Beta P4",
+              "bowler": "Alpha P11",
+              "non_striker": "Beta P4",
+              "runs": {
+                "batter": 2,
+                "extras": 0,
+                "total": 2
+              }
+            },
+            {
+              "batter": "Beta P4",
+              "bowler": "Alpha P11",
+              "non_striker": "Beta P4",
+              "runs": {
+                "batter": 4,
+                "extras": 0,
+                "total": 4
+              }
+            },
+            {
+              "batter": "Beta P4",
+              "bowler": "Alpha P11",
+              "non_striker": "Beta P4",
+              "runs": {
+                "batter": 6,
+                "extras": 0,
+                "total": 6
+              }
+            },
+            {
+              "batter": "Beta P4",
+              "bowler": "Alpha P11",
+              "non_striker": "Beta P4",
+              "runs": {
+                "batter": 1,
+                "extras": 0,
+                "total": 1
+              }
+            },
+            {
+              "batter": "Beta P4",
+              "bowler": "Alpha P11",
+              "non_striker": "Beta P4",
+              "runs": {
+                "batter": 0,
+                "extras": 0,
+                "total": 0
+              },
+              "wickets": [
+                {
+                  "kind": "bowled",
+                  "player_out": "Beta P4"
+                }
+              ]
+            }
+          ],
+          "over": 3
+        },
+        {
+          "deliveries": [
+            {
+              "batter": "Beta P1",
+              "bowler": "Alpha P8",
+              "non_striker": "Beta P1",
+              "runs": {
+                "batter": 1,
+                "extras": 0,
+                "total": 1
+              }
+            },
+            {
+              "batter": "Beta P1",
+              "bowler": "Alpha P8",
+              "non_striker": "Beta P1",
+              "runs": {
+                "batter": 2,
+                "extras": 0,
+                "total": 2
+              }
+            },
+            {
+              "batter": "Beta P1",
+              "bowler": "Alpha P8",
+              "non_striker": "Beta P1",
+              "runs": {
+                "batter": 4,
+                "extras": 0,
+                "total": 4
+              }
+            },
+            {
+              "batter": "Beta P1",
+              "bowler": "Alpha P8",
+              "non_striker": "Beta P1",
+              "runs": {
+                "batter": 6,
+                "extras": 0,
+                "total": 6
+              }
+            },
+            {
+              "batter": "Beta P1",
+              "bowler": "Alpha P8",
+              "non_striker": "Beta P1",
+              "runs": {
+                "batter": 1,
+                "extras": 0,
+                "total": 1
+              }
+            },
+            {
+              "batter": "Beta P1",
+              "bowler": "Alpha P8",
+              "non_striker": "Beta P1",
+              "runs": {
+                "batter": 0,
+                "extras": 0,
+                "total": 0
+              }
+            }
+          ],
+          "over": 4
+        }
+      ],
+      "team": "Beta CC"
+    },
+    {
+      "overs": [
+        {
+          "deliveries": [
+            {
+              "batter": "Alpha P1",
+              "bowler": "Beta P8",
+              "non_striker": "Alpha P1",
+              "runs": {
+                "batter": 3,
+                "extras": 0,
+                "total": 3
+              }
+            },
+            {
+              "batter": "Alpha P1",
+              "bowler": "Beta P8",
+              "non_striker": "Alpha P1",
+              "runs": {
+                "batter": 4,
+                "extras": 0,
+                "total": 4
+              }
+            },
+            {
+              "batter": "Alpha P1",
+              "bowler": "Beta P8",
+              "non_striker": "Alpha P1",
+              "runs": {
+                "batter": 6,
+                "extras": 0,
+                "total": 6
+              }
+            },
+            {
+              "batter": "Alpha P1",
+              "bowler": "Beta P8",
+              "non_striker": "Alpha P1",
+              "runs": {
+                "batter": 1,
+                "extras": 0,
+                "total": 1
+              }
+            },
+            {
+              "batter": "Alpha P1",
+              "bowler": "Beta P8",
+              "non_striker": "Alpha P1",
+              "runs": {
+                "batter": 0,
+                "extras": 0,
+                "total": 0
+              }
+            },
+            {
+              "batter": "Alpha P1",
+              "bowler": "Beta P8",
+              "non_striker": "Alpha P1",
+              "runs": {
+                "batter": 1,
+                "extras": 0,
+                "total": 1
+              }
+            }
+          ],
+          "over": 0
+        },
+        {
+          "deliveries": [
+            {
+              "batter": "Alpha P2",
+              "bowler": "Beta P9",
+              "non_striker": "Alpha P2",
+              "runs": {
+                "batter": 3,
+                "extras": 0,
+                "total": 3
+              }
+            },
+            {
+              "batter": "Alpha P2",
+              "bowler": "Beta P9",
+              "non_striker": "Alpha P2",
+              "runs": {
+                "batter": 4,
+                "extras": 0,
+                "total": 4
+              }
+            },
+            {
+              "batter": "Alpha P2",
+              "bowler": "Beta P9",
+              "non_striker": "Alpha P2",
+              "runs": {
+                "batter": 6,
+                "extras": 0,
+                "total": 6
+              }
+            },
+            {
+              "batter": "Alpha P2",
+              "bowler": "Beta P9",
+              "non_striker": "Alpha P2",
+              "runs": {
+                "batter": 1,
+                "extras": 0,
+                "total": 1
+              }
+            },
+            {
+              "batter": "Alpha P2",
+              "bowler": "Beta P9",
+              "non_striker": "Alpha P2",
+              "runs": {
+                "batter": 0,
+                "extras": 0,
+                "total": 0
+              }
+            },
+            {
+              "batter": "Alpha P2",
+              "bowler": "Beta P9",
+              "non_striker": "Alpha P2",
+              "runs": {
+                "batter": 1,
+                "extras": 0,
+                "total": 1
+              }
+            }
+          ],
+          "over": 1
+        },
+        {
+          "deliveries": [
+            {
+              "batter": "Alpha P3",
+              "bowler": "Beta P10",
+              "non_striker": "Alpha P3",
+              "runs": {
+                "batter": 3,
+                "extras": 0,
+                "total": 3
+              }
+            },
+            {
+              "batter": "Alpha P3",
+              "bowler": "Beta P10",
+              "non_striker": "Alpha P3",
+              "runs": {
+                "batter": 4,
+                "extras": 0,
+                "total": 4
+              }
+            },
+            {
+              "batter": "Alpha P3",
+              "bowler": "Beta P10",
+              "non_striker": "Alpha P3",
+              "runs": {
+                "batter": 6,
+                "extras": 0,
+                "total": 6
+              }
+            },
+            {
+              "batter": "Alpha P3",
+              "bowler": "Beta P10",
+              "non_striker": "Alpha P3",
+              "runs": {
+                "batter": 1,
+                "extras": 0,
+                "total": 1
+              }
+            },
+            {
+              "batter": "Alpha P3",
+              "bowler": "Beta P10",
+              "non_striker": "Alpha P3",
+              "runs": {
+                "batter": 0,
+                "extras": 0,
+                "total": 0
+              }
+            },
+            {
+              "batter": "Alpha P3",
+              "bowler": "Beta P10",
+              "non_striker": "Alpha P3",
+              "runs": {
+                "batter": 1,
+                "extras": 0,
+                "total": 1
+              }
+            }
+          ],
+          "over": 2
+        },
+        {
+          "deliveries": [
+            {
+              "batter": "Alpha P4",
+              "bowler": "Beta P11",
+              "non_striker": "Alpha P4",
+              "runs": {
+                "batter": 3,
+                "extras": 0,
+                "total": 3
+              }
+            },
+            {
+              "batter": "Alpha P4",
+              "bowler": "Beta P11",
+              "non_striker": "Alpha P4",
+              "runs": {
+                "batter": 4,
+                "extras": 0,
+                "total": 4
+              }
+            },
+            {
+              "batter": "Alpha P4",
+              "bowler": "Beta P11",
+              "non_striker": "Alpha P4",
+              "runs": {
+                "batter": 6,
+                "extras": 0,
+                "total": 6
+              }
+            },
+            {
+              "batter": "Alpha P4",
+              "bowler": "Beta P11",
+              "non_striker": "Alpha P4",
+              "runs": {
+                "batter": 1,
+                "extras": 0,
+                "total": 1
+              }
+            },
+            {
+              "batter": "Alpha P4",
+              "bowler": "Beta P11",
+              "non_striker": "Alpha P4",
+              "runs": {
+                "batter": 0,
+                "extras": 0,
+                "total": 0
+              }
+            },
+            {
+              "batter": "Alpha P4",
+              "bowler": "Beta P11",
+              "non_striker": "Alpha P4",
+              "runs": {
+                "batter": 1,
+                "extras": 0,
+                "total": 1
+              },
+              "wickets": [
+                {
+                  "kind": "bowled",
+                  "player_out": "Alpha P4"
+                }
+              ]
+            }
+          ],
+          "over": 3
+        },
+        {
+          "deliveries": [
+            {
+              "batter": "Alpha P1",
+              "bowler": "Beta P8",
+              "non_striker": "Alpha P1",
+              "runs": {
+                "batter": 3,
+                "extras": 0,
+                "total": 3
+              }
+            },
+            {
+              "batter": "Alpha P1",
+              "bowler": "Beta P8",
+              "non_striker": "Alpha P1",
+              "runs": {
+                "batter": 4,
+                "extras": 0,
+                "total": 4
+              }
+            },
+            {
+              "batter": "Alpha P1",
+              "bowler": "Beta P8",
+              "non_striker": "Alpha P1",
+              "runs": {
+                "batter": 6,
+                "extras": 0,
+                "total": 6
+              }
+            },
+            {
+              "batter": "Alpha P1",
+              "bowler": "Beta P8",
+              "non_striker": "Alpha P1",
+              "runs": {
+                "batter": 1,
+                "extras": 0,
+                "total": 1
+              }
+            },
+            {
+              "batter": "Alpha P1",
+              "bowler": "Beta P8",
+              "non_striker": "Alpha P1",
+              "runs": {
+                "batter": 0,
+                "extras": 0,
+                "total": 0
+              }
+            },
+            {
+              "batter": "Alpha P1",
+              "bowler": "Beta P8",
+              "non_striker": "Alpha P1",
+              "runs": {
+                "batter": 1,
+                "extras": 0,
+                "total": 1
+              }
+            }
+          ],
+          "over": 4
+        }
+      ],
+      "team": "Alpha CC"
+    }
+  ],
+  "meta": {
+    "data_version": "1.1.0",
+    "revision": 1
+  }
+}
