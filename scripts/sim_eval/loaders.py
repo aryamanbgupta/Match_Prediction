@@ -240,6 +240,9 @@ class TestMatchLoader:
 
         return players
     
+_ODDS_METADATA_KEYS = frozenset({"timestamp", "scheduled_start_timestamp"})
+
+
 class BettingOddsLoader:
     """Loads and processes betting odds data"""
 
@@ -312,6 +315,13 @@ class BettingOddsLoader:
         if not odds:
             return {}
         
+        # Metadata keys ride along inside the odds dict of the v2 evidence
+        # files (`odds.winner.timestamp`); they are not a side of the book.
+        # Counting them as an unparsed side made the fail-closed guard below
+        # return {} for EVERY row, so no simulator eval since 2026-08-14
+        # placed a bet (found by the BR2 gate matrix, 2026-09-10).
+        odds = {team: value for team, value in odds.items()
+                if team not in _ODDS_METADATA_KEYS}
         # Convert to raw implied probabilities
         implied = {}
         for team, decimal_odd in odds.items():

@@ -87,3 +87,30 @@ untracked evidence), `run_br2_gates.sh` with manifest roles, seed 42,
 
 Recorded in `research/reports/auto/BR2.md`; the four mandatory gates must
 pass or carry a written user exception before the merge (step 6).
+
+### Gate-matrix run 1 (2026-09-10): two defects found before any gate could be read
+
+1. **Zero bets in every simulator eval since 2026-08-14.** The one-sided-book
+   guard in `BettingOddsLoader.get_implied_probabilities` (commit 094532a)
+   compares parsed sides to `len(odds)`, and the v2 odds rows carry a
+   `timestamp` inside `odds.winner`, so every row returned `{}`: no market
+   probabilities, zero edge, zero bets, G1 unreadable. Fixed by excluding
+   metadata keys before the count; regression
+   `scripts/tests/test_odds_metadata_keys.py`. Not an item 2 regression (the
+   loader was untouched by item 2); a pre-existing branch defect the gate
+   matrix exposed.
+2. **Prop A/B ran on 30 matches and paired nothing.** `prop_backtest.py`
+   defaults `--n-matches 30` and `run_br2_gates.sh` did not override it; the
+   recorded detail is keyed by the legacy display id while the new detail is
+   cricsheet-keyed, so the paired join was empty. `compare_selector_eval.py`
+   gains `--join-key display_match_id`; the full 255-match backtest is
+   re-run.
+
+G1's recorded reference (`reports/prop_selector_comparison_n60.md`) is an
+n=30 empirical-vs-random delta on the old engine, not an absolute LL on this
+population, so G1 is read as the plan defines it (empirical selector not
+worse than random by more than 0.002) on the full v2 set under the fixed
+engine, both arms re-run. G5 read 89.7% on 3,061 slots (2025: 90.5%, 2026:
+89.3%), below the 90% bar as the plan anticipated; that requires a written
+user exception or a separate debutant-fallback change, never a
+reinterpreted bar.

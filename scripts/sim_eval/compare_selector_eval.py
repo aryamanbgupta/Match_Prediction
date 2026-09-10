@@ -113,15 +113,20 @@ def paired_bootstrap_delta(
 # ---------------------------------------------------------------------------
 
 
-def load_detail(path: str) -> Tuple[Dict[str, Dict[str, list]], List[str]]:
-    """Return (family → match_id → rows, families_in_order)."""
+def load_detail(path: str, join_key: str = "match_id") -> Tuple[Dict[str, Dict[str, list]], List[str]]:
+    """Return (family → match_id → rows, families_in_order).
+
+    ``join_key`` selects the record field used as the pairing id; a record
+    lacking it falls back to ``match_id`` (recorded pre-I15 details keep the
+    legacy display id there).
+    """
     with open(path) as f:
         data = json.load(f)
     families: List[str] = []
     seen = set()
     family_match_rows: Dict[str, Dict[str, list]] = defaultdict(dict)
     for d in data:
-        mid = d["match_id"]
+        mid = str(d.get(join_key) or d["match_id"])
         for fam, rows in d["obs"].items():
             if fam not in seen:
                 families.append(fam); seen.add(fam)
@@ -146,6 +151,10 @@ def is_continuous_family(rows: List[dict]) -> bool:
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--join-key", choices=("match_id", "display_match_id"), default="match_id",
+                    help="Detail record key used to pair matches. Recorded pre-I15 details "
+                         "carry the legacy display id as match_id; pass display_match_id to "
+                         "pair a cricsheet-keyed detail against one of those.")
     ap.add_argument("--left", required=True, help="Detail JSON path (treated as 'new'/'empirical')")
     ap.add_argument("--right", required=True, help="Detail JSON path (treated as 'baseline'/'random')")
     ap.add_argument("--left-label", default="empirical")
@@ -155,8 +164,8 @@ def main():
     ap.add_argument("--seed", type=int, default=42)
     args = ap.parse_args()
 
-    left_rows, families = load_detail(args.left)
-    right_rows, _ = load_detail(args.right)
+    left_rows, families = load_detail(args.left, args.join_key)
+    right_rows, _ = load_detail(args.right, args.join_key)
 
     lines: List[str] = []
     lines.append(f"# Prop selector comparison — {args.left_label} vs {args.right_label}")
