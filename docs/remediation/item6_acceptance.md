@@ -141,3 +141,12 @@ which 18 blocks cannot resolve; serving stays raw. HB1–HB4 met; evidence in
 | HD2 | Arms | same frame for both; baseline = M7+swap with `--drop-features` naming the 12 E4 columns (so it is the production feature set); candidate = M7+swap on all 60 |
 | HD3 | Decision | five seeds, zero cost, registered odds v2; the gate decides; E4's June discard on the validation rule is the prior, not evidence |
 | HD4 | Record | R4 in IDEAS.md; evidence in `research/handoff/R4/` |
+
+### Candidate D result (2026-09-10): FAILED (null)
+
+Idea R4. Five non-provisional seeds; paired ≥$50k ΔLL **+0.0003
+[−0.0057, +0.0073]**, seeds split 3 worse / 2 better; Δprofit noise. The
+baseline arm reproduces the production headline exactly, confirming the
+drop recovered the served feature set (HD2). HD1–HD4 met; frame built by
+joining the 12 E4 columns onto the v2 frame (row counts, ids and existing
+columns asserted identical); evidence in `research/handoff/R4/`.

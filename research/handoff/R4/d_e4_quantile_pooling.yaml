@@ -1,0 +1,18 @@
+name: ITEM6_D_E4_QUANTILE_POOLING
+# Candidate D (plan 6.6): E4 quantile lineup pooling. Same frame for both arms
+# (v2 frame + the 12 E4 columns joined from data/xgb_match_data_i7_full);
+# the baseline drops the 12 E4 columns by substring so it is exactly the
+# production 48-feature set; the candidate uses all 60.
+frame: data/xgb_match_data_i7_v2_e4
+baseline:
+  trainer_args: {monotone: true, swap_augment: true, drop_features: "elo_max,elo_spread,elo_top2"}
+candidate:
+  kind: trainer
+  trainer_args: {monotone: true, swap_augment: true}
+seeds: [29, 7, 13, 42, 101]
+slices: [all, 50000, 100000]
+cost: {spread_bps: 0, fee_bps: 0, fee_basis: winnings}  # decision at zero cost; scenarios are diagnostics
+expected_minutes_per_seed: 18
+ceiling_minutes: 240
+odds_role: odds_iteration_v2
+out_dir: experiments/results/item6_d_e4

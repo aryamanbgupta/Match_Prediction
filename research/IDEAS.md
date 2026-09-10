@@ -2827,3 +2827,15 @@ point-favourable with intervals straddling zero. **Gate:** match_model,
 five aligned seeds (29, 7, 13, 42, 101), zero-cost decision, registered
 iteration odds v2. **Budget:** ~10 fits.
 **Result:** FAILED 2026-09-10 (gate). Five aligned seeds, non-provisional. ≥$50k paired ΔLL −0.0068 [−0.0230, +0.0125]: favourable on 5/5 seeds (−0.0046, −0.0083, −0.0063, −0.0076, −0.0071; raw 0.6249/0.6336/0.6266/0.6284/0.6336 → Platt 0.6204/0.6252/0.6203/0.6208/0.6265) but the 18-block interval straddles zero, so the LL gate does not clear; Δprofit −0.010 [−0.121, +0.062] is noise. Reading: consistent across seeds and just under the 0.007 floor, i.e. the shape of a real but small effect that 168 fixtures in 18 blocks cannot resolve; consistent with P2's re-look. Not a retry candidate on this set; a golden-set confirmation or more fixtures is the only way to resolve it. Serving stays raw. Artifacts: experiments/results/item6_platt_isolated/{gate,harness}.json; evidence copied to research/handoff/R2/.
+
+## R4 [P2] [FAILED] Item 6 candidate D: E4 quantile lineup pooling on the i7 frame
+*(remediation plan §6 step 6, 2026-09-10; run before R3 because C's sweep support was still being built)*
+**Hypothesis:** the 12 E4 quantile-pooling columns (top-6 batting ELO max
+and spread, bowling ELO max and top-2, and their diffs), discarded in June on
+the validation rule, improve paired ≥$50k log loss over the production
+48-feature set when both arms train on the same frame
+(`data/xgb_match_data_i7_v2_e4`, v2 frame + E4 columns joined from
+`xgb_match_data_i7_full`) and the baseline drops them by substring. **Gate:**
+match_model, five aligned seeds, zero-cost decision, registered iteration
+odds v2. **Budget:** ~10 fits.
+**Result:** FAILED 2026-09-10 (gate). Five aligned seeds, non-provisional. ≥$50k paired ΔLL +0.0003 [−0.0057, +0.0073]: null; seeds split (29 +0.0043, 7 +0.0017, 13 +0.0023, 42 −0.0030, 101 −0.0038). Δprofit +0.005 [−0.098, +0.067] is noise. The baseline arm (60 → 48 features via drop_features elo_max,elo_spread,elo_top2) reproduces the production seed-29 headline exactly (LL 0.6249, ROI +3.38%), so the comparison is against the served feature set. Reading: quantile pooling adds nothing the mean-pooled and ELO features do not already carry on this frame; consistent with the June discard and with M3–M6's finding that feature work is exhausted at this signal level. Artifacts: experiments/results/item6_d_e4/{gate,harness}.json; evidence in research/handoff/R4/.

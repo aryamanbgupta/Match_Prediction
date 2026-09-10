@@ -153,7 +153,7 @@ gate file SHA-256. When out of `PENDING` ideas, design one combination of
 `TABLED` ideas and run it (see PROTOCOL step 1).
 
 review_due: 2026-12-09
-verdicts_since_review: 2
+verdicts_since_review: 3
 
 ### Superseded 2026-09-10 (verbatim)
 
