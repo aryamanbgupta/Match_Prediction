@@ -85,3 +85,13 @@ unresolved winner skipped price validation, so a positive-edge bet at odds
 Claude at both evaluator sites: the EV/Kelly block now catches the price
 rejection, stamps `price_rejected`, and zeroes the sizing outputs; regression
 in `scripts/tests/test_eval_math.py`.
+
+## Step 6 result (2026-09-10)
+
+Production `test_predictions.json` pulled from the Mac mini (model md5
+`54faf586…`). Re-baseline in `reports/item2_rebaseline_20260910.md`: on the
+same inputs as the recorded I17 evaluation, zero-cost numbers are identical
+on all three slices (0 numeric differences, 0 per-record profit
+mismatches); cost-scenario columns and stamps are the only new output. Sol's
+headline comparison in the report body is confounded by stored pre-v2 prices
+in the I17 envelope; see the addendum. **Item 2 is complete.**
