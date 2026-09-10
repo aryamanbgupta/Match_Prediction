@@ -62,3 +62,10 @@ awaiting the user's decision. Not on the mini: `models/bowler_roster_policy.json
 (local-only, recorded in the manifest).
 
 Steps 5–6 (gate matrix, merge) remain open.
+
+Update (2026-09-10, later): with the user's approval the local fresh cricsheet
+export was renamed `data/t20s_json_fresh_export_20260805/` and the mini's
+frozen corpus (11,264 files, 1.0.0 export) synced into `data/t20s_json`;
+the legacy `models/xgb_v3` and `models/xgb_match_v3_m7_production` rollback
+artifacts were pulled because the sealed-set preflight verifies them. Full
+suite on this checkout: **443 passed, 5 skipped, 0 failed** (E14 met).
