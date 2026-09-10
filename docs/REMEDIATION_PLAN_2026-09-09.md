@@ -626,3 +626,17 @@ Claude Fable coordinates, writes each item's acceptance checks before
 implementation starts, and reads every diff. Note (2026-09-09): the Codex
 model requested as `gpt-5.6-sol` identified itself as "GPT-5.4 Codex" on a
 ping; confirm the routing before the first implementation task.
+
+[v6, user decision 2026-09-10] **Codex Sol (medium) implements every item**;
+the Opus 5 rows above are superseded. Reviewers are unchanged (Astra light
+and/or Claude per the table). Routing check 2026-09-10: the Codex CLI session
+header accepted `gpt-5.6-sol` / medium and `gpt-6-astra` / low with no
+fallback; self-reported names ("GPT-5 Codex", "GPT-6") are not treated as
+evidence. Accepted by the user as sufficient. Per-item acceptance checks live
+in `docs/remediation/`.
+
+Erratum (2026-09-10, checkout verification): `scripts/tests/` holds 55 `.py`
+files (48 `test_*.py`), 63 files carry `sys.path` edits (64 occurrences), all
+resolving to `scripts/`; fifteen files (ten in `scripts/tests/`, five in
+`tests/`) define private cricsheet builders, not eight; `predict_fixture`
+has 29 tests across two files. Counts only; no design change.
