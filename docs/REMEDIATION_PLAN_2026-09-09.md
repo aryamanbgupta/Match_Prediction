@@ -399,7 +399,7 @@ than asserted.
    | prop A/B | fixed-seed `prop_backtest` new vs recorded engine, paired per family | no CI-clean regression in any family; movements only where SIM1/SIM2/PROP3/engine changes fire |
    | G1 | winner-market LL parity, empirical selector, i7 ball model | ΔLL vs recorded within 0.002 |
    | G3 | `top_batter` paired delta | interval includes zero or favourable |
-   | G5 | bowler coverage ≥90% on v2 set | ≥90% on the declared population; if a debutant fallback is added to the usage prior, it is a separate change with its own before/after, and the bar is not reinterpreted |
+   | G5 | bowler coverage ≥90% on v2 set | ≥90% on the declared population; if a debutant fallback is added to the usage prior, it is a separate change with its own before/after, and the bar is not reinterpreted. [v6, user decision 2026-09-10: 89.7% accepted by written exception in BR2.md; the bar is **≥89%** from here on] |
    | E2 | `highest_individual_mae` re-derived against the corrected match-level baseline | verdict restated either way |
 
    Recorded in `research/reports/auto/BR2.md`. [v3] prop A/B, G1, G3 and

@@ -128,3 +128,7 @@ reinterpreted bar.
 E2 restated: parity (15.99 vs 16.39, −0.40 [−1.02, +0.17]); old "sim adds
 skill" withdrawn for this family. Full record: `research/reports/auto/BR2.md`;
 evidence `research/handoff/BR2/`. Step 5 complete except the G5 decision.
+
+G5 disposition (user, 2026-09-10): 89.7% accepted by written exception in
+BR2.md; the coverage bar is now **≥89%** going forward. Step 5 complete; step
+6 (merge) awaits the user's branch review.
