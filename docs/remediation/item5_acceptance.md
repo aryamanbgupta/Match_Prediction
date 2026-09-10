@@ -69,3 +69,21 @@ frozen corpus (11,264 files, 1.0.0 export) synced into `data/t20s_json`;
 the legacy `models/xgb_v3` and `models/xgb_match_v3_m7_production` rollback
 artifacts were pulled because the sealed-set preflight verifies them. Full
 suite on this checkout: **443 passed, 5 skipped, 0 failed** (E14 met).
+
+## Step 5: BR2 gate matrix checks (written before running; run on the laptop, 2026-09-10)
+
+Required outcomes are fixed by plan §5 step 5. Inputs: recorded pre-fix detail
+`reports/prop_calibration_detail_emp_n261.json` (pulled from the mini,
+untracked evidence), `run_br2_gates.sh` with manifest roles, seed 42,
+100 sims, empirical selector, OMP threads capped.
+
+| Gate | Required | How read |
+|---|---|---|
+| prop A/B | no CI-clean regression in any family; movements only where SIM1/SIM2/PROP3/engine changes fire | `compare_selector_eval.py` paired output per family |
+| G1 | winner-market ΔLL vs recorded within 0.002 | `run_sim_eval` sliced summary vs the recorded ≥$50k line |
+| G3 | `top_batter` paired delta interval includes zero or favourable | prop A/B row |
+| G5 | bowler coverage ≥90% on the v2 set | `check_bowler_coverage.py` |
+| E2 | `highest_individual_mae` restated against the corrected baseline | verdict restated either way; cannot block |
+
+Recorded in `research/reports/auto/BR2.md`; the four mandatory gates must
+pass or carry a written user exception before the merge (step 6).

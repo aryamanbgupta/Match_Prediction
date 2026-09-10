@@ -122,3 +122,22 @@ Idea R2. Five non-provisional seeds; paired ≥$50k ΔLL **−0.0068
 zero; Δprofit noise. The effect is consistent and just under the seed floor,
 which 18 blocks cannot resolve; serving stays raw. HB1–HB4 met; evidence in
 `research/handoff/R2/`.
+
+## Candidate C checks (written before running)
+
+| # | Check | Pass condition |
+|---|---|---|
+| HC1 | Grid | learning rate {0.03, 0.05, 0.08} × colsample {0.7, 0.9} × depth {3, 4} = 12 configs around M7 (lr 0.05, colsample 0.9, depth 4, monotone, swap); grid is configuration in `experiments/harness/c_rolling_grid.yaml` |
+| HC2 | Folds | exactly the plan's three: train ≤2022-12-31 / select 2023; ≤2023-12-31 / 2024; ≤2024-12-31 / 2025-H1, as row masks over the i7 frame, encoders refit per fold, early stopping on the select rows |
+| HC3 | Selection statistic | fold-mean select-set LL per config, with per-fold values and the M7 config's own row; the best config is the argmin; ties within 0.002 go to M7 (fewer changes) |
+| HC4 | Re-selection is a separate step | the sweep only reports; if the argmin is not M7 and beats it by more than 0.002 fold-mean, a five-seed gate run (candidate = argmin config, baseline = M7) is prepared as `experiments/harness/c_confirm.yaml` and run; otherwise the candidate is recorded as "M7 retained" with the table |
+| HC5 | Record | R3 in IDEAS.md; verdict via the gate if a confirm run happens, else DESCRIPTIVE recorded manually with the sweep table in `research/handoff/R3/` |
+
+## Candidate D checks (written before running)
+
+| # | Check | Pass condition |
+|---|---|---|
+| HD1 | Frame | built from `data/xgb_match_data_i7_full` (pulled from the mini) with the production 48 columns plus the 12 E4 quantile-pooling columns, via `build_i7_match_frame.py` with an extended feature list; identity stamps identical to the v2 frame |
+| HD2 | Arms | same frame for both; baseline = M7+swap with `--drop-features` naming the 12 E4 columns (so it is the production feature set); candidate = M7+swap on all 60 |
+| HD3 | Decision | five seeds, zero cost, registered odds v2; the gate decides; E4's June discard on the validation rule is the prior, not evidence |
+| HD4 | Record | R4 in IDEAS.md; evidence in `research/handoff/R4/` |
