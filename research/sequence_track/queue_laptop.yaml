@@ -1,0 +1,252 @@
+# Sequence-track job queue, read by research/sequence_track/run_queue.sh.
+#
+# Jobs run in listed order, one at a time, on the machine whose tag matches
+# --machine (default: laptop). A job is skipped when its output_dir holds a
+# COMPLETE marker whose config_sha256 equals the sha256 of its config file,
+# so a night that was stopped resumes where it left off.
+#
+# Paths are relative to the repository root unless absolute. Commands run
+# through /bin/bash -c with the repository root as the working directory.
+#
+# ---------------------------------------------------------------------------
+# Stage 2, night 1 (docs/sequence_track/stage2_acceptance.md, D8 checks 8.2
+# and 8.3). THE NIGHT IS SPLIT BY SEED ACROSS TWO MACHINES (Astra MUST-FIX 9,
+# the user's decision 2026-09-12): seed 7 runs on the laptop
+# (research/sequence_track/queue_laptop.yaml) and seed 13 on the Mac mini
+# (research/sequence_track/queue_mini.yaml). This file is the laptop half:
+# sixteen jobs, one per registered configuration, in the registered queue
+# order, ONE seed each (seed 7).
+#
+# Every job names the SAME config file, so a change to the config changes all
+# sixteen signatures on both machines and the driver's reuse check then
+# re-runs only what is missing.
+#
+# WHY output_dir IS SEED-SPECIFIC: run_queue.sh decides skip-vs-run from the
+# COMPLETE marker in output_dir and the config sha256 ALONE -- it does not
+# look at the command or at the seed subset. A per-configuration marker
+# directory shared by both halves would therefore let seed 7's COMPLETE
+# suppress seed 13 (or the reverse) as soon as the two trees are synced. Each
+# job's output_dir is models/embeddings/seq_stage2/runs/<config_id>/seed_<seed>,
+# which is exactly the directory retrain_stage2.py writes that seed's run
+# into, so one marker means one finished run.
+#
+# THREAD CAPS LIVE IN EACH COMMAND, NOT IN defaults: scripts/sequence_track/
+# queue_lib.py validates `defaults` against
+# {memory_floor_gb, memory_cap_gb, poll_seconds, stop_file} and every other
+# field -- per-job memory fields included -- is IGNORED with a warning
+# (KNOWN_DEFAULT_FIELDS / KNOWN_JOB_FIELDS). So the memory floor and cap are
+# queue-wide defaults, and the thread caps are environment prefixes on each
+# command.
+#
+# EXPECTED HOURS: expected_hours = ceil_to_0.05((30 * smoke_seconds * F + 120)
+# / 3600), with F = 1.5 on the laptop and smoke_seconds the D6.3 laptop
+# load-plus-one-epoch wall time. 30 is the registered epoch ceiling (patience
+# 3 usually stops earlier, so this is an upper bound), and 120 s covers frame
+# load and startup.
+#
+# RETRY BUDGET: run_queue.sh gives each job a per-attempt alarm of
+# 2 * expected_hours AND retries once after a failure or a timeout, so a hung
+# job can consume up to 4 * expected_hours of the night before the queue moves
+# on. The sum of 4 * expected_hours over these sixteen jobs is 15.4 h;
+# the sum of expected_hours is 3.85 h.
+#
+# xLSTM RECALIBRATED (2026-09-12): the xLSTM cell's normalisation fix (Astra
+# MUST-FIX 1) and its restored output gate changed the arm, so it was re-smoked
+# on an idle machine at 73.2 s per load-plus-epoch (was 62.7 s). xlstm's
+# expected_hours below is computed FROM THAT CORRECTED SMOKE:
+# (30 x 73.2 x 1.5 + 120)/3600 = 0.9483 h -> 0.95. No other job's budget
+# changed. A one-hour blanket timeout is what Astra flagged as able to kill
+# legitimate training -- do not reintroduce one.
+# ---------------------------------------------------------------------------
+
+defaults:
+  # Refuse to launch a job when available memory (vm_stat: free + inactive +
+  # speculative) is below this. Laptop-sized: this machine also runs the interactive session,
+  # so the floor is high and the cap leaves room for it.
+  memory_floor_gb: 12
+  # Kill a job whose process-tree RSS exceeds this.
+  memory_cap_gb: 24
+  # Watchdog poll interval, seconds.
+  poll_seconds: 30
+  # Touch this file to stop THIS queue between jobs; remove it to resume.
+  # Each half has its own stop file so stopping one machine never stops the
+  # other.
+  stop_file: research/sequence_track/STOP_laptop
+
+jobs:
+  - id: mlp-s7
+    config: experiments/configs/seq_stage2_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids mlp --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage2/runs/mlp/seed_7
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Configuration 1 of 16, seed 7: the shared control; every family's gate reference.
+      Budget: 30 x 6.5 s x 1.5 + 120 s = 412.5 s
+      = 0.1146 h, rounded up to 0.15.
+
+  - id: full-s7
+    config: experiments/configs/seq_stage2_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids full --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage2/runs/full/seed_7
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Configuration 2 of 16, seed 7: the standard-wiring reference.
+      Budget: 30 x 8.2 s x 1.5 + 120 s = 489.0 s
+      = 0.1358 h, rounded up to 0.15.
+
+  - id: fixed_decay-s7
+    config: experiments/configs/seq_stage2_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids fixed_decay --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage2/runs/fixed_decay/seed_7
+    expected_hours: 0.20
+    machine: laptop
+    notes: >
+      Configuration 3 of 16, seed 7: ALiBi fixed decay, and fox's matched control.
+      Budget: 30 x 10.0 s x 1.5 + 120 s = 570.0 s
+      = 0.1583 h, rounded up to 0.20.
+
+  - id: fox-s7
+    config: experiments/configs/seq_stage2_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids fox --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage2/runs/fox/seed_7
+    expected_hours: 0.20
+    machine: laptop
+    notes: >
+      Configuration 4 of 16, seed 7: learned forgetting.
+      Budget: 30 x 11.1 s x 1.5 + 120 s = 619.5 s
+      = 0.1721 h, rounded up to 0.20.
+
+  - id: aligned_hist-s7
+    config: experiments/configs/seq_stage2_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids aligned_hist --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage2/runs/aligned_hist/seed_7
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Configuration 5 of 16, seed 7: participant-aligned history, standard wiring.
+      Budget: 30 x 8.7 s x 1.5 + 120 s = 511.5 s
+      = 0.1421 h, rounded up to 0.15.
+
+  - id: recency_k30-s7
+    config: experiments/configs/seq_stage2_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids recency_k30 --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage2/runs/recency_k30/seed_7
+    expected_hours: 0.20
+    machine: laptop
+    notes: >
+      Configuration 6 of 16, seed 7: the recency mask at k = 30, same_entity_k30's matched control.
+      Budget: 30 x 11.2 s x 1.5 + 120 s = 624.0 s
+      = 0.1733 h, rounded up to 0.20.
+
+  - id: same_entity_k30-s7
+    config: experiments/configs/seq_stage2_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids same_entity_k30 --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage2/runs/same_entity_k30/seed_7
+    expected_hours: 0.20
+    machine: laptop
+    notes: >
+      Configuration 7 of 16, seed 7: the primary ownership candidate.
+      Budget: 30 x 11.0 s x 1.5 + 120 s = 615.0 s
+      = 0.1708 h, rounded up to 0.20.
+
+  - id: aligned_hist_rf-s7
+    config: experiments/configs/seq_stage2_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids aligned_hist_rf --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage2/runs/aligned_hist_rf/seed_7
+    expected_hours: 0.25
+    machine: laptop
+    notes: >
+      Configuration 8 of 16, seed 7: the relay-free unrestricted endpoint (same_entity_unr's matched control).
+      Budget: 30 x 13.9 s x 1.5 + 120 s = 745.5 s
+      = 0.2071 h, rounded up to 0.25.
+
+  - id: same_entity_k0-s7
+    config: experiments/configs/seq_stage2_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids same_entity_k0 --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage2/runs/same_entity_k0/seed_7
+    expected_hours: 0.20
+    machine: laptop
+    notes: >
+      Configuration 9 of 16, seed 7: k sweep floor, the target row alone.
+      Budget: 30 x 11.0 s x 1.5 + 120 s = 615.0 s
+      = 0.1708 h, rounded up to 0.20.
+
+  - id: same_entity_k6-s7
+    config: experiments/configs/seq_stage2_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids same_entity_k6 --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage2/runs/same_entity_k6/seed_7
+    expected_hours: 0.25
+    machine: laptop
+    notes: >
+      Configuration 10 of 16, seed 7: k sweep, one over.
+      Budget: 30 x 14.2 s x 1.5 + 120 s = 759.0 s
+      = 0.2108 h, rounded up to 0.25.
+
+  - id: same_entity_k12-s7
+    config: experiments/configs/seq_stage2_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids same_entity_k12 --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage2/runs/same_entity_k12/seed_7
+    expected_hours: 0.25
+    machine: laptop
+    notes: >
+      Configuration 11 of 16, seed 7: k sweep, two overs.
+      Budget: 30 x 14.4 s x 1.5 + 120 s = 768.0 s
+      = 0.2133 h, rounded up to 0.25.
+
+  - id: same_entity_unr-s7
+    config: experiments/configs/seq_stage2_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids same_entity_unr --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage2/runs/same_entity_unr/seed_7
+    expected_hours: 0.20
+    machine: laptop
+    notes: >
+      Configuration 12 of 16, seed 7: ownership over the whole innings.
+      Budget: 30 x 11.1 s x 1.5 + 120 s = 619.5 s
+      = 0.1721 h, rounded up to 0.20.
+
+  - id: lstm-s7
+    config: experiments/configs/seq_stage2_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids lstm --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage2/runs/lstm/seed_7
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Configuration 13 of 16, seed 7: 2-layer LSTM, hidden 128.
+      Budget: 30 x 6.9 s x 1.5 + 120 s = 430.5 s
+      = 0.1196 h, rounded up to 0.15.
+
+  - id: xlstm-s7
+    config: experiments/configs/seq_stage2_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids xlstm --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage2/runs/xlstm/seed_7
+    expected_hours: 0.95
+    machine: laptop
+    notes: >
+      Configuration 14 of 16, seed 7: sLSTM then mLSTM, plain torch. The night's long pole; see the xLSTM note in the header.
+      Budget from the CORRECTED 73.2 s smoke: 30 x 73.2 s x 1.5 + 120 s = 3414.0 s
+      = 0.9483 h, rounded up to 0.95.
+
+  - id: residual_mlp-s7
+    config: experiments/configs/seq_stage2_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids residual_mlp --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage2/runs/residual_mlp/seed_7
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Configuration 15 of 16, seed 7: residual over the production ball model, residual_t1's matched control. Needs the D4 base logits on this machine.
+      Budget: 30 x 7.4 s x 1.5 + 120 s = 453.0 s
+      = 0.1258 h, rounded up to 0.15.
+
+  - id: residual_t1-s7
+    config: experiments/configs/seq_stage2_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids residual_t1 --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage2/runs/residual_t1/seed_7
+    expected_hours: 0.20
+    machine: laptop
+    notes: >
+      Configuration 16 of 16, seed 7: sequence over the production prior. Needs the D4 base logits on this machine.
+      Budget: 30 x 11.4 s x 1.5 + 120 s = 633.0 s
+      = 0.1758 h, rounded up to 0.20.
+

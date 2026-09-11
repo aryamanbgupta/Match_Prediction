@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deterministic overnight queue runner for the sequence and embeddings track.
 #
-# Every arm is pre-registered in queue.yaml, so unattended work is a plain
+# Every arm is pre-registered in a queue file, so unattended work is a plain
 # queue: jobs in listed order, one at a time, each with a config hash, an
 # output dir, an expected wall time and a machine tag. There is no model in
 # the loop, no verdict logging, and no version-control command anywhere in
@@ -36,7 +36,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 QUEUE_LIB="$REPO_ROOT/scripts/sequence_track/queue_lib.py"
 
-QUEUE="$SCRIPT_DIR/queue.yaml"
+QUEUE="$SCRIPT_DIR/queue_laptop.yaml"
 MACHINE="laptop"
 DRY_RUN=0
 
@@ -44,7 +44,10 @@ usage() {
   cat <<'EOF'
 Usage: ./research/sequence_track/run_queue.sh [--queue PATH] [--machine NAME] [--dry-run]
 
-  --queue PATH    queue file (default: research/sequence_track/queue.yaml)
+  --queue PATH    queue file (default:
+                  research/sequence_track/queue_laptop.yaml; the stage-2
+                  night is split by seed, so the mini half is
+                  research/sequence_track/queue_mini.yaml)
   --machine NAME  run only jobs tagged with this machine (default: laptop)
   --dry-run       print the resolved jobs, each skip/run decision and the
                   memory reading, then exit without launching anything

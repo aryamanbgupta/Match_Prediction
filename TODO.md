@@ -1153,3 +1153,20 @@ See [IMPROVEMENTS.md](IMPROVEMENTS.md) for detailed research findings:
 - Realistic market-beating edge is 1-3% ROI
 - GBMs still outperform deep learning on tabular data
 - Don't chase ball accuracy >60%, don't optimize for small test set
+
+### Golden set redefinition (added 2026-09-11, user decision during stage 2 kickoff)
+
+- [ ] **Move the match-level golden window to matches dated 2026-08-06
+  onward.** The 2026-04-17 → 2026-08-05 window (471 men's T20 matches) is
+  now the sequence track's ball-level *untouched cohort*
+  (`docs/sequence_track/stage2_acceptance.md` D5), built from the
+  stat-generator cricsheet zips with the 137 sealed forward fixtures and the
+  124 match-level golden fixtures excluded from scoring. Once stage 2 scores
+  it, that window is consumed at ball level too. The next match-level golden
+  set must therefore start at 2026-08-06: fresh cricsheet and Polymarket
+  captures sealed under the daily protocol
+  (`docs/DAILY_PREDICTION_PROTOCOL.md`), a new `data/golden/` build with its
+  own `_v3` odds file, and updated `CLAUDE.md` / `docs/registered_odds.json`
+  roles. Until that lands, `data/golden/betting_odds_golden_v2.json` remains
+  the match-level golden set of record and must not be scored by any
+  sequence-track arm.

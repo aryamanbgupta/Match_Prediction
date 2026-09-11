@@ -71,6 +71,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -109,6 +110,96 @@ AUX_WEIGHT_DEFAULT = 0.2
 # Bookkeeping column read only to record each split's date range; it is
 # never part of the feature tensor.
 DATE_COL = "match_date"
+
+# --------------------------------------------------------------------------
+# Sequence track stage 2 (docs/sequence_track/stage2_acceptance.md, D3).
+#
+# The four stage 1 arms keep their exact behaviour: `STAGE1_ARMS` is the
+# registered stage 1 set and every table below reproduces what those arms
+# already did, so adding stage 2 arms cannot move a stage 1 number (D3.3).
+STAGE1_ARMS = ("full", "mlp", "no_attention", "no_history")
+STAGE2_ARMS = ("fixed_decay", "fox", "aligned_hist", "aligned_hist_rf",
+               "recency", "same_entity", "residual_mlp", "residual_t1",
+               "lstm", "xlstm")
+ALL_ARMS = STAGE1_ARMS + STAGE2_ARMS
+
+# Arms whose attention set is parameterised by a window k (D3.3: --k is
+# required for these and refused for every other arm).
+ARMS_NEEDING_K = ("recency", "same_entity")
+# Arms that consume a base log-probability input (D3.3 / D4).
+ARMS_NEEDING_BASE_LOGITS = ("residual_mlp", "residual_t1")
+
+# How every arm is wired. "token_mlp" has no sequence access at all;
+# "standard" is `nn.TransformerEncoder`-shaped (queries, keys and values all
+# from the running residual stream); "relay_free" takes keys and values from
+# the LAYER-ZERO token embedding at every layer, so h_i depends only on
+# {e_j : j in the attention set of i} (arm register, "Relay-free wiring";
+# certified in D7); "recurrent" dispatches to `sequence_track.recurrent_arms`.
+ARM_WIRING = {
+    "mlp": "token_mlp", "residual_mlp": "token_mlp",
+    "full": "standard", "no_attention": "standard",
+    "no_history": "standard", "aligned_hist": "standard",
+    "residual_t1": "standard", "fixed_decay": "standard", "fox": "standard",
+    "aligned_hist_rf": "relay_free", "recency": "relay_free",
+    "same_entity": "relay_free",
+    "lstm": "recurrent", "xlstm": "recurrent",
+}
+# The history input each arm reads. "innings_previous" is the stage 1
+# `out_emb(prev_y)`; "participant_aligned" replaces it with
+# `bat_emb(prev_bat) + bowl_emb(prev_bowl)` (D3.4). `no_history` reads the
+# innings-previous pathway with every value forced to BOS, so its declared
+# history input is "none" while it still owns an `out_emb`.
+ARM_HISTORY = {
+    "mlp": "none", "residual_mlp": "none", "no_history": "none",
+    "full": "innings_previous", "no_attention": "innings_previous",
+    "residual_t1": "innings_previous", "fixed_decay": "innings_previous",
+    "fox": "innings_previous", "recency": "innings_previous",
+    "lstm": "innings_previous", "xlstm": "innings_previous",
+    "aligned_hist": "participant_aligned",
+    "aligned_hist_rf": "participant_aligned",
+    "same_entity": "participant_aligned",
+}
+# How the KEY/VALUE token of an earlier row is built (handoff § 3.1, the
+# `relay_free_keys_carry_own_outcome` asymmetry).
+#
+#   * "own_outcome" (every relay-free arm) — the key/value token for an
+#     earlier row j < i is e_j = feat_proj(feat_j) + own_out_emb(y_j) + pos_j,
+#     with y_j row j's OWN realised outcome (known before ball i). The query
+#     stream's initial state and the self key/value (j == i) are instead
+#     e_i^self = feat_proj(feat_i) + hist(i) + pos_i, so row i never reads
+#     y_i. The dependency set is then exactly S(i) = attention_set(i) union
+#     {history-source rows of i}, which is what D7 certifies;
+#   * "shifted_history" (standard wiring) — every token, key or query, is
+#     feat_proj(feat_j) + hist(j) + pos_j, i.e. the SHIFTED previous outcome.
+#     Unchanged from stage 1;
+#   * None — the arm has no keys (token_mlp) or no attention (recurrent).
+#
+# Consequence, recorded as a known asymmetry: relay-free arms read earlier
+# rows as (state, own outcome) pairs and standard arms as (state, shifted
+# previous outcome) pairs, so `aligned_hist_rf - aligned_hist` measures the
+# wiring AND the key construction, not the wiring alone.
+ARM_KEY_CONSTRUCTION = {
+    arm: ("own_outcome" if ARM_WIRING[arm] == "relay_free"
+          else "shifted_history" if ARM_WIRING[arm] == "standard" else None)
+    for arm in ALL_ARMS}
+# Own-outcome vocabulary: 6 real classes, no BOS. A row's own outcome always
+# exists, so there is nothing for a BOS symbol to stand for.
+N_OUTCOME_CLASSES = 6
+
+# The additive attention bias. `fixed_decay` and `fox` differ ONLY here and
+# in the gate parameters (D3.9), and neither carries a positional embedding.
+ARM_BIAS = {arm: "none" for arm in ALL_ARMS}
+ARM_BIAS["fixed_decay"] = "alibi"
+ARM_BIAS["fox"] = "fox"
+# Positional embedding: every attention arm except the two bias arms, which
+# are registered "pos emb: no" because their bias carries position.
+ARM_POS_EMB = {
+    arm: ARM_WIRING[arm] in ("standard", "relay_free")
+    and ARM_BIAS[arm] == "none" for arm in ALL_ARMS}
+# The FoX gate bias initialiser: sigma(4) ~ 0.982, so the gate is ~1 (no
+# forgetting) at initialisation and the arm starts from vanilla attention.
+FOX_GATE_BIAS_INIT = 4.0
+RESIDUAL_L2_DEFAULT = 0.001
 
 
 def load_aux(split: str, n_rows: int, vocabs: dict | None,
@@ -313,6 +404,177 @@ def build_innings(df: pd.DataFrame):
     return list(df.groupby("innings_id", sort=False).indices.values())
 
 
+def aligned_history(y, batter_ids, bowler_ids, innings_index_lists):
+    """Participant-aligned history inputs, one pair per row (D3.4).
+
+    ``prev_bat[r]`` is the outcome class of the last EARLIER row of the same
+    innings with the same ``batter_id``; ``prev_bowl[r]`` the same for
+    ``bowler_id``. ``BOS`` where there is no such row — the batter's or
+    bowler's first delivery of the innings.
+
+    Rows are walked in parquet (ball) order within each innings, so extras
+    (wides, no-balls) are ordinary rows and count: a wide by the same bowler
+    is that bowler's previous outcome for the next legal ball.
+
+    Pure, numpy-only and index-aligned to the split's rows, so the unit test
+    can assert exact vectors on a hand-built innings and the trainer can
+    compute the arrays once per split.
+    """
+    y = np.asarray(y)
+    batter_ids = np.asarray(batter_ids)
+    bowler_ids = np.asarray(bowler_ids)
+    n = len(y)
+    if len(batter_ids) != n or len(bowler_ids) != n:
+        raise ValueError("y, batter_ids and bowler_ids must be row-aligned")
+    prev_bat = np.full(n, BOS, dtype=np.int64)
+    prev_bowl = np.full(n, BOS, dtype=np.int64)
+    for index_list in innings_index_lists:
+        last_bat: dict = {}
+        last_bowl: dict = {}
+        for row in index_list:
+            bat, bowl = batter_ids[row], bowler_ids[row]
+            if bat in last_bat:
+                prev_bat[row] = last_bat[bat]
+            if bowl in last_bowl:
+                prev_bowl[row] = last_bowl[bowl]
+            # Updated AFTER the row is read: the outcome of ball r is never
+            # an input to ball r (invariant 2, temporal integrity).
+            last_bat[bat] = y[row]
+            last_bowl[bowl] = y[row]
+    return prev_bat, prev_bowl
+
+
+def attention_mask(arm: str, k, batter, bowler, pad_mask) -> torch.Tensor:
+    """Boolean ``(B, L, L)`` attention set: True where query i may read key j.
+
+    D3.5. Every set is causal (j <= i), excludes padded keys, and always
+    contains the target itself, so no query row is fully masked (which would
+    make softmax produce NaN).
+
+      * ``recency`` — W_k(i) = {j : i-k <= j <= i}; ``k`` may be ``"unr"``
+        (or ``None``) for the whole innings prefix, and ``k = 0`` leaves the
+        target alone;
+      * ``same_entity`` — {j in W_k(i) : batter[j] == batter[i] or
+        bowler[j] == bowler[i]} union {i};
+      * anything else (``aligned_hist_rf``, and the standard-wiring biased
+        arms) — the full causal prefix.
+
+    k counts delivery ROWS inclusive of extras, because the frame's row order
+    is the delivery order.
+    """
+    B, L = pad_mask.shape
+    device = pad_mask.device
+    pos = torch.arange(L, device=device)
+    lag = pos.view(-1, 1) - pos.view(1, -1)  # (L, L): i - j
+    allowed = lag >= 0  # causal prefix
+    if arm in ARMS_NEEDING_K and k is not None and k != "unr":
+        allowed = allowed & (lag <= int(k))
+    allowed = allowed.unsqueeze(0).expand(B, L, L)
+    if arm == "same_entity":
+        if batter is None or bowler is None:
+            raise ValueError("same_entity needs batter/bowler id tensors")
+        same = ((batter.unsqueeze(2) == batter.unsqueeze(1))
+                | (bowler.unsqueeze(2) == bowler.unsqueeze(1)))
+        allowed = allowed & same
+    allowed = allowed & ~pad_mask.unsqueeze(1)  # padded keys are never read
+    diag = torch.eye(L, dtype=torch.bool, device=device).unsqueeze(0)
+    return allowed | diag
+
+
+def attention_set(arm: str, k, target: int, batter=None, bowler=None,
+                  length: int | None = None) -> set[int]:
+    """The rows query ``target`` may attend to, as a set of row positions.
+
+    Positions are WITHIN-INNINGS (the padded sequence index), matching
+    `attention_mask`. `batter`/`bowler` are 1-D per-row integer codes of the
+    innings; `length` defaults to their length.
+
+    The token-MLP arms have no attention at all and `no_attention` is masked
+    to its own diagonal, so both return ``{target}``.
+    """
+    if length is None:
+        if batter is None:
+            raise ValueError("attention_set needs `length` or id arrays")
+        length = len(batter)
+    if ARM_WIRING[arm] in ("token_mlp", "recurrent") or arm == "no_attention":
+        return {int(target)}
+    pad = torch.zeros(1, length, dtype=torch.bool)
+
+    def ids(values):
+        if values is None:
+            return None
+        return torch.as_tensor(np.asarray(values, dtype=np.int64)).view(1, -1)
+
+    mask = attention_mask(arm, k, ids(batter), ids(bowler), pad)
+    return set(torch.nonzero(mask[0, target]).flatten().tolist())
+
+
+def history_source_rows(arm: str, target: int, batter=None,
+                        bowler=None) -> set[int]:
+    """Rows whose OWN outcome feeds ``target``'s history input.
+
+    Innings-previous history reads row ``target - 1``; participant-aligned
+    history reads the last earlier same-batter row and the last earlier
+    same-bowler row (empty where the target is that participant's first
+    delivery of the innings). An arm with no history input reads none.
+    """
+    history = ARM_HISTORY[arm]
+    if history == "innings_previous":
+        return {int(target) - 1} if target > 0 else set()
+    if history != "participant_aligned":
+        return set()
+    if batter is None or bowler is None:
+        raise ValueError(f"arm {arm!r} needs batter/bowler ids for S(i)")
+    out: set[int] = set()
+    for values in (np.asarray(batter), np.asarray(bowler)):
+        earlier = [j for j in range(int(target)) if values[j] == values[target]]
+        if earlier:
+            out.add(int(earlier[-1]))
+    return out
+
+
+def dependency_set(arm: str, k, target: int, batter=None, bowler=None,
+                   length: int | None = None) -> set[int]:
+    """S(i) = attention_set(i) union {history-source rows of i}.
+
+    The acceptance file's dependency set (arm register, "Dependency set
+    S(i)"), shared by the D3.7 invariance tests and
+    `scripts/sequence_track/ownership_dependency_test.py` so the script and
+    the tests cannot disagree about what a relay-free arm is allowed to read.
+
+    Under the own-outcome key construction (`ARM_KEY_CONSTRUCTION`) this set
+    is a superset of both dependencies of a relay-free target:
+
+      * features of row j reach i only through e_j, so only for
+        j in attention_set(i);
+      * the outcome of row j reaches i either as own_out_emb(y_j) in a key
+        (j in attention_set(i), j != i) or through hist(i) (j a history
+        source). The target's own y_i reaches nothing: e_i^self carries
+        hist(i), not y_i, and the own-outcome key at position i is masked
+        off the diagonal.
+    """
+    return (attention_set(arm, k, target, batter, bowler, length)
+            | history_source_rows(arm, target, batter, bowler))
+
+
+def alibi_slopes(heads: int) -> torch.Tensor:
+    """m_h = 2^(-8h/H), h = 1..H — the registered fixed-decay slopes."""
+    h = torch.arange(1, heads + 1, dtype=torch.float32)
+    return torch.pow(2.0, -8.0 * h / heads)
+
+
+def alibi_bias(length: int, heads: int, device=None) -> torch.Tensor:
+    """``(1, H, L, L)`` additive bias -m_h * (i - j), zero above the diagonal.
+
+    Entries with j > i are masked out by the attention set, so their value is
+    immaterial; they are clamped to 0 rather than left positive.
+    """
+    pos = torch.arange(length, device=device)
+    lag = (pos.view(-1, 1) - pos.view(1, -1)).clamp(min=0).to(torch.float32)
+    slopes = alibi_slopes(heads).to(device=device)
+    return -(slopes.view(1, heads, 1, 1) * lag.view(1, 1, length, length))
+
+
 class TokenMLPBlock(nn.Module):
     """Residual token-local feed-forward block with no sequence inputs."""
 
@@ -328,61 +590,367 @@ class TokenMLPBlock(nn.Module):
         return value + self.dropout(self.linear2(self.dropout(hidden)))
 
 
+def _masked_attention(query, key, value, allowed, bias, heads: int,
+                      dropout: nn.Dropout):
+    """Multi-head attention with a boolean set mask and an additive bias.
+
+    ``allowed`` is ``(B, Lq, Lk)`` (broadcast over heads), ``bias`` is
+    ``(B, H, Lq, Lk)`` / ``(1, H, Lq, Lk)`` or None. Written with plain matmul,
+    softmax and ``masked_fill`` so it runs on both MPS and CPU.
+
+    The key/value length may differ from the query length: the relay-free
+    wiring attends over ``2L`` keys (the own-outcome tokens of the earlier
+    rows, then the self tokens on the diagonal).
+    """
+    B, Lq, D = query.shape
+    Lk = key.shape[1]
+    dh = D // heads
+
+    def split(t, length):
+        return t.view(B, length, heads, dh).transpose(1, 2)  # (B, H, len, dh)
+
+    q = split(query, Lq)
+    k, v = split(key, Lk), split(value, Lk)
+    scores = torch.matmul(q, k.transpose(-1, -2)) / math.sqrt(dh)
+    if bias is not None:
+        scores = scores + bias
+    scores = scores.masked_fill(~allowed.unsqueeze(1), float("-inf"))
+    weights = dropout(torch.softmax(scores, dim=-1))
+    out = torch.matmul(weights, v)  # (B, H, Lq, dh)
+    return out.transpose(1, 2).contiguous().view(B, Lq, D)
+
+
+class _FeedForward(nn.Module):
+    """Pre-norm ReLU feed-forward block, 2*d hidden, dropout 0.1.
+
+    The same shape AND activation as `nn.TransformerEncoderLayer(
+    norm_first=True, dim_feedforward=2*d, dropout=0.1)`'s FF half (whose
+    default activation is ReLU), so the cross-wiring contrasts
+    `aligned_hist_rf - aligned_hist` (D3.8) and `fixed_decay - full` carry no
+    activation difference. (`TokenMLPBlock`, the stage 1 `mlp` arm, keeps its
+    GELU untouched.) Orchestrator edit 2026-09-11 after review.
+    """
+
+    def __init__(self, dmodel: int, dropout: float):
+        super().__init__()
+        self.norm = nn.LayerNorm(dmodel)
+        self.linear1 = nn.Linear(dmodel, 2 * dmodel)
+        self.linear2 = nn.Linear(2 * dmodel, dmodel)
+        self.dropout = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
+
+    def forward(self, value):
+        hidden = self.dropout(nn.functional.relu(self.linear1(
+            self.norm(value))))
+        return value + self.dropout2(self.linear2(hidden))
+
+
+class BiasedEncoderLayer(nn.Module):
+    """Self-attending pre-norm layer with an additive attention bias.
+
+    Used by `fixed_decay` and `fox` (D3.9). Queries, keys and values all come
+    from the running residual stream, just as `nn.TransformerEncoderLayer`
+    does;
+    the only addition is the per-head ``(B, H, L, L)`` bias added to the scaled
+    scores before the softmax.
+    """
+
+    def __init__(self, dmodel: int, heads: int, dropout: float):
+        super().__init__()
+        self.heads = heads
+        self.norm1 = nn.LayerNorm(dmodel)
+        self.qkv = nn.Linear(dmodel, 3 * dmodel)
+        self.out_proj = nn.Linear(dmodel, dmodel)
+        self.attn_dropout = nn.Dropout(dropout)
+        self.dropout1 = nn.Dropout(dropout)
+        self.ff = _FeedForward(dmodel, dropout)
+
+    def forward(self, h, allowed, bias):
+        normed = self.norm1(h)
+        q, k, v = self.qkv(normed).chunk(3, dim=-1)
+        attn = _masked_attention(q, k, v, allowed, bias, self.heads,
+                                 self.attn_dropout)
+        return self.ff(h + self.dropout1(self.out_proj(attn)))
+
+
+class RelayFreeLayer(nn.Module):
+    """Relay-free pre-norm layer: keys and values from the LAYER-ZERO tokens.
+
+    Arm register, "Relay-free wiring" (D3.6/D3.8, certified in D7): at every
+    layer the keys and values are linear projections of e_j, the layer-zero
+    token embedding, while the query comes from the running residual stream
+    h_i. Because i is always in its own attention set, h_i is a function of
+    {e_j : j in attention_set(i)} alone — no information can relay in through
+    a neighbour's hidden state.
+
+    Since the own-outcome key construction (handoff § 3.1) an earlier row and
+    the target itself contribute DIFFERENT tokens, so `tokens` is the
+    concatenation ``[own-outcome tokens ; self tokens]`` of length ``2L`` and
+    `allowed` is the matching ``(B, L, 2L)`` set: the first half is masked to
+    j < i and the second half to j == i. `LayerNorm`, the projections and the
+    attention are all per-token, so nothing about this layer needs to know
+    which half a key came from.
+    """
+
+    def __init__(self, dmodel: int, heads: int, dropout: float):
+        super().__init__()
+        self.heads = heads
+        self.norm_q = nn.LayerNorm(dmodel)   # normalises the residual stream
+        self.norm_kv = nn.LayerNorm(dmodel)  # normalises the layer-zero tokens
+        self.q_proj = nn.Linear(dmodel, dmodel)
+        self.k_proj = nn.Linear(dmodel, dmodel)
+        self.v_proj = nn.Linear(dmodel, dmodel)
+        self.out_proj = nn.Linear(dmodel, dmodel)
+        self.attn_dropout = nn.Dropout(dropout)
+        self.dropout1 = nn.Dropout(dropout)
+        self.ff = _FeedForward(dmodel, dropout)
+
+    def forward(self, h, tokens, allowed):
+        kv = self.norm_kv(tokens)
+        attn = _masked_attention(self.q_proj(self.norm_q(h)), self.k_proj(kv),
+                                 self.v_proj(kv), allowed, None, self.heads,
+                                 self.attn_dropout)
+        return self.ff(h + self.dropout1(self.out_proj(attn)))
+
+
 class T1Model(nn.Module):
     def __init__(self, n_feats: int, dmodel: int, layers: int, heads: int,
-                 aux_sizes: dict | None = None, arm: str = "full"):
+                 aux_sizes: dict | None = None, arm: str = "full",
+                 k=None, dropout: float = 0.1):
         super().__init__()
-        if arm not in {"full", "mlp", "no_attention", "no_history"}:
+        if arm not in ALL_ARMS:
             raise ValueError(f"unknown T1 ablation arm: {arm}")
         self.arm = arm
+        self.wiring = ARM_WIRING[arm]
+        self.history_input = ARM_HISTORY[arm]
+        self.key_construction = ARM_KEY_CONSTRUCTION[arm]
+        self.bias_kind = ARM_BIAS[arm]
+        self.has_pos_emb = ARM_POS_EMB[arm]
+        self.heads = heads
+        self.n_layers = layers
+        self.residual = arm in ARMS_NEEDING_BASE_LOGITS
+        if (arm in ARMS_NEEDING_K) != (k is not None):
+            verb = "requires" if arm in ARMS_NEEDING_K else "does not accept"
+            raise ValueError(f"arm {arm!r} {verb} a window k (got {k!r})")
+        self.k = k
+
+        # D3.10 — the recurrent arms live in their own module and own their
+        # whole token pathway, so nothing else here is built for them.
+        if self.wiring == "recurrent":
+            if aux_sizes:
+                raise ValueError("recurrent arms carry no aux heads")
+            try:
+                from sequence_track.recurrent_arms import (  # noqa: PLC0415
+                    build_recurrent_model)
+            except ImportError as exc:  # pragma: no cover - D3.10 module
+                raise RuntimeError(
+                    f"arm {arm!r} needs scripts/sequence_track/"
+                    f"recurrent_arms.py: {exc}") from exc
+            self.recurrent = build_recurrent_model(arm, n_feats, dmodel,
+                                                   dropout)
+            self.aux_heads = nn.ModuleDict()
+            return
+
         self.feat_proj = nn.Linear(n_feats, dmodel)
-        if arm == "mlp":
+        if self.wiring == "token_mlp":
             # Two token-local FF blocks per transformer layer approximately
             # match the full arm's parameter budget without sequence access.
             self.token_mlp = nn.Sequential(*[
                 TokenMLPBlock(dmodel) for _ in range(2 * layers)])
         else:
-            self.out_emb = nn.Embedding(7, dmodel)  # 6 classes + BOS
-            self.pos_emb = nn.Embedding(200, dmodel)
-            layer = nn.TransformerEncoderLayer(
-                d_model=dmodel, nhead=heads, dim_feedforward=2 * dmodel,
-                dropout=0.1, batch_first=True, norm_first=True)
-            self.encoder = nn.TransformerEncoder(layer, num_layers=layers)
+            if self.history_input == "participant_aligned":
+                # D3.4 — two separate embeddings REPLACING out_emb(prev_y).
+                self.bat_emb = nn.Embedding(7, dmodel)   # 6 classes + BOS
+                self.bowl_emb = nn.Embedding(7, dmodel)
+            else:
+                self.out_emb = nn.Embedding(7, dmodel)  # 6 classes + BOS
+            if self.has_pos_emb:
+                self.pos_emb = nn.Embedding(200, dmodel)
+            if self.wiring == "standard" and self.bias_kind == "none":
+                layer = nn.TransformerEncoderLayer(
+                    d_model=dmodel, nhead=heads, dim_feedforward=2 * dmodel,
+                    dropout=0.1, batch_first=True, norm_first=True)
+                self.encoder = nn.TransformerEncoder(layer, num_layers=layers)
+            elif self.wiring == "standard":
+                self.layers = nn.ModuleList([
+                    BiasedEncoderLayer(dmodel, heads, dropout)
+                    for _ in range(layers)])
+            else:
+                self.layers = nn.ModuleList([
+                    RelayFreeLayer(dmodel, heads, dropout)
+                    for _ in range(layers)])
         self.head = nn.Linear(dmodel, 6)
         self.aux_heads = nn.ModuleDict(
             {t: nn.Linear(dmodel, n) for t, n in (aux_sizes or {}).items()})
+        if self.residual:
+            # D3.7 — zero-initialised head, so at initialisation the residual
+            # is identically zero and p == p_base exactly.
+            nn.init.zeros_(self.head.weight)
+            nn.init.zeros_(self.head.bias)
+        # The FoX gates are created LAST and initialised deterministically, so
+        # every other parameter of `fox` draws from the same RNG stream as
+        # `fixed_decay`'s and the two arms differ only in the gate (D3.9).
+        if self.bias_kind == "fox":
+            self.fox_gates = nn.ModuleList([nn.Linear(dmodel, heads)
+                                            for _ in range(layers)])
+            for gate in self.fox_gates:
+                nn.init.zeros_(gate.weight)
+                nn.init.constant_(gate.bias, FOX_GATE_BIAS_INIT)
+        # Created LAST, after every parameter that existed before the § 3.1
+        # own-outcome redesign, so the RNG stream of all of those is
+        # untouched by the addition (the stage 1 arms are relay-free-free, so
+        # they never reach this branch at all).
+        if self.key_construction == "own_outcome":
+            self.own_out_emb = nn.Embedding(N_OUTCOME_CLASSES, dmodel)
 
-    def forward(self, feats, prev_y, pad_mask):
+    # --------------------------------------------------------------- biases
+
+    def _bias(self, layer_index: int, tokens, length: int):
+        """The additive ``(*, H, L, L)`` attention bias for one layer."""
+        if self.bias_kind == "alibi":
+            # No learned parameters: -m_h * (i - j) with the ALiBi slopes.
+            return alibi_bias(length, self.heads, tokens.device)
+        # FoX (Lin et al. 2025): bias[i, j] = sum_{t=j+1..i}
+        # log sigma(g_h(e_t)),
+        # computed as C[i] - C[j] with C the cumulative sum of the per-head
+        # log-gate over the sequence. g_h is a per-layer per-head scalar linear
+        # function of the KEY token's layer-zero embedding.
+        gate = nn.functional.logsigmoid(self.fox_gates[layer_index](tokens))
+        cumulative = torch.cumsum(gate, dim=1).permute(0, 2, 1)  # (B, H, L)
+        return cumulative.unsqueeze(-1) - cumulative.unsqueeze(-2)
+
+    # -------------------------------------------------------------- forward
+
+    def forward(self, feats, prev_y, pad_mask, prev_bat=None, prev_bowl=None,
+                batter=None, bowler=None, base_logp=None, own_y=None):
+        """One forward pass.
+
+        `own_y` is the ``(B, L)`` realised outcome class of each row — the
+        batch's TARGETS. Only the relay-free arms read it, and only as the
+        own-outcome key/value of an EARLIER row (§ 3.1): row i's own key is
+        built from hist(i), so y_i is never readable at row i. Padded rows'
+        own outcomes are immaterial because their keys are masked off.
+        """
+        if self.wiring == "recurrent":
+            return self.recurrent(feats, prev_y, pad_mask)
+
         L = feats.shape[1]
-        if self.arm == "mlp":
+        if self.wiring == "token_mlp":
             h = self.token_mlp(self.feat_proj(feats))
-            aux = {t: hd(h) for t, hd in self.aux_heads.items()}
-            return self.head(h), aux
-
-        pos = torch.arange(L, device=feats.device)
-        if self.arm == "no_history":
-            prev_y = torch.full_like(prev_y, BOS)
-        x = self.feat_proj(feats) + self.out_emb(prev_y) + self.pos_emb(pos)
-        if self.arm == "no_attention":
-            # Preserve the transformer's parameters and token pathway while
-            # preventing all cross-token mixing. Each token can still use its
-            # immediately preceding outcome via the causally shifted input.
-            attn_mask = ~torch.eye(L, dtype=torch.bool, device=feats.device)
         else:
-            attn_mask = torch.triu(
-                torch.ones((L, L), dtype=torch.bool, device=feats.device),
-                diagonal=1)
-        # In the diagonal arm, padding cannot mix into real tokens. Passing a
-        # key-padding mask would leave each padded query with no legal key and
-        # produce NaNs, so padded outputs are simply computed and discarded.
-        key_padding = None if self.arm == "no_attention" else pad_mask
-        h = self.encoder(x, mask=attn_mask,
-                         src_key_padding_mask=key_padding)
+            if self.arm == "no_history":
+                prev_y = torch.full_like(prev_y, BOS)
+            x = self.feat_proj(feats)
+            if self.history_input == "participant_aligned":
+                if prev_bat is None or prev_bowl is None:
+                    raise ValueError(
+                        f"arm {self.arm!r} needs prev_bat/prev_bowl")
+                x = x + self.bat_emb(prev_bat) + self.bowl_emb(prev_bowl)
+            else:
+                x = x + self.out_emb(prev_y)
+            pos = (self.pos_emb(torch.arange(L, device=feats.device))
+                   if self.has_pos_emb else None)
+            if pos is not None:
+                x = x + pos
+            # § 3.1 — the relay-free arms additionally build the own-outcome
+            # key/value token of every row: feat_proj(feat_j) +
+            # own_out_emb(y_j) + pos_j, with NO history input. `x` stays the
+            # self token (and the query stream's initial state).
+            x_kv = None
+            if self.key_construction == "own_outcome":
+                if own_y is None:
+                    raise ValueError(
+                        f"arm {self.arm!r} needs own_y (the realised outcome "
+                        "of each row) to build its key/value tokens")
+                own = own_y.clamp(0, N_OUTCOME_CLASSES - 1)
+                x_kv = self.feat_proj(feats) + self.own_out_emb(own)
+                if pos is not None:
+                    x_kv = x_kv + pos
+            h = self._mix(x, pad_mask, batter, bowler, L, x_kv)
+        logits = self.head(h)
         aux = {t: hd(h) for t, hd in self.aux_heads.items()}
-        return self.head(h), aux
+        if self.residual:
+            if base_logp is None:
+                raise ValueError(f"arm {self.arm!r} needs base_logp")
+            # p = softmax(log p_base + r_theta); the raw residual is returned
+            # so the trainer can add lambda * mean(r^2) (arm register).
+            aux["residual"] = logits
+            logits = base_logp + logits
+        return logits, aux
+
+    def _mix(self, x, pad_mask, batter, bowler, L: int, x_kv=None):
+        """Sequence mixing for the attention wirings.
+
+        `x` is the self token of every row (and the initial residual stream);
+        `x_kv` the own-outcome key/value token of every row, supplied by the
+        relay-free arms only.
+        """
+        if self.wiring == "standard" and self.bias_kind == "none":
+            if self.arm == "no_attention":
+                # Preserve the transformer's parameters and token pathway while
+                # preventing all cross-token mixing. Each token can still use
+                # its immediately preceding outcome via the shifted input.
+                attn_mask = ~torch.eye(L, dtype=torch.bool, device=x.device)
+            else:
+                attn_mask = torch.triu(
+                    torch.ones((L, L), dtype=torch.bool, device=x.device),
+                    diagonal=1)
+            # In the diagonal arm, padding cannot mix into real tokens. Passing
+            # a key-padding mask would leave each padded query with no legal
+            # key and produce NaNs, so padded outputs are simply computed and
+            # discarded.
+            key_padding = None if self.arm == "no_attention" else pad_mask
+            return self.encoder(x, mask=attn_mask,
+                                src_key_padding_mask=key_padding)
+        allowed = attention_mask(self.arm, self.k, batter, bowler, pad_mask)
+        tokens = x
+        if self.wiring == "relay_free":
+            # § 3.1 — j != i reads the own-outcome token, j == i the self
+            # token. Built once as a 2L-key set: [j < i allowed | diagonal].
+            eye = torch.eye(L, dtype=torch.bool,
+                            device=x.device).unsqueeze(0).expand_as(allowed)
+            allowed = torch.cat([allowed & ~eye, eye], dim=2)
+            tokens = torch.cat([x_kv, x], dim=1)
+        h = x
+        for index, layer in enumerate(self.layers):
+            if self.wiring == "standard":
+                h = layer(h, allowed, self._bias(index, x, L))
+            else:
+                # Relay-free: keys/values always from the layer-zero tokens.
+                h = layer(h, tokens, allowed)
+        return h
 
 
-def collate(idx_lists, feats, y, device, aux=None):
+class Batch(NamedTuple):
+    """One padded batch of innings.
+
+    The first five fields are exactly what stage 1's ``collate`` returned, in
+    the same order, so ``collate(...)[:5]`` is the old contract verbatim. The
+    stage 2 fields are None unless the caller supplied the source arrays.
+    """
+
+    feats: torch.Tensor            # (B, L, F)
+    prev_y: torch.Tensor           # (B, L) innings-previous outcome, BOS at 0
+    y: torch.Tensor                # (B, L) targets
+    pad: torch.Tensor             # (B, L) True where padded
+    aux: dict                      # task -> (B, L) aux targets
+    batter: torch.Tensor | None = None    # (B, L) int codes, -1 where padded
+    bowler: torch.Tensor | None = None    # (B, L) int codes, -1 where padded
+    prev_bat: torch.Tensor | None = None  # (B, L) participant-aligned history
+    prev_bowl: torch.Tensor | None = None
+    base_logp: torch.Tensor | None = None  # (B, L, 6) base log-probabilities
+
+
+def collate(idx_lists, feats, y, device, aux=None, batter=None, bowler=None,
+            prev_bat=None, prev_bowl=None, base_logp=None) -> Batch:
+    """Pad one chunk of innings into a `Batch`.
+
+    Stage 2 additions (D3.2): integer batter/bowler codes so the attention
+    set masks can be built on device, the participant-aligned history inputs,
+    and the per-row base log-probabilities of the residual arms. Every
+    addition is row-gathered from a full-split array, so nothing is recomputed
+    per batch and nothing about the stage 1 fields changes.
+    """
     B = len(idx_lists)
     L = max(len(ix) for ix in idx_lists)
     f = np.zeros((B, L, feats.shape[1]), dtype=np.float32)
@@ -390,6 +958,14 @@ def collate(idx_lists, feats, y, device, aux=None):
     ty = np.zeros((B, L), dtype=np.int64)
     pad = np.ones((B, L), dtype=bool)
     ax = {t: np.full((B, L), -1, dtype=np.int64) for t in (aux or {})}
+    # -1 never matches a real code, so a padded key can never look like the
+    # same batter or bowler as a real query.
+    bat = None if batter is None else np.full((B, L), -1, dtype=np.int64)
+    bwl = None if bowler is None else np.full((B, L), -1, dtype=np.int64)
+    pbat = None if prev_bat is None else np.full((B, L), BOS, dtype=np.int64)
+    pbowl = None if prev_bowl is None else np.full((B, L), BOS, dtype=np.int64)
+    blp = (None if base_logp is None
+           else np.zeros((B, L, base_logp.shape[1]), dtype=np.float32))
     for b, ix in enumerate(idx_lists):
         n = len(ix)
         f[b, :n] = feats[ix]
@@ -398,9 +974,109 @@ def collate(idx_lists, feats, y, device, aux=None):
         pad[b, :n] = False
         for t in ax:
             ax[t][b, :n] = aux[t][ix]
-    return (torch.tensor(f).to(device), torch.tensor(py).to(device),
-            torch.tensor(ty).to(device), torch.tensor(pad).to(device),
-            {t: torch.tensor(v).to(device) for t, v in ax.items()})
+        if bat is not None:
+            bat[b, :n] = batter[ix]
+        if bwl is not None:
+            bwl[b, :n] = bowler[ix]
+        if pbat is not None:
+            pbat[b, :n] = prev_bat[ix]
+        if pbowl is not None:
+            pbowl[b, :n] = prev_bowl[ix]
+        if blp is not None:
+            blp[b, :n] = base_logp[ix]
+
+    def to_device(array):
+        return None if array is None else torch.tensor(array).to(device)
+
+    return Batch(
+        feats=torch.tensor(f).to(device), prev_y=torch.tensor(py).to(device),
+        y=torch.tensor(ty).to(device), pad=torch.tensor(pad).to(device),
+        aux={t: torch.tensor(v).to(device) for t, v in ax.items()},
+        batter=to_device(bat), bowler=to_device(bwl), prev_bat=to_device(pbat),
+        prev_bowl=to_device(pbowl), base_logp=to_device(blp))
+
+
+def parse_k(raw):
+    """``--k`` as an int >= 0 or the literal string ``"unr"``."""
+    if raw is None:
+        return None
+    if str(raw).strip().lower() == "unr":
+        return "unr"
+    try:
+        value = int(str(raw))
+    except ValueError as exc:
+        raise ValueError(f"--k must be an int >= 0 or 'unr', got {raw!r}"
+                         ) from exc
+    if value < 0:
+        raise ValueError(f"--k must be >= 0 or 'unr', got {raw!r}")
+    return value
+
+
+def load_base_logits(base_dir: Path, split: str, n_rows: int,
+                     parquet_md5: str):
+    """The production base log-probabilities for one split (D3.7 / D4.1).
+
+    Refuses anything that is not the split this run actually read: the npz
+    carries its own row count and the md5 of the parquet it was built from,
+    and both must match the split record `transformer_t1` already computes.
+    Returns ``(logp (n_rows, 6) float32, md5 of the npz file)``.
+    """
+    path = Path(base_dir) / f"{split}.npz"
+    if not path.exists():
+        raise RuntimeError(
+            f"base logits for split {split!r} not found: {path}")
+    with np.load(path, allow_pickle=False) as archive:
+        for key in ("logp", "n_rows", "parquet_md5"):
+            if key not in archive:
+                raise RuntimeError(f"{path} carries no {key!r} key")
+        logp = np.asarray(archive["logp"], dtype=np.float32)
+        declared_rows = int(np.asarray(archive["n_rows"]).reshape(-1)[0])
+        declared_md5 = str(np.asarray(archive["parquet_md5"]
+                                     ).reshape(-1)[0])
+    if logp.ndim != 2 or logp.shape[1] != 6:
+        raise RuntimeError(
+            f"{path} logp must be (n_rows, 6), got {logp.shape}")
+    if declared_rows != n_rows or logp.shape[0] != n_rows:
+        raise RuntimeError(
+            f"{path} declares n_rows={declared_rows} with "
+            f"{logp.shape[0]} rows "
+            f"of logits, but split {split!r} has {n_rows} rows")
+    if declared_md5 != parquet_md5:
+        raise RuntimeError(
+            f"{path} was built from parquet md5 {declared_md5}, but split "
+            f"{split!r} read md5 {parquet_md5}; refusing to train")
+    return logp, md5_file(path)
+
+
+def arm_params_block(arm: str, k, residual_l2, base_logits_md5,
+                     n_parameters: int, extra: dict | None = None) -> dict:
+    """The `arm_params` block of `metrics.json` (D3.11).
+
+    Every field is derived from the registered arm tables, not from the CLI,
+    so the recorded wiring cannot disagree with the model that trained.
+
+    Astra MUST-FIX 8 — `extra` carries a sub-model's own `arm_params` (the
+    recurrent arms' `cell` and `simplifications`, which no table knows). Only
+    keys the table block does not already define are merged, so the registered
+    tables stay authoritative for every shared field.
+    """
+    block = {
+        "arm": arm,
+        "k": k,
+        "wiring": ARM_WIRING[arm],
+        "history_input": ARM_HISTORY[arm],
+        "key_construction": ARM_KEY_CONSTRUCTION[arm],
+        "positional_embedding": bool(ARM_POS_EMB[arm]),
+        "bias": ARM_BIAS[arm],
+        "residual_l2": (float(residual_l2)
+                        if arm in ARMS_NEEDING_BASE_LOGITS else None),
+        "base_logits_md5": base_logits_md5,
+        "n_parameters": int(n_parameters),
+    }
+    for key, value in (extra or {}).items():
+        if key not in block:
+            block[key] = value
+    return block
 
 
 def calibration_metrics(probs: np.ndarray, y: np.ndarray,
@@ -434,8 +1110,21 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--device", choices=["auto", "cpu", "mps", "cuda"],
                     default="auto")
-    ap.add_argument("--arm", choices=["full", "mlp", "no_attention",
-                                      "no_history"], default="full")
+    ap.add_argument("--arm", choices=list(ALL_ARMS), default="full")
+    # Stage 2 (D3.3). `--k` is required for the windowed arms and refused for
+    # every other one, so a k that could not have been used cannot be
+    # recorded; likewise `--base-logits-dir` for the residual arms.
+    ap.add_argument("--k", default=None,
+                    help="attention window in delivery rows: an int >= 0 or "
+                         "'unr'; required for --arm recency/same_entity and "
+                         "refused for every other arm")
+    ap.add_argument("--base-logits-dir", type=Path, default=None,
+                    help="directory of <split>.npz base log-probabilities; "
+                         "required for --arm residual_mlp/residual_t1 and "
+                         "refused for every other arm")
+    ap.add_argument("--residual-l2", type=float, default=RESIDUAL_L2_DEFAULT,
+                    help="lambda of the lambda*mean(r^2) shrinkage the "
+                         "residual arms add to the loss")
     ap.add_argument("--aux", action="store_true",
                     help="T1.5: multi-task heads on DeepCrease "
                          "shot/line/length/control labels")
@@ -468,6 +1157,26 @@ def main() -> None:
     score_test = use_kit or args.score_test
     if args.stats_cache_path is not None and not args.stats_cache_role:
         ap.error("--stats-cache-path requires --stats-cache-role")
+    # D3.3 — the arm/flag contract, checked before anything is loaded.
+    needs_k = args.arm in ARMS_NEEDING_K
+    if needs_k and args.k is None:
+        ap.error(f"--arm {args.arm} requires --k (an int >= 0 or 'unr')")
+    if not needs_k and args.k is not None:
+        ap.error(f"--k is not accepted by --arm {args.arm}; it is only "
+                 f"meaningful for {', '.join(ARMS_NEEDING_K)}")
+    try:
+        k_value = parse_k(args.k)
+    except ValueError as exc:
+        ap.error(str(exc))
+    needs_base = args.arm in ARMS_NEEDING_BASE_LOGITS
+    if needs_base and args.base_logits_dir is None:
+        ap.error(f"--arm {args.arm} requires --base-logits-dir")
+    if not needs_base and args.base_logits_dir is not None:
+        ap.error(f"--base-logits-dir is not accepted by --arm {args.arm}; it "
+                 f"is only meaningful for "
+                 f"{', '.join(ARMS_NEEDING_BASE_LOGITS)}")
+    # Recorded in `config` as the normalised value the model was built with.
+    args.k = k_value
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -546,6 +1255,46 @@ def main() -> None:
     if test is not None:
         F_te, y_te, inn_te = (build_features(test), test["y"].to_numpy(),
                               build_innings(test))
+    # --- stage 2 per-split inputs (D3.2) ---------------------------------
+    # Built once per split and row-gathered by `collate`. Only what the arm
+    # actually reads is built, so a stage 1 arm's run does no extra work.
+    wants_ids = ARM_WIRING[args.arm] == "relay_free"
+    wants_aligned = ARM_HISTORY[args.arm] == "participant_aligned"
+    extras: dict[str, dict] = {}
+    for name, frame in frames.items():
+        block: dict = {}
+        if wants_ids:
+            # Factorised per split; only equality between rows of one innings
+            # is ever asked, so a per-split coding is sufficient.
+            block["batter"] = pd.factorize(frame["batter_id"])[0].astype(
+                np.int64)
+            block["bowler"] = pd.factorize(frame["bowler_id"])[0].astype(
+                np.int64)
+        if wants_aligned:
+            prev_bat, prev_bowl = aligned_history(
+                frame["y"].to_numpy(), frame["batter_id"].to_numpy(),
+                frame["bowler_id"].to_numpy(), build_innings(frame))
+            block["prev_bat"], block["prev_bowl"] = prev_bat, prev_bowl
+        extras[name] = block
+
+    base_logits_md5 = None
+    base_logits_by_split = None
+    if args.arm in ARMS_NEEDING_BASE_LOGITS:
+        per_split = {}
+        base_logits_by_split = per_split
+        for name, frame in frames.items():
+            logp, digest = load_base_logits(
+                args.base_logits_dir, name, len(frame),
+                split_files[name]["md5"])
+            extras[name]["base_logp"] = logp
+            per_split[name] = digest
+        # One string, so a driver's reuse check can compare a single field;
+        # the per-split digests are recorded alongside.
+        base_logits_md5 = hashlib.md5(  # noqa: S324 - artifact identity
+            "\n".join(f"{s}={d}" for s, d in sorted(per_split.items()))
+            .encode("utf-8")).hexdigest()
+        print(f"base logits: {per_split}", flush=True)
+
     print(f"innings: train {len(inn_tr)}, val {len(inn_va)}, "
           f"test {'-' if inn_te is None else len(inn_te)}; "
           f"feats {F_tr.shape[1]}", flush=True)
@@ -564,20 +1313,28 @@ def main() -> None:
         print(f"aux tasks: {aux_sizes}", flush=True)
 
     model = T1Model(F_tr.shape[1], args.dmodel, args.layers, args.heads,
-                    aux_sizes, arm=args.arm).to(device)
+                    aux_sizes, arm=args.arm, k=args.k).to(device)
     print(f"params: {sum(p.numel() for p in model.parameters()):,}", flush=True)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
     loss_fn = nn.CrossEntropyLoss(reduction="none")
 
-    def eval_split(feats, y, innings, df, aux=None):
+    def run_model(batch: Batch):
+        """One forward pass, feeding whatever the arm's wiring reads."""
+        return model(batch.feats, batch.prev_y, batch.pad,
+                     prev_bat=batch.prev_bat, prev_bowl=batch.prev_bowl,
+                     batter=batch.batter, bowler=batch.bowler,
+                     base_logp=batch.base_logp, own_y=batch.y)
+
+    def eval_split(feats, y, innings, df, aux=None, extra=None):
         model.eval()
         probs = np.zeros((len(y), 6), dtype=np.float32)
         aux_hits = {t: [0, 0] for t in (aux or {})}
         with torch.no_grad():
             for s in range(0, len(innings), args.batch):
                 chunk = innings[s:s + args.batch]
-                f, py, ty, pad, ax = collate(chunk, feats, y, device, aux)
-                logits, aux_out = model(f, py, pad)
+                batch = collate(chunk, feats, y, device, aux, **(extra or {}))
+                ax = batch.aux
+                logits, aux_out = run_model(batch)
                 p = torch.softmax(logits, dim=-1).cpu().numpy()
                 for b, ix in enumerate(chunk):
                     probs[ix] = p[b, :len(ix)]
@@ -606,12 +1363,20 @@ def main() -> None:
         t0, tot, cnt = time.time(), 0.0, 0
         for s in range(0, len(order), args.batch):
             chunk = [inn_tr[i] for i in order[s:s + args.batch]]
-            f, py, ty, pad, ax = collate(chunk, F_tr, y_tr, device, aux_tr)
+            batch = collate(chunk, F_tr, y_tr, device, aux_tr,
+                            **extras["train"])
+            ty, pad, ax = batch.y, batch.pad, batch.aux
             opt.zero_grad()
-            logits, aux_out = model(f, py, pad)
+            logits, aux_out = run_model(batch)
             raw = loss_fn(logits.reshape(-1, 6), ty.reshape(-1))
             keep = (~pad).reshape(-1).float()
             loss = (raw * keep).sum() / keep.sum()
+            if "residual" in aux_out:
+                # lambda * mean(r^2) over REAL tokens only (arm register).
+                residual = aux_out.pop("residual")
+                penalty = (residual.pow(2).mean(dim=-1).reshape(-1) * keep
+                           ).sum() / keep.sum()
+                loss = loss + args.residual_l2 * penalty
             for t, tgt in ax.items():
                 sel = (tgt >= 0).reshape(-1)
                 if sel.any():
@@ -624,7 +1389,8 @@ def main() -> None:
             opt.step()
             tot += loss.item() * keep.sum().item()
             cnt += keep.sum().item()
-        _, vll, _, _ = eval_split(F_va, y_va, inn_va, val)
+        _, vll, _, _ = eval_split(F_va, y_va, inn_va, val,
+                                  extra=extras["validation"])
         print(f"epoch {epoch}: train_ll={tot/cnt:.4f} val_ll={vll:.4f} "
               f"({time.time()-t0:.0f}s)", flush=True)
         if vll < best_val - 1e-5:
@@ -645,15 +1411,30 @@ def main() -> None:
     if use_kit:
         masks = np.load(args.kit_dir / "unseen_pair_masks.npz")
         probes_df = pd.read_parquet(args.kit_dir / "probe_labels.parquet")
+    n_params = sum(p.numel() for p in model.parameters())
     metrics = {"config": {k: (str(v) if isinstance(v, Path) else v)
                           for k, v in vars(args).items()},
-               "n_params": sum(p.numel() for p in model.parameters()),
-               "device": device}
+               "n_params": n_params,
+               "device": device,
+               # D3.11 — the arm's own identity block, separate from the
+               # training_contract (whose architecture/optimiser blocks are
+               # pinned by the stage 1 contract tests and must not grow).
+               # Astra MUST-FIX 8 — a recurrent arm's own `arm_params` (cell,
+               # simplifications) is serialized here; it used to be dropped.
+               "arm_params": arm_params_block(
+                   args.arm, args.k, args.residual_l2, base_logits_md5,
+                   n_params,
+                   extra=getattr(getattr(model, "recurrent", None),
+                                 "arm_params", None))}
+    if base_logits_by_split is not None:
+        metrics["arm_params"]["base_logits_md5_by_split"] = dict(
+            base_logits_by_split)
     scored = [("validation", F_va, y_va, inn_va, val, aux_va)]
     if test is not None:
         scored.append(("test", F_te, y_te, inn_te, test, aux_te))
     for name, feats, y, innings, df, aux in scored:
-        probs, mean_ll, ll_vec, aux_acc = eval_split(feats, y, innings, df, aux)
+        probs, mean_ll, ll_vec, aux_acc = eval_split(
+            feats, y, innings, df, aux, extra=extras[name])
         if aux_acc:
             metrics[f"{name}_aux_acc"] = aux_acc
         # Full float64 precision: seeds separated in the sixth decimal are

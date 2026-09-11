@@ -23,7 +23,10 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUNNER = REPO_ROOT / "research" / "sequence_track" / "run_queue.sh"
 QUEUE_LIB = REPO_ROOT / "scripts" / "sequence_track" / "queue_lib.py"
-EXAMPLE_QUEUE = REPO_ROOT / "research" / "sequence_track" / "queue.yaml"
+LAPTOP_QUEUE = REPO_ROOT / "research" / "sequence_track" / "queue_laptop.yaml"
+MINI_QUEUE = REPO_ROOT / "research" / "sequence_track" / "queue_mini.yaml"
+# The runner's default queue, and the one this file checks for side channels.
+EXAMPLE_QUEUE = LAPTOP_QUEUE
 
 # Generous per-run ceiling; the slowest test here is the timeout job (~7 s).
 RUN_TIMEOUT_SECONDS = 120
@@ -594,8 +597,52 @@ def test_dry_run_reports_skip_for_completed_job(tmp_path: Path) -> None:
     assert counter.read_text() == "x"
 
 
-def test_example_queue_dry_runs(tmp_path: Path) -> None:
-    """The shipped example queue validates and dry-runs (2.1, 2.11)."""
+def test_shipped_queues_dry_run(tmp_path: Path) -> None:
+    """Both shipped queues validate and dry-run (2.1, 2.11).
+
+    The shipped queues are the stage-2 night-1 halves (stage 2 acceptance D8
+    check 8.2): `queue_laptop.yaml` (seed 7, `machine: laptop`, the runner's
+    default) and `queue_mini.yaml` (seed 13, `machine: mini`). Their content is
+    asserted in `scripts/tests/test_queue_stage2.py`; what matters here is that
+    the runner parses and lists each one, selects every job on its own machine,
+    and selects none of the other half.
+    """
+    for queue_path, machine, other in (
+        (LAPTOP_QUEUE, "laptop", "mini"),
+        (MINI_QUEUE, "mini", "laptop"),
+    ):
+        shipped = yaml.safe_load(queue_path.read_text(encoding="utf-8"))
+        job_ids = [job["id"] for job in shipped["jobs"]]
+
+        own = subprocess.run(
+            [str(RUNNER), "--queue", str(queue_path), "--machine", machine,
+             "--dry-run"],
+            capture_output=True,
+            text=True,
+            timeout=RUN_TIMEOUT_SECONDS,
+            cwd=str(REPO_ROOT),
+        )
+        assert own.returncode == 0, own.stdout + own.stderr
+        assert "jobs listed: %d" % len(job_ids) in own.stdout
+        for job_id in job_ids:
+            assert job_id in own.stdout
+        assert own.stdout.count("decision=run") == len(job_ids)
+
+        crossed = subprocess.run(
+            [str(RUNNER), "--queue", str(queue_path), "--machine", other,
+             "--dry-run"],
+            capture_output=True,
+            text=True,
+            timeout=RUN_TIMEOUT_SECONDS,
+            cwd=str(REPO_ROOT),
+        )
+        assert crossed.returncode == 0, crossed.stdout + crossed.stderr
+        assert "decision=run" not in crossed.stdout
+        assert "does not match '%s'" % other in crossed.stdout
+
+
+def test_the_default_queue_is_the_laptop_half() -> None:
+    """No --queue: the runner reads queue_laptop.yaml and runs all sixteen."""
     result = subprocess.run(
         [str(RUNNER), "--dry-run"],
         capture_output=True,
@@ -604,8 +651,9 @@ def test_example_queue_dry_runs(tmp_path: Path) -> None:
         cwd=str(REPO_ROOT),
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "stage1_placeholder" in result.stdout
-    assert "command=echo placeholder" in result.stdout
+    assert "queue_laptop.yaml" in result.stdout
+    shipped = yaml.safe_load(LAPTOP_QUEUE.read_text(encoding="utf-8"))
+    assert result.stdout.count("decision=run") == len(shipped["jobs"])
 
 
 # ---------------------------------------------------------------------------

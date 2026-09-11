@@ -4,7 +4,7 @@
 Three jobs are done here rather than in shell, because each is fragile in bash:
 
 ``resolve``
-    Parse and validate ``queue.yaml``, then print the defaults and the fully
+    Parse and validate a queue file, then print the defaults and the fully
     resolved job list as tab-separated records the runner can read.
 ``mem``
     Read available memory from ``vm_stat`` (free + inactive + speculative pages

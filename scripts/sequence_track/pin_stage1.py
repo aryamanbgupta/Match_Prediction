@@ -76,6 +76,7 @@ import platform
 import shutil
 import subprocess
 import sys
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from functools import lru_cache
 from importlib import metadata
@@ -330,6 +331,21 @@ RUNTIME_DISTRIBUTIONS = ("xgboost", "torch", "numpy", "pandas",
                          "scikit-learn")
 
 NOT_VERIFIED = ("provenance.pins_generated_at", "provenance.git_head_short")
+
+# The stage 1 freeze commit: the immutable tree the pinned source closure was
+# taken against, and the only permitted HISTORICAL SOURCE for verification.
+# See docs/sequence_track/stage1_erratum_trainer_closure.md.
+STAGE1_COMMIT = "2c7ea6f"
+
+# Verification mode for the source closure, set by `--historical-sources` (or
+# by `verify_config(..., historical_sources=True)`) and read by
+# `_source_closure`. The DEFAULT is None = strict live verification: the md5s
+# are taken from the working tree, so a drifted live trainer fails --verify.
+# Historical mode resolves each closure file from the git blob at
+# STAGE1_COMMIT instead, which certifies the HISTORICAL evidence (the sources
+# stage 1's numbers were produced by) and deliberately says nothing about the
+# current tree. It is never the default and `--write` refuses it.
+_HISTORICAL_SOURCE_COMMIT = None
 
 SUB_SEED_STREAMS = ("outcome", "extras", "selector")
 _LOW31 = (1 << 31) - 1
@@ -1564,11 +1580,37 @@ def _odds_block() -> dict:
     }
 
 
-def _source_closure() -> tuple[dict, list]:
-    """`{source: md5}` for every closure file present, plus the absent ones."""
+def _git_blob(commit: str, source: str) -> bytes | None:
+    """Bytes of `source` at `commit`, or None when the blob does not exist."""
+    try:
+        result = subprocess.run(
+            ["git", "show", f"{commit}:{source}"],
+            cwd=REPO_ROOT, capture_output=True, check=True)
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return result.stdout
+
+
+def _source_closure(historical_commit: str | None = None
+                    ) -> tuple[dict, list]:
+    """`{source: md5}` for every closure file present, plus the absent ones.
+
+    With `historical_commit` None (the DEFAULT) the md5s come from the working
+    tree: strict live verification, which fails as soon as any closure file
+    drifts. With a commit, each file is read from that commit's git blob
+    instead — historical-source verification of the evidence the pin was taken
+    against, which says nothing about the current tree.
+    """
     present = {}
     absent = []
     for source in PROVENANCE_SOURCE_CLOSURE:
+        if historical_commit is not None:
+            blob = _git_blob(historical_commit, source)
+            if blob is None:
+                absent.append(source)
+            else:
+                present[source] = hashlib.md5(blob).hexdigest()  # noqa: S324
+            continue
         if _abs(source).is_file():
             present[source] = _md5_file(source)
         else:
@@ -2914,7 +2956,8 @@ def build_config() -> dict:
         },
     ]
 
-    source_md5, source_md5_absent = _source_closure()
+    source_md5, source_md5_absent = _source_closure(
+        _HISTORICAL_SOURCE_COMMIT)
     config["provenance"] = {
         "pins_generated_at": datetime.now(timezone.utc).strftime(
             "%Y-%m-%dT%H:%M:%SZ"),
@@ -3046,7 +3089,33 @@ def diff_config(expected: dict, actual: dict) -> list[str]:
     return problems
 
 
-def verify_config(path: Path = CONFIG_PATH) -> list[str]:
+@contextmanager
+def historical_sources(commit: str = STAGE1_COMMIT):
+    """Resolve the source closure from `commit`'s git blobs inside this block.
+
+    This is HISTORICAL-EVIDENCE verification, not live-closure certification:
+    it certifies that the pinned md5s are the md5s of the sources stage 1's
+    numbers were produced by, and it deliberately says nothing about the
+    working tree. Strict live verification (the default) must stay the default,
+    or arbitrary later drift would be concealed.
+    """
+    global _HISTORICAL_SOURCE_COMMIT
+    previous = _HISTORICAL_SOURCE_COMMIT
+    _HISTORICAL_SOURCE_COMMIT = commit
+    try:
+        yield commit
+    finally:
+        _HISTORICAL_SOURCE_COMMIT = previous
+
+
+def verify_config(path: Path = CONFIG_PATH, *,
+                  historical_sources_commit: str | None = None) -> list[str]:
+    """Recompute every pinned fact and diff the committed file.
+
+    `historical_sources_commit` switches ONLY the source closure to that
+    commit's git blobs (see `historical_sources`). Default None = strict live
+    verification.
+    """
     if not Path(path).exists():
         return [f"MISSING  file: {path}"]
     try:
@@ -3055,7 +3124,10 @@ def verify_config(path: Path = CONFIG_PATH) -> list[str]:
         return [f"UNPARSEABLE {path}: {exc}"]
     if not isinstance(actual, dict):
         return [f"UNPARSEABLE {path}: top level is not a mapping"]
-    return diff_config(build_config(), actual)
+    if historical_sources_commit is None:
+        return diff_config(build_config(), actual)
+    with historical_sources(historical_sources_commit):
+        return diff_config(build_config(), actual)
 
 
 def print_selection(config: dict) -> None:
@@ -3167,8 +3239,22 @@ def main(argv=None) -> int:
     parser.add_argument("--n-sims", type=int, default=None,
                         help="single n_sims candidate for "
                              "--check-seed-overlap")
+    parser.add_argument("--historical-sources", nargs="?",
+                        const=STAGE1_COMMIT, default=None,
+                        metavar="COMMIT",
+                        help="verify the SOURCE CLOSURE against the immutable "
+                             f"git blobs at COMMIT (default {STAGE1_COMMIT}, "
+                             "the stage 1 freeze) instead of the working "
+                             "tree. HISTORICAL-EVIDENCE verification only: it "
+                             "certifies the sources stage 1's numbers were "
+                             "produced by and says nothing about the current "
+                             "tree. --verify only; the default is strict live "
+                             "verification and must stay that way")
     parser.add_argument("--config", type=Path, default=CONFIG_PATH)
     args = parser.parse_args(argv)
+    if args.historical_sources is not None and not args.verify:
+        parser.error("--historical-sources applies to --verify only; a "
+                     "--write must pin the live sources")
 
     try:
         if args.check_seed_overlap:
@@ -3186,7 +3272,9 @@ def main(argv=None) -> int:
             print_shards(config, actions)
             print(f"wrote {args.config}")
             return 0
-        problems = verify_config(args.config)
+        problems = verify_config(
+            args.config,
+            historical_sources_commit=args.historical_sources)
     except PinError as exc:
         print(f"pin_stage1: ERROR: {exc}", file=sys.stderr)
         return 1
@@ -3200,6 +3288,16 @@ def main(argv=None) -> int:
     print_selection(config)
     print_shards(config)
     print("not compared (recorded only): " + ", ".join(NOT_VERIFIED))
+    if args.historical_sources is not None:
+        print(f"source closure verified in HISTORICAL-SOURCE mode against "
+              f"{args.historical_sources} (git blobs, not the working tree): "
+              "historical-evidence verification, NOT live-closure "
+              "certification — see "
+              "docs/sequence_track/stage1_erratum_trainer_closure.md")
+        print(f"pin_stage1: OK (historical sources @ "
+              f"{args.historical_sources}) — {args.config} matches every "
+              "recomputed fact")
+        return 0
     print(f"pin_stage1: OK — {args.config} matches every recomputed fact")
     return 0
 

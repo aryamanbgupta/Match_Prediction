@@ -24,6 +24,7 @@ until the retrain exists and the config is re-pinned.
 from __future__ import annotations
 
 import atexit
+import hashlib
 import json
 import shutil
 import tempfile
@@ -78,10 +79,73 @@ needs_repin = pytest.mark.skipif(
 @pytest.mark.needs_artifacts
 @needs_repin
 def test_verify_passes_on_the_committed_config():
+    """`--verify` passes on the committed file in HISTORICAL-SOURCE mode.
+
+    The stage 1 config pins the source closure at the freeze commit
+    `2c7ea6f`, and `scripts/transformer_t1.py` has since been extended for
+    stage 2 — a live-file change, not an edit to frozen stage 1 evidence. See
+    docs/sequence_track/stage1_erratum_trainer_closure.md. So the committed
+    config is verified against the immutable git blobs at that commit, which
+    is historical-EVIDENCE verification; strict live verification stays the
+    default and is expected to fail on the current tree (asserted by
+    `test_strict_live_verification_still_fails_on_the_drifted_tree`).
+    """
     assert CONFIG_PATH.exists(), (
         f"{CONFIG_PATH} is missing; run pin_stage1.py --write")
-    assert verify_config(CONFIG_PATH) == []
-    assert main(["--verify"]) == 0
+    assert verify_config(
+        CONFIG_PATH,
+        historical_sources_commit=pin_stage1.STAGE1_COMMIT) == []
+    assert main(["--verify", "--historical-sources"]) == 0
+
+
+@pytest.mark.needs_artifacts
+@needs_repin
+def test_strict_live_verification_still_fails_on_the_drifted_tree():
+    """The default must NOT become the historical fallback (Astra MUST-FIX 7).
+
+    A broad live-or-historical fallback in default verification would conceal
+    arbitrary later drift, so the default mode still recomputes the live md5s
+    and still fails while the live trainer differs from the stage 1 pin.
+    """
+    problems = verify_config(CONFIG_PATH)
+    assert problems, (
+        "strict live verification passed: either the tree was reverted to "
+        "the stage 1 sources, or the historical fallback leaked into the "
+        "default mode")
+    assert any("provenance.source_md5" in problem for problem in problems)
+    assert main(["--verify"]) == 1
+
+
+def test_historical_sources_is_refused_for_write():
+    """`--write` must pin the live sources, never a historical blob."""
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--write", "--historical-sources"])
+    assert excinfo.value.code == 2
+
+
+def test_historical_source_closure_reads_git_blobs_not_the_tree():
+    live, live_absent = pin_stage1._source_closure()
+    historical, historical_absent = pin_stage1._source_closure(
+        pin_stage1.STAGE1_COMMIT)
+    assert live_absent == historical_absent == []
+    assert set(live) == set(historical)
+    # the trainer is the file the erratum is about: extended since the freeze
+    trainer = "scripts/transformer_t1.py"
+    assert live[trainer] != historical[trainer]
+    blob = pin_stage1._git_blob(pin_stage1.STAGE1_COMMIT, trainer)
+    assert blob is not None
+    assert historical[trainer] == hashlib.md5(blob).hexdigest()
+    # the erratum's recorded value for the trainer at the freeze commit
+    assert historical[trainer] == "2fa534412e8061352115014346b88100"
+
+
+def test_the_historical_mode_is_scoped_to_the_source_closure():
+    """The context manager restores the default when it exits."""
+    assert pin_stage1._HISTORICAL_SOURCE_COMMIT is None
+    with pin_stage1.historical_sources():
+        assert pin_stage1._HISTORICAL_SOURCE_COMMIT == (
+            pin_stage1.STAGE1_COMMIT)
+    assert pin_stage1._HISTORICAL_SOURCE_COMMIT is None
 
 
 @pytest.mark.needs_artifacts
@@ -836,9 +900,18 @@ def test_c114_is_deferred_with_no_artifacts(committed):
 
 @needs_repin
 def test_source_closure_is_hashed_in_full(committed):
-    """Every closure file on this checkout is hashed, with a live md5."""
-    from artifacts import md5_file
+    """Every closure file is hashed, with its md5 AT THE STAGE 1 FREEZE.
 
+    This is the historical-source check (Astra MUST-FIX 7, option c): the
+    recorded md5s must equal the md5s of the files as committed at `2c7ea6f`,
+    read from the immutable git blobs — not "live or historical, whichever
+    matches", which would accept arbitrary drift in any closure file. Shared
+    source files (e.g. scripts/transformer_t1.py) are extended for later
+    stages without re-pinning the frozen stage 1 config; see
+    docs/sequence_track/stage1_erratum_trainer_closure.md. Strict live
+    verification is exercised separately by
+    `test_strict_live_verification_still_fails_on_the_drifted_tree`.
+    """
     provenance = committed["provenance"]
     pinned = provenance["source_md5"]
     absent = provenance["source_md5_absent"]
@@ -847,10 +920,18 @@ def test_source_closure_is_hashed_in_full(committed):
         pin_stage1.PROVENANCE_SOURCE_CLOSURE)
     assert provenance["source_count"] == len(pinned)
     assert absent == [], f"closure files missing from the checkout: {absent}"
+
+    historical, historical_absent = pin_stage1._source_closure(
+        pin_stage1.STAGE1_COMMIT)
+    assert historical_absent == [], (
+        f"closure files absent at {pin_stage1.STAGE1_COMMIT}: "
+        f"{historical_absent}")
     for source, recorded in pinned.items():
-        path = pin_stage1.REPO_ROOT / source
-        assert path.is_file(), source
-        assert md5_file(path) == recorded, f"{source} md5 is stale"
+        assert (pin_stage1.REPO_ROOT / source).is_file(), source
+        assert historical[source] == recorded, (
+            f"{source} md5 does not match the file at "
+            f"{pin_stage1.STAGE1_COMMIT} "
+            f"(stage1_commit={historical[source]}, recorded={recorded})")
 
 
 def test_source_closure_reaches_past_the_runner_and_the_engine(committed):

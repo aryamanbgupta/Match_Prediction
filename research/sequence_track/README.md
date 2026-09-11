@@ -2,8 +2,8 @@
 
 Deterministic runner for pre-registered overnight jobs (stage 1+ of the
 sequence and embeddings track). No model in the loop, no verdicts, no
-source-control commands: the runner launches the commands listed in
-`queue.yaml`, one at a time, and writes marker files.
+source-control commands: the runner launches the commands listed in a queue
+file, one at a time, and writes marker files.
 
 ## Run
 
@@ -11,18 +11,20 @@ source-control commands: the runner launches the commands listed in
 # what would happen, launching nothing
 ./research/sequence_track/run_queue.sh --dry-run
 
-# the real thing, laptop jobs (default), inside tmux
+# the real thing, the laptop half (queue_laptop.yaml is the default), in tmux
 ./research/sequence_track/run_queue.sh 2>&1 | tee -a research/sequence_track/queue.log
 
-# the mini's jobs
-./research/sequence_track/run_queue.sh --machine mini
+# the mini half (on the mini)
+./research/sequence_track/run_queue.sh --queue research/sequence_track/queue_mini.yaml \
+    --machine mini
 
 # a different queue file
 ./research/sequence_track/run_queue.sh --queue /path/to/other_queue.yaml
 ```
 
-Stop the queue with `touch research/sequence_track/STOP` (the path in
-`defaults.stop_file`). It is checked before each job starts, never mid-job.
+Stop a queue by touching its own `defaults.stop_file`
+(`research/sequence_track/STOP_laptop` for the laptop half,
+`STOP_mini` for the mini half, so stopping one machine never stops the other). It is checked before each job starts, never mid-job.
 Remove it and re-run to resume: finished jobs are skipped by config hash.
 
 ## Queue file
@@ -84,7 +86,10 @@ the job re-runs once the real config lands.
 ## Files
 
 - `run_queue.sh` — the runner.
-- `queue.yaml` — the example queue (one placeholder stage-1 job).
+- `queue_laptop.yaml` — the stage-2 night-1 laptop half: sixteen jobs, seed 7
+  (the runner's default queue).
+- `queue_mini.yaml` — the stage-2 night-1 mini half: the same sixteen
+  configurations at seed 13.
 - `scripts/sequence_track/queue_lib.py` — YAML parsing/validation, the
   `vm_stat` reading, and the memory/deadline watchdog. Set `QUEUE_VM_STAT_CMD`
   to substitute the memory reading with another command (tests only).

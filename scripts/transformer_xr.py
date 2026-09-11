@@ -114,7 +114,9 @@ def main() -> None:
     ce_none = nn.CrossEntropyLoss(reduction="none")
 
     def run_batch(chunk, feats, y, aux):
-        f, py, ty, pad, ax = collate(chunk, feats, y, device, aux)
+        # `collate` returns a Batch namedtuple since stage 2; its first five
+        # fields are the stage 1 tuple verbatim.
+        f, py, ty, pad, ax = collate(chunk, feats, y, device, aux)[:5]
         # teacher-forced delivery indices; -1 (unlabeled) -> UNK row
         li = ax["line"].clamp(min=-1)
         ni = ax["length"].clamp(min=-1)
