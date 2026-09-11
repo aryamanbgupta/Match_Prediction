@@ -72,33 +72,41 @@ commit lands. `git status` shows the stage 2 files uncommitted.
 
 ---
 
-## 2. The exact remaining sequence
+## 2. The exact remaining sequence (morning onward)
 
-Each step's detail is in the handoff § 5. Short form:
+Everything through the launch is done. What is left, in order:
 
-1. ~~Smoke~~ DONE: all sixteen configurations, D6 filled.
-2. ~~Astra gate 1 round 1~~ DONE: `VERDICT: AGREE WITH CHANGES`, 9 MUST-FIX,
-   recorded with dispositions in D11. Three Opus implementers are fixing
-   MUST-FIX 1-5, 7-9 and SHOULD 1-4; MUST-FIX 6 was closed by the
-   orchestrator (`docs/sequence_track/stage2_cohort_consumer_audit.md`).
-   **Then round 2:**
-   ```bash
-   codex exec -m gpt-6-astra -c model_reasoning_effort="medium" -s read-only \
-       "$(cat <scratchpad>/astra/gate1_prompt.md)" </dev/null \
-       > <scratchpad>/astra/gate1_round1.md 2><scratchpad>/astra/gate1_round1.err
-   ```
-   The prompt is preserved at `docs/sequence_track/astra/gate1_prompt.md`
-   (copied out of the scratchpad so it survives the session). Iterate
-   rounds until `VERDICT: SIGN-OFF`; record each round in a D11 table.
-3. Commit the stage 2 code, config, tests, acceptance file, runbook,
-   handoff, erratum and `TODO.md`. One commit, plain summary plus body,
-   **no AI-attribution trailers**. Nothing under `models/` is committed.
-4. Push to the mini and launch the night (§ 3 below).
-5. Morning: rsync the runs back, fill D8's Result.
-6. Then, each gated on the user's explicit go: 2e k sweep, 2f statistics
-   and report, Astra gate 2, commit, verdict.
-
----
+1. **Both queues finish.** 16 jobs each, seed 7 laptop / seed 13 mini. Check
+   completions by counting `runs/*/seed_<s>/COMPLETE.json`, never by the
+   runner's exit status, which is zero even after memory refusals and
+   exhausted retries.
+2. **Consolidate (§ 3b).** Confirm no `run_queue.sh`, `retrain_stage2.py` or
+   `transformer_t1.py` is alive on either machine, rsync only `seed_13/***`
+   home, then `retrain_stage2.py --consolidate`. It refuses and names any
+   incomplete run rather than retraining it; re-queue those on the machine
+   that owns the seed. Fill D8.5 through D8.9.
+3. **Land the deferred analysis fixes** before any number is quoted: the three
+   items in D11's round 3 section (admission failing open, summary-LL
+   authentication and k-sweep comparability, `--consolidate` diagnostic
+   completeness) plus Astra's four cross-arm signature requirements and the two
+   report fixes. An agent was dispatched for these during the night; verify
+   its work landed and the suite is green.
+4. **Recertify ownership (D10.12)** on the trained checkpoints of
+   `same_entity_k0`, `same_entity_k30`, `same_entity_unr` and `recency_k30` at
+   both seeds, with the matched positive controls. A failed certificate blocks
+   that arm's family; it is not a footnote.
+5. **D9, the k sweep.** Run it; the rule is deterministic (best two-seed mean
+   unless no k beats k = 30 by more than 0.002, then 30; any k including `unr`
+   may win). Record the D9.6 interpretation flags beside the selection. If the
+   chosen k is not 30, note that it has **no** registered recency control and
+   that borrowing `recency_k30` is forbidden.
+6. **D10, the statistics and the report.** Then re-pin.
+7. **Astra gate 2.** Fill the structural facts into
+   `docs/sequence_track/astra/gate2_prompt_template.md` and send it. Iterate to
+   SIGN-OFF, recording each round in D11.
+8. **Commit the results.** Then stop: `research/log_verdict.py` is **not** run
+   tonight or in the morning. Leave the gate JSON and the proposed ledger row
+   prepared, and put them in the report for the user's decision.
 
 ## 3. Launching the night (copy-paste)
 
