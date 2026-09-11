@@ -10,9 +10,14 @@ roles are still `docs/sequence_track/stage2_handoff_opus.md`.
 
 ## 0. NEXT ACTION (read this first)
 
-> **Land the three Astra gate-1 implementer fixes, re-run both suites, ask
-> Astra for gate-1 round 2, iterate to SIGN-OFF, commit, then launch both
-> queues (§ 3).** Everything before that is done and recorded.
+> **LAUNCHED. Both queues have been running since 2026-09-12T01:31+0530**,
+> from commit `972cdf3`: seed 7 on the laptop out of the training worktree,
+> seed 13 on the Mac mini. Nothing to do until they finish. Then, in order:
+> § 3b morning consolidation; D9 the k sweep; D10 the statistics and report;
+> Astra gate 2. The three open analysis defects recorded in D11 (statistics
+> admission failing open, summary-LL authentication and k-sweep comparability,
+> and `--consolidate`'s incomplete diagnostics) must be fixed **before any
+> number is quoted from this stage**.
 
 ### Autonomy grant (user, 2026-09-12 ~01:15 IST)
 
@@ -126,6 +131,8 @@ test "$(git -C "$WT" rev-parse HEAD)" = "$TRAIN_COMMIT" \
 ls -l "$WT"/data/xgb_data_i7 "$WT"/models/embeddings   # must still be symlinks into $MAIN
 
 # --- 2. push to the mini and check it out there ---
+# one-time on the mini, because embeddings-ladder is checked out there:
+#   ssh mac-mini 'cd ~/CricML/Match_Prediction && git config receive.denyCurrentBranch updateInstead'
 cd "$MAIN" && git push mini embeddings-ladder
 ssh mac-mini 'cd ~/CricML/Match_Prediction && git checkout embeddings-ladder && git pull --ff-only && git rev-parse HEAD'
 # assert the mini is on the same commit before launching
@@ -154,7 +161,18 @@ cd "$WT" && rm -f research/sequence_track/STOP_laptop && \
     --queue research/sequence_track/queue_laptop.yaml --machine laptop \
     > /tmp/stage2_laptop_$(date +%Y%m%d_%H%M).log 2>&1 & echo "laptop pid $!"
 
-ssh mac-mini 'cd ~/CricML/Match_Prediction && rm -f research/sequence_track/STOP_mini && nohup ./research/sequence_track/run_queue.sh --queue research/sequence_track/queue_mini.yaml --machine mini > /tmp/stage2_mini_$(date +%Y%m%d_%H%M).log 2>&1 & echo "mini pid $!"'
+# The mini needs uv on the PATH: a non-interactive ssh does not get it, and
+# run_queue.sh then fails queue validation, launches NOTHING and exits 0.
+# Quoting nohup through ssh is also fragile, so send a script instead.
+cat > /tmp/launch_mini.sh <<'EOS'
+cd ~/CricML/Match_Prediction
+export PATH="$HOME/.local/bin:$PATH"
+rm -f research/sequence_track/STOP_mini
+LOG=/tmp/stage2_mini_$(date +%Y%m%d_%H%M).log
+nohup ./research/sequence_track/run_queue.sh --queue research/sequence_track/queue_mini.yaml --machine mini > "$LOG" 2>&1 < /dev/null &
+echo "launched pid $! log $LOG"
+EOS
+scp -q /tmp/launch_mini.sh mac-mini:/tmp/launch_mini.sh && ssh mac-mini 'bash /tmp/launch_mini.sh'
 ```
 
 Record both launch stamps in D8.4. They are necessarily after the cohort's
