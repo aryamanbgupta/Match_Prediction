@@ -250,3 +250,53 @@ def test_contract_without_stats_cache_md5_is_refused(
         contract=_contract(stats_cache=stats_cache))
     with pytest.raises(RuntimeError, match="stats_cache.md5"):
         _load(monkeypatch, mdir, _FakeProvider(I7_META))
+
+
+# --- torch CPU thread cap (stage 1 1b probe, 2026-09-11) -------------------
+# The wrapper used to force torch.set_num_threads(4) on CPU, overriding the
+# runner's --threads cap; a "one-thread" arm ran four torch threads and ten
+# concurrent shards thrashed the cores.
+
+
+def test_cpu_thread_cap_follows_omp_num_threads(monkeypatch):
+    import sim_t1
+    monkeypatch.setenv("OMP_NUM_THREADS", "1")
+    assert sim_t1._cpu_thread_cap() == 1
+    monkeypatch.setenv("OMP_NUM_THREADS", "3")
+    assert sim_t1._cpu_thread_cap() == 3
+
+
+def test_cpu_thread_cap_defaults_to_four_without_a_cap(monkeypatch):
+    import sim_t1
+    monkeypatch.delenv("OMP_NUM_THREADS", raising=False)
+    assert sim_t1._cpu_thread_cap() == 4
+    monkeypatch.setenv("OMP_NUM_THREADS", "")
+    assert sim_t1._cpu_thread_cap() == 4
+
+
+def test_cpu_thread_cap_refuses_garbage(monkeypatch):
+    import pytest
+    import sim_t1
+    monkeypatch.setenv("OMP_NUM_THREADS", "four")
+    with pytest.raises(RuntimeError):
+        sim_t1._cpu_thread_cap()
+    monkeypatch.setenv("OMP_NUM_THREADS", "0")
+    with pytest.raises(RuntimeError):
+        sim_t1._cpu_thread_cap()
+
+
+def test_cpu_model_load_applies_the_cap(tmp_path, monkeypatch):
+    """Loading an i7-contracted checkpoint on cpu under OMP_NUM_THREADS=1
+    leaves torch at one thread rather than the old hard-coded four."""
+    import torch
+    import sim_t1
+    monkeypatch.setenv("OMP_NUM_THREADS", "1")
+    before = torch.get_num_threads()
+    torch.set_num_threads(4)
+    try:
+        mdir = _checkpoint(
+            tmp_path, data_dir="data/xgb_data_i7", contract=_contract())
+        model = _load(monkeypatch, mdir, _FakeProvider(I7_META))  # noqa: F841
+        assert torch.get_num_threads() == 1
+    finally:
+        torch.set_num_threads(before)

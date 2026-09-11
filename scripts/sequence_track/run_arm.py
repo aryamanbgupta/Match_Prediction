@@ -19,6 +19,14 @@ XGBoost wrappers as well:
   with an explicit model dir and `ball_calibrator=None` (the promoted i7
   stack serves RAW — D16/D17).
 
+One more seam is patched for every arm: the frozen runner builds its I3
+competition-cluster lookup from its own `--test-dir`, whose block ids depend
+on which of an event's fixtures that directory happens to hold, so a shard
+stamps a different `competition_cluster_id` than a serial run (stage-1 1c,
+D10). `--cluster-source-dir` names the corpus the lookup is built from —
+required with `--config`, where it is the whole registered fixture set — and
+the run fails closed if it does not cover every fixture being scored.
+
 Everything else is delegated to the frozen `run_sim_eval.main()`, so the arm
 output dir holds the standard evaluator results JSON (copied to `eval.json`)
 plus two stage-1 artifacts:
@@ -147,7 +155,7 @@ def _early_thread_cap(argv=None) -> int:
     wait for argparse (same reason `run_sim_eval_t1` reads argv directly).
     """
     argv = list(sys.argv if argv is None else argv)
-    threads = 4
+    threads = 1  # registered stage-1 value since 2026-09-11 (was 4)
     if "--threads" in argv:
         index = argv.index("--threads")
         try:
@@ -538,17 +546,120 @@ def _block_n_sims(block: dict):
     return [] if value is None else [int(value)]
 
 
+def _match_fixture_dir(block: dict, fixture_dir):
+    """`(block name, shard entry or None)` for this launch's fixture dir.
+
+    A registered run block names ONE fixture directory. The 1d full run is
+    additionally partitioned into shards (D11 check 11.1), each a registered
+    directory of the same block, because `run_arm` refuses `--parallel` and
+    disjoint fixture shards in separate processes are the only parallelism
+    stage 1 has. A shard launch is therefore a `full_run` launch — same
+    n_sims, same base seed, same everything except `--fixture-dir` and
+    `--output-dir` — and it binds to that shard's own inventory hash and
+    count rather than to the whole set's.
+    """
+    for name in REGISTERED_BLOCKS:
+        run_block = block.get(name) or {}
+        if not isinstance(run_block, dict):
+            continue
+        if _same_path(run_block.get("fixture_dir"), fixture_dir):
+            return name, None
+        for shard in (run_block.get("shards") or []):
+            if not isinstance(shard, dict):
+                continue
+            if _same_path(shard.get("fixture_dir"), fixture_dir):
+                return name, shard
+    return None, None
+
+
+def _fixture_dir_identity(fixture_dir):
+    """`(md5, json count)` of a fixture directory as it is right now."""
+    from artifacts import md5_directory  # noqa: PLC0415 - heavy-ish import
+
+    directory = Path(fixture_dir)
+    return (md5_directory(directory),
+            len(sorted(directory.glob("*.json"))))
+
+
+def cluster_lookup_seam(frozen_loader, *, fixture_dir, cluster_source_dir,
+                        stems):
+    """A drop-in replacement for `run_sim_eval.load_competition_clusters`.
+
+    The frozen runner calls it with its OWN `--test-dir`. A competition
+    cluster id is `event:<name>|block_start:<the first date of that event's
+    members IN THAT DIRECTORY>`, so the id a fixture is stamped with depends
+    on which of its event's siblings the directory happens to hold: a shard
+    holding one fixture of an event stamps a different
+    `competition_cluster_id` than a serial run over the whole set (stage-1
+    1c, D10 — fixture 1477610 was stamped block_start 2026-01-29 in shard 0
+    against 2026-01-27 serial). That id is the I3 block every ROI interval is
+    resampled over, so it must be a property of the registered corpus, not of
+    the partition.
+
+    The returned callable therefore redirects the runner's own fixture dir to
+    `cluster_source_dir` (any other directory is passed through untouched)
+    and fails closed when the source does not cover every fixture the run
+    scores — an uncovered fixture would silently fall back to a
+    team-pair-season block.
+    """
+    def _load_clusters(source_dir):
+        requested = Path(source_dir)
+        source = (Path(cluster_source_dir)
+                  if _same_path(requested, fixture_dir) else requested)
+        lookup = frozen_loader(source)
+        uncovered = sorted(stem for stem in stems if stem not in lookup)
+        if uncovered:
+            raise SystemExit(
+                f"run_arm refuses to score: {len(uncovered)} of "
+                f"{len(stems)} fixture(s) in {fixture_dir} are absent from "
+                f"the competition-cluster lookup built from {source} "
+                f"({uncovered[:5]}{' ...' if len(uncovered) > 5 else ''}). "
+                "The cluster source directory must cover every fixture the "
+                "run scores, or those fixtures would fall back to "
+                "team-pair-season blocks instead of the registered "
+                "tournament blocks.")
+        print(f"[run_arm] competition clusters: {len(lookup)} lookup key(s) "
+              f"from {source}, covering all {len(stems)} fixture(s) of this "
+              "run")
+        return lookup
+
+    return _load_clusters
+
+
+def _cluster_source_mismatch(binding, effective: dict, label: str) -> list:
+    """The run block's (or shard's) own cluster-source pin, when it has one.
+
+    The arm-level pin is checked unconditionally above; this catches a run
+    block that registers a DIFFERENT cluster source from the arm it belongs
+    to, which would make two launches of the same arm stamp different I3
+    block ids.
+    """
+    if not isinstance(binding, dict):
+        return []
+    pinned = binding.get("cluster_source_dir")
+    if pinned is None:
+        return []
+    if _same_path(pinned, effective["cluster_source_dir"]):
+        return []
+    return [f"cluster source dir: run uses "
+            f"{effective['cluster_source_dir']!r}, the {label} block pins "
+            f"{pinned!r}"]
+
+
 def registered_mismatches(config: dict, arm: str, effective: dict) -> list:
     """Differences between this invocation and the arm's registered block.
 
     `effective` carries the values the run will actually use — including the
     RESOLVED device and the simulation count, both of which used to escape
     the check (Astra round 2, item 4a). The fixture dir must equal one of
-    the arm's registered run blocks (`smoke_1a`, `full_run`, `timing_1b`),
-    and that block also fixes which base seeds and which n_sims are allowed:
-    the 1b convergence batches are a registered protocol, not an ad-hoc run
-    (item 4c). The matched block name and its seed cohort are written back
-    into `effective` as `config_block` and `seed_cohort`.
+    the arm's registered run blocks (`smoke_1a`, `full_run`, `timing_1b`) or
+    one of that block's registered SHARDS (D11 check 11.1), and the block
+    fixes which base seeds and which n_sims are allowed: the 1b convergence
+    batches and the 1d shards are registered protocols, not ad-hoc runs
+    (item 4c). A shard launch additionally binds to that shard's own
+    inventory hash and count. The matched block name, the shard index (or
+    None) and the seed cohort are written back into `effective` as
+    `config_block`, `config_shard` and `seed_cohort`.
     """
     arms = config.get("arms") or {}
     block = arms.get(arm)
@@ -562,6 +673,10 @@ def registered_mismatches(config: dict, arm: str, effective: dict) -> list:
         ("bowler usage", "bowler_usage", effective["bowler_usage_path"]),
         ("roster policy", "roster_policy", effective["roster_policy_path"]),
         ("context dir", "context_dir", effective["context_dir"]),
+        # The I3 block ids must come from the registered set, not from this
+        # launch's fixture dir (stage-1 1c, D10).
+        ("cluster source dir", "cluster_source_dir",
+         effective["cluster_source_dir"]),
         ("player metadata", "player_metadata",
          effective["player_metadata"]),
     ):
@@ -595,13 +710,10 @@ def registered_mismatches(config: dict, arm: str, effective: dict) -> list:
         problems.append(
             f"clip bounds: run uses {clip!r}, config pins {pinned_clip!r}")
 
-    matched = None
-    for name in REGISTERED_BLOCKS:
-        pinned_dir = (block.get(name) or {}).get("fixture_dir")
-        if pinned_dir and _same_path(pinned_dir, effective["fixture_dir"]):
-            matched = name
-            break
+    matched, shard = _match_fixture_dir(block, effective["fixture_dir"])
     effective["config_block"] = matched
+    effective["config_shard"] = (
+        None if shard is None else int(shard.get("index")))
     effective["seed_cohort"] = [int(effective["base_seed"])]
     if matched is None:
         registered = {
@@ -609,10 +721,39 @@ def registered_mismatches(config: dict, arm: str, effective: dict) -> list:
             for name in REGISTERED_BLOCKS if block.get(name)}
         problems.append(
             f"fixture dir: run uses {effective['fixture_dir']!r}, which is "
-            f"no registered fixture dir {registered!r}")
+            f"no registered fixture dir {registered!r} and no registered "
+            "shard of one")
         return problems
 
+    if shard is not None:
+        # The shard's OWN inventory, measured now: without this a launch
+        # could point `--fixture-dir` at a registered shard path whose
+        # contents had moved and still match on the path alone.
+        found_md5, found_count = _fixture_dir_identity(
+            effective["fixture_dir"])
+        effective["fixture_dir_md5"] = found_md5
+        effective["fixture_count"] = found_count
+        pinned_md5 = shard.get("fixture_dir_md5")
+        if not pinned_md5:
+            problems.append(
+                f"{matched} shard {shard.get('index')!r}: the config pins no "
+                "fixture directory hash, so this shard cannot be launched")
+        elif pinned_md5 != found_md5:
+            problems.append(
+                f"shard fixture dir hash: {effective['fixture_dir']!r} "
+                f"hashes to {found_md5!r}, the {matched} shard "
+                f"{shard.get('index')!r} pins {pinned_md5!r}")
+        pinned_count = shard.get("fixture_count")
+        if pinned_count is not None and int(pinned_count) != found_count:
+            problems.append(
+                f"shard fixture count: {effective['fixture_dir']!r} holds "
+                f"{found_count} fixture(s), the {matched} shard "
+                f"{shard.get('index')!r} registers {pinned_count!r}")
+        problems += _cluster_source_mismatch(
+            shard, effective, f"{matched} shard {shard.get('index')!r}")
+
     run_block = block[matched]
+    problems += _cluster_source_mismatch(run_block, effective, matched)
     seeds = _block_seeds(run_block, config)
     if not seeds:
         problems.append(
@@ -660,6 +801,17 @@ def parse_args(argv=None) -> argparse.Namespace:
                         help="directory of cricsheet fixture JSONs to score")
     parser.add_argument("--context-dir", default=DEFAULT_CONTEXT_DIR,
                         help="same-day replay corpus (default data/t20s_json)")
+    parser.add_argument(
+        "--cluster-source-dir", default=None,
+        help="directory the I3 competition-cluster lookup is built from. "
+             "REQUIRED with --config, where the registered value is the "
+             "whole iteration set. The frozen runner builds the lookup from "
+             "its own --test-dir, and a block id carries the first date of "
+             "that event's members IN THAT DIRECTORY, so a shard holding "
+             "one fixture of an event stamps a different "
+             "competition_cluster_id than a serial run (stage-1 1c, D10). "
+             "Defaults to --fixture-dir for an unregistered ad-hoc run, "
+             "which reproduces the frozen behaviour.")
     parser.add_argument("--odds", required=True)
     parser.add_argument("--n-sims", type=int, required=True)
     parser.add_argument("--base-seed", type=int, required=True)
@@ -677,7 +829,7 @@ def parse_args(argv=None) -> argparse.Namespace:
                              "policy JSON (default: plain empirical selector)")
     parser.add_argument("--clip-low", type=float, default=None)
     parser.add_argument("--clip-high", type=float, default=None)
-    parser.add_argument("--threads", type=int, default=4)
+    parser.add_argument("--threads", type=int, default=1)
     parser.add_argument(
         "--device", default=None, choices=("cpu", "mps", "cuda", "auto"),
         help="device for the T1 arms (default: T1_SIM_DEVICE, else cpu). "
@@ -685,6 +837,11 @@ def parse_args(argv=None) -> argparse.Namespace:
              "provenance records.")
     parser.add_argument("--player-metadata", default=DEFAULT_PLAYER_METADATA)
     args = parser.parse_args(argv)
+    if args.config and not args.cluster_source_dir:
+        parser.error(
+            "--cluster-source-dir is required with --config: a registered "
+            "run stamps its I3 block ids from the registered fixture set, "
+            "never from its own (possibly sharded) fixture dir")
     if (args.clip_low is None) != (args.clip_high is None):
         parser.error("--clip-low and --clip-high must be given together")
     if args.clip_low is not None and not (
@@ -745,6 +902,10 @@ def main(argv=None) -> None:
     usage_path = args.bowler_usage_path
     roster_path = args.bowler_roster_policy
     output_dir = Path(args.output_dir)
+    # The I3 competition-cluster lookup is built from this directory, not
+    # from the fixture dir the run scores (stage-1 1c, D10). Without
+    # --config an ad-hoc run keeps the frozen runner's behaviour.
+    cluster_source_dir = Path(args.cluster_source_dir or args.fixture_dir)
     stats_role = STATS_CACHE_ROLES.get(stats_version)
     stats_cache = (
         artifact_path(stats_role) if stats_role
@@ -752,10 +913,14 @@ def main(argv=None) -> None:
 
     for candidate in (args.fixture_dir, args.context_dir, args.odds,
                       args.output_dir, model_dir, graft_path, usage_path,
-                      roster_path, args.player_metadata, stats_cache):
+                      roster_path, args.player_metadata, stats_cache,
+                      cluster_source_dir):
         if candidate is not None:
             reject_sealed(candidate)
 
+    if not cluster_source_dir.is_dir():
+        raise SystemExit(
+            f"cluster source directory not found: {cluster_source_dir}")
     if not model_dir.is_dir():
         raise SystemExit(
             f"arm {args.arm}: model directory {model_dir} does not exist "
@@ -779,6 +944,7 @@ def main(argv=None) -> None:
 
     # ---- preflight: the registered pins, re-verified here ---------------
     config_block = None
+    config_shard = None
     seed_cohort = [int(args.base_seed)]
     if args.config:
         from sequence_track.pin_stage1 import verify_config  # noqa: E402
@@ -804,6 +970,7 @@ def main(argv=None) -> None:
             "roster_policy_path": roster_path,
             "odds": args.odds,
             "context_dir": args.context_dir,
+            "cluster_source_dir": str(cluster_source_dir),
             "player_metadata": args.player_metadata,
             "clip": clip_bounds,
             "base_seed": int(args.base_seed),
@@ -821,12 +988,15 @@ def main(argv=None) -> None:
                 + "\n  ".join(mismatches)
                 + "\nRun the command line the config registers, or re-pin.")
         config_block = effective["config_block"]
+        config_shard = effective.get("config_shard")
         seed_cohort = effective["seed_cohort"]
         config_sha256 = sha256(config_path)
         config_verified = True
         print(f"[run_arm] config verified: {config_path} "
-              f"(arm {args.arm}, {config_block} block, device {device}, "
-              f"n_sims {args.n_sims}, seed cohort {seed_cohort})")
+              f"(arm {args.arm}, {config_block} block"
+              f"{'' if config_shard is None else f', shard {config_shard}'}, "
+              f"device {device}, n_sims {args.n_sims}, seed cohort "
+              f"{seed_cohort})")
     else:
         config_path = None
         config_sha256 = None
@@ -1128,6 +1298,24 @@ def main(argv=None) -> None:
     _ArmEvaluator.scored_state = scored_state
     runner.MatchLevelEvaluator = _ArmEvaluator
 
+    # ---- competition clusters: stamped from the REGISTERED set -----------
+    # The frozen runner builds its I3 block lookup with
+    # `load_competition_clusters(args.test_dir)` — the run's OWN fixture dir.
+    # A block id is `event:<name>|block_start:<the first date of that event's
+    # members IN THAT DIRECTORY>`, so a shard that holds one fixture of an
+    # event stamps a different `competition_cluster_id` than a serial run
+    # over the whole set does (stage-1 1c, D10: fixture 1477610 stamped
+    # block_start 2026-01-29 in shard 0 against 2026-01-27 serial).
+    # Everything else the simulator writes is shard-invariant, so this is the
+    # one field the partition can move — and it moves the I3 blocking that
+    # every ROI interval is resampled over. The lookup is therefore built
+    # from the cluster SOURCE directory for every launch, sharded or not.
+    runner.load_competition_clusters = cluster_lookup_seam(
+        runner.load_competition_clusters,
+        fixture_dir=args.fixture_dir,
+        cluster_source_dir=cluster_source_dir,
+        stems=stems)
+
     # ---- delegate to the frozen runner ----------------------------------
     delegated = [
         "run_sim_eval.py",
@@ -1249,6 +1437,10 @@ def main(argv=None) -> None:
         "config_sha256": config_sha256,
         "config_verified": bool(config_verified),
         "config_block": config_block,
+        # None for a whole-block run; the shard index for a 1d shard launch
+        # (D11 check 11.1). audit_cross_arm binds a run that carries one to
+        # that shard's registered inventory rather than to the whole set's.
+        "config_shard": config_shard,
         "fixture_dir": str(args.fixture_dir),
         # Bound to the registered block by audit_cross_arm: a run cannot
         # claim a block whose fixture directory it did not read.
@@ -1258,6 +1450,13 @@ def main(argv=None) -> None:
         "context_dir": str(args.context_dir),
         "context_dir_hash": md5_directory(args.context_dir),
         "context_dir_hash_contract": DIR_HASH_CONTRACT,
+        # The directory the I3 competition-cluster lookup was built from.
+        # audit_cross_arm asserts it identical across arms and equal to the
+        # registered pin: two arms whose block ids came from different
+        # corpora are not comparable at the ROI-interval layer.
+        "cluster_source_dir": str(cluster_source_dir),
+        "cluster_source_dir_hash": md5_directory(cluster_source_dir),
+        "cluster_source_dir_hash_contract": DIR_HASH_CONTRACT,
         "odds": str(args.odds),
         "odds_sha256": sha256(args.odds),
         "player_metadata_sha256": sha256(args.player_metadata),

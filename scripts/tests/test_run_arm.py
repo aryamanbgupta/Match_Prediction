@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -515,19 +516,23 @@ def _config(tmp_path):
                 "bowler_usage": "models/bowler_phase_usage.json",
                 "roster_policy": "models/bowler_roster_policy.json",
                 "context_dir": "data/t20s_json",
+                "cluster_source_dir": "data/polymarket_test_v2",
                 "player_metadata": "data/all_players_enriched.csv",
                 "odds": {"path": "betting_odds_polymarket_v2.json"},
                 "clip": [0.01, 0.99],
                 "base_seed": 20260910,
-                "threads": 4,
+                "threads": 1,
                 "device": "cpu",
                 "smoke_1a": {"fixture_dir": str(tmp_path / "smoke"),
+                             "cluster_source_dir": "data/polymarket_test_v2",
                              "n_sims": 10, "base_seeds": [20260910]},
                 "full_run": {"fixture_dir": str(tmp_path / "full"),
+                             "cluster_source_dir": "data/polymarket_test_v2",
                              "n_sims": "to_be_filled_before_1d",
                              "base_seeds": [20260910]},
                 "timing_1b": {
                     "fixture_dir": str(tmp_path / "timing"),
+                    "cluster_source_dir": "data/polymarket_test_v2",
                     # The PERMITTED list is the jointly screened one; 6400
                     # is screened and refused (Astra round 3, item 2).
                     "n_sims": [100, 200, 400, 800, 1600, 3200],
@@ -547,12 +552,13 @@ def _effective(tmp_path, **overrides):
         "bowler_usage_path": "models/bowler_phase_usage.json",
         "roster_policy_path": "models/bowler_roster_policy.json",
         "context_dir": "data/t20s_json",
+        "cluster_source_dir": "data/polymarket_test_v2",
         "player_metadata": "data/all_players_enriched.csv",
         "odds": "betting_odds_polymarket_v2.json",
         "clip": [0.01, 0.99],
         "base_seed": 20260910,
         "n_sims": 10,
-        "threads": 4,
+        "threads": 1,
         "device": "cpu",
         "fixture_dir": str(tmp_path / "smoke"),
     }
@@ -610,6 +616,117 @@ def test_registered_mismatches_refuses_clipping_left_off(tmp_path):
     problems = registered_mismatches(
         _config(tmp_path), "A", _effective(tmp_path, clip=None))
     assert any("clip bounds" in problem for problem in problems)
+
+
+# --------------------------------------------------------------------------
+# 1c / D10 — the competition-cluster lookup is built from the registered set
+# --------------------------------------------------------------------------
+
+def _cricsheet(path, *, date, event, teams=("India", "Australia")):
+    path.write_text(json.dumps({
+        "info": {"dates": [date], "event": {"name": event},
+                 "teams": list(teams), "gender": "male",
+                 "match_type": "T20"}}))
+
+
+def _two_fixture_event(tmp_path):
+    """A two-fixture event, and a one-fixture sub-dir holding the later one.
+
+    This is the 1c case in miniature: both fixtures belong to one event, so
+    the whole set blocks them together from the EARLIER date, while the
+    sub-dir on its own would start the block at the later one.
+    """
+    whole = tmp_path / "whole"
+    whole.mkdir()
+    _cricsheet(whole / "1477609.json", date="2026-01-27", event="BBL 2025/26")
+    _cricsheet(whole / "1477610.json", date="2026-01-29", event="BBL 2025/26")
+    shard = tmp_path / "shard0"
+    shard.mkdir()
+    _cricsheet(shard / "1477610.json", date="2026-01-29", event="BBL 2025/26")
+    return whole, shard
+
+
+def test_a_one_fixture_shard_stamps_the_whole_sets_cluster_id(tmp_path):
+    from sequence_track.run_arm import cluster_lookup_seam
+    from sim_eval.eval_statistics import load_competition_clusters
+
+    whole, shard = _two_fixture_event(tmp_path)
+    serial = load_competition_clusters(whole)["1477610"]
+
+    # The defect: the frozen runner builds the lookup from its own fixture
+    # dir, so the shard starts the block on its own first date.
+    assert load_competition_clusters(shard)["1477610"] != serial
+
+    # The seam: the shard's fixture dir is redirected to the cluster source.
+    seam = cluster_lookup_seam(
+        load_competition_clusters, fixture_dir=str(shard),
+        cluster_source_dir=whole, stems={"1477610"})
+    assert seam(str(shard))["1477610"] == serial
+    # And a serial run over the whole set is unchanged.
+    whole_seam = cluster_lookup_seam(
+        load_competition_clusters, fixture_dir=str(whole),
+        cluster_source_dir=whole, stems={"1477609", "1477610"})
+    assert whole_seam(str(whole))["1477610"] == serial
+
+
+def test_the_cluster_seam_fails_closed_on_an_uncovered_fixture(tmp_path):
+    from sequence_track.run_arm import cluster_lookup_seam
+    from sim_eval.eval_statistics import load_competition_clusters
+
+    whole, shard = _two_fixture_event(tmp_path)
+    _cricsheet(shard / "1999999.json", date="2026-01-29", event="BBL 2025/26")
+    seam = cluster_lookup_seam(
+        load_competition_clusters, fixture_dir=str(shard),
+        cluster_source_dir=whole, stems={"1477610", "1999999"})
+    with pytest.raises(SystemExit) as error:
+        seam(str(shard))
+    assert "1999999" in str(error.value)
+    assert "team-pair-season" in str(error.value)
+
+
+def test_registered_mismatches_refuses_a_wrong_cluster_source_dir(tmp_path):
+    problems = registered_mismatches(
+        _config(tmp_path), "A",
+        _effective(tmp_path, cluster_source_dir=str(tmp_path / "smoke")))
+    assert any("cluster source dir" in problem for problem in problems), (
+        problems)
+
+
+def test_a_run_block_pinning_a_different_cluster_source_is_refused(tmp_path):
+    config = _config(tmp_path)
+    config["arms"]["A"]["smoke_1a"]["cluster_source_dir"] = str(
+        tmp_path / "somewhere_else")
+    problems = registered_mismatches(config, "A", _effective(tmp_path))
+    assert any("cluster source dir" in problem and "smoke_1a" in problem
+               for problem in problems), problems
+
+
+def test_a_shard_pinning_a_different_cluster_source_is_refused(tmp_path):
+    config = _sharded_config(tmp_path)
+    shard = config["arms"]["A"]["full_run"]["shards"][1]
+    shard["cluster_source_dir"] = str(tmp_path / "shards" / "1" / "fixtures")
+    problems = registered_mismatches(
+        config, "A",
+        _effective(tmp_path, fixture_dir=shard["fixture_dir"],
+                   n_sims=SHARD_N_SIMS))
+    assert any("cluster source dir" in problem and "shard" in problem
+               for problem in problems), problems
+
+
+def test_config_without_a_cluster_source_dir_is_refused_at_parse(tmp_path):
+    from sequence_track.run_arm import parse_args
+
+    common = [
+        "--arm", "A", "--fixture-dir", str(tmp_path),
+        "--odds", "betting_odds_polymarket_v2.json",
+        "--n-sims", "10", "--base-seed", "20260910",
+        "--output-dir", str(tmp_path / "out"),
+    ]
+    with pytest.raises(SystemExit):
+        parse_args(common + ["--config", "experiments/configs/x.yaml"])
+    # Without --config an ad-hoc run keeps the frozen behaviour.
+    args = parse_args(common)
+    assert args.cluster_source_dir is None
 
 
 # --------------------------------------------------------------------------
@@ -802,3 +919,146 @@ def test_a_jointly_forbidden_candidate_is_refused_by_the_preflight(tmp_path):
     ok = _effective(tmp_path, fixture_dir=str(tmp_path / "timing"),
                     base_seed=20260911, n_sims=3200)
     assert registered_mismatches(config, "A", ok) == []
+
+
+# --------------------------------------------------------------------------
+# D11 check 11.2 — a 1d shard launch binds to its registered shard entry
+#
+# A shard is a `full_run` launch over one registered directory of the
+# partition: same n_sims, same base seed, same everything else, and bound to
+# that shard's OWN inventory hash and count so a path match alone is never
+# enough.
+# --------------------------------------------------------------------------
+
+SHARD_N_SIMS = 1600
+
+
+def _shard_dir(tmp_path, index, ids=("1500001", "1500002")):
+    directory = tmp_path / "shards" / str(index) / "fixtures"
+    directory.mkdir(parents=True, exist_ok=True)
+    for fixture_id in ids:
+        (directory / f"{fixture_id}.json").write_text('{"info": {}}')
+    return directory
+
+
+def _sharded_config(tmp_path, n_shards=3, n_sims=SHARD_N_SIMS):
+    """`_config` with a launchable full_run and a materialised partition."""
+    from artifacts import md5_directory
+
+    config = _config(tmp_path)
+    full = config["arms"]["A"]["full_run"]
+    full["n_sims"] = n_sims
+    full["shards"] = []
+    for index in range(n_shards):
+        directory = _shard_dir(
+            tmp_path, index, ids=(f"150000{index}", f"160000{index}"))
+        full["shards"].append({
+            "index": index,
+            "fixture_dir": str(directory),
+            "fixture_dir_md5": md5_directory(directory),
+            "fixture_count": 2,
+            "cluster_source_dir": "data/polymarket_test_v2",
+            "output_dir": str(tmp_path / "full" / "A" / f"shard{index}"),
+            "command": "env uv run",
+        })
+    return config
+
+
+def test_a_registered_shard_launch_is_accepted(tmp_path):
+    config = _sharded_config(tmp_path)
+    shard = config["arms"]["A"]["full_run"]["shards"][1]
+    effective = _effective(tmp_path, fixture_dir=shard["fixture_dir"],
+                           n_sims=SHARD_N_SIMS)
+    assert registered_mismatches(config, "A", effective) == []
+    # It is a full_run launch, on shard 1, with the block's own seed cohort.
+    assert effective["config_block"] == "full_run"
+    assert effective["config_shard"] == 1
+    assert effective["seed_cohort"] == [20260910]
+    assert effective["fixture_count"] == 2
+    assert effective["fixture_dir_md5"] == shard["fixture_dir_md5"]
+
+
+def test_the_whole_set_full_run_launch_records_no_shard(tmp_path):
+    config = _sharded_config(tmp_path)
+    effective = _effective(tmp_path, fixture_dir=str(tmp_path / "full"),
+                           n_sims=SHARD_N_SIMS)
+    assert registered_mismatches(config, "A", effective) == []
+    assert effective["config_block"] == "full_run"
+    assert effective["config_shard"] is None
+
+
+def test_a_shard_whose_contents_moved_is_refused(tmp_path):
+    """The pinned path still resolves; the fixtures behind it changed."""
+    config = _sharded_config(tmp_path)
+    shard = config["arms"]["A"]["full_run"]["shards"][0]
+    victim = sorted(Path(shard["fixture_dir"]).glob("*.json"))[0]
+    victim.write_text('{"info": {"dates": ["2025-07-01"]}}')
+
+    effective = _effective(tmp_path, fixture_dir=shard["fixture_dir"],
+                           n_sims=SHARD_N_SIMS)
+    problems = registered_mismatches(config, "A", effective)
+    assert any("shard fixture dir hash" in problem for problem in problems), (
+        problems)
+    assert not any("shard fixture count" in problem for problem in problems)
+
+
+def test_a_shard_that_gained_a_fixture_is_refused(tmp_path):
+    config = _sharded_config(tmp_path)
+    shard = config["arms"]["A"]["full_run"]["shards"][2]
+    (Path(shard["fixture_dir"]) / "1999999.json").write_text('{"info": {}}')
+
+    effective = _effective(tmp_path, fixture_dir=shard["fixture_dir"],
+                           n_sims=SHARD_N_SIMS)
+    problems = registered_mismatches(config, "A", effective)
+    assert any("shard fixture count" in problem for problem in problems), (
+        problems)
+    assert any("shard fixture dir hash" in problem for problem in problems)
+
+
+def test_a_shard_with_no_pinned_hash_cannot_be_launched(tmp_path):
+    config = _sharded_config(tmp_path)
+    config["arms"]["A"]["full_run"]["shards"][0]["fixture_dir_md5"] = None
+    shard = config["arms"]["A"]["full_run"]["shards"][0]
+    effective = _effective(tmp_path, fixture_dir=shard["fixture_dir"],
+                           n_sims=SHARD_N_SIMS)
+    problems = registered_mismatches(config, "A", effective)
+    assert any("pins no fixture directory hash" in problem
+               for problem in problems), problems
+
+
+def test_a_shard_launch_still_obeys_the_blocks_n_sims_and_seed(tmp_path):
+    config = _sharded_config(tmp_path)
+    shard = config["arms"]["A"]["full_run"]["shards"][0]
+    problems = registered_mismatches(
+        config, "A",
+        _effective(tmp_path, fixture_dir=shard["fixture_dir"], n_sims=100))
+    assert any("n_sims" in problem and "permits" in problem
+               for problem in problems), problems
+
+    problems = registered_mismatches(
+        config, "A",
+        _effective(tmp_path, fixture_dir=shard["fixture_dir"],
+                   n_sims=SHARD_N_SIMS, base_seed=20260911))
+    assert any("base seed" in problem for problem in problems), problems
+
+
+def test_a_shard_of_an_unlaunchable_block_is_still_unlaunchable(tmp_path):
+    """The pre-1b placeholder governs the shards too."""
+    config = _sharded_config(tmp_path, n_sims="to_be_filled_before_1d")
+    shard = config["arms"]["A"]["full_run"]["shards"][0]
+    problems = registered_mismatches(
+        config, "A",
+        _effective(tmp_path, fixture_dir=shard["fixture_dir"],
+                   n_sims=SHARD_N_SIMS))
+    assert any("not launchable yet" in problem for problem in problems)
+
+
+def test_a_directory_that_is_no_block_and_no_shard_is_refused(tmp_path):
+    config = _sharded_config(tmp_path)
+    problems = registered_mismatches(
+        config, "A",
+        _effective(tmp_path, fixture_dir=str(tmp_path / "elsewhere"),
+                   n_sims=SHARD_N_SIMS))
+    assert any("no registered fixture dir" in problem
+               and "no registered shard" in problem
+               for problem in problems), problems

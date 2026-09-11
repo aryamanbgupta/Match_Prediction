@@ -260,7 +260,281 @@ Astra rounds (`codex exec -m gpt-6-astra -c model_reasoning_effort="low" -s read
 
 ---
 
-## D9–D12. 1b timing and convergence, 1c shard consistency, 1d full run, gate and verdict
+## D9. 1b timing and convergence (user go: 2026-09-11, "okay sounds good let's run it")
+
+Written before the shard was simulated. Nothing in this deliverable reads
+or reports a log loss, Brier, ROI or edge from the shard: the convergence
+statistic is a *spread* (range and SD across batches of a paired contrast),
+never a level.
+
+| # | Check | Pass condition |
+|---|---|---|
+| 9.1 | Shard rule | ten fixtures from `data/polymarket_test_v2` by a stated deterministic rule biased to long innings (largest total delivery count, male T20, recorded winner, odds row, ties to the lower cricsheet id), copied to `models/embeddings/seq_stage1/timing/fixtures/`, rule and table recorded in `timing/SHARD_RULE.md` |
+| 9.2 | Candidate 50 | `CONVERGENCE_CANDIDATES` gains 50; `timing_1b.n_sims` permits it; the joint overlap screen re-run over the three batch seeds includes 50 and still caps at 3,200 (joint min gap 3,290); the protocol text labels 50 a noise-curve point only (plug-in bias ≈0.01 at 50 sims), never a full-run candidate |
+| 9.3 | Re-pin | `pin_stage1.py --write` then `--verify` OK with the shard present (`fixture_count` 10, `fixture_dir_md5` recorded); `stop_rule_reading` recorded as `to_be_decided_by_the_user_before_1d` |
+| 9.4 | Driver | `scripts/sequence_track/run_timing_1b.py` renders every command from the registered `timing_1b.command_template` per arm, refuses any unpermitted `n_sims`, runs the four arms concurrently per (n_sims, batch seed) so memory pressure is real, skips complete runs, honours a STOP file, records wall seconds / exit code / parsed simulation time / peak RSS per run in `timing/timing_record.json`, and never parses a metric line |
+| 9.5 | Runs | 5 candidates × 3 batch seeds × 4 arms = 60 runs, all exit 0, every arm's `config_verified: true`; the cross-arm audit passes on every (n_sims, seed) group with `--expected-fixtures` the shard dir |
+| 9.6 | Variability rerun | the brief's "second base seed rerun" is satisfied by the batch-seed design: batch seeds 20260910 and 20260911 are the same shard under two seeds at every count; the per-fixture paired-difference SD between them is reported per contrast and count (no extra runs) |
+| 9.7 | Convergence table | `scripts/sequence_track/convergence_1b.py` writes `timing/convergence_1b.{md,json}` with, per (n_sims, contrast ∈ {C−B, B−A, C−A, A50−A}): the range (max−min) and SD of the paired shard-mean delta across the three batches, the below-0.002 flag on the raw range, and the full-set-equivalent range × sqrt(10/255); plus the noise-curve fit a·n^(−1/2) with the crossing points; the code asserts no output field carries a log-loss level, and a test greps the outputs for leaked levels |
+| 9.8 | Timing table | per arm and count: wall seconds per match, seconds per simulation, extrapolation to 255 fixtures (serial per arm, and concurrent wall = max over arms), peak RSS; brought to the user with the convergence table so they choose the 1d count and the stop-rule reading |
+| 9.9 | Numbers not read | no log loss / Brier / ROI / edge from the shard appears in this file, the report, the convergence outputs, or any commit message |
+| 9.10 | Stop | 1c and 1d do not start before the user chooses the count and the stop-rule reading, both recorded in the config by `pin_stage1.py` before 1d |
+
+### Result (D9)
+
+Recorded 2026-09-11 12:30 IST from `models/embeddings/seq_stage1/timing/`
+(`SHARD_RULE.md`, `timing_record.json`, `driver.log`, `driver_attempt1.log`,
+`convergence_1b.{md,json}`). No log loss, Brier, ROI or edge from the shard
+was read; the convergence script asserts that no output field carries a
+level, and the report was read only after that assertion.
+
+| # | Result |
+|---|---|
+| 9.1 | PASS — rule and table in `timing/SHARD_RULE.md`: the ten largest fixtures by total delivery count among male T20, winner-recorded, odds-carrying fixtures (257–264 deliveries; iteration median 240 under this count; 252 of 255 eligible), ids 1493243, 1529380, 1527693, 1529379, 1512727, 1494272, 1501330, 1525160, 1512766, 1528306; 1525160 and 1512766 share 2026-02-26 (a same-day pair) |
+| 9.2 | PASS — `CONVERGENCE_CANDIDATES` = [50, 100, 200, 400, 800, 1600, 3200, 6400], `TIMING_1B_CANDIDATES` = [50, 100, 200, 400, 800]; `timing_1b.n_sims` = [50, 100, 200, 400, 800, 1600, 3200]; joint screen rows: 50 disjoint, joint min gap 3,290, largest permitted 3,200, 6400 `not_permitted_without_new_seeds`; protocol text labels 50 a noise-curve point only |
+| 9.3 | PASS — `--write` / `--verify` OK with `fixture_count` 10, `fixture_dir_md5` `857d03aa63c3f0114d8983a1e6f5a35e`, `fixture_dir_status: present`; `stop_rule_reading: to_be_decided_by_the_user_before_1d`; `test_pin_stage1.py` updated for the present shard (177 passed) |
+| 9.4 | PASS — `scripts/sequence_track/run_timing_1b.py` (+ `scripts/tests/test_timing_1b.py`, 38 passed): commands rendered from `timing_1b.command_template` with only the four tokens substituted, unpermitted `n_sims` and unregistered base seeds refused, four arms concurrent per group, skip-if-complete, STOP file honoured between groups (exercised for real: `driver_attempt1.log` stopped before `n50/seed20260912` with exit 3 when the driver was re-launched under `nohup` to survive the session; the two completed groups were skipped on relaunch), per-run wall / exit / `Total simulation time` / process-tree peak RSS in `timing_record.json`; only the timing line is parsed from the logs |
+| 9.5 | PASS — 60 runs recorded, every exit code 0, `[audit] pass` on all 15 (n_sims, seed) groups (`grep -c` on `driver.log` = 15 after the two groups of attempt 1, which also passed); wall 10:55–12:26 IST across the two attempts |
+| 9.6 | PASS — per-fixture paired-difference SD between batch seeds 20260910 and 20260911, per contrast and count, in the "Variability rerun" table of `convergence_1b.md`; no extra runs |
+| 9.7 | PASS — `scripts/sequence_track/convergence_1b.py` wrote `convergence_1b.{md,json}`; slice used: **all** (the shard has no sliced files; the ≥$50k semantics is not applied at 1b — recorded in the report header); `range_95` = max−min of the three batches (with n = 3 the empirical range is the 95% range, no wider estimator); spread rows for C−B, B−A, C−A, A50−A at 50/100/200/400/800; noise-curve fit a·n^(−1/2) with crossing points; leak assertion passed |
+| 9.8 | PASS — timing table per arm and count and the concurrent 255-fixture projection are in the report; brought to the user 2026-09-11 12:30 IST with the spread table |
+| 9.9 | PASS — no level appears in this file, the report or the outputs |
+| 9.10 | CLOSED 2026-09-11 ≈13:10 IST — user decisions: **n_sims = 1,600** for 1d; **stop-rule reading** = the full-set-equivalent Monte Carlo SD of the paired primary contrasts (two-seed paired difference ÷ sqrt(10) × sqrt(10/255)) at or below about 0.002 at the chosen count, recorded in `convergence_protocol.stop_rule_reading` as a change of statistic from the registered range rule, which was not met at any permitted count (fit crossing ≈5,264 for C−B, above the 3,200 seed cap); `CHOSEN_N_SIMS = 1600`, every full-run command now carries `--n-sims 1600`; the spread table (spreads only) is pinned into `convergence_protocol.spread_table` from `convergence_1b.json` and recomputed by `--verify` |
+
+**Addendum — thread cap and sharding probe (2026-09-11 12:32–13:05 IST,
+timing only, no metric read).** Twelve concurrent full-T1 processes at the
+registered 4 threads ran 5.45× slower per process than the 1b rate
+(0.6712 vs 0.1232 s/sim). Twelve at `--threads 1` were no better (0.6503
+s/sim, aggregate 2.27× one process); 4 concurrent one-thread processes gave
+2.05× aggregate, 8 gave 1.62×. Cause: `scripts/sim_t1.py` hard-coded
+`torch.set_num_threads(4)` on CPU after the runner's cap, so every
+"one-thread" T1 process ran four torch threads (`ps`: ≈350–400 % CPU each,
+38 % system time; `torch.get_num_threads()` reports 1 under the env cap
+outside the wrapper). Threads buy nothing per process (solo 4-thread 0.0888
+s/sim vs the 4-thread smoke rate 0.0875). The XGBoost arms honour the cap:
+four concurrent one-thread arm-A processes ran at 0.032 s/sim each with no
+contention. Machine: Apple M5 Pro, 10 performance + 5 efficiency cores, 48 GB.
+**User decision:** fix the wrapper to honour `OMP_NUM_THREADS` (default 4
+when uncapped, tests in `tests/test_sim_t1_contract_guard.py`), register
+`threads: 1` for every arm (`pin_stage1.THREADS`, `run_arm.py` default and
+cap), re-pin, re-smoke, and confirm scaling with a ten-process probe before
+1c. Floating-point reductions can differ across torch thread counts, so no
+1d number is expected to be bit-identical to a four-thread run; nothing
+scored has run at four threads except the timing shard, which is timing
+only. Probe outputs under `timing/probe*/` are unregistered and are not
+results.
+
+**Headline numbers from `convergence_1b.md`, verbatim (spreads and timings
+only).** Raw 95% range of the paired shard-mean contrast across the three
+batches, and the full-set equivalent (× sqrt(10/255) = 0.1980):
+
+| n_sims | C−B range / scaled | B−A range / scaled | C−A range / scaled | A50−A range / scaled |
+|---|---|---|---|---|
+| 50 | 0.101046 / 0.02001 | 0.043837 / 0.008681 | 0.057209 / 0.011329 | 0.100475 / 0.019897 |
+| 100 | 0.070026 / 0.013867 | 0.105539 / 0.0209 | 0.051868 / 0.010271 | 0.058657 / 0.011616 |
+| 200 | 0.044304 / 0.008773 | 0.055086 / 0.010909 | 0.016345 / 0.003237 | 0.039585 / 0.007839 |
+| 400 | 0.05468 / 0.010828 | 0.081055 / 0.016051 | 0.03966 / 0.007854 | 0.064831 / 0.012839 |
+| 800 | 0.034961 / 0.006923 | 0.043664 / 0.008647 | 0.008703 / 0.001724 | 0.027953 / 0.005536 |
+
+No cell meets the literal rule (raw range < 0.002); on the scaled reading
+only C−A at 800 does (0.001724). Variability-rerun scaled shard-mean SD at
+800: C−B 0.002513, B−A 0.003221, C−A 0.00264, A50−A 0.002915 (at 400:
+0.004182 / 0.005237 / 0.004439 / 0.004155). Noise-curve crossing of 0.002 on
+the scaled reading: C−B n ≈ 5,264, B−A ≈ 4,497, C−A ≈ 1,826, A50−A ≈ 4,797
+(relative RMSE 0.16–0.56, an order-of-magnitude guide). Timing: seconds per
+simulation A 0.049–0.060, A50 0.047–0.060, B 0.047–0.056, C 0.108–0.123;
+peak RSS A/A50 ≈ 0.8 GB, B/C ≈ 0.5 GB; concurrent-arms wall for one 255-fixture
+batch: 400 → 3.39 h, 800 → 6.09 h (T1 sets it; sharding the T1 arm divides
+that).
+
+---
+
+## D10. 1c shard consistency (user go: 2026-09-11 ≈13:10 IST, together with 1d)
+
+Written before any 1c run. 1c is a consistency check, not a result: no
+metric is read; the comparison is byte equality of per-fixture outputs.
+
+| # | Check | Pass condition |
+|---|---|---|
+| 10.1 | Cases | a fixture set covering all five registered boundary cases, each named by cricsheet id and the rule that chose it: (a) a same-day pair split across two shards; (b) a fixture on the first and on the last date of the iteration set; (c) a fixture without an odds row (a male T20 from the context corpus inside the window that is not in the odds file); (d) a fixture whose same-day sibling is in `data/t20s_json` but not in the evaluated set; (e) the first fixture of every shard (process initialisation) |
+| 10.2 | Runs | every arm (A, A50, B, C) simulated on the case set serially in one process and sharded across ≥2 processes, each shard keeping the full replay context (`--context-dir data/t20s_json`), same base seed, same n_sims (small), threads 1; unregistered runs (no `--config`), because the case set is not a registered block |
+| 10.3 | Identity | for every arm and every case fixture: the per-fixture eval record, the per-simulation raw rows (`raw_sims.jsonl`) and the provenance as-of stamp (date, ordered predecessor list, `matches_advanced`), eligibility fields and per-fixture seed are byte-identical between the serial run and the shard that contains the fixture, after dropping run-level fields (timestamps, output paths, shard membership); any difference fails naming arm, fixture and field |
+| 10.4 | Odds-less fixture | case (c) is stamped, unscored, `odds_row_found: false`, and identical between serial and sharded |
+| 10.5 | Post-run assertions | `scripts/sequence_track/merge_shards.py` (or equivalent) asserts, over a set of shard outputs: union of fixture ids equals the expected set, no duplicate fixture across shards, every odds record claimed by exactly one fixture, coverage counts (scored / unscored / skipped) sum to the totals; each assertion has a negative test |
+| 10.6 | Tests and record | tests for the comparison and the assertions on synthetic outputs; the 1c run's command lines, case table and PASS/FAIL per (arm, case) recorded here; no metric read |
+
+### Result (D10)
+
+Recorded 2026-09-11 (first pass ≈13:40 IST; final pass appended below once
+the runner fix landed). Files: `scripts/sequence_track/shard_consistency_1c.py`,
+`scripts/sequence_track/merge_shards.py`, tests
+`scripts/tests/test_shard_consistency_1c.py` (33) and
+`scripts/tests/test_merge_shards.py` (27): `60 passed`. Outputs under
+`models/embeddings/seq_stage1/consistency_1c/`. Both scripts refuse to write
+any number that is not an allow-listed count; no metric was read.
+
+| # | Result (first pass, before the runner fix) |
+|---|---|
+| 10.1 | PASS — 8 fixtures, 3 shards by `round_robin_over_date_then_id_v1`: (a) 1512766 / 1525160 (2026-02-26) split across shards 1 / 2, plus 1527575 / 1527576 (2026-04-16) split 0 / 1 and 1496921 / 1448357 (2025-09-10) split 1 / 0; (b) 1496921 (first date on disk, **2025-09-10** — the docs' 2025-07-01 is the window bound, not the first fixture) and 1527575, 1527576 (last date 2026-04-16); (c) 1448357, a male T20 from `data/t20s_json` in the window with no odds row; (d) 1477610 (2026-01-29; siblings 1519139, 1519636 context-only) and 1496921 (sibling 1477997 context-only); (e) shard firsts 1448357, 1496921, 1477609; control 1477609 (alone on its date) |
+| 10.2 | PASS — 16 runs (4 arms × serial + 3 shards), unregistered (registered smoke commands minus `--config`, only fixture dir / `--n-sims 20` / output dir substituted; `--threads 1`, base seed 20260910, full context), all exit 0, 6–20 s each |
+| 10.3 | **FAIL on one field, everything else identical** — 96 (arm, fixture, artefact) rows: `raw_sims` rows 32/32 identical, provenance per-fixture 32/32 identical, eval records 28/32 identical; the 4 failures are fixture 1477610 on every arm, and the only differing field in the whole run is `competition_cluster_id` (all differing keys were listed, not just the first). Run identity serial vs shard 12/12 identical. Excluded from the comparison: `as_of.matches_advanced` only, a run-cumulative process counter; in its place the ordered `same_day_advanced_before` list is compared in full and the decomposition (advanced − same-day count constant per date, non-decreasing) is asserted, PASS on 16/16 |
+| 10.4 | PASS — 1448357 stamped on all arms and both paths, `odds_row_found: false`, `scored: false`, `skip_reason: no_odds_row`, absent from `eval.json` and `raw_sims.jsonl`, provenance identical |
+| 10.5 | PASS — per arm: union == 8, no duplicates, every odds record claimed exactly once, coverage 7 scored + 1 unscored + 0 skipped; merged == serial byte-for-byte after the cluster re-stamp; negative tests for every assertion |
+| 10.6 | recorded here; commands in `consistency_1c.md` |
+
+**Diagnosis of the 10.3 failure.** `scripts/sim_eval/run_sim_eval.py` builds
+the competition-cluster lookup from the run's own fixture directory, so the
+I3 block id `event:<name>|block_start:<date>` takes `block_start` from the
+first event member *in that directory*: serial (holding 1477609, same event,
+2026-01-27) stamped 1477610 with `block_start:2026-01-27`; shard 0 (holding
+only 1477610) stamped `2026-01-29`. This is the registered block key of
+invariant 7, and `reslice_eval_json.py` prefers a stamped id, so reslicing
+does not repair it. `merge_shards.py` gained an explicit, opt-in
+`--cluster-source-dir` re-stamp from the registered set (fail-closed on an
+uncovered fixture; `n_changed` recorded; 1 per arm here). **Decision
+(Fable, 2026-09-11):** a post-hoc repair does not satisfy "serial and sharded
+outputs must be identical"; the runner is fixed to build the lookup from the
+registered fixture set for every shard (`run_arm --cluster-source-dir`, pinned
+per block, asserted identical across arms by the audit), and 1c is re-run;
+the merge re-stamp is retained as a belt-and-braces assertion expected to
+change zero records.
+
+**Final pass (≈13:55 IST, after the runner fix).** `run_arm.py` gained
+`--cluster-source-dir` (required with `--config`; the pinned value is the
+`iteration_set_v2` role path, `data/polymarket_test_v2`, dir hash
+`8005cad7…`), installed as a seam over the frozen runner's
+`load_competition_clusters` that redirects the run's own fixture dir to the
+registered set and fails closed on an uncovered fixture; pinned in every
+block and shard and rendered into every command; provenance records the
+dir and hash; the audit asserts the hash identical across arms and equal to
+the pin. 14 new tests; suites `438 passed` (sequence-track files), full
+`1184 passed, 5 skipped`. Re-pin `--verify` OK. **1c re-run
+(`shard_consistency_1c.py --force`): `PASS: 117 checks, 0 failing`** —
+eval records 32/32, raw-sims rows 32/32, provenance 32/32 identical serial
+vs shard on all four arms; run identity 12/12; decomposition 0 problems;
+merge assertions 8/8 with merged == serial; cluster re-stamp `n_changed = 0`
+on every arm; fixture 1477610 now stamped
+`event:West Indies tour of South Africa|block_start:2026-01-27` on both
+paths. **D10: PASS.** The 1c case set was stamped from its own registered
+set (`consistency_1c/serial/fixtures`) because it holds a fixture outside the
+iteration set; 1d stamps from `data/polymarket_test_v2`.
+
+---
+
+## D11. 1d full run (user go: 2026-09-11 ≈13:10 IST, conditional on 1c passing)
+
+| # | Check | Pass condition |
+|---|---|---|
+| 11.1 | Shard registration | the full-run block registers a deterministic partition of the 255 registered fixtures into 10 shards (rule stated, e.g. round-robin over the `(match_date, cricsheet id)` order so long and short matches balance and each shard spans the window), materialised as per-shard fixture dirs under `models/embeddings/seq_stage1/full/shards/<k>/fixtures/` with md5 and count pinned per shard; the union of shard inventories equals the registered 255-fixture set (asserted by `--verify`); every per-shard command differs from the registered full-run command only in `--fixture-dir` and `--output-dir` |
+| 11.2 | Settings | n_sims 1,600 (`CHOSEN_N_SIMS`), base seed 20260910, threads 1, clip [0.01, 0.99], roster selector, B18 graft, i7 cache, the retrained B/C checkpoints; `run_arm --config` verifies each shard against its registered shard block and records `config_verified: true` |
+| 11.3 | Driver | 40 jobs (4 arms × 10 shards) run at a concurrency of 10 one-thread processes, detached (nohup), skip-if-complete, STOP file, per-job wall / exit / simulation time / peak RSS recorded; the T1 arm's shards are scheduled first so the slowest arm sets the wall clock |
+| 11.4 | Completion | 40 jobs exit 0; per shard the cross-arm audit passes across the four arms with `--expected-fixtures` the shard dir; the D10.5 post-run assertions pass on the union for every arm (255 fixtures, no duplicates, every odds record claimed once, coverage counts) |
+| 11.5 | Merge | per arm, one merged eval JSON (the union of the ten shards' per-fixture records in the registered chronological order) plus a merged provenance, with the shard of origin recorded per fixture; reslice to all / ≥$50k / ≥$100k; realism and prop scorers run on the merged raw simulations |
+| 11.6 | Numbers not read | no winner log loss, Brier, ROI or edge is read from any shard or merged output before the gate runs; the merge and assertions print counts only |
+| 11.7 | Stop | the gate (D12) runs only after 11.4–11.6 pass and its table is written |
+
+### Result (D11)
+
+**Launched 2026-09-11 14:01 IST** (`nohup caffeinate -i … run_full_1d.py
+--concurrency 10`, log `models/embeddings/seq_stage1/full/driver.log`,
+record `full_record.json`), after the final re-pin (`--verify` OK) and a
+smoke re-run against that config (config sha256 `b41ceb34…`, audit PASS,
+threads 1, cluster source hash `8005cad7…` identical on all arms;
+`evidence/smoke_round5_*`). Shards: 10, round-robin over
+`date_then_match_id_lexicographic_v1`, sizes 26×5 + 25×5 = 255, dir md5s
+`63d8b5cd…`, `18a52752…`, `3e0e1d26…`, `8040bcd6…`, `2ac21d13…`,
+`e85d917e…`, `5b01fba2…`, `38f4cca6…`, `e9ae15b3…`, `01d497ef…`. Jobs 40,
+order C → B → A50 → A, n_sims 1,600, base seed 20260910. Expected wall
+≈3.5 h from the 1b/probe rates (T1 ≈0.166 s/sim at ten concurrent).
+
+**Completed 2026-09-11 18:36 IST** (driver exit 0; `full_record.json`,
+config sha256 `b41ceb34…`). Per arm: C: 10 shards, exit codes [0], wall min/mean/max 8327/8511/8691 s, peak RSS max 512 MB; B: 10 shards, exit codes [0], wall min/mean/max 2429/2490/2565 s, peak RSS max 629 MB; A50: 10 shards, exit codes [0], wall min/mean/max 2379/2429/2489 s, peak RSS max 888 MB; A: 10 shards, exit codes [0], wall min/mean/max 2137/2198/2261 s, peak RSS max 792 MB.
+Per-shard cross-arm audits: `[audit shard k] pass` for k = 0…9 (11.4).
+Merges (`merge_shards.py`, per arm, `--cluster-source-dir
+data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json`): every arm
+`[pass]` on run_identity, union_equals_expected (255), no_duplicate_fixture,
+odds_claimed_once, coverage_counts (255 scored + 0 unscored + 0 skipped);
+cluster re-derivation changed 0 records on every arm; merged outputs under
+`full/merged/<arm>/` (11.5). Reslice: 255 / 168 / 110 fixtures on
+all / ≥$50k / ≥$100k for every arm. Realism scorer 247 of 255 per arm (3
+no-decided-winner and 5 D/L fixtures excluded by design), prop scorer 250
+fixtures, 15 families, per arm. No winner log loss, Brier, ROI or edge was
+read before the gate (11.6). Observed wall per shard (ten concurrent): T1 139–145 min, B 40–43 min, A50 40–41 min, A 36–38 min (`full_record.json`); total 14:01 → 18:36 IST.
+
+---
+
+Note on test counts in D9–D12: every pytest count quoted in these sections
+is the count reported by the implementing agent or by Fable's shell at the
+time; the retained, traceable evidence is the full-suite output saved at the
+end of the stage (D12.9 result block), not the individual invocations.
+
+## D12. Gate and verdict
+
+Written 2026-09-11 ≈17:30 IST, after the C and B merges and before any gate
+run or any read of a winner log loss. The registered rule
+(`decision_rule` in the config) is applied as written and is not restated
+after the numbers are seen.
+
+| # | Check | Pass condition |
+|---|---|---|
+| 12.1 | Inputs | per arm, the merged full-run output (D11.5) resliced into `all` / `50000` / `100000`; the gate reads the `50000` slice for the primary contrasts and the other two for the secondary report; every input file's sha256 recorded |
+| 12.2 | Gate runs | `claim_gate.py --kind match_model --odds-role odds_iteration_v2 --cluster-source-dir data/polymarket_test_v2` for each confirmatory contrast (C−B, B−A, C−A) and the exploratory A50−A on the primary slice, and for the same four on `all` and `100000` (secondary); each gate JSON kept unchanged under `models/embeddings/seq_stage1/full/gate/`; the gate recomputes prices, placement and profit from the registered odds role |
+| 12.3 | Uncertainty | `tournament_time_block_v1`, 10,000 seed-42 whole-event resamples; block count per slice recorded; a slice with fewer than 10 blocks is labelled descriptive |
+| 12.4 | Multiplicity | Holm adjustment across the three confirmatory contrasts, applied to the block-bootstrap p-values (or equivalently to the interval level) exactly as the gate exposes them; A50−A not adjusted; the adjustment script and its inputs recorded |
+| 12.5 | Classification | each contrast labelled parity / favourable / adverse / inconclusive by the registered outcomes (interval inside ±0.007 → parity; interval excludes zero and point beyond ∓0.007 → favourable/adverse; else inconclusive), on the Holm-adjusted intervals for the confirmatory family; the pre-registered expectation ("parity everywhere, no arm advancing") quoted beside the result |
+| 12.6 | Advancement | B advances only if B−A is favourable; C only if C−A is favourable; a favourable C−B alone is recorded as evidence about the pair for stage 2, not an advancement; any market claim additionally needs the gate's market comparison under the five registered cost scenarios and a paired Δprofit/ΔROI interval, and is otherwise not made |
+| 12.7 | Exploratory | realism and prop outputs (D11.5) read only after 12.5 is recorded; reported as exploratory with no advancement or claim attached; prop families reported paired against the fair baseline |
+| 12.8 | Report | `research/reports/embeddings/SEQ_STAGE1_REPORT.md` (new file): question, arms, settings, 1b/1c facts, the four contrasts on three slices with intervals and labels, realism and props, every registered deviation and asymmetry and known limitation restated, the single-checkpoint caveat, and the D9 stop-rule change; all numbers verbatim from the gate JSONs |
+| 12.9 | Astra | end-of-stage review over D9–D12 and the report, rounds to SIGN-OFF, recorded in D8-style table; then one commit by Fable |
+| 12.10 | Verdict | after the user's advancement decision, `research/log_verdict.py` with the unchanged gate JSON(s); the user makes the call; Fable is the only caller |
+
+### Result (D12)
+
+Recorded 2026-09-11 18:45 IST. Gate JSONs under
+`models/embeddings/seq_stage1/full/gate/` (`<contrast>_<slice>.json`, twelve
+files, unchanged since written; sha256 prefixes below), Holm outputs
+`holm_<slice>.{json,md}` from `scripts/sequence_track/holm_stage1.py`
+(`--verify-gate`; 60 tests after the step-down fix). Every number below is copied from those files.
+
+| # | Result |
+|---|---|
+| 12.1 | PASS — inputs are the merged, resliced outputs of D11.5 (`full/merged/<arm>/sliced/eval_min_volume_50000.json` etc.); each sliced file's canonical sha256 is recorded in its gate JSON and re-verified by the Holm script |
+| 12.2 | PASS — twelve gate runs (4 contrasts × 3 slices), all exit 0; `--odds-role odds_iteration_v2 --cluster-source-dir data/polymarket_test_v2`; the gate recomputed prices, placement and profit from the registered odds role |
+| 12.3 | PASS — `tournament_time_block_v1`, 10,000 seed-42 resamples; blocks 18 (≥$50k, 167 paired records: one of the 168 slice fixtures dropped symmetrically by the gate's pairing rule), 11 (≥$100k, 110), 25 (all, 252); no slice below the 10-block floor. Every gate is `provisional: true` because each arm is a single checkpoint (the gate's ≥5-seed rule), so per invariant 9 nothing here can be LANDED — consistent with the plan's single-checkpoint screen |
+| 12.4 | PASS — Holm step-down over C−B, B−A, C−A on the bootstrap p-values (`p = 2·min(P(δ*≤0), P(δ*≥0))`); the script reproduced every gate `ci95` to 1e-9 from the same draws before adjusting; A50−A unadjusted |
+| 12.5 | **Primary slice ≥$50k, registered outcomes.** Favourable/adverse require the Holm step-down rejection (adjusted p ≤ 0.05) and a point beyond ±0.007; the intervals quoted are rank-local percentile intervals, not simultaneous Holm intervals (Astra end-of-stage MUST-FIX 1; the classifier was corrected to enforce the step-down and the labels did not change). C−B point −0.0257, rank-local interval [−0.0346, −0.0102], raw p 0.0006, Holm p 0.0018 → **favourable**; B−A +0.0247, [−0.0027, +0.0554], Holm p 0.1640 → **inconclusive**; C−A −0.0009, [−0.0277, +0.0288], Holm p 0.8936 → **inconclusive**; A50−A (exploratory) +0.0276, [+0.0095, +0.0419], raw p 0.0002 → **adverse**. Pre-registered expectation was "parity everywhere, no arm advancing": C−B departs from it in the favourable direction; B−A and C−A are inconclusive rather than parity (intervals wider than ±0.007) |
+| 12.6 | **No arm advances.** B−A is not favourable, C−A is not favourable. C−B favourable is recorded as evidence about the full-T1 vs token-MLP pair for stage 2, per the registered rule, not as an advancement and not as a measurement of sequence memory. No market claim is made: every gate is provisional (single checkpoint), and the Δprofit intervals are reported below as descriptive |
+
+Gate table, all slices (Δ = candidate − baseline; Δprofit in units per flat 1-unit bet, descriptive, cost scenario 0/0 winnings):
+
+| contrast | slice | n | blocks | ΔLL point | ΔLL ci95 | Δprofit point | Δprofit ci95 | gate verdict | gate sha256 |
+|---|---|---|---|---|---|---|---|---|---|
+| C-B | 50000 | 167 | 18 | -0.02569 | [-0.03307, -0.01346] | +0.1859 | [+0.0493, +0.3255] | PROMISING | `2f43c19b88c2…` |
+| B-A | 50000 | 167 | 18 | +0.02475 | [-0.00118, +0.05257] | -0.0687 | [-0.1489, -0.0070] | FAILED | `aa13ad29f269…` |
+| C-A | 50000 | 167 | 18 | -0.00095 | [-0.02772, +0.02877] | +0.1173 | [-0.0690, +0.2887] | FAILED | `038fdfac04f2…` |
+| A50-A | 50000 | 167 | 18 | +0.02762 | [+0.00945, +0.04194] | -0.0918 | [-0.1741, -0.0081] | FAILED | `f62d1c197151…` |
+| C-B | 100000 | 110 | 11 | -0.02672 | [-0.03780, -0.01382] | +0.1696 | [+0.0297, +0.3646] | PROMISING | `27dab32a4691…` |
+| B-A | 100000 | 110 | 11 | +0.04005 | [+0.00879, +0.06267] | -0.1288 | [-0.3103, +0.0000] | FAILED | `3e5177e628b4…` |
+| C-A | 100000 | 110 | 11 | +0.01334 | [-0.02302, +0.03801] | +0.0408 | [-0.1516, +0.3087] | FAILED | `28c63b055010…` |
+| A50-A | 100000 | 110 | 11 | +0.04235 | [+0.02602, +0.04957] | -0.1955 | [-0.3176, -0.0880] | FAILED | `8117301ae2a8…` |
+| C-B | all | 252 | 25 | -0.02149 | [-0.03053, -0.01004] | +0.1266 | [+0.0233, +0.2251] | PROMISING | `39f277ce7100…` |
+| B-A | all | 252 | 25 | +0.02695 | [+0.00707, +0.04907] | -0.0794 | [-0.1418, -0.0250] | FAILED | `013b5bb1d399…` |
+| C-A | all | 252 | 25 | +0.00546 | [-0.01578, +0.02942] | +0.0472 | [-0.0748, +0.1686] | FAILED | `9e713e7947d7…` |
+| A50-A | all | 252 | 25 | +0.02584 | [+0.01296, +0.03751] | -0.1081 | [-0.1707, -0.0417] | FAILED | `77d698ee9662…` |
+
+Secondary slices (outside the confirmatory decision; the same Holm step was run for reporting, and the numbers below are the `gate ci95` / `point` columns of `holm_100000.md` / `holm_all.md`, i.e. the unadjusted gate intervals):
+C−B favourable on both (≥$100k −0.0267 [−0.0378, −0.0138]; all −0.0215
+[−0.0305, −0.0100]); B−A adverse on both (≥$100k +0.0401 [+0.0088, +0.0627];
+all +0.0270 [+0.0071, +0.0491]); C−A inconclusive on both; A50−A adverse on
+both. The gate's own labels (`PROMISING` / `FAILED`) are its LANDED-rule
+readout and are not the stage-1 classification.
+
+| # | Result (continued) |
+|---|---|
+| 12.7 | PASS — realism and props read after 12.5 was recorded, from `full/merged/<arm>/realism.json` and `props.json`; reported in the stage report § 6 as exploratory. Realism first innings (247 fixtures per arm): bias A +2.12, A50 +0.50, B +3.01, C +5.06 runs; P10–P90 coverage 0.753 / 0.745 / 0.761 / 0.773 (nominal 0.80); sim wickets 6.86 / 6.82 / 6.68 / 6.68 vs actual 7.00. Props (250 fixtures, 15 families): every arm beats the as-of fair baseline with an interval excluding zero on `innings_runs_ou_{160_5,170_5,180_5}`, `pp_total_ou_{45_5,50_5,55_5}`, `team_highest_individual_ou_{29_5,34_5,39_5}`, `batter_50plus` and `batter_runs_mae`, and loses on `bowler_wkts_{1,2,3}plus`; `top_batter` straddles zero. Exploratory; differs from E2 v2 (retired v7 stack, 100 sims); no claim |
+| 12.9 | Astra end-of-stage rounds (`codex exec -m gpt-6-astra -c model_reasoning_effort="low" -s read-only`, prompt `<scratchpad>/astra_stage1_end.prompt.md`): **round 1** `<scratchpad>/astra_stage1_end_1.md` (≈18:55 IST) → **NO SIGN-OFF**, 5 MUST-FIX, 2 SHOULD, 3 NOTE. Dispositions: MUST-FIX 1 (Holm classifier used rank-local intervals without enforcing the step-down) → `holm_stage1.py` now rejects only via the cumulative step-down, parity decided on the gate ci95, intervals renamed `rank_local_*` with an explicit "not simultaneous" note, regression cases 0.020/0.021/0.022 and rank-3-cannot-reject added (60 tests); the three real Holm runs re-executed: every point, interval and p byte-identical, **no label changed**. MUST-FIX 2 ("parity-or-better", "T1 recovers ~0.028 from sequence history") → withdrawn; report now says C−A inconclusive with a near-zero point, A50−A adverse, neither establishing parity nor quantifying recovery. MUST-FIX 3 (teacher-forcing vs rollout "disagreement" on "the same pair") → restated as historical motivation on different checkpoints; a matched teacher-forced score named as the follow-up. MUST-FIX 4 (convergence numbers presented as measured primary-slice MC SD) → relabelled extrapolated two-batch-difference spreads (√2 factor, all ten fixtures not the primary slice, four threads, never measured at 1,600), range_95 called an empirical range. MUST-FIX 5 (deviation consequences dropped; "byte-identical" overstated) → consequences restated per id from the config; 1c wording qualified with the `matches_advanced` exclusion. SHOULD 6 → B shard wall corrected to 40–43 min; secondary-slice source columns named; p at the resolution floor shown as `<0.0002`; "none retyped" narrowed to table numbers; test-count note added above D12. SHOULD 7 → `merge_shards.py` identity keys now include `cluster_source_dir` and its hash (4 tests); `--check-only` re-run on all four arms: PASS (the merged provenance written earlier does not carry the two keys in its run block; the shard provenance does, all 40 identical). NOTE 9 (E2 vs BR2 restatement) → report cites both. NOTE 10 (verdict vocabulary) → adopted, see 12.10. Full suite after the fixes (`evidence/pytest_full_stage_end.txt`): `1248 passed, 5 skipped, 29 warnings in 124.48s`; artifact-free `1211 passed, 42 deselected` |
+| 12.9 (round 2) | `<scratchpad>/astra_stage1_end_2.md` (≈19:20 IST) → **SIGN-OFF**; MUST-FIX 1–5 closed with file:line, SHOULD 6 substantially closed (three non-blocking wording items: renderer docstring, the § 7 "95% range" introduction, and that the retained pytest evidence is two summary lines — the first two fixed after the round, the third recorded as is), SHOULD 7 partially closed (analysis-source manifest requested → written to `full/gate/analysis_manifest.json`: sha256 of 21 post-processing sources and 30 inputs plus the report), NOTE 10 approved the verdict approach (see 12.10). A plain-language section (§ 10) was added to the report after sign-off at the user's request; it introduces no number not already in the tables |
+| 12.8 | PASS — `research/reports/embeddings/SEQ_STAGE1_REPORT.md` rendered by `scripts/sequence_track/render_stage1_report.py` from the gate / Holm / realism / props / convergence / full-record files and the pinned config; sections: question, arms and settings, decision rule, primary-slice Holm table, secondary slices, full gate table with sha256 prefixes, uncertainty and non-claims, exploratory readouts, 1b spreads and timings, 1c, registered deviations/asymmetries/limitations restated, next |
 
 Tables written before each step starts, after the user's explicit go for
 that step. Known content they must cover (from the brief § 5 and § 6): the

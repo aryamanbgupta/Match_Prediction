@@ -21,9 +21,10 @@ It fails closed rather than passing on absent evidence:
   fixture directory: `--expected-fixtures`, or (by default) the
   `run.fixture_dir` recorded in the provenance, which must itself agree
   across arms. For a registered run that directory, its md5 and its count
-  are bound to the block the run claims, so a run cannot relabel itself as
-  another block, and a block whose fixture set is not pinned yet (the 1b
-  timing shard, before it is built) cannot be claimed at all.
+  are bound to the block the run claims — or, when the run records a
+  `config_shard`, to that shard's entry of the block (the 1d partition) — so
+  a run cannot relabel itself as another block or another shard, and a block
+  whose fixture set is not pinned yet cannot be claimed at all.
 * each arm is checked against ITSELF as well as against the others: every
   fixture's seed and sub-seeds are recomputed from the recorded base seed
   and cricsheet id, and every per-fixture n_sims must equal the run's.
@@ -98,6 +99,11 @@ RUN_SCHEMA = {
     "player_metadata_sha256": _TEXT,
     "context_dir": _TEXT,
     "context_dir_hash": _TEXT,
+    # The corpus the I3 competition-cluster lookup was built from. A run
+    # that stamped its block ids from its own shard is not comparable with
+    # one that stamped them from the registered set (stage-1 1c, D10).
+    "cluster_source_dir": _TEXT,
+    "cluster_source_dir_hash": _TEXT,
     "odds": _TEXT,
     "odds_sha256": _TEXT,
 }
@@ -157,12 +163,19 @@ RUN_IDENTITY_FIELDS = (
     "config_sha256",
     "odds_sha256",
     "context_dir_hash",
+    # The I3 blocking every ROI interval is resampled over: arms whose block
+    # ids came from different corpora are not paired.
+    "cluster_source_dir_hash",
     "engine_md5",
     "runner_md5",
+    # None for a whole-block run; the 1d shard index otherwise. Four arms
+    # audited together must be the same shard of the same partition.
+    "config_shard",
 )
 
 # Listed in the table, never asserted.
 RUN_LISTED_FIELDS = (
+    "cluster_source_dir",
     "model_dir",
     "model_dir_hash",
     "checkpoint_md5",
@@ -357,6 +370,12 @@ def registration_failures(arm) -> list:
            run.get("odds_sha256"))
     _check("context_dir_hash", block.get("context_dir_md5"),
            run.get("context_dir_hash"))
+    # The registered cluster source (1c, D10): the I3 block ids must come
+    # from the pinned corpus, not from whatever fixture dir the run scored.
+    _check("cluster_source_dir", block.get("cluster_source_dir"),
+           run.get("cluster_source_dir"), path_compare=True)
+    _check("cluster_source_dir_hash", block.get("cluster_source_dir_md5"),
+           run.get("cluster_source_dir_hash"))
     _check("threads", block.get("threads"), run.get("threads"))
     _check("device", block.get("device"), run.get("device"))
     _check("selector_class", block.get("bowler_selector"),
@@ -405,37 +424,67 @@ def registration_failures(arm) -> list:
             f"[config] {label}: base_seed = {run.get('base_seed')!r}, the "
             f"{block_name} block permits {seeds!r}")
 
-    # The block's OWN fixture directory, inventory hash and count — without
-    # this binding a run could claim any block it liked (Astra round 3,
-    # item 1: the smoke records relabelled as timing_1b passed).
-    pinned_dir = run_block.get("fixture_dir")
+    # A 1d shard run is a `full_run` launch over one registered shard of the
+    # partition (D11 check 11.1), so its fixture directory, hash and count
+    # are bound to that SHARD's entry; n_sims and the base seed still come
+    # from the block. A shard index that the block does not register cannot
+    # be bound to anything, so it fails here rather than falling back to the
+    # whole set's pins.
+    binding, binding_name = run_block, block_name
+    shard_index = run.get("config_shard")
+    if shard_index is not None:
+        shards = run_block.get("shards") or []
+        found = [entry for entry in shards
+                 if isinstance(entry, dict)
+                 and entry.get("index") == shard_index]
+        if len(found) != 1:
+            failures.append(
+                f"[config] {label}: config_shard = {shard_index!r} is not a "
+                f"registered shard of the {block_name} block "
+                f"({len(shards)} shard(s) registered)")
+            return failures
+        binding = found[0]
+        binding_name = f"{block_name} shard {shard_index}"
+
+    # The block's (or shard's) OWN fixture directory, inventory hash and
+    # count — without this binding a run could claim any block it liked
+    # (Astra round 3, item 1: the smoke records relabelled as timing_1b
+    # passed).
+    pinned_dir = binding.get("fixture_dir")
     if not _same_path(pinned_dir, run.get("fixture_dir")):
         failures.append(
             f"[config] {label}: fixture_dir = {run.get('fixture_dir')!r}, "
-            f"the {block_name} block registers {pinned_dir!r}")
-    pinned_hash = run_block.get("fixture_dir_md5")
+            f"the {binding_name} block registers {pinned_dir!r}")
+    pinned_hash = binding.get("fixture_dir_md5")
     if pinned_hash is None:
         failures.append(
-            f"[config] {label}: the {block_name} block pins no fixture "
+            f"[config] {label}: the {binding_name} block pins no fixture "
             f"directory hash (status: "
-            f"{run_block.get('fixture_dir_status', 'unpinned')!r}); a run "
+            f"{binding.get('fixture_dir_status', 'unpinned')!r}); a run "
             "cannot claim a block whose fixture set is not registered yet")
     elif run.get("fixture_dir_hash") != pinned_hash:
         failures.append(
             f"[config] {label}: fixture_dir_hash = "
-            f"{run.get('fixture_dir_hash')!r}, the {block_name} block pins "
+            f"{run.get('fixture_dir_hash')!r}, the {binding_name} block pins "
             f"{pinned_hash!r}")
-    pinned_count = run_block.get("fixture_count")
+    binding_cluster = binding.get("cluster_source_dir")
+    if binding_cluster is not None and not _same_path(
+            binding_cluster, run.get("cluster_source_dir")):
+        failures.append(
+            f"[config] {label}: cluster_source_dir = "
+            f"{run.get('cluster_source_dir')!r}, the {binding_name} block "
+            f"registers {binding_cluster!r}")
+    pinned_count = binding.get("fixture_count")
     if pinned_count is not None:
         if run.get("fixture_count") != pinned_count:
             failures.append(
                 f"[config] {label}: fixture_count = "
-                f"{run.get('fixture_count')!r}, the {block_name} block "
+                f"{run.get('fixture_count')!r}, the {binding_name} block "
                 f"registers {pinned_count!r}")
         if len(arm.fixtures) != pinned_count:
             failures.append(
                 f"[config] {label}: {len(arm.fixtures)} fixture rows, the "
-                f"{block_name} block registers {pinned_count!r}")
+                f"{binding_name} block registers {pinned_count!r}")
 
     permitted = run_block.get("n_sims")
     permitted = (permitted if isinstance(permitted, list) else [permitted])

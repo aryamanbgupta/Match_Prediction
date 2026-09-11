@@ -13,6 +13,16 @@ makes the config's two jobs separable:
   artifact, an edited prose line, a hand-patched command — exits 1 and
   names the differing keys.
 
+`--write` is also the only thing that MATERIALISES the 1d shard partition
+(D11 check 11.1): it copies the registered fixture set into ten
+`models/embeddings/seq_stage1/full/shards/<k>/fixtures` directories by the
+round-robin rule in `SHARD_RULE`, refusing a directory that already holds
+something else, and then pins each shard's ids, count and directory hash
+plus a per-shard command that differs from the whole-set `full_run` command
+only in `--fixture-dir` and `--output-dir`. `--verify` recomputes the
+partition from the fixture set, re-reads and re-hashes the ten directories,
+and asserts their union is the registered set with no fixture in two shards.
+
 Two provenance fields are recorded but never compared, because they
 change without the config's meaning changing: `pins_generated_at` and
 `git_head_short`. They are listed in the YAML itself under
@@ -63,6 +73,7 @@ import hashlib
 import json
 import math
 import platform
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -99,7 +110,7 @@ THIRD_BATCH_BASE_SEED = 20260912  # third convergence batch only
 # The seed line the 1b batches share; every joint screen uses this set.
 BATCH_BASE_SEEDS = (BASE_SEED, SECOND_BASE_SEED, THIRD_BATCH_BASE_SEED)
 CLIP_BOUNDS = [0.01, 0.99]
-THREADS = 4
+THREADS = 1  # 2026-09-11: was 4; the 1b probe showed threads buy nothing per process and block sharding
 DEVICE = "cpu"
 EQUIVALENCE_MARGIN_LL = 0.007
 CONVERGENCE_THRESHOLD = 0.002
@@ -112,12 +123,16 @@ CONVERGENCE_FIRST_CANDIDATE = 100
 # The list runs two doublings past the joint seed-interval wall on purpose:
 # the config must SHOW where the registered base seeds stop being usable
 # rather than stopping short of it.
-CONVERGENCE_CANDIDATES = [100, 200, 400, 800, 1600, 3200, 6400]
+# 50 added 2026-09-11 (user decision for 1b): a noise-curve point only —
+# at 50 simulations the plug-in log-loss bias is about 0.01, above the
+# 0.007 floor, so 50 can never be the full-run count.
+CONVERGENCE_CANDIDATES = [50, 100, 200, 400, 800, 1600, 3200, 6400]
+TIMING_1B_CANDIDATES = [50, 100, 200, 400, 800]  # fixed by the user 2026-09-11
 # Set to an int once the 1b replicated convergence check is read; every
 # `--n-sims` in the full-run command lines is rendered from it, so the
 # commands and the protocol can never disagree. `None` = not yet chosen,
 # and the commands carry the `<chosen_n_sims>` token instead of a number.
-CHOSEN_N_SIMS = None
+CHOSEN_N_SIMS = 1600  # user decision 2026-09-11 after the 1b table (see convergence_protocol)
 N_SIMS_TOKEN = "<chosen_n_sims>"
 SMOKE_N_SIMS = 10
 FIXTURE_SET_EXPECTED_COUNT = 255
@@ -208,6 +223,39 @@ SMOKE_FIXTURE_DIR = SEQ_STAGE1_ROOT / "smoke" / "fixtures"
 TIMING_FIXTURE_DIR = SEQ_STAGE1_ROOT / "timing" / "fixtures"
 TIMING_SHARD_SIZE = 10
 A50_DIR = SEQ_STAGE1_ROOT / "a50"
+
+# --- the 1d shard partition (D11 check 11.1) -------------------------------
+#
+# `run_arm.py` refuses `--parallel` (deviation `no_parallel_within_a_run`:
+# the same-day replay lifecycle is strictly sequential), so the only
+# parallelism available for the full run is disjoint fixture shards in
+# separate processes. That makes the partition a registered artifact rather
+# than an operator's `ls | split`: it is computed here from the fixture set,
+# materialised as ten directories, pinned with its ids, count and hash, and
+# recomputed by `--verify`.
+FULL_RUN_SHARDS = 10
+FULL_RUN_ROOT = SEQ_STAGE1_ROOT / "full"
+FULL_SHARD_ROOT = FULL_RUN_ROOT / "shards"
+SHARD_FIXTURES_DIRNAME = "fixtures"
+SHARD_OUTPUT_PREFIX = "shard"
+SHARD_RULE = (
+    "round-robin over the registered fixture set in the repo's own "
+    "(match_date, cricsheet id) chronology "
+    "(loaders_common.iter_matches_chronological, the ordering contract every "
+    f"tracker walk uses): the i-th fixture of that order goes to shard "
+    f"i mod {FULL_RUN_SHARDS}. Round-robin rather than contiguous blocks, so "
+    "long and short innings spread evenly and every shard spans the whole "
+    "iteration window instead of being one tournament; that keeps the "
+    "per-shard wall clocks comparable and keeps any single shard from being "
+    "a slice with its own venue or era. The partition is a function of the "
+    "fixture set alone, so --verify recomputes it and re-reads the ten "
+    "directories: each shard's inventory must be exactly its share of the "
+    "order, the union of the ten must be the registered fixture set, and no "
+    "fixture may appear in two shards. Every shard still runs with the FULL "
+    "same-day replay context (--context-dir data/t20s_json), so a sharded "
+    "run sees the same chronology a serial one does — which is what 1c "
+    "checks")
+SHARD_COMMAND_DIFFERS_ONLY_IN = ["--fixture-dir", "--output-dir"]
 EXTRAS_GRAFT = MODELS_ROOT / "auto" / "b18" / "extras_graft_v1.json"
 
 # Neither of these matches an artifact-manifest role, and neither is under a
@@ -397,6 +445,222 @@ def fixture_ids_for(fixture_dir) -> list:
     return ids
 
 
+# ---------------------------------------------------------------------------
+# The 1d shard partition (D11 check 11.1)
+# ---------------------------------------------------------------------------
+
+def same_day_order_version() -> str:
+    """The repo's versioned within-date ordering contract."""
+    from loaders_common import SAME_DAY_ORDER_VERSION  # noqa: PLC0415
+
+    return SAME_DAY_ORDER_VERSION
+
+
+def chronological_fixture_ids(fixture_dir) -> list:
+    """The directory's cricsheet ids in the repo's (match_date, id) order.
+
+    The order comes from `loaders_common.iter_matches_chronological`, which
+    IS the versioned same-day contract (`SAME_DAY_ORDER_VERSION`) that every
+    tracker walk and the stage-1 replay loader use — the partition therefore
+    orders fixtures exactly the way the run will visit them, rather than
+    inventing a second chronology here.
+
+    The helper is asked for EVERY document (`gender=None`) and its output is
+    compared against the directory's JSON stems: a file it skipped (bad JSON,
+    no `info.dates`) would otherwise drop out of the partition silently, and
+    a dropped fixture is a fixture no shard would ever run.
+    """
+    from loaders_common import iter_matches_chronological  # noqa: PLC0415
+
+    directory = _abs(fixture_dir)
+    ordered = [match_id for match_id, _text, _date
+               in iter_matches_chronological(directory, gender=None)]
+    duplicates = sorted({value for value in ordered
+                         if ordered.count(value) > 1})
+    if duplicates:
+        raise PinError(
+            f"{_p(fixture_dir)}: the chronology yields fixture(s) "
+            f"{duplicates} more than once")
+    on_disk = set(fixture_ids_for(fixture_dir))
+    missing = sorted(on_disk - set(ordered))
+    if missing:
+        raise PinError(
+            f"{_p(fixture_dir)}: {len(missing)} fixture file(s) are not in "
+            f"the chronology and would belong to no shard: {missing[:5]}"
+            f"{' ...' if len(missing) > 5 else ''}. "
+            "loaders_common.iter_matches_chronological skips a document it "
+            "cannot parse or that carries no info.dates")
+    unexpected = sorted(set(ordered) - on_disk)
+    if unexpected:
+        raise PinError(
+            f"{_p(fixture_dir)}: the chronology yields {unexpected} which is "
+            "not a JSON file of that directory")
+    return ordered
+
+
+def round_robin_partition(ordered_ids, n_shards: int = FULL_RUN_SHARDS
+                          ) -> list:
+    """`[[ids of shard 0], ...]` by `i mod n_shards` over a fixed order."""
+    count = int(n_shards)
+    if count < 1:
+        raise PinError(f"n_shards must be >= 1, got {n_shards!r}")
+    shards = [[] for _ in range(count)]
+    for index, fixture_id in enumerate(ordered_ids):
+        shards[index % count].append(str(fixture_id))
+    empty = [index for index, ids in enumerate(shards) if not ids]
+    if empty:
+        raise PinError(
+            f"shard(s) {empty} would be empty: {len(list(ordered_ids))} "
+            f"fixtures do not fill {count} shards")
+    return shards
+
+
+def shard_fixture_dir(index: int) -> Path:
+    """`models/embeddings/seq_stage1/full/shards/<k>/fixtures`, composed."""
+    return FULL_SHARD_ROOT / str(int(index)) / SHARD_FIXTURES_DIRNAME
+
+
+def shard_output_dir(arm: str, index: int) -> Path:
+    """`models/embeddings/seq_stage1/full/<arm>/shard<k>`, composed."""
+    return FULL_RUN_ROOT / str(arm) / f"{SHARD_OUTPUT_PREFIX}{int(index)}"
+
+
+def _materialize_one_shard(source_dir: str, index: int,
+                           fixture_ids) -> dict:
+    """Copy one shard's fixtures, or confirm the directory already holds them.
+
+    Refuses rather than repairs: a shard directory that holds a DIFFERENT set
+    of fixtures, or the right names with different bytes, is evidence that a
+    run under way covered something other than the registered partition, and
+    quietly overwriting it would hide that. Deleting it is a deliberate act.
+    """
+    label = _p(shard_fixture_dir(index))
+    target = _abs(shard_fixture_dir(index))
+    wanted = {}
+    for fixture_id in fixture_ids:
+        relative = Path(source_dir) / f"{fixture_id}.json"
+        path = _abs(relative)
+        if not path.is_file():
+            raise PinError(
+                f"shard {index}: {_p(relative)} is not on disk, so the "
+                "partition cannot be materialised")
+        wanted[str(fixture_id)] = path
+
+    if target.exists():
+        if not target.is_dir():
+            raise PinError(f"{label} exists and is not a directory")
+        children = sorted(target.iterdir())
+        strays = [child.name for child in children
+                  if not (child.is_file() and child.suffix == ".json")]
+        if strays:
+            raise PinError(
+                f"{label} holds non-fixture entries {strays}; a shard "
+                "directory holds exactly its cricsheet JSONs")
+        if children:
+            present = {child.stem for child in children}
+            if present != set(wanted):
+                raise PinError(
+                    f"{label} already holds a different fixture set "
+                    f"({len(present)} file(s), "
+                    f"{len(present - set(wanted))} unexpected, "
+                    f"{len(set(wanted) - present)} missing). The 1d "
+                    "partition is deterministic, so this directory was "
+                    "built from something else; delete it deliberately and "
+                    "re-run --write")
+            for fixture_id, path in sorted(wanted.items()):
+                if md5_file(target / f"{fixture_id}.json") != md5_file(path):
+                    raise PinError(
+                        f"{label}/{fixture_id}.json differs from "
+                        f"{source_dir}/{fixture_id}.json; a shard is a COPY "
+                        "of the registered fixture set, never an edit of it")
+            return {"shard": int(index), "action": "unchanged",
+                    "fixture_count": len(wanted), "fixture_dir": label}
+
+    target.mkdir(parents=True, exist_ok=True)
+    for fixture_id, path in sorted(wanted.items()):
+        shutil.copyfile(path, target / f"{fixture_id}.json")
+    return {"shard": int(index), "action": "copied",
+            "fixture_count": len(wanted), "fixture_dir": label}
+
+
+def materialize_full_run_shards(fixture_dir=None,
+                                n_shards: int = FULL_RUN_SHARDS) -> list:
+    """Build the ten shard fixture directories by COPYING the JSONs.
+
+    Idempotent: a shard directory that already holds exactly its fixtures,
+    byte for byte, is left alone and reported as `unchanged`. Called by
+    `--write` only; `--verify` reads the directories and never writes.
+    """
+    source = (_role_path(ROLE_FIXTURE_SET) if fixture_dir is None
+              else _p(fixture_dir))
+    partition = round_robin_partition(
+        chronological_fixture_ids(source), n_shards)
+    return [_materialize_one_shard(source, index, ids)
+            for index, ids in enumerate(partition)]
+
+
+def full_run_shard_facts(fixture_dir=None,
+                         n_shards: int = FULL_RUN_SHARDS) -> list:
+    """Per-shard pinned facts, RECOMPUTED from the directories on disk.
+
+    Both `--write` and `--verify` reach this, so the config's shard block is
+    a record of the files rather than of what `--write` intended: the
+    partition is re-derived from the registered fixture set, each shard
+    directory's inventory is re-read and re-hashed and must equal its share
+    of the order, the union of the ten inventories must be the registered
+    fixture set, and no fixture may appear twice.
+    """
+    source = (_role_path(ROLE_FIXTURE_SET) if fixture_dir is None
+              else _p(fixture_dir))
+    registered = sorted(fixture_ids_for(source))
+    partition = round_robin_partition(
+        chronological_fixture_ids(source), n_shards)
+
+    facts = []
+    owner = {}
+    for index, ids in enumerate(partition):
+        relative = _p(shard_fixture_dir(index))
+        directory = _abs(relative)
+        if not directory.is_dir():
+            raise PinError(
+                f"missing shard fixture dir {relative}: the 1d partition is "
+                "materialised by pin_stage1.py --write, which copies each "
+                f"shard's fixtures out of {source}")
+        on_disk = sorted(path.stem for path in directory.glob("*.json"))
+        if on_disk != sorted(ids):
+            raise PinError(
+                f"{relative} holds {len(on_disk)} fixture(s), the partition "
+                f"gives it {len(ids)}; the directory and the rule disagree "
+                f"(first difference: "
+                f"{sorted(set(on_disk) ^ set(ids))[:3]}). Delete the shard "
+                "directory and re-run --write")
+        for fixture_id in ids:
+            if fixture_id in owner:
+                raise PinError(
+                    f"fixture {fixture_id} is in shard {owner[fixture_id]} "
+                    f"and in shard {index}; the shards must be disjoint")
+            owner[fixture_id] = index
+        facts.append({
+            "index": int(index),
+            "fixture_dir": relative,
+            "fixture_dir_md5": _md5_dir(relative),
+            "fixture_dir_hash_contract": DIR_HASH_CONTRACT,
+            "fixture_count": len(ids),
+            "fixture_ids": list(ids),
+        })
+
+    union = sorted(owner)
+    if union != registered:
+        missing = sorted(set(registered) - set(union))
+        extra = sorted(set(union) - set(registered))
+        raise PinError(
+            f"the union of the {n_shards} shard inventories is not the "
+            f"registered fixture set {source} ({len(union)} vs "
+            f"{len(registered)}; missing {missing[:5]}, unexpected "
+            f"{extra[:5]})")
+    return facts
+
+
 def overlap_rows(fixture_ids, base_seed, candidates=None) -> list:
     """One row per n_sims candidate: overlapping pairs and the seed margin.
 
@@ -506,6 +770,41 @@ def _is_four_decimal_rounded(value: float) -> bool:
     number = float(value)
     return (number == round(number, 4)
             and decimal_places(number) < FULL_PRECISION_MIN_DECIMALS)
+
+
+def _spread_table_from_convergence_1b() -> list:
+    """Spread rows from the 1b convergence JSON (spreads only, no levels).
+
+    Returns [] before 1b has run so the config can still be written; once
+    the file exists every row is copied verbatim and --verify recomputes
+    it from the same file.
+    """
+    path = SEQ_STAGE1_ROOT / "timing" / "convergence_1b.json"
+    if not _abs(path).is_file():
+        return []
+    payload = json.loads(_abs(path).read_text())
+    spread = payload.get("spread", payload.get("spread_table", []))
+    variability = {
+        (int(r["n_sims"]), r["contrast"]): r
+        for r in payload.get("variability", payload.get("variability_rerun", []))}
+    rows = []
+    for r in spread:
+        key = (int(r["n_sims"]), r["contrast"])
+        v = variability.get(key, {})
+        row = {
+            "n_sims": int(r["n_sims"]), "contrast": r["contrast"],
+            "range_95": float(r["range_95"]), "sd": float(r["sd"]),
+            "below_threshold": bool(r["below_threshold"]),
+            "scaled_range_95": float(r["scaled_range_95"]),
+            "scaled_below_threshold": bool(r["scaled_below_threshold"]),
+            "variability_scaled_shard_mean_sd": (
+                float(v["scaled_paired_diff_sd"]) if "scaled_paired_diff_sd" in v else None),
+        }
+        for name in row:
+            for banned in ("log_loss", "delta", "ll_mean"):
+                assert banned not in name, name
+        rows.append(row)
+    return rows
 
 
 def _validated_ll(value, label: str) -> float:
@@ -1349,6 +1648,10 @@ def _command(arm: str, *, model_dir: str, fixture_dir: str, n_sims,
         "--stats-version", ARM_SPEC[arm]["stats_version"],
         "--fixture-dir", _p(fixture_dir),
         "--context-dir", CONTEXT_DIR,
+        # Every launch stamps its I3 block ids from the whole registered
+        # fixture set, never from its own (possibly sharded) fixture dir
+        # (stage-1 1c, D10).
+        "--cluster-source-dir", _role_path(ROLE_FIXTURE_SET),
         "--odds", _role_path(ROLE_ODDS),
         "--player-metadata", PLAYER_METADATA,
         "--extras-graft", _p(EXTRAS_GRAFT),
@@ -1429,6 +1732,16 @@ def _arm_block(arm: str, shared: dict, selection: dict) -> dict:
         "context_dir_md5": shared["context_dir_md5"],
         "context_dir_hash_contract": DIR_HASH_CONTRACT,
         "context_dir_json_count": shared["context_dir_json_count"],
+        # The corpus the I3 competition-cluster lookup is built from, for
+        # EVERY run block including each 1d shard. A block id carries the
+        # first date of that event's members in the directory the lookup was
+        # built from, so building it from a shard's own fixtures moves the
+        # id (stage-1 1c, D10); the registered fixture set is the one corpus
+        # that makes a sharded run and a serial run stamp the same blocks.
+        "cluster_source_dir": _role_path(ROLE_FIXTURE_SET),
+        "cluster_source_dir_role": ROLE_FIXTURE_SET,
+        "cluster_source_dir_md5": shared["fixture_set_md5"],
+        "cluster_source_dir_hash_contract": DIR_HASH_CONTRACT,
         "player_metadata": PLAYER_METADATA,
         "player_metadata_sha256": shared["player_metadata_sha256"],
         "bowler_selector": "RosterEmpiricalBowlerSelector",
@@ -1481,6 +1794,9 @@ def _arm_block(arm: str, shared: dict, selection: dict) -> dict:
             "fixture_dir_role": ROLE_FIXTURE_SET,
             "fixture_dir_md5": shared["fixture_set_md5"],
             "fixture_count": shared["fixture_set_count"],
+            "cluster_source_dir": _role_path(ROLE_FIXTURE_SET),
+            "cluster_source_dir_role": ROLE_FIXTURE_SET,
+            "cluster_source_dir_md5": shared["fixture_set_md5"],
             "n_sims": full_n_sims,
             "base_seeds": [BASE_SEED],
             "n_sims_source": shared["full_run_n_sims_source"],
@@ -1490,11 +1806,51 @@ def _arm_block(arm: str, shared: dict, selection: dict) -> dict:
                                 n_sims=shared["full_run_n_sims_token"],
                                 output_dir=output_full),
             "command_completeness": shared["full_run_command_completeness"],
+            # D11 check 11.1. The whole-set command above stays the
+            # REFERENCE — it is what the ten shard commands are a partition
+            # of, and it is what a serial rerun would use.
+            "shard_rule": SHARD_RULE,
+            "shard_count": FULL_RUN_SHARDS,
+            "shard_order_version": shared["same_day_order_version"],
+            "shard_command_differs_only_in": list(
+                SHARD_COMMAND_DIFFERS_ONLY_IN),
+            "shards_source": (
+                "pin_stage1.full_run_shard_facts: the partition is "
+                "recomputed from the registered fixture set and every shard "
+                "directory is re-read and re-hashed on both --write and "
+                "--verify; --write additionally materialises the "
+                "directories by copying the fixture JSONs"),
+            "shards": [
+                {
+                    "index": shard["index"],
+                    "fixture_dir": shard["fixture_dir"],
+                    "fixture_dir_md5": shard["fixture_dir_md5"],
+                    "fixture_dir_hash_contract": shard[
+                        "fixture_dir_hash_contract"],
+                    "fixture_count": shard["fixture_count"],
+                    "fixture_ids": list(shard["fixture_ids"]),
+                    # The shard scores its own fixtures but stamps its I3
+                    # block ids from the WHOLE set (1c, D10).
+                    "cluster_source_dir": _role_path(ROLE_FIXTURE_SET),
+                    "cluster_source_dir_role": ROLE_FIXTURE_SET,
+                    "cluster_source_dir_md5": shared["fixture_set_md5"],
+                    "output_dir": _p(shard_output_dir(arm, shard["index"])),
+                    "command": _command(
+                        arm, model_dir=model_dir,
+                        fixture_dir=shard["fixture_dir"],
+                        n_sims=shared["full_run_n_sims_token"],
+                        output_dir=_p(shard_output_dir(arm, shard["index"]))),
+                }
+                for shard in shared["full_run_shards"]
+            ],
         },
         "smoke_1a": {
             "fixture_dir": _p(SMOKE_FIXTURE_DIR),
             "fixture_dir_md5": shared["smoke_fixture_dir_md5"],
             "fixture_count": shared["smoke_fixture_count"],
+            "cluster_source_dir": _role_path(ROLE_FIXTURE_SET),
+            "cluster_source_dir_role": ROLE_FIXTURE_SET,
+            "cluster_source_dir_md5": shared["fixture_set_md5"],
             "n_sims": SMOKE_N_SIMS,
             "base_seeds": [BASE_SEED],
             "output_dir": output_smoke,
@@ -1515,6 +1871,9 @@ def _arm_block(arm: str, shared: dict, selection: dict) -> dict:
             "fixture_dir_md5": shared["timing_fixture_dir_md5"],
             "fixture_count": shared["timing_fixture_count"],
             "fixture_count_expected": TIMING_SHARD_SIZE,
+            "cluster_source_dir": _role_path(ROLE_FIXTURE_SET),
+            "cluster_source_dir_role": ROLE_FIXTURE_SET,
+            "cluster_source_dir_md5": shared["fixture_set_md5"],
             "base_seeds": list(BATCH_BASE_SEEDS),
             # The PERMITTED list is the jointly screened one, not the whole
             # ladder: a candidate whose intervals collide across batches is
@@ -1624,6 +1983,11 @@ def build_config() -> dict:
         },
         "fixture_set_md5": _md5_dir(fixture_set),
         "fixture_set_count": fixture_count,
+        # The 1d partition, recomputed from the fixture set and re-read from
+        # the ten shard directories once per pin and shared by every arm
+        # (only the output dir and the command differ per arm).
+        "full_run_shards": full_run_shard_facts(fixture_set),
+        "same_day_order_version": same_day_order_version(),
         "smoke_fixture_dir_md5": _md5_dir(SMOKE_FIXTURE_DIR),
         "smoke_fixture_count": _json_count(SMOKE_FIXTURE_DIR),
         # The 1b timing shard is chosen and copied at 1b, so it may be
@@ -1970,7 +2334,34 @@ def build_config() -> dict:
 
     config["convergence_protocol"] = {
         "candidates": (
-            "n_sims doubles from 100 with no ceiling: 100, 200, 400, 800, ..."),
+            "n_sims doubles from 100 with no ceiling: 100, 200, 400, 800, ...; "
+            "the 1b run measures 50, 100, 200, 400, 800 (user decision "
+            "2026-09-11), where 50 is a noise-curve point only and never a "
+            "full-run candidate (plug-in bias about 0.01 at 50 simulations)"),
+        "timing_1b_candidates": list(TIMING_1B_CANDIDATES),
+        "stop_rule_reading": (
+            "USER DECISION 2026-09-11, recorded before 1d. The literal rule "
+            "(95% range of the paired C-B and B-A shard-mean contrast across "
+            "three batches below 0.002) was NOT met at any permitted count: "
+            "on the 10-fixture shard the raw range at 800 was 0.034961 (C-B) "
+            "and 0.043664 (B-A), the full-set equivalent (x sqrt(10/255)) "
+            "0.006923 and 0.008647, and the a/sqrt(n) fit crosses 0.002 on "
+            "the scaled reading at about n = 5,264 (C-B) and 4,497 (B-A), "
+            "above the 3,200 joint seed cap. The three-batch range is a "
+            "poor estimator with n = 3 (non-monotone 200 -> 400). The "
+            "operational reading adopted: the full-set-equivalent Monte "
+            "Carlo SD of the paired primary contrasts, measured as the "
+            "per-fixture paired difference between batch seeds 20260910 and "
+            "20260911 divided by sqrt(10) and scaled by sqrt(10/255), must "
+            "be at or below about 0.002 at the chosen count. Measured at "
+            "800: C-B 0.002513, B-A 0.003221; extrapolated (/sqrt 2) at "
+            "1,600: about 0.0018 and 0.0023. Chosen n_sims = 1,600, the "
+            "0.007 equivalence margin being 3-4 x that SD. This is a change "
+            "of statistic from the registered range rule, made by the user "
+            "with the numbers in hand, and is recorded as such"),
+        "stop_rule_reading_source": (
+            f"{_p(SEQ_STAGE1_ROOT / 'timing' / 'convergence_1b')}.{{md,json}}; "
+            "docs/sequence_track/stage1_acceptance.md D9"),
         "first_candidate": CONVERGENCE_FIRST_CANDIDATE,
         "batches_per_arm_per_candidate": 3,
         "batch_base_seeds": [
@@ -1994,9 +2385,15 @@ def build_config() -> dict:
             "the --n-sims token in every arm's full_run.command; both are "
             "rendered from pin_stage1.CHOSEN_N_SIMS"),
         "spread_table_columns": [
-            "n_sims", "contrast", "batch_1_delta_ll", "batch_2_delta_ll",
-            "batch_3_delta_ll", "range_95", "below_threshold"],
-        "spread_table": [],
+            "n_sims", "contrast", "range_95", "sd", "below_threshold",
+            "scaled_range_95", "scaled_below_threshold",
+            "variability_scaled_shard_mean_sd"],
+        "spread_table_columns_note": (
+            "the three per-batch paired-difference columns of the original "
+            "registration are deliberately NOT recorded: they are level-"
+            "bearing (a paired delta on the shard) and the 1b rule forbids "
+            "reading any shard log loss; only spreads are kept"),
+        "spread_table": _spread_table_from_convergence_1b(),
         "fill_before": "1d (the full 255-fixture run)",
     }
 
@@ -2590,7 +2987,14 @@ def dump_config(config: dict) -> str:
     return HEADER + body
 
 
-def write_config(path: Path = CONFIG_PATH) -> dict:
+def write_config(path: Path = CONFIG_PATH, *, materialize: bool = True
+                 ) -> dict:
+    # The only write outside the YAML: `--write` materialises the ten 1d
+    # shard fixture directories before it pins them, so the hashes it records
+    # are hashes of directories that exist. `--verify` never writes.
+    if materialize:
+        selection_table(RETRAIN_SUMMARY)
+        materialize_full_run_shards()
     config = build_config()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(dump_config(config))
@@ -2674,6 +3078,27 @@ def print_selection(config: dict) -> None:
               f"({diagnostic['label']})")
 
 
+def print_shards(config: dict, actions=None) -> None:
+    """The 1d partition, one line per shard (D11 check 11.1)."""
+    block = ((config.get("arms") or {}).get("A") or {}).get("full_run") or {}
+    shards = block.get("shards") or []
+    if not shards:
+        return
+    by_index = {int(row["shard"]): row for row in (actions or [])}
+    total = sum(int(shard["fixture_count"]) for shard in shards)
+    print(f"1d shard partition ({len(shards)} shards, {total} fixtures, "
+          f"{SHARD_COMMAND_DIFFERS_ONLY_IN[0]} / "
+          f"{SHARD_COMMAND_DIFFERS_ONLY_IN[1]} are the only per-shard "
+          "flags):")
+    for shard in shards:
+        action = by_index.get(int(shard["index"]), {}).get("action")
+        suffix = "" if action is None else f"  [{action}]"
+        print(f"  shard {shard['index']:>2}  "
+              f"{shard['fixture_count']:>3} fixtures  "
+              f"md5 {shard['fixture_dir_md5']}  "
+              f"{shard['fixture_dir']}{suffix}")
+
+
 def print_overlap_check(n_sims=None) -> int:
     """Screen the registered fixture set for seed-interval overlap.
 
@@ -2749,8 +3174,16 @@ def main(argv=None) -> int:
         if args.check_seed_overlap:
             return print_overlap_check(args.n_sims)
         if args.write:
-            config = write_config(args.config)
+            # Fail closed BEFORE copying anything. Materialising the shards
+            # is the one write a pin makes outside the YAML, and a --write
+            # that cannot produce a config must not leave 19 MB of fixture
+            # copies behind: the retrain summary is the precondition that a
+            # stale or absent retrain breaks (D6 check 6.8).
+            selection_table(RETRAIN_SUMMARY)
+            actions = materialize_full_run_shards()
+            config = write_config(args.config, materialize=False)
             print_selection(config)
+            print_shards(config, actions)
             print(f"wrote {args.config}")
             return 0
         problems = verify_config(args.config)
@@ -2765,6 +3198,7 @@ def main(argv=None) -> int:
         return 1
     config = yaml.safe_load(Path(args.config).read_text())
     print_selection(config)
+    print_shards(config)
     print("not compared (recorded only): " + ", ".join(NOT_VERIFIED))
     print(f"pin_stage1: OK — {args.config} matches every recomputed fact")
     return 0

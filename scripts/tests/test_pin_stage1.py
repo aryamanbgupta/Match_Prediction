@@ -682,10 +682,13 @@ REQUIRED_FLAGS = [
     "--extras-graft models/auto/b18/extras_graft_v1.json",
     "--clip-low 0.01 --clip-high 0.99",
     "--context-dir data/t20s_json",
+    # 1c / D10: the I3 block ids come from the registered fixture set, never
+    # from the (possibly sharded) fixture dir a launch scores.
+    "--cluster-source-dir data/polymarket_test_v2",
     "--odds betting_odds_polymarket_v2.json",
     "--player-metadata data/all_players_enriched.csv",
     "--base-seed 20260910",
-    "--threads 4",
+    f"--threads {pin_stage1.THREADS}",
 ]
 
 ACTIVE_ARMS = ("A", "A50", "B", "C")
@@ -723,6 +726,33 @@ def test_smoke_differs_from_full_only_in_three_flags(committed, arm):
         f"models/embeddings/seq_stage1/smoke/{arm}")
     assert block["full_run"]["output_dir"] == (
         f"models/embeddings/seq_stage1/full/{arm}")
+
+
+@pytest.mark.parametrize("arm", ACTIVE_ARMS)
+def test_every_run_block_pins_the_registered_cluster_source(committed, arm):
+    """1c / D10: every launch stamps I3 blocks from the registered set."""
+    block = committed["arms"][arm]
+    registered = block["cluster_source_dir"]
+    assert registered == pin_stage1._role_path(pin_stage1.ROLE_FIXTURE_SET)
+    assert block["cluster_source_dir_role"] == pin_stage1.ROLE_FIXTURE_SET
+    assert block["cluster_source_dir_md5"] == block["full_run"][
+        "fixture_dir_md5"]
+
+    flag = f"--cluster-source-dir {registered} "
+    for name in ("full_run", "smoke_1a"):
+        run_block = block[name]
+        assert run_block["cluster_source_dir"] == registered
+        assert run_block["cluster_source_dir_md5"] == block[
+            "cluster_source_dir_md5"]
+        assert flag in run_block["command"] + " "
+    timing = block["timing_1b"]
+    assert timing["cluster_source_dir"] == registered
+    assert flag in timing["command_template"] + " "
+    for shard in block["full_run"]["shards"]:
+        # The shard scores its own fixtures and stamps from the whole set.
+        assert shard["cluster_source_dir"] == registered
+        assert shard["fixture_dir"] != registered
+        assert flag in shard["command"] + " "
 
 
 def test_chosen_n_sims_drives_the_full_run_commands(committed):
@@ -986,13 +1016,18 @@ def test_timing_and_variability_blocks_are_registered(committed):
         assert block["full_run"]["base_seeds"] == [pin_stage1.BASE_SEED]
 
         # Astra round 3, item 1: every launchable block binds its own
-        # fixture directory, inventory hash and count; the 1b shard is
-        # unpinned until it is built, which is what makes it unclaimable.
-        for name in ("smoke_1a", "full_run"):
+        # fixture directory, inventory hash and count. The 1b shard was
+        # unpinned (and therefore unclaimable) until it was built on
+        # 2026-09-11 (stage 1 D9.1); since then it is pinned like the others.
+        for name in ("smoke_1a", "full_run", "timing_1b"):
             assert block[name]["fixture_dir_md5"], name
             assert block[name]["fixture_count"] > 0, name
-        assert timing["fixture_dir_md5"] is None
-        assert timing["fixture_dir_status"].startswith("absent")
+        assert timing["fixture_count"] == timing["fixture_count_expected"] == 10
+        assert timing["fixture_dir_status"] == "present"
+        # 50 is permitted for 1b (user decision 2026-09-11) and is the
+        # smallest screened candidate; 6400 stays unpermitted.
+        assert timing["n_sims"][0] == 50
+        assert 6400 not in timing["n_sims"]
 
 
 def test_the_extra_source_files_are_pinned(committed):
@@ -1127,9 +1162,14 @@ def test_write_fails_closed_when_the_retrain_is_absent(tmp_path, monkeypatch,
     """No traceback, a PinError naming the missing summary, nothing written."""
     monkeypatch.setattr(pin_stage1, "RETRAIN_SUMMARY",
                         tmp_path / "absent" / "summary.yaml")
+    monkeypatch.setattr(pin_stage1, "FULL_SHARD_ROOT", tmp_path / "shards")
     target = tmp_path / "written.yaml"
     assert main(["--write", "--config", str(target)]) == 1
     assert not target.exists()
+    # Nothing outside the YAML either: the shard copies are the one write a
+    # pin makes, and a --write that cannot produce a config must not leave
+    # 19 MB of fixtures behind.
+    assert not (tmp_path / "shards").exists()
     message = capsys.readouterr().err
     assert "pin_stage1: ERROR: missing retrain summary" in message
     assert "summary.yaml" in message
@@ -1677,3 +1717,334 @@ def test_built_config_keeps_every_role_and_path_paired(synthetic_config):
         assert flat.get(sibling) == by_path[value], (
             f"{key} pins manifest-owned {value!r} but {sibling} is "
             f"{flat.get(sibling)!r}, expected {by_path[value]!r}")
+
+
+# ---------------------------------------------------------------------------
+# D11 check 11.1 — the 1d shard partition
+#
+# The partition is a pure function of the fixture set, so every rule below is
+# exercised on a synthetic fixture directory whose answer can be written out
+# by hand; the last group checks the committed config against the real one.
+# ---------------------------------------------------------------------------
+
+SHARD_DATES = ["2025-07-01", "2025-08-15", "2025-11-02", "2026-01-20",
+               "2026-04-16"]
+
+
+def _fixture_json(date: str) -> str:
+    return json.dumps({
+        "info": {"dates": [date], "gender": "male", "match_type": "T20",
+                 "teams": ["A", "B"], "outcome": {"winner": "A"}},
+        "innings": [],
+    })
+
+
+def _synthetic_fixture_set(directory: Path, count: int = 255) -> list:
+    """`count` fixtures spread over five dates, ids NOT in date order.
+
+    The ids run backwards against the dates on purpose: a partition that
+    sorted by filename, or that used `Path.glob` order, would produce a
+    different answer from one that used the (date, id) chronology, and the
+    tests below can tell them apart.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    ids = []
+    for index in range(count):
+        fixture_id = str(1600000 - index)
+        date = SHARD_DATES[index % len(SHARD_DATES)]
+        (directory / f"{fixture_id}.json").write_text(_fixture_json(date))
+        ids.append(fixture_id)
+    return ids
+
+
+@pytest.fixture
+def shard_tree(tmp_path, monkeypatch):
+    """A synthetic fixture set plus a shard root pointing inside tmp_path."""
+    source = tmp_path / "fixtures"
+    ids = _synthetic_fixture_set(source)
+    monkeypatch.setattr(pin_stage1, "FULL_SHARD_ROOT", tmp_path / "shards")
+    monkeypatch.setattr(pin_stage1, "FULL_RUN_ROOT", tmp_path / "full")
+    return source, ids
+
+
+def test_chronological_order_is_date_then_id(tmp_path):
+    source = tmp_path / "fixtures"
+    _synthetic_fixture_set(source, count=12)
+    ordered = pin_stage1.chronological_fixture_ids(source)
+
+    def _date(fixture_id):
+        return json.loads(
+            (source / f"{fixture_id}.json").read_text())["info"]["dates"][0]
+
+    assert ordered == sorted(ordered, key=lambda value: (_date(value), value))
+    # Not filename order, and not reverse filename order: the dates lead.
+    assert ordered != sorted(ordered)
+    assert set(ordered) == {path.stem for path in source.glob("*.json")}
+
+
+def test_chronological_order_refuses_a_document_it_cannot_place(tmp_path):
+    """A fixture the chronology skips would belong to no shard."""
+    source = tmp_path / "fixtures"
+    _synthetic_fixture_set(source, count=6)
+    (source / "9999999.json").write_text(json.dumps({"info": {}}))
+    with pytest.raises(PinError) as excinfo:
+        pin_stage1.chronological_fixture_ids(source)
+    assert "9999999" in str(excinfo.value)
+    assert "no shard" in str(excinfo.value)
+
+
+def test_round_robin_partition_covers_every_fixture_exactly_once():
+    ids = [f"id{index}" for index in range(255)]
+    shards = pin_stage1.round_robin_partition(ids, 10)
+    assert len(shards) == 10
+    assert sum(len(shard) for shard in shards) == 255
+    flat = [value for shard in shards for value in shard]
+    assert sorted(flat) == sorted(ids)
+    assert len(set(flat)) == len(flat)
+    # i mod 10, so the sizes differ by at most one and shard k starts at k.
+    assert {len(shard) for shard in shards} == {25, 26}
+    assert [shard[0] for shard in shards] == ids[:10]
+    assert shards[3][:2] == ["id3", "id13"]
+
+
+def test_round_robin_partition_is_deterministic():
+    ids = [f"id{index}" for index in range(255)]
+    assert (pin_stage1.round_robin_partition(ids, 10)
+            == pin_stage1.round_robin_partition(list(ids), 10))
+
+
+def test_round_robin_partition_refuses_an_empty_shard():
+    with pytest.raises(PinError) as excinfo:
+        pin_stage1.round_robin_partition(["a", "b"], 10)
+    assert "empty" in str(excinfo.value)
+
+
+def test_materialize_copies_the_fixtures_and_is_idempotent(shard_tree):
+    source, ids = shard_tree
+    first = pin_stage1.materialize_full_run_shards(source)
+    assert [row["action"] for row in first] == ["copied"] * 10
+    assert sum(row["fixture_count"] for row in first) == len(ids)
+
+    copied = []
+    for index in range(10):
+        directory = pin_stage1._abs(pin_stage1.shard_fixture_dir(index))
+        stems = sorted(path.stem for path in directory.glob("*.json"))
+        copied.extend(stems)
+        for stem in stems:
+            assert ((directory / f"{stem}.json").read_text()
+                    == (source / f"{stem}.json").read_text())
+    assert sorted(copied) == sorted(ids)
+
+    # The source is untouched, and a second call changes nothing.
+    assert sorted(path.stem for path in source.glob("*.json")) == sorted(ids)
+    second = pin_stage1.materialize_full_run_shards(source)
+    assert [row["action"] for row in second] == ["unchanged"] * 10
+
+
+def test_materialize_refuses_a_shard_dir_holding_another_fixture(shard_tree):
+    source, _ids = shard_tree
+    pin_stage1.materialize_full_run_shards(source)
+    intruder = pin_stage1._abs(pin_stage1.shard_fixture_dir(4))
+    (intruder / "1234567.json").write_text(_fixture_json("2025-07-01"))
+    with pytest.raises(PinError) as excinfo:
+        pin_stage1.materialize_full_run_shards(source)
+    assert "different fixture set" in str(excinfo.value)
+
+
+def test_materialize_refuses_an_edited_copy(shard_tree):
+    source, _ids = shard_tree
+    pin_stage1.materialize_full_run_shards(source)
+    directory = pin_stage1._abs(pin_stage1.shard_fixture_dir(2))
+    victim = sorted(directory.glob("*.json"))[0]
+    victim.write_text(_fixture_json("2026-04-16"))
+    with pytest.raises(PinError) as excinfo:
+        pin_stage1.materialize_full_run_shards(source)
+    assert victim.name in str(excinfo.value)
+    assert "COPY" in str(excinfo.value)
+
+
+def test_materialize_refuses_a_stray_non_fixture_file(shard_tree):
+    source, _ids = shard_tree
+    pin_stage1.materialize_full_run_shards(source)
+    directory = pin_stage1._abs(pin_stage1.shard_fixture_dir(0))
+    (directory / "notes.txt").write_text("hand written")
+    with pytest.raises(PinError) as excinfo:
+        pin_stage1.materialize_full_run_shards(source)
+    assert "notes.txt" in str(excinfo.value)
+
+
+def test_shard_facts_pin_ids_count_and_hash(shard_tree):
+    from artifacts import md5_directory
+
+    source, ids = shard_tree
+    pin_stage1.materialize_full_run_shards(source)
+    facts = pin_stage1.full_run_shard_facts(source)
+
+    assert [row["index"] for row in facts] == list(range(10))
+    assert sum(row["fixture_count"] for row in facts) == len(ids)
+    union = [value for row in facts for value in row["fixture_ids"]]
+    assert sorted(union) == sorted(ids)
+    assert len(set(union)) == len(union)
+    for row in facts:
+        directory = pin_stage1._abs(row["fixture_dir"])
+        assert row["fixture_count"] == len(row["fixture_ids"])
+        assert row["fixture_dir_md5"] == md5_directory(directory)
+        assert row["fixture_dir_hash_contract"] == pin_stage1.DIR_HASH_CONTRACT
+        assert row["fixture_dir"].endswith(
+            f"/{row['index']}/{pin_stage1.SHARD_FIXTURES_DIRNAME}")
+
+
+def test_shard_facts_refuse_a_missing_shard_dir(shard_tree):
+    source, _ids = shard_tree
+    pin_stage1.materialize_full_run_shards(source)
+    shutil.rmtree(pin_stage1._abs(pin_stage1.shard_fixture_dir(7)))
+    with pytest.raises(PinError) as excinfo:
+        pin_stage1.full_run_shard_facts(source)
+    assert "missing shard fixture dir" in str(excinfo.value)
+    assert "/7/" in str(excinfo.value)
+
+
+def test_shard_facts_refuse_an_inventory_that_drifted(shard_tree):
+    source, _ids = shard_tree
+    pin_stage1.materialize_full_run_shards(source)
+    directory = pin_stage1._abs(pin_stage1.shard_fixture_dir(1))
+    sorted(directory.glob("*.json"))[0].unlink()
+    with pytest.raises(PinError) as excinfo:
+        pin_stage1.full_run_shard_facts(source)
+    assert "the directory and the rule disagree" in str(excinfo.value)
+
+
+def test_shard_facts_refuse_a_fixture_claimed_by_two_shards(shard_tree,
+                                                            monkeypatch):
+    """The union/duplicate assertion, forced by a partition that overlaps."""
+    source, _ids = shard_tree
+    pin_stage1.materialize_full_run_shards(source)
+    honest = pin_stage1.round_robin_partition(
+        pin_stage1.chronological_fixture_ids(source), 10)
+
+    def overlapping(ordered_ids, n_shards=10):
+        shards = [list(shard) for shard in honest]
+        shards[1] = list(shards[0])
+        return shards
+
+    monkeypatch.setattr(pin_stage1, "round_robin_partition", overlapping)
+    with pytest.raises(PinError) as excinfo:
+        pin_stage1.full_run_shard_facts(source)
+    # Shard 1's directory no longer matches its claimed share, which is the
+    # first thing the reader hits; either refusal is the partition failing.
+    assert "shard" in str(excinfo.value).lower()
+
+
+def test_shard_facts_refuse_a_union_that_is_not_the_registered_set(
+        shard_tree, monkeypatch):
+    source, _ids = shard_tree
+    pin_stage1.materialize_full_run_shards(source)
+    honest = pin_stage1.round_robin_partition(
+        pin_stage1.chronological_fixture_ids(source), 10)
+    dropped = honest[3].pop()
+    (pin_stage1._abs(pin_stage1.shard_fixture_dir(3))
+     / f"{dropped}.json").unlink()
+
+    monkeypatch.setattr(pin_stage1, "round_robin_partition",
+                        lambda ordered_ids, n_shards=10: honest)
+    with pytest.raises(PinError) as excinfo:
+        pin_stage1.full_run_shard_facts(source)
+    assert "union" in str(excinfo.value)
+    assert dropped in str(excinfo.value)
+
+
+# --- the committed config's shard block -------------------------------------
+
+def test_full_run_registers_the_whole_partition(committed):
+    for arm in ACTIVE_ARMS:
+        block = committed["arms"][arm]["full_run"]
+        shards = block["shards"]
+        assert block["shard_count"] == pin_stage1.FULL_RUN_SHARDS
+        assert len(shards) == pin_stage1.FULL_RUN_SHARDS
+        assert [shard["index"] for shard in shards] == list(
+            range(pin_stage1.FULL_RUN_SHARDS))
+        assert block["shard_order_version"] == (
+            "date_then_match_id_lexicographic_v1")
+        assert block["shard_command_differs_only_in"] == [
+            "--fixture-dir", "--output-dir"]
+
+        union = [value for shard in shards for value in shard["fixture_ids"]]
+        assert len(set(union)) == len(union), f"{arm}: a fixture in 2 shards"
+        assert len(union) == block["fixture_count"] == 255
+        for shard in shards:
+            assert shard["fixture_count"] == len(shard["fixture_ids"])
+            assert len(shard["fixture_dir_md5"]) == 32
+            assert shard["fixture_dir"] == (
+                "models/embeddings/seq_stage1/full/shards/"
+                f"{shard['index']}/fixtures")
+            assert shard["output_dir"] == (
+                f"models/embeddings/seq_stage1/full/{arm}/"
+                f"shard{shard['index']}")
+
+
+def test_every_arm_shards_the_same_way(committed):
+    reference = [
+        (shard["index"], shard["fixture_dir"], shard["fixture_dir_md5"],
+         tuple(shard["fixture_ids"]))
+        for shard in committed["arms"]["A"]["full_run"]["shards"]]
+    for arm in ACTIVE_ARMS:
+        assert [
+            (shard["index"], shard["fixture_dir"], shard["fixture_dir_md5"],
+             tuple(shard["fixture_ids"]))
+            for shard in committed["arms"][arm]["full_run"]["shards"]
+        ] == reference, arm
+
+
+@pytest.mark.parametrize("arm", ACTIVE_ARMS)
+def test_a_shard_command_differs_from_the_full_command_in_two_flags(
+        committed, arm):
+    block = committed["arms"][arm]["full_run"]
+    full = block["command"].split()
+    for shard in block["shards"]:
+        shard_command = shard["command"].split()
+        assert len(shard_command) == len(full)
+        differing = {full[index - 1] for index in range(1, len(full))
+                     if full[index] != shard_command[index]}
+        assert differing == {"--fixture-dir", "--output-dir"}, shard["index"]
+        assert f"--fixture-dir {shard['fixture_dir']} " in (
+            shard["command"] + " ")
+        assert shard["command"].endswith(f"--output-dir {shard['output_dir']}")
+
+
+def test_the_shard_rule_states_how_the_partition_is_formed(committed):
+    rule = committed["arms"]["A"]["full_run"]["shard_rule"].lower()
+    assert "round-robin" in rule
+    assert "match_date" in rule
+    assert "union" in rule
+    assert "context" in rule
+
+
+@pytest.mark.needs_artifacts
+@needs_repin
+def test_the_committed_shards_are_the_recomputed_partition(committed):
+    """The union assertion against the fixture set actually on disk."""
+    facts = pin_stage1.full_run_shard_facts()
+    pinned = committed["arms"]["A"]["full_run"]["shards"]
+    assert [row["index"] for row in facts] == [
+        shard["index"] for shard in pinned]
+    for row, shard in zip(facts, pinned):
+        assert row["fixture_ids"] == shard["fixture_ids"]
+        assert row["fixture_dir_md5"] == shard["fixture_dir_md5"]
+        assert row["fixture_count"] == shard["fixture_count"]
+    registered = set(pin_stage1.fixture_ids_for(
+        committed["arms"]["A"]["full_run"]["fixture_dir"]))
+    union = [value for row in facts for value in row["fixture_ids"]]
+    assert sorted(union) == sorted(registered)
+    assert len(set(union)) == len(union)
+
+
+@pytest.mark.needs_artifacts
+@needs_repin
+def test_a_tampered_shard_hash_fails_verify(tmp_path):
+    tampered = tmp_path / "seq_stage1_sim_v1.yaml"
+    shutil.copyfile(CONFIG_PATH, tampered)
+    payload = yaml.safe_load(tampered.read_text())
+    payload["arms"]["C"]["full_run"]["shards"][2]["fixture_dir_md5"] = "0" * 32
+    tampered.write_text(yaml.safe_dump(payload, sort_keys=False))
+    assert any("arms.C.full_run.shards[2].fixture_dir_md5" in problem
+               for problem in verify_config(tampered))

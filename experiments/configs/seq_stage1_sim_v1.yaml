@@ -50,6 +50,10 @@ arms:
     context_dir_md5: 6da2f2d7880d5e8ab0fe95c37574ee14
     context_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
     context_dir_json_count: 11264
+    cluster_source_dir: data/polymarket_test_v2
+    cluster_source_dir_role: iteration_set_v2
+    cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+    cluster_source_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
     player_metadata: data/all_players_enriched.csv
     player_metadata_sha256: e5a657b7b714b8a13b7e66d82c6e88a3bfd02d8952dc793c8b398d533208db21
     bowler_selector: RosterEmpiricalBowlerSelector
@@ -104,46 +108,529 @@ arms:
       count: 255
     prefix_cache: 'off'
     device: cpu
-    threads: 4
+    threads: 1
     clip:
     - 0.01
     - 0.99
     base_seed: 20260910
     env:
-      OMP_NUM_THREADS: '4'
-      MKL_NUM_THREADS: '4'
-      OPENBLAS_NUM_THREADS: '4'
-      VECLIB_MAXIMUM_THREADS: '4'
-      NUMEXPR_NUM_THREADS: '4'
+      OMP_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      VECLIB_MAXIMUM_THREADS: '1'
+      NUMEXPR_NUM_THREADS: '1'
     full_run:
       fixture_dir: data/polymarket_test_v2
       fixture_dir_role: iteration_set_v2
       fixture_dir_md5: 8005cad729458d0234265a9b983a6819
       fixture_count: 255
-      n_sims: to_be_filled_before_1d
+      cluster_source_dir: data/polymarket_test_v2
+      cluster_source_dir_role: iteration_set_v2
+      cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+      n_sims: 1600
       base_seeds:
       - 20260910
       n_sims_source: convergence_protocol.chosen_n_sims, set from the 1b replicated
         convergence check; pin_stage1.py renders --n-sims from the same constant,
         so the command and the protocol cannot disagree
       output_dir: models/embeddings/seq_stage1/full/A
-      command: env OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 VECLIB_MAXIMUM_THREADS=4
-        NUMEXPR_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/run_arm.py
+      command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
+        NUMEXPR_NUM_THREADS=1 uv run --no-sync python scripts/sequence_track/run_arm.py
         --arm A --config experiments/configs/seq_stage1_sim_v1.yaml --model-dir
         models/xgb_i7_noweights_production --stats-version i7 --fixture-dir data/polymarket_test_v2
-        --context-dir data/t20s_json --odds betting_odds_polymarket_v2.json --player-metadata
-        data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
-        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
-        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
-        <chosen_n_sims> --base-seed 20260910 --threads 4 --output-dir models/embeddings/seq_stage1/full/A
-      command_completeness: every flag and env var is final except the single token
-        '<chosen_n_sims>', which is unresolved until 1d by design (check 5.6 forbids
-        choosing n_sims before the convergence check). Set CHOSEN_N_SIMS in pin_stage1.py
-        and re-run --write to render a runnable command.
+        --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+        --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+        --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+        models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+        --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+        1 --output-dir models/embeddings/seq_stage1/full/A
+      command_completeness: complete and runnable from the repo root as written
+      shard_rule: 'round-robin over the registered fixture set in the repo''s own
+        (match_date, cricsheet id) chronology (loaders_common.iter_matches_chronological,
+        the ordering contract every tracker walk uses): the i-th fixture of that
+        order goes to shard i mod 10. Round-robin rather than contiguous blocks,
+        so long and short innings spread evenly and every shard spans the whole
+        iteration window instead of being one tournament; that keeps the per-shard
+        wall clocks comparable and keeps any single shard from being a slice with
+        its own venue or era. The partition is a function of the fixture set alone,
+        so --verify recomputes it and re-reads the ten directories: each shard''s
+        inventory must be exactly its share of the order, the union of the ten must
+        be the registered fixture set, and no fixture may appear in two shards.
+        Every shard still runs with the FULL same-day replay context (--context-dir
+        data/t20s_json), so a sharded run sees the same chronology a serial one
+        does — which is what 1c checks'
+      shard_count: 10
+      shard_order_version: date_then_match_id_lexicographic_v1
+      shard_command_differs_only_in:
+      - --fixture-dir
+      - --output-dir
+      shards_source: 'pin_stage1.full_run_shard_facts: the partition is recomputed
+        from the registered fixture set and every shard directory is re-read and
+        re-hashed on both --write and --verify; --write additionally materialises
+        the directories by copying the fixture JSONs'
+      shards:
+      - index: 0
+        fixture_dir: models/embeddings/seq_stage1/full/shards/0/fixtures
+        fixture_dir_md5: 63d8b5cdec54fe92dafe4e2fdf58dc89
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 26
+        fixture_ids:
+        - '1496921'
+        - '1496936'
+        - '1478909'
+        - '1506014'
+        - '1501328'
+        - '1501334'
+        - '1501339'
+        - '1493249'
+        - '1494257'
+        - '1494262'
+        - '1494268'
+        - '1514482'
+        - '1494278'
+        - '1493279'
+        - '1477610'
+        - '1512723'
+        - '1512734'
+        - '1512744'
+        - '1512756'
+        - '1512765'
+        - '1512770'
+        - '1527678'
+        - '1527681'
+        - '1527686'
+        - '1527570'
+        - '1527574'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/A/shard0
+        command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+          VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python
+          scripts/sequence_track/run_arm.py --arm A --config experiments/configs/seq_stage1_sim_v1.yaml
+          --model-dir models/xgb_i7_noweights_production --stats-version i7 --fixture-dir
+          models/embeddings/seq_stage1/full/shards/0/fixtures --context-dir data/t20s_json
+          --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+          --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+          --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+          models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+          1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/A/shard0
+      - index: 1
+        fixture_dir: models/embeddings/seq_stage1/full/shards/1/fixtures
+        fixture_dir_md5: 18a5275257b923aeec8fd2907c5e5303
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 26
+        fixture_ids:
+        - '1496922'
+        - '1496937'
+        - '1491723'
+        - '1506015'
+        - '1501329'
+        - '1493241'
+        - '1493245'
+        - '1494253'
+        - '1493253'
+        - '1493258'
+        - '1514480'
+        - '1493270'
+        - '1493275'
+        - '1494283'
+        - '1507719'
+        - '1512724'
+        - '1512735'
+        - '1512745'
+        - '1512758'
+        - '1512766'
+        - '1525162'
+        - '1527560'
+        - '1527682'
+        - '1527566'
+        - '1527571'
+        - '1529266'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/A/shard1
+        command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+          VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python
+          scripts/sequence_track/run_arm.py --arm A --config experiments/configs/seq_stage1_sim_v1.yaml
+          --model-dir models/xgb_i7_noweights_production --stats-version i7 --fixture-dir
+          models/embeddings/seq_stage1/full/shards/1/fixtures --context-dir data/t20s_json
+          --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+          --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+          --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+          models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+          1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/A/shard1
+      - index: 2
+        fixture_dir: models/embeddings/seq_stage1/full/shards/2/fixtures
+        fixture_dir_md5: 3e0e1d2606ec6e607cd84948d6d6596c
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 26
+        fixture_ids:
+        - '1496924'
+        - '1491714'
+        - '1478910'
+        - '1506016'
+        - '1501330'
+        - '1501335'
+        - '1501340'
+        - '1501345'
+        - '1494258'
+        - '1493259'
+        - '1493264'
+        - '1494274'
+        - '1493276'
+        - '1494284'
+        - '1490238'
+        - '1512725'
+        - '1512736'
+        - '1512747'
+        - '1512760'
+        - '1523000'
+        - '1512771'
+        - '1527561'
+        - '1529380'
+        - '1527687'
+        - '1527690'
+        - '1527575'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/A/shard2
+        command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+          VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python
+          scripts/sequence_track/run_arm.py --arm A --config experiments/configs/seq_stage1_sim_v1.yaml
+          --model-dir models/xgb_i7_noweights_production --stats-version i7 --fixture-dir
+          models/embeddings/seq_stage1/full/shards/2/fixtures --context-dir data/t20s_json
+          --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+          --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+          --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+          models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+          1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/A/shard2
+      - index: 3
+        fixture_dir: models/embeddings/seq_stage1/full/shards/3/fixtures
+        fixture_dir_md5: 8040bcd62202618b1488d14f292e0b9e
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 26
+        fixture_ids:
+        - '1496925'
+        - '1505125'
+        - '1491724'
+        - '1501323'
+        - '1479578'
+        - '1493242'
+        - '1501341'
+        - '1493250'
+        - '1493254'
+        - '1493260'
+        - '1493265'
+        - '1493271'
+        - '1494279'
+        - '1490235'
+        - '1519637'
+        - '1512726'
+        - '1512737'
+        - '1512748'
+        - '1512761'
+        - '1523001'
+        - '1491735'
+        - '1527679'
+        - '1529381'
+        - '1528306'
+        - '1527691'
+        - '1527576'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/A/shard3
+        command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+          VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python
+          scripts/sequence_track/run_arm.py --arm A --config experiments/configs/seq_stage1_sim_v1.yaml
+          --model-dir models/xgb_i7_noweights_production --stats-version i7 --fixture-dir
+          models/embeddings/seq_stage1/full/shards/3/fixtures --context-dir data/t20s_json
+          --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+          --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+          --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+          models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+          1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/A/shard3
+      - index: 4
+        fixture_dir: models/embeddings/seq_stage1/full/shards/4/fixtures
+        fixture_dir_md5: 2ac21d139ea2553ba18bff41c2c87d65
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 26
+        fixture_ids:
+        - '1496926'
+        - '1501895'
+        - '1491725'
+        - '1501324'
+        - '1493238'
+        - '1501336'
+        - '1493246'
+        - '1494254'
+        - '1494259'
+        - '1494265'
+        - '1493266'
+        - '1494275'
+        - '1494280'
+        - '1493280'
+        - '1507720'
+        - '1512727'
+        - '1512738'
+        - '1512749'
+        - '1512762'
+        - '1525160'
+        - '1527556'
+        - '1529377'
+        - '1527564'
+        - '1527567'
+        - '1527572'
+        - '1529267'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/A/shard4
+        command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+          VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python
+          scripts/sequence_track/run_arm.py --arm A --config experiments/configs/seq_stage1_sim_v1.yaml
+          --model-dir models/xgb_i7_noweights_production --stats-version i7 --fixture-dir
+          models/embeddings/seq_stage1/full/shards/4/fixtures --context-dir data/t20s_json
+          --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+          --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+          --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+          models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+          1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/A/shard4
+      - index: 5
+        fixture_dir: models/embeddings/seq_stage1/full/shards/5/fixtures
+        fixture_dir_md5: e85d917e514d3515d6303ed85af8cd76
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 25
+        fixture_ids:
+        - '1496929'
+        - '1505126'
+        - '1491727'
+        - '1501325'
+        - '1501331'
+        - '1479580'
+        - '1501342'
+        - '1494255'
+        - '1494260'
+        - '1493261'
+        - '1493267'
+        - '1493272'
+        - '1493277'
+        - '1490236'
+        - '1519638'
+        - '1512728'
+        - '1512739'
+        - '1512751'
+        - '1512763'
+        - '1512767'
+        - '1527557'
+        - '1527562'
+        - '1527683'
+        - '1527568'
+        - '1527692'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/A/shard5
+        command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+          VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python
+          scripts/sequence_track/run_arm.py --arm A --config experiments/configs/seq_stage1_sim_v1.yaml
+          --model-dir models/xgb_i7_noweights_production --stats-version i7 --fixture-dir
+          models/embeddings/seq_stage1/full/shards/5/fixtures --context-dir data/t20s_json
+          --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+          --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+          --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+          models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+          1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/A/shard5
+      - index: 6
+        fixture_dir: models/embeddings/seq_stage1/full/shards/6/fixtures
+        fixture_dir_md5: 5b01fba2446a6a092edae7af9b6b2b9e
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 25
+        fixture_ids:
+        - '1496931'
+        - '1478908'
+        - '1502050'
+        - '1479576'
+        - '1501332'
+        - '1493243'
+        - '1493247'
+        - '1501346'
+        - '1493255'
+        - '1494266'
+        - '1494271'
+        - '1494276'
+        - '1494281'
+        - '1493281'
+        - '1507721'
+        - '1512729'
+        - '1512740'
+        - '1512752'
+        - '1512764'
+        - '1523002'
+        - '1527675'
+        - '1527680'
+        - '1527684'
+        - '1527688'
+        - '1527693'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/A/shard6
+        command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+          VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python
+          scripts/sequence_track/run_arm.py --arm A --config experiments/configs/seq_stage1_sim_v1.yaml
+          --model-dir models/xgb_i7_noweights_production --stats-version i7 --fixture-dir
+          models/embeddings/seq_stage1/full/shards/6/fixtures --context-dir data/t20s_json
+          --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+          --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+          --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+          models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+          1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/A/shard6
+      - index: 7
+        fixture_dir: models/embeddings/seq_stage1/full/shards/7/fixtures
+        fixture_dir_md5: 38f4cca66cf431f11131f254c615860b
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 25
+        fixture_ids:
+        - '1496933'
+        - '1501896'
+        - '1502051'
+        - '1501326'
+        - '1493239'
+        - '1501337'
+        - '1501343'
+        - '1493251'
+        - '1493256'
+        - '1493262'
+        - '1494272'
+        - '1493273'
+        - '1494282'
+        - '1494286'
+        - '1512719'
+        - '1512730'
+        - '1512741'
+        - '1512753'
+        - '1522998'
+        - '1523003'
+        - '1527676'
+        - '1529378'
+        - '1528299'
+        - '1528307'
+        - '1527573'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/A/shard7
+        command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+          VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python
+          scripts/sequence_track/run_arm.py --arm A --config experiments/configs/seq_stage1_sim_v1.yaml
+          --model-dir models/xgb_i7_noweights_production --stats-version i7 --fixture-dir
+          models/embeddings/seq_stage1/full/shards/7/fixtures --context-dir data/t20s_json
+          --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+          --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+          --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+          models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+          1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/A/shard7
+      - index: 8
+        fixture_dir: models/embeddings/seq_stage1/full/shards/8/fixtures
+        fixture_dir_md5: e9ae15b33b33adf2f3b2b2c8e1a44a4c
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 25
+        fixture_ids:
+        - '1496934'
+        - '1505127'
+        - '1502052'
+        - '1501327'
+        - '1501333'
+        - '1493244'
+        - '1501344'
+        - '1501347'
+        - '1494261'
+        - '1494267'
+        - '1493269'
+        - '1494277'
+        - '1493278'
+        - '1477609'
+        - '1512720'
+        - '1512732'
+        - '1512742'
+        - '1512754'
+        - '1522999'
+        - '1512768'
+        - '1527677'
+        - '1529379'
+        - '1528300'
+        - '1527569'
+        - '1529264'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/A/shard8
+        command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+          VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python
+          scripts/sequence_track/run_arm.py --arm A --config experiments/configs/seq_stage1_sim_v1.yaml
+          --model-dir models/xgb_i7_noweights_production --stats-version i7 --fixture-dir
+          models/embeddings/seq_stage1/full/shards/8/fixtures --context-dir data/t20s_json
+          --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+          --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+          --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+          models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+          1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/A/shard8
+      - index: 9
+        fixture_dir: models/embeddings/seq_stage1/full/shards/9/fixtures
+        fixture_dir_md5: 01d497ef5592766db5061b1d97e76925
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 25
+        fixture_ids:
+        - '1496935'
+        - '1501897'
+        - '1502053'
+        - '1479577'
+        - '1493240'
+        - '1501338'
+        - '1493248'
+        - '1493252'
+        - '1493257'
+        - '1493263'
+        - '1494273'
+        - '1493274'
+        - '1490234'
+        - '1490237'
+        - '1512721'
+        - '1512733'
+        - '1512743'
+        - '1512755'
+        - '1525159'
+        - '1512769'
+        - '1527559'
+        - '1527563'
+        - '1527565'
+        - '1527689'
+        - '1529265'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/A/shard9
+        command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+          VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python
+          scripts/sequence_track/run_arm.py --arm A --config experiments/configs/seq_stage1_sim_v1.yaml
+          --model-dir models/xgb_i7_noweights_production --stats-version i7 --fixture-dir
+          models/embeddings/seq_stage1/full/shards/9/fixtures --context-dir data/t20s_json
+          --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+          --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+          --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+          models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+          1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/A/shard9
     smoke_1a:
       fixture_dir: models/embeddings/seq_stage1/smoke/fixtures
       fixture_dir_md5: 703f522de0f0384f42a250247b9a653d
       fixture_count: 4
+      cluster_source_dir: data/polymarket_test_v2
+      cluster_source_dir_role: iteration_set_v2
+      cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
       n_sims: 10
       base_seeds:
       - 20260910
@@ -152,29 +639,34 @@ arms:
       - --fixture-dir
       - --n-sims
       - --output-dir
-      command: env OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 VECLIB_MAXIMUM_THREADS=4
-        NUMEXPR_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/run_arm.py
+      command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
+        NUMEXPR_NUM_THREADS=1 uv run --no-sync python scripts/sequence_track/run_arm.py
         --arm A --config experiments/configs/seq_stage1_sim_v1.yaml --model-dir
         models/xgb_i7_noweights_production --stats-version i7 --fixture-dir models/embeddings/seq_stage1/smoke/fixtures
-        --context-dir data/t20s_json --odds betting_odds_polymarket_v2.json --player-metadata
-        data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
-        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
-        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
-        10 --base-seed 20260910 --threads 4 --output-dir models/embeddings/seq_stage1/smoke/A
+        --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+        --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+        --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+        models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+        --clip-low 0.01 --clip-high 0.99 --n-sims 10 --base-seed 20260910 --threads
+        1 --output-dir models/embeddings/seq_stage1/smoke/A
     timing_1b:
       purpose: 'the 1b convergence protocol and the variability rerun: the same
         timing shard simulated under each registered batch base seed at each candidate
         n_sims'
       fixture_dir: models/embeddings/seq_stage1/timing/fixtures
-      fixture_dir_status: 'absent: populated at 1b, re-pin after it is built'
-      fixture_dir_md5: null
-      fixture_count: null
+      fixture_dir_status: present
+      fixture_dir_md5: 857d03aa63c3f0114d8983a1e6f5a35e
+      fixture_count: 10
       fixture_count_expected: 10
+      cluster_source_dir: data/polymarket_test_v2
+      cluster_source_dir_role: iteration_set_v2
+      cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
       base_seeds:
       - 20260910
       - 20260911
       - 20260912
       n_sims: &id001
+      - 50
       - 100
       - 200
       - 400
@@ -182,6 +674,7 @@ arms:
       - 1600
       - 3200
       candidates_screened:
+      - 50
       - 100
       - 200
       - 400
@@ -196,15 +689,16 @@ arms:
       seed_cohort: the three batch base seeds share one seed line, so run_arm screens
         their JOINT intervals for any launch on this block and refuses a candidate
         above 3290
-      command_template: env OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4
-        VECLIB_MAXIMUM_THREADS=4 NUMEXPR_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/run_arm.py
+      command_template: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+        VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python scripts/sequence_track/run_arm.py
         --arm A --config experiments/configs/seq_stage1_sim_v1.yaml --model-dir
         models/xgb_i7_noweights_production --stats-version i7 --fixture-dir models/embeddings/seq_stage1/timing/fixtures
-        --context-dir data/t20s_json --odds betting_odds_polymarket_v2.json --player-metadata
-        data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
-        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
-        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
-        <candidate> --base-seed <batch_base_seed> --threads 4 --output-dir models/embeddings/seq_stage1/timing/A/seed<base_seed>_n<n_sims>
+        --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+        --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+        --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+        models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+        --clip-low 0.01 --clip-high 0.99 --n-sims <candidate> --base-seed <batch_base_seed>
+        --threads 1 --output-dir models/embeddings/seq_stage1/timing/A/seed<base_seed>_n<n_sims>
     variability_rerun:
       what: 'the 1b Monte Carlo variability rerun: the timing shard at the chosen
         n_sims, re-run under the second registered base seed 20260911 (and the third,
@@ -235,6 +729,10 @@ arms:
     context_dir_md5: 6da2f2d7880d5e8ab0fe95c37574ee14
     context_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
     context_dir_json_count: 11264
+    cluster_source_dir: data/polymarket_test_v2
+    cluster_source_dir_role: iteration_set_v2
+    cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+    cluster_source_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
     player_metadata: data/all_players_enriched.csv
     player_metadata_sha256: e5a657b7b714b8a13b7e66d82c6e88a3bfd02d8952dc793c8b398d533208db21
     bowler_selector: RosterEmpiricalBowlerSelector
@@ -289,46 +787,529 @@ arms:
       count: 255
     prefix_cache: 'off'
     device: cpu
-    threads: 4
+    threads: 1
     clip:
     - 0.01
     - 0.99
     base_seed: 20260910
     env:
-      OMP_NUM_THREADS: '4'
-      MKL_NUM_THREADS: '4'
-      OPENBLAS_NUM_THREADS: '4'
-      VECLIB_MAXIMUM_THREADS: '4'
-      NUMEXPR_NUM_THREADS: '4'
+      OMP_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      VECLIB_MAXIMUM_THREADS: '1'
+      NUMEXPR_NUM_THREADS: '1'
     full_run:
       fixture_dir: data/polymarket_test_v2
       fixture_dir_role: iteration_set_v2
       fixture_dir_md5: 8005cad729458d0234265a9b983a6819
       fixture_count: 255
-      n_sims: to_be_filled_before_1d
+      cluster_source_dir: data/polymarket_test_v2
+      cluster_source_dir_role: iteration_set_v2
+      cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+      n_sims: 1600
       base_seeds:
       - 20260910
       n_sims_source: convergence_protocol.chosen_n_sims, set from the 1b replicated
         convergence check; pin_stage1.py renders --n-sims from the same constant,
         so the command and the protocol cannot disagree
       output_dir: models/embeddings/seq_stage1/full/A50
-      command: env OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 VECLIB_MAXIMUM_THREADS=4
-        NUMEXPR_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/run_arm.py
+      command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
+        NUMEXPR_NUM_THREADS=1 uv run --no-sync python scripts/sequence_track/run_arm.py
         --arm A50 --config experiments/configs/seq_stage1_sim_v1.yaml --model-dir
         models/embeddings/seq_stage1/a50 --stats-version i7 --fixture-dir data/polymarket_test_v2
-        --context-dir data/t20s_json --odds betting_odds_polymarket_v2.json --player-metadata
-        data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
-        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
-        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
-        <chosen_n_sims> --base-seed 20260910 --threads 4 --output-dir models/embeddings/seq_stage1/full/A50
-      command_completeness: every flag and env var is final except the single token
-        '<chosen_n_sims>', which is unresolved until 1d by design (check 5.6 forbids
-        choosing n_sims before the convergence check). Set CHOSEN_N_SIMS in pin_stage1.py
-        and re-run --write to render a runnable command.
+        --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+        --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+        --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+        models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+        --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+        1 --output-dir models/embeddings/seq_stage1/full/A50
+      command_completeness: complete and runnable from the repo root as written
+      shard_rule: 'round-robin over the registered fixture set in the repo''s own
+        (match_date, cricsheet id) chronology (loaders_common.iter_matches_chronological,
+        the ordering contract every tracker walk uses): the i-th fixture of that
+        order goes to shard i mod 10. Round-robin rather than contiguous blocks,
+        so long and short innings spread evenly and every shard spans the whole
+        iteration window instead of being one tournament; that keeps the per-shard
+        wall clocks comparable and keeps any single shard from being a slice with
+        its own venue or era. The partition is a function of the fixture set alone,
+        so --verify recomputes it and re-reads the ten directories: each shard''s
+        inventory must be exactly its share of the order, the union of the ten must
+        be the registered fixture set, and no fixture may appear in two shards.
+        Every shard still runs with the FULL same-day replay context (--context-dir
+        data/t20s_json), so a sharded run sees the same chronology a serial one
+        does — which is what 1c checks'
+      shard_count: 10
+      shard_order_version: date_then_match_id_lexicographic_v1
+      shard_command_differs_only_in:
+      - --fixture-dir
+      - --output-dir
+      shards_source: 'pin_stage1.full_run_shard_facts: the partition is recomputed
+        from the registered fixture set and every shard directory is re-read and
+        re-hashed on both --write and --verify; --write additionally materialises
+        the directories by copying the fixture JSONs'
+      shards:
+      - index: 0
+        fixture_dir: models/embeddings/seq_stage1/full/shards/0/fixtures
+        fixture_dir_md5: 63d8b5cdec54fe92dafe4e2fdf58dc89
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 26
+        fixture_ids:
+        - '1496921'
+        - '1496936'
+        - '1478909'
+        - '1506014'
+        - '1501328'
+        - '1501334'
+        - '1501339'
+        - '1493249'
+        - '1494257'
+        - '1494262'
+        - '1494268'
+        - '1514482'
+        - '1494278'
+        - '1493279'
+        - '1477610'
+        - '1512723'
+        - '1512734'
+        - '1512744'
+        - '1512756'
+        - '1512765'
+        - '1512770'
+        - '1527678'
+        - '1527681'
+        - '1527686'
+        - '1527570'
+        - '1527574'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/A50/shard0
+        command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+          VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python
+          scripts/sequence_track/run_arm.py --arm A50 --config experiments/configs/seq_stage1_sim_v1.yaml
+          --model-dir models/embeddings/seq_stage1/a50 --stats-version i7 --fixture-dir
+          models/embeddings/seq_stage1/full/shards/0/fixtures --context-dir data/t20s_json
+          --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+          --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+          --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+          models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+          1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/A50/shard0
+      - index: 1
+        fixture_dir: models/embeddings/seq_stage1/full/shards/1/fixtures
+        fixture_dir_md5: 18a5275257b923aeec8fd2907c5e5303
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 26
+        fixture_ids:
+        - '1496922'
+        - '1496937'
+        - '1491723'
+        - '1506015'
+        - '1501329'
+        - '1493241'
+        - '1493245'
+        - '1494253'
+        - '1493253'
+        - '1493258'
+        - '1514480'
+        - '1493270'
+        - '1493275'
+        - '1494283'
+        - '1507719'
+        - '1512724'
+        - '1512735'
+        - '1512745'
+        - '1512758'
+        - '1512766'
+        - '1525162'
+        - '1527560'
+        - '1527682'
+        - '1527566'
+        - '1527571'
+        - '1529266'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/A50/shard1
+        command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+          VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python
+          scripts/sequence_track/run_arm.py --arm A50 --config experiments/configs/seq_stage1_sim_v1.yaml
+          --model-dir models/embeddings/seq_stage1/a50 --stats-version i7 --fixture-dir
+          models/embeddings/seq_stage1/full/shards/1/fixtures --context-dir data/t20s_json
+          --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+          --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+          --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+          models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+          1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/A50/shard1
+      - index: 2
+        fixture_dir: models/embeddings/seq_stage1/full/shards/2/fixtures
+        fixture_dir_md5: 3e0e1d2606ec6e607cd84948d6d6596c
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 26
+        fixture_ids:
+        - '1496924'
+        - '1491714'
+        - '1478910'
+        - '1506016'
+        - '1501330'
+        - '1501335'
+        - '1501340'
+        - '1501345'
+        - '1494258'
+        - '1493259'
+        - '1493264'
+        - '1494274'
+        - '1493276'
+        - '1494284'
+        - '1490238'
+        - '1512725'
+        - '1512736'
+        - '1512747'
+        - '1512760'
+        - '1523000'
+        - '1512771'
+        - '1527561'
+        - '1529380'
+        - '1527687'
+        - '1527690'
+        - '1527575'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/A50/shard2
+        command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+          VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python
+          scripts/sequence_track/run_arm.py --arm A50 --config experiments/configs/seq_stage1_sim_v1.yaml
+          --model-dir models/embeddings/seq_stage1/a50 --stats-version i7 --fixture-dir
+          models/embeddings/seq_stage1/full/shards/2/fixtures --context-dir data/t20s_json
+          --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+          --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+          --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+          models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+          1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/A50/shard2
+      - index: 3
+        fixture_dir: models/embeddings/seq_stage1/full/shards/3/fixtures
+        fixture_dir_md5: 8040bcd62202618b1488d14f292e0b9e
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 26
+        fixture_ids:
+        - '1496925'
+        - '1505125'
+        - '1491724'
+        - '1501323'
+        - '1479578'
+        - '1493242'
+        - '1501341'
+        - '1493250'
+        - '1493254'
+        - '1493260'
+        - '1493265'
+        - '1493271'
+        - '1494279'
+        - '1490235'
+        - '1519637'
+        - '1512726'
+        - '1512737'
+        - '1512748'
+        - '1512761'
+        - '1523001'
+        - '1491735'
+        - '1527679'
+        - '1529381'
+        - '1528306'
+        - '1527691'
+        - '1527576'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/A50/shard3
+        command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+          VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python
+          scripts/sequence_track/run_arm.py --arm A50 --config experiments/configs/seq_stage1_sim_v1.yaml
+          --model-dir models/embeddings/seq_stage1/a50 --stats-version i7 --fixture-dir
+          models/embeddings/seq_stage1/full/shards/3/fixtures --context-dir data/t20s_json
+          --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+          --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+          --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+          models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+          1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/A50/shard3
+      - index: 4
+        fixture_dir: models/embeddings/seq_stage1/full/shards/4/fixtures
+        fixture_dir_md5: 2ac21d139ea2553ba18bff41c2c87d65
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 26
+        fixture_ids:
+        - '1496926'
+        - '1501895'
+        - '1491725'
+        - '1501324'
+        - '1493238'
+        - '1501336'
+        - '1493246'
+        - '1494254'
+        - '1494259'
+        - '1494265'
+        - '1493266'
+        - '1494275'
+        - '1494280'
+        - '1493280'
+        - '1507720'
+        - '1512727'
+        - '1512738'
+        - '1512749'
+        - '1512762'
+        - '1525160'
+        - '1527556'
+        - '1529377'
+        - '1527564'
+        - '1527567'
+        - '1527572'
+        - '1529267'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/A50/shard4
+        command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+          VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python
+          scripts/sequence_track/run_arm.py --arm A50 --config experiments/configs/seq_stage1_sim_v1.yaml
+          --model-dir models/embeddings/seq_stage1/a50 --stats-version i7 --fixture-dir
+          models/embeddings/seq_stage1/full/shards/4/fixtures --context-dir data/t20s_json
+          --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+          --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+          --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+          models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+          1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/A50/shard4
+      - index: 5
+        fixture_dir: models/embeddings/seq_stage1/full/shards/5/fixtures
+        fixture_dir_md5: e85d917e514d3515d6303ed85af8cd76
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 25
+        fixture_ids:
+        - '1496929'
+        - '1505126'
+        - '1491727'
+        - '1501325'
+        - '1501331'
+        - '1479580'
+        - '1501342'
+        - '1494255'
+        - '1494260'
+        - '1493261'
+        - '1493267'
+        - '1493272'
+        - '1493277'
+        - '1490236'
+        - '1519638'
+        - '1512728'
+        - '1512739'
+        - '1512751'
+        - '1512763'
+        - '1512767'
+        - '1527557'
+        - '1527562'
+        - '1527683'
+        - '1527568'
+        - '1527692'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/A50/shard5
+        command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+          VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python
+          scripts/sequence_track/run_arm.py --arm A50 --config experiments/configs/seq_stage1_sim_v1.yaml
+          --model-dir models/embeddings/seq_stage1/a50 --stats-version i7 --fixture-dir
+          models/embeddings/seq_stage1/full/shards/5/fixtures --context-dir data/t20s_json
+          --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+          --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+          --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+          models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+          1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/A50/shard5
+      - index: 6
+        fixture_dir: models/embeddings/seq_stage1/full/shards/6/fixtures
+        fixture_dir_md5: 5b01fba2446a6a092edae7af9b6b2b9e
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 25
+        fixture_ids:
+        - '1496931'
+        - '1478908'
+        - '1502050'
+        - '1479576'
+        - '1501332'
+        - '1493243'
+        - '1493247'
+        - '1501346'
+        - '1493255'
+        - '1494266'
+        - '1494271'
+        - '1494276'
+        - '1494281'
+        - '1493281'
+        - '1507721'
+        - '1512729'
+        - '1512740'
+        - '1512752'
+        - '1512764'
+        - '1523002'
+        - '1527675'
+        - '1527680'
+        - '1527684'
+        - '1527688'
+        - '1527693'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/A50/shard6
+        command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+          VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python
+          scripts/sequence_track/run_arm.py --arm A50 --config experiments/configs/seq_stage1_sim_v1.yaml
+          --model-dir models/embeddings/seq_stage1/a50 --stats-version i7 --fixture-dir
+          models/embeddings/seq_stage1/full/shards/6/fixtures --context-dir data/t20s_json
+          --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+          --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+          --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+          models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+          1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/A50/shard6
+      - index: 7
+        fixture_dir: models/embeddings/seq_stage1/full/shards/7/fixtures
+        fixture_dir_md5: 38f4cca66cf431f11131f254c615860b
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 25
+        fixture_ids:
+        - '1496933'
+        - '1501896'
+        - '1502051'
+        - '1501326'
+        - '1493239'
+        - '1501337'
+        - '1501343'
+        - '1493251'
+        - '1493256'
+        - '1493262'
+        - '1494272'
+        - '1493273'
+        - '1494282'
+        - '1494286'
+        - '1512719'
+        - '1512730'
+        - '1512741'
+        - '1512753'
+        - '1522998'
+        - '1523003'
+        - '1527676'
+        - '1529378'
+        - '1528299'
+        - '1528307'
+        - '1527573'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/A50/shard7
+        command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+          VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python
+          scripts/sequence_track/run_arm.py --arm A50 --config experiments/configs/seq_stage1_sim_v1.yaml
+          --model-dir models/embeddings/seq_stage1/a50 --stats-version i7 --fixture-dir
+          models/embeddings/seq_stage1/full/shards/7/fixtures --context-dir data/t20s_json
+          --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+          --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+          --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+          models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+          1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/A50/shard7
+      - index: 8
+        fixture_dir: models/embeddings/seq_stage1/full/shards/8/fixtures
+        fixture_dir_md5: e9ae15b33b33adf2f3b2b2c8e1a44a4c
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 25
+        fixture_ids:
+        - '1496934'
+        - '1505127'
+        - '1502052'
+        - '1501327'
+        - '1501333'
+        - '1493244'
+        - '1501344'
+        - '1501347'
+        - '1494261'
+        - '1494267'
+        - '1493269'
+        - '1494277'
+        - '1493278'
+        - '1477609'
+        - '1512720'
+        - '1512732'
+        - '1512742'
+        - '1512754'
+        - '1522999'
+        - '1512768'
+        - '1527677'
+        - '1529379'
+        - '1528300'
+        - '1527569'
+        - '1529264'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/A50/shard8
+        command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+          VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python
+          scripts/sequence_track/run_arm.py --arm A50 --config experiments/configs/seq_stage1_sim_v1.yaml
+          --model-dir models/embeddings/seq_stage1/a50 --stats-version i7 --fixture-dir
+          models/embeddings/seq_stage1/full/shards/8/fixtures --context-dir data/t20s_json
+          --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+          --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+          --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+          models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+          1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/A50/shard8
+      - index: 9
+        fixture_dir: models/embeddings/seq_stage1/full/shards/9/fixtures
+        fixture_dir_md5: 01d497ef5592766db5061b1d97e76925
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 25
+        fixture_ids:
+        - '1496935'
+        - '1501897'
+        - '1502053'
+        - '1479577'
+        - '1493240'
+        - '1501338'
+        - '1493248'
+        - '1493252'
+        - '1493257'
+        - '1493263'
+        - '1494273'
+        - '1493274'
+        - '1490234'
+        - '1490237'
+        - '1512721'
+        - '1512733'
+        - '1512743'
+        - '1512755'
+        - '1525159'
+        - '1512769'
+        - '1527559'
+        - '1527563'
+        - '1527565'
+        - '1527689'
+        - '1529265'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/A50/shard9
+        command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+          VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python
+          scripts/sequence_track/run_arm.py --arm A50 --config experiments/configs/seq_stage1_sim_v1.yaml
+          --model-dir models/embeddings/seq_stage1/a50 --stats-version i7 --fixture-dir
+          models/embeddings/seq_stage1/full/shards/9/fixtures --context-dir data/t20s_json
+          --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+          --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+          --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+          models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+          1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/A50/shard9
     smoke_1a:
       fixture_dir: models/embeddings/seq_stage1/smoke/fixtures
       fixture_dir_md5: 703f522de0f0384f42a250247b9a653d
       fixture_count: 4
+      cluster_source_dir: data/polymarket_test_v2
+      cluster_source_dir_role: iteration_set_v2
+      cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
       n_sims: 10
       base_seeds:
       - 20260910
@@ -337,30 +1318,35 @@ arms:
       - --fixture-dir
       - --n-sims
       - --output-dir
-      command: env OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 VECLIB_MAXIMUM_THREADS=4
-        NUMEXPR_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/run_arm.py
+      command: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
+        NUMEXPR_NUM_THREADS=1 uv run --no-sync python scripts/sequence_track/run_arm.py
         --arm A50 --config experiments/configs/seq_stage1_sim_v1.yaml --model-dir
         models/embeddings/seq_stage1/a50 --stats-version i7 --fixture-dir models/embeddings/seq_stage1/smoke/fixtures
-        --context-dir data/t20s_json --odds betting_odds_polymarket_v2.json --player-metadata
-        data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
-        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
-        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
-        10 --base-seed 20260910 --threads 4 --output-dir models/embeddings/seq_stage1/smoke/A50
+        --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+        --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+        --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+        models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+        --clip-low 0.01 --clip-high 0.99 --n-sims 10 --base-seed 20260910 --threads
+        1 --output-dir models/embeddings/seq_stage1/smoke/A50
     timing_1b:
       purpose: 'the 1b convergence protocol and the variability rerun: the same
         timing shard simulated under each registered batch base seed at each candidate
         n_sims'
       fixture_dir: models/embeddings/seq_stage1/timing/fixtures
-      fixture_dir_status: 'absent: populated at 1b, re-pin after it is built'
-      fixture_dir_md5: null
-      fixture_count: null
+      fixture_dir_status: present
+      fixture_dir_md5: 857d03aa63c3f0114d8983a1e6f5a35e
+      fixture_count: 10
       fixture_count_expected: 10
+      cluster_source_dir: data/polymarket_test_v2
+      cluster_source_dir_role: iteration_set_v2
+      cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
       base_seeds:
       - 20260910
       - 20260911
       - 20260912
       n_sims: *id001
       candidates_screened:
+      - 50
       - 100
       - 200
       - 400
@@ -375,15 +1361,16 @@ arms:
       seed_cohort: the three batch base seeds share one seed line, so run_arm screens
         their JOINT intervals for any launch on this block and refuses a candidate
         above 3290
-      command_template: env OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4
-        VECLIB_MAXIMUM_THREADS=4 NUMEXPR_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/run_arm.py
+      command_template: env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+        VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 uv run --no-sync python scripts/sequence_track/run_arm.py
         --arm A50 --config experiments/configs/seq_stage1_sim_v1.yaml --model-dir
         models/embeddings/seq_stage1/a50 --stats-version i7 --fixture-dir models/embeddings/seq_stage1/timing/fixtures
-        --context-dir data/t20s_json --odds betting_odds_polymarket_v2.json --player-metadata
-        data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
-        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
-        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
-        <candidate> --base-seed <batch_base_seed> --threads 4 --output-dir models/embeddings/seq_stage1/timing/A50/seed<base_seed>_n<n_sims>
+        --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+        --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+        --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+        models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+        --clip-low 0.01 --clip-high 0.99 --n-sims <candidate> --base-seed <batch_base_seed>
+        --threads 1 --output-dir models/embeddings/seq_stage1/timing/A50/seed<base_seed>_n<n_sims>
     variability_rerun:
       what: 'the 1b Monte Carlo variability rerun: the timing shard at the chosen
         n_sims, re-run under the second registered base seed 20260911 (and the third,
@@ -469,6 +1456,10 @@ arms:
     context_dir_md5: 6da2f2d7880d5e8ab0fe95c37574ee14
     context_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
     context_dir_json_count: 11264
+    cluster_source_dir: data/polymarket_test_v2
+    cluster_source_dir_role: iteration_set_v2
+    cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+    cluster_source_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
     player_metadata: data/all_players_enriched.csv
     player_metadata_sha256: e5a657b7b714b8a13b7e66d82c6e88a3bfd02d8952dc793c8b398d533208db21
     bowler_selector: RosterEmpiricalBowlerSelector
@@ -521,17 +1512,17 @@ arms:
       count: 255
     prefix_cache: 'off'
     device: cpu
-    threads: 4
+    threads: 1
     clip:
     - 0.01
     - 0.99
     base_seed: 20260910
     env:
-      OMP_NUM_THREADS: '4'
-      MKL_NUM_THREADS: '4'
-      OPENBLAS_NUM_THREADS: '4'
-      VECLIB_MAXIMUM_THREADS: '4'
-      NUMEXPR_NUM_THREADS: '4'
+      OMP_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      VECLIB_MAXIMUM_THREADS: '1'
+      NUMEXPR_NUM_THREADS: '1'
       T1_SIM_MODEL_DIR: models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
       T1_SIM_DEVICE: cpu
       T1_EXTRAS_GRAFT_PATH: models/auto/b18/extras_graft_v1.json
@@ -541,32 +1532,544 @@ arms:
       fixture_dir_role: iteration_set_v2
       fixture_dir_md5: 8005cad729458d0234265a9b983a6819
       fixture_count: 255
-      n_sims: to_be_filled_before_1d
+      cluster_source_dir: data/polymarket_test_v2
+      cluster_source_dir_role: iteration_set_v2
+      cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+      n_sims: 1600
       base_seeds:
       - 20260910
       n_sims_source: convergence_protocol.chosen_n_sims, set from the 1b replicated
         convergence check; pin_stage1.py renders --n-sims from the same constant,
         so the command and the protocol cannot disagree
       output_dir: models/embeddings/seq_stage1/full/B
-      command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4
-        VECLIB_MAXIMUM_THREADS=4 NUMEXPR_NUM_THREADS=4 T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+      command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+        VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
         T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
         uv run --no-sync python scripts/sequence_track/run_arm.py --arm B --config
         experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
         --stats-version i7 --fixture-dir data/polymarket_test_v2 --context-dir data/t20s_json
-        --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
-        --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
-        models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
-        --clip-low 0.01 --clip-high 0.99 --n-sims <chosen_n_sims> --base-seed 20260910
-        --threads 4 --output-dir models/embeddings/seq_stage1/full/B
-      command_completeness: every flag and env var is final except the single token
-        '<chosen_n_sims>', which is unresolved until 1d by design (check 5.6 forbids
-        choosing n_sims before the convergence check). Set CHOSEN_N_SIMS in pin_stage1.py
-        and re-run --write to render a runnable command.
+        --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+        --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+        1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/B
+      command_completeness: complete and runnable from the repo root as written
+      shard_rule: 'round-robin over the registered fixture set in the repo''s own
+        (match_date, cricsheet id) chronology (loaders_common.iter_matches_chronological,
+        the ordering contract every tracker walk uses): the i-th fixture of that
+        order goes to shard i mod 10. Round-robin rather than contiguous blocks,
+        so long and short innings spread evenly and every shard spans the whole
+        iteration window instead of being one tournament; that keeps the per-shard
+        wall clocks comparable and keeps any single shard from being a slice with
+        its own venue or era. The partition is a function of the fixture set alone,
+        so --verify recomputes it and re-reads the ten directories: each shard''s
+        inventory must be exactly its share of the order, the union of the ten must
+        be the registered fixture set, and no fixture may appear in two shards.
+        Every shard still runs with the FULL same-day replay context (--context-dir
+        data/t20s_json), so a sharded run sees the same chronology a serial one
+        does — which is what 1c checks'
+      shard_count: 10
+      shard_order_version: date_then_match_id_lexicographic_v1
+      shard_command_differs_only_in:
+      - --fixture-dir
+      - --output-dir
+      shards_source: 'pin_stage1.full_run_shard_facts: the partition is recomputed
+        from the registered fixture set and every shard directory is re-read and
+        re-hashed on both --write and --verify; --write additionally materialises
+        the directories by copying the fixture JSONs'
+      shards:
+      - index: 0
+        fixture_dir: models/embeddings/seq_stage1/full/shards/0/fixtures
+        fixture_dir_md5: 63d8b5cdec54fe92dafe4e2fdf58dc89
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 26
+        fixture_ids:
+        - '1496921'
+        - '1496936'
+        - '1478909'
+        - '1506014'
+        - '1501328'
+        - '1501334'
+        - '1501339'
+        - '1493249'
+        - '1494257'
+        - '1494262'
+        - '1494268'
+        - '1514482'
+        - '1494278'
+        - '1493279'
+        - '1477610'
+        - '1512723'
+        - '1512734'
+        - '1512744'
+        - '1512756'
+        - '1512765'
+        - '1512770'
+        - '1527678'
+        - '1527681'
+        - '1527686'
+        - '1527570'
+        - '1527574'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/B/shard0
+        command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+          OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+          T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+          T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+          uv run --no-sync python scripts/sequence_track/run_arm.py --arm B --config
+          experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+          --stats-version i7 --fixture-dir models/embeddings/seq_stage1/full/shards/0/fixtures
+          --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+          --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+          --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+          models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+          --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+          1 --output-dir models/embeddings/seq_stage1/full/B/shard0
+      - index: 1
+        fixture_dir: models/embeddings/seq_stage1/full/shards/1/fixtures
+        fixture_dir_md5: 18a5275257b923aeec8fd2907c5e5303
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 26
+        fixture_ids:
+        - '1496922'
+        - '1496937'
+        - '1491723'
+        - '1506015'
+        - '1501329'
+        - '1493241'
+        - '1493245'
+        - '1494253'
+        - '1493253'
+        - '1493258'
+        - '1514480'
+        - '1493270'
+        - '1493275'
+        - '1494283'
+        - '1507719'
+        - '1512724'
+        - '1512735'
+        - '1512745'
+        - '1512758'
+        - '1512766'
+        - '1525162'
+        - '1527560'
+        - '1527682'
+        - '1527566'
+        - '1527571'
+        - '1529266'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/B/shard1
+        command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+          OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+          T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+          T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+          uv run --no-sync python scripts/sequence_track/run_arm.py --arm B --config
+          experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+          --stats-version i7 --fixture-dir models/embeddings/seq_stage1/full/shards/1/fixtures
+          --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+          --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+          --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+          models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+          --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+          1 --output-dir models/embeddings/seq_stage1/full/B/shard1
+      - index: 2
+        fixture_dir: models/embeddings/seq_stage1/full/shards/2/fixtures
+        fixture_dir_md5: 3e0e1d2606ec6e607cd84948d6d6596c
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 26
+        fixture_ids:
+        - '1496924'
+        - '1491714'
+        - '1478910'
+        - '1506016'
+        - '1501330'
+        - '1501335'
+        - '1501340'
+        - '1501345'
+        - '1494258'
+        - '1493259'
+        - '1493264'
+        - '1494274'
+        - '1493276'
+        - '1494284'
+        - '1490238'
+        - '1512725'
+        - '1512736'
+        - '1512747'
+        - '1512760'
+        - '1523000'
+        - '1512771'
+        - '1527561'
+        - '1529380'
+        - '1527687'
+        - '1527690'
+        - '1527575'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/B/shard2
+        command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+          OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+          T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+          T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+          uv run --no-sync python scripts/sequence_track/run_arm.py --arm B --config
+          experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+          --stats-version i7 --fixture-dir models/embeddings/seq_stage1/full/shards/2/fixtures
+          --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+          --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+          --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+          models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+          --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+          1 --output-dir models/embeddings/seq_stage1/full/B/shard2
+      - index: 3
+        fixture_dir: models/embeddings/seq_stage1/full/shards/3/fixtures
+        fixture_dir_md5: 8040bcd62202618b1488d14f292e0b9e
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 26
+        fixture_ids:
+        - '1496925'
+        - '1505125'
+        - '1491724'
+        - '1501323'
+        - '1479578'
+        - '1493242'
+        - '1501341'
+        - '1493250'
+        - '1493254'
+        - '1493260'
+        - '1493265'
+        - '1493271'
+        - '1494279'
+        - '1490235'
+        - '1519637'
+        - '1512726'
+        - '1512737'
+        - '1512748'
+        - '1512761'
+        - '1523001'
+        - '1491735'
+        - '1527679'
+        - '1529381'
+        - '1528306'
+        - '1527691'
+        - '1527576'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/B/shard3
+        command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+          OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+          T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+          T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+          uv run --no-sync python scripts/sequence_track/run_arm.py --arm B --config
+          experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+          --stats-version i7 --fixture-dir models/embeddings/seq_stage1/full/shards/3/fixtures
+          --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+          --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+          --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+          models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+          --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+          1 --output-dir models/embeddings/seq_stage1/full/B/shard3
+      - index: 4
+        fixture_dir: models/embeddings/seq_stage1/full/shards/4/fixtures
+        fixture_dir_md5: 2ac21d139ea2553ba18bff41c2c87d65
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 26
+        fixture_ids:
+        - '1496926'
+        - '1501895'
+        - '1491725'
+        - '1501324'
+        - '1493238'
+        - '1501336'
+        - '1493246'
+        - '1494254'
+        - '1494259'
+        - '1494265'
+        - '1493266'
+        - '1494275'
+        - '1494280'
+        - '1493280'
+        - '1507720'
+        - '1512727'
+        - '1512738'
+        - '1512749'
+        - '1512762'
+        - '1525160'
+        - '1527556'
+        - '1529377'
+        - '1527564'
+        - '1527567'
+        - '1527572'
+        - '1529267'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/B/shard4
+        command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+          OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+          T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+          T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+          uv run --no-sync python scripts/sequence_track/run_arm.py --arm B --config
+          experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+          --stats-version i7 --fixture-dir models/embeddings/seq_stage1/full/shards/4/fixtures
+          --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+          --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+          --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+          models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+          --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+          1 --output-dir models/embeddings/seq_stage1/full/B/shard4
+      - index: 5
+        fixture_dir: models/embeddings/seq_stage1/full/shards/5/fixtures
+        fixture_dir_md5: e85d917e514d3515d6303ed85af8cd76
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 25
+        fixture_ids:
+        - '1496929'
+        - '1505126'
+        - '1491727'
+        - '1501325'
+        - '1501331'
+        - '1479580'
+        - '1501342'
+        - '1494255'
+        - '1494260'
+        - '1493261'
+        - '1493267'
+        - '1493272'
+        - '1493277'
+        - '1490236'
+        - '1519638'
+        - '1512728'
+        - '1512739'
+        - '1512751'
+        - '1512763'
+        - '1512767'
+        - '1527557'
+        - '1527562'
+        - '1527683'
+        - '1527568'
+        - '1527692'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/B/shard5
+        command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+          OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+          T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+          T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+          uv run --no-sync python scripts/sequence_track/run_arm.py --arm B --config
+          experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+          --stats-version i7 --fixture-dir models/embeddings/seq_stage1/full/shards/5/fixtures
+          --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+          --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+          --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+          models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+          --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+          1 --output-dir models/embeddings/seq_stage1/full/B/shard5
+      - index: 6
+        fixture_dir: models/embeddings/seq_stage1/full/shards/6/fixtures
+        fixture_dir_md5: 5b01fba2446a6a092edae7af9b6b2b9e
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 25
+        fixture_ids:
+        - '1496931'
+        - '1478908'
+        - '1502050'
+        - '1479576'
+        - '1501332'
+        - '1493243'
+        - '1493247'
+        - '1501346'
+        - '1493255'
+        - '1494266'
+        - '1494271'
+        - '1494276'
+        - '1494281'
+        - '1493281'
+        - '1507721'
+        - '1512729'
+        - '1512740'
+        - '1512752'
+        - '1512764'
+        - '1523002'
+        - '1527675'
+        - '1527680'
+        - '1527684'
+        - '1527688'
+        - '1527693'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/B/shard6
+        command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+          OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+          T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+          T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+          uv run --no-sync python scripts/sequence_track/run_arm.py --arm B --config
+          experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+          --stats-version i7 --fixture-dir models/embeddings/seq_stage1/full/shards/6/fixtures
+          --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+          --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+          --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+          models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+          --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+          1 --output-dir models/embeddings/seq_stage1/full/B/shard6
+      - index: 7
+        fixture_dir: models/embeddings/seq_stage1/full/shards/7/fixtures
+        fixture_dir_md5: 38f4cca66cf431f11131f254c615860b
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 25
+        fixture_ids:
+        - '1496933'
+        - '1501896'
+        - '1502051'
+        - '1501326'
+        - '1493239'
+        - '1501337'
+        - '1501343'
+        - '1493251'
+        - '1493256'
+        - '1493262'
+        - '1494272'
+        - '1493273'
+        - '1494282'
+        - '1494286'
+        - '1512719'
+        - '1512730'
+        - '1512741'
+        - '1512753'
+        - '1522998'
+        - '1523003'
+        - '1527676'
+        - '1529378'
+        - '1528299'
+        - '1528307'
+        - '1527573'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/B/shard7
+        command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+          OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+          T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+          T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+          uv run --no-sync python scripts/sequence_track/run_arm.py --arm B --config
+          experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+          --stats-version i7 --fixture-dir models/embeddings/seq_stage1/full/shards/7/fixtures
+          --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+          --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+          --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+          models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+          --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+          1 --output-dir models/embeddings/seq_stage1/full/B/shard7
+      - index: 8
+        fixture_dir: models/embeddings/seq_stage1/full/shards/8/fixtures
+        fixture_dir_md5: e9ae15b33b33adf2f3b2b2c8e1a44a4c
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 25
+        fixture_ids:
+        - '1496934'
+        - '1505127'
+        - '1502052'
+        - '1501327'
+        - '1501333'
+        - '1493244'
+        - '1501344'
+        - '1501347'
+        - '1494261'
+        - '1494267'
+        - '1493269'
+        - '1494277'
+        - '1493278'
+        - '1477609'
+        - '1512720'
+        - '1512732'
+        - '1512742'
+        - '1512754'
+        - '1522999'
+        - '1512768'
+        - '1527677'
+        - '1529379'
+        - '1528300'
+        - '1527569'
+        - '1529264'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/B/shard8
+        command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+          OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+          T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+          T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+          uv run --no-sync python scripts/sequence_track/run_arm.py --arm B --config
+          experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+          --stats-version i7 --fixture-dir models/embeddings/seq_stage1/full/shards/8/fixtures
+          --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+          --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+          --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+          models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+          --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+          1 --output-dir models/embeddings/seq_stage1/full/B/shard8
+      - index: 9
+        fixture_dir: models/embeddings/seq_stage1/full/shards/9/fixtures
+        fixture_dir_md5: 01d497ef5592766db5061b1d97e76925
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 25
+        fixture_ids:
+        - '1496935'
+        - '1501897'
+        - '1502053'
+        - '1479577'
+        - '1493240'
+        - '1501338'
+        - '1493248'
+        - '1493252'
+        - '1493257'
+        - '1493263'
+        - '1494273'
+        - '1493274'
+        - '1490234'
+        - '1490237'
+        - '1512721'
+        - '1512733'
+        - '1512743'
+        - '1512755'
+        - '1525159'
+        - '1512769'
+        - '1527559'
+        - '1527563'
+        - '1527565'
+        - '1527689'
+        - '1529265'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/B/shard9
+        command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+          OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+          T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+          T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+          uv run --no-sync python scripts/sequence_track/run_arm.py --arm B --config
+          experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+          --stats-version i7 --fixture-dir models/embeddings/seq_stage1/full/shards/9/fixtures
+          --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+          --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+          --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+          models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+          --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+          1 --output-dir models/embeddings/seq_stage1/full/B/shard9
     smoke_1a:
       fixture_dir: models/embeddings/seq_stage1/smoke/fixtures
       fixture_dir_md5: 703f522de0f0384f42a250247b9a653d
       fixture_count: 4
+      cluster_source_dir: data/polymarket_test_v2
+      cluster_source_dir_role: iteration_set_v2
+      cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
       n_sims: 10
       base_seeds:
       - 20260910
@@ -575,32 +2078,37 @@ arms:
       - --fixture-dir
       - --n-sims
       - --output-dir
-      command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4
-        VECLIB_MAXIMUM_THREADS=4 NUMEXPR_NUM_THREADS=4 T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+      command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+        VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
         T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
         uv run --no-sync python scripts/sequence_track/run_arm.py --arm B --config
         experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
         --stats-version i7 --fixture-dir models/embeddings/seq_stage1/smoke/fixtures
-        --context-dir data/t20s_json --odds betting_odds_polymarket_v2.json --player-metadata
-        data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
-        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
-        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
-        10 --base-seed 20260910 --threads 4 --output-dir models/embeddings/seq_stage1/smoke/B
+        --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+        --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+        --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+        models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+        --clip-low 0.01 --clip-high 0.99 --n-sims 10 --base-seed 20260910 --threads
+        1 --output-dir models/embeddings/seq_stage1/smoke/B
     timing_1b:
       purpose: 'the 1b convergence protocol and the variability rerun: the same
         timing shard simulated under each registered batch base seed at each candidate
         n_sims'
       fixture_dir: models/embeddings/seq_stage1/timing/fixtures
-      fixture_dir_status: 'absent: populated at 1b, re-pin after it is built'
-      fixture_dir_md5: null
-      fixture_count: null
+      fixture_dir_status: present
+      fixture_dir_md5: 857d03aa63c3f0114d8983a1e6f5a35e
+      fixture_count: 10
       fixture_count_expected: 10
+      cluster_source_dir: data/polymarket_test_v2
+      cluster_source_dir_role: iteration_set_v2
+      cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
       base_seeds:
       - 20260910
       - 20260911
       - 20260912
       n_sims: *id001
       candidates_screened:
+      - 50
       - 100
       - 200
       - 400
@@ -615,17 +2123,18 @@ arms:
       seed_cohort: the three batch base seeds share one seed line, so run_arm screens
         their JOINT intervals for any launch on this block and refuses a candidate
         above 3290
-      command_template: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=4 MKL_NUM_THREADS=4
-        OPENBLAS_NUM_THREADS=4 VECLIB_MAXIMUM_THREADS=4 NUMEXPR_NUM_THREADS=4 T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
+      command_template: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+        OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
         T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
         uv run --no-sync python scripts/sequence_track/run_arm.py --arm B --config
         experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/mlp/seed_101
         --stats-version i7 --fixture-dir models/embeddings/seq_stage1/timing/fixtures
-        --context-dir data/t20s_json --odds betting_odds_polymarket_v2.json --player-metadata
-        data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
-        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
-        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
-        <candidate> --base-seed <batch_base_seed> --threads 4 --output-dir models/embeddings/seq_stage1/timing/B/seed<base_seed>_n<n_sims>
+        --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+        --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+        --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+        models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+        --clip-low 0.01 --clip-high 0.99 --n-sims <candidate> --base-seed <batch_base_seed>
+        --threads 1 --output-dir models/embeddings/seq_stage1/timing/B/seed<base_seed>_n<n_sims>
     variability_rerun:
       what: 'the 1b Monte Carlo variability rerun: the timing shard at the chosen
         n_sims, re-run under the second registered base seed 20260911 (and the third,
@@ -711,6 +2220,10 @@ arms:
     context_dir_md5: 6da2f2d7880d5e8ab0fe95c37574ee14
     context_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
     context_dir_json_count: 11264
+    cluster_source_dir: data/polymarket_test_v2
+    cluster_source_dir_role: iteration_set_v2
+    cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+    cluster_source_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
     player_metadata: data/all_players_enriched.csv
     player_metadata_sha256: e5a657b7b714b8a13b7e66d82c6e88a3bfd02d8952dc793c8b398d533208db21
     bowler_selector: RosterEmpiricalBowlerSelector
@@ -763,17 +2276,17 @@ arms:
       count: 255
     prefix_cache: 'off'
     device: cpu
-    threads: 4
+    threads: 1
     clip:
     - 0.01
     - 0.99
     base_seed: 20260910
     env:
-      OMP_NUM_THREADS: '4'
-      MKL_NUM_THREADS: '4'
-      OPENBLAS_NUM_THREADS: '4'
-      VECLIB_MAXIMUM_THREADS: '4'
-      NUMEXPR_NUM_THREADS: '4'
+      OMP_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      VECLIB_MAXIMUM_THREADS: '1'
+      NUMEXPR_NUM_THREADS: '1'
       T1_SIM_MODEL_DIR: models/embeddings/seq_stage1/retrain_i7/full/seed_101
       T1_SIM_DEVICE: cpu
       T1_EXTRAS_GRAFT_PATH: models/auto/b18/extras_graft_v1.json
@@ -783,32 +2296,544 @@ arms:
       fixture_dir_role: iteration_set_v2
       fixture_dir_md5: 8005cad729458d0234265a9b983a6819
       fixture_count: 255
-      n_sims: to_be_filled_before_1d
+      cluster_source_dir: data/polymarket_test_v2
+      cluster_source_dir_role: iteration_set_v2
+      cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+      n_sims: 1600
       base_seeds:
       - 20260910
       n_sims_source: convergence_protocol.chosen_n_sims, set from the 1b replicated
         convergence check; pin_stage1.py renders --n-sims from the same constant,
         so the command and the protocol cannot disagree
       output_dir: models/embeddings/seq_stage1/full/C
-      command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4
-        VECLIB_MAXIMUM_THREADS=4 NUMEXPR_NUM_THREADS=4 T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/full/seed_101
+      command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+        VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/full/seed_101
         T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
         uv run --no-sync python scripts/sequence_track/run_arm.py --arm C --config
         experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/full/seed_101
         --stats-version i7 --fixture-dir data/polymarket_test_v2 --context-dir data/t20s_json
-        --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
-        --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
-        models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
-        --clip-low 0.01 --clip-high 0.99 --n-sims <chosen_n_sims> --base-seed 20260910
-        --threads 4 --output-dir models/embeddings/seq_stage1/full/C
-      command_completeness: every flag and env var is final except the single token
-        '<chosen_n_sims>', which is unresolved until 1d by design (check 5.6 forbids
-        choosing n_sims before the convergence check). Set CHOSEN_N_SIMS in pin_stage1.py
-        and re-run --write to render a runnable command.
+        --cluster-source-dir data/polymarket_test_v2 --odds betting_odds_polymarket_v2.json
+        --player-metadata data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
+        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
+        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
+        1600 --base-seed 20260910 --threads 1 --output-dir models/embeddings/seq_stage1/full/C
+      command_completeness: complete and runnable from the repo root as written
+      shard_rule: 'round-robin over the registered fixture set in the repo''s own
+        (match_date, cricsheet id) chronology (loaders_common.iter_matches_chronological,
+        the ordering contract every tracker walk uses): the i-th fixture of that
+        order goes to shard i mod 10. Round-robin rather than contiguous blocks,
+        so long and short innings spread evenly and every shard spans the whole
+        iteration window instead of being one tournament; that keeps the per-shard
+        wall clocks comparable and keeps any single shard from being a slice with
+        its own venue or era. The partition is a function of the fixture set alone,
+        so --verify recomputes it and re-reads the ten directories: each shard''s
+        inventory must be exactly its share of the order, the union of the ten must
+        be the registered fixture set, and no fixture may appear in two shards.
+        Every shard still runs with the FULL same-day replay context (--context-dir
+        data/t20s_json), so a sharded run sees the same chronology a serial one
+        does — which is what 1c checks'
+      shard_count: 10
+      shard_order_version: date_then_match_id_lexicographic_v1
+      shard_command_differs_only_in:
+      - --fixture-dir
+      - --output-dir
+      shards_source: 'pin_stage1.full_run_shard_facts: the partition is recomputed
+        from the registered fixture set and every shard directory is re-read and
+        re-hashed on both --write and --verify; --write additionally materialises
+        the directories by copying the fixture JSONs'
+      shards:
+      - index: 0
+        fixture_dir: models/embeddings/seq_stage1/full/shards/0/fixtures
+        fixture_dir_md5: 63d8b5cdec54fe92dafe4e2fdf58dc89
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 26
+        fixture_ids:
+        - '1496921'
+        - '1496936'
+        - '1478909'
+        - '1506014'
+        - '1501328'
+        - '1501334'
+        - '1501339'
+        - '1493249'
+        - '1494257'
+        - '1494262'
+        - '1494268'
+        - '1514482'
+        - '1494278'
+        - '1493279'
+        - '1477610'
+        - '1512723'
+        - '1512734'
+        - '1512744'
+        - '1512756'
+        - '1512765'
+        - '1512770'
+        - '1527678'
+        - '1527681'
+        - '1527686'
+        - '1527570'
+        - '1527574'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/C/shard0
+        command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+          OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+          T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/full/seed_101
+          T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+          uv run --no-sync python scripts/sequence_track/run_arm.py --arm C --config
+          experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/full/seed_101
+          --stats-version i7 --fixture-dir models/embeddings/seq_stage1/full/shards/0/fixtures
+          --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+          --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+          --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+          models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+          --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+          1 --output-dir models/embeddings/seq_stage1/full/C/shard0
+      - index: 1
+        fixture_dir: models/embeddings/seq_stage1/full/shards/1/fixtures
+        fixture_dir_md5: 18a5275257b923aeec8fd2907c5e5303
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 26
+        fixture_ids:
+        - '1496922'
+        - '1496937'
+        - '1491723'
+        - '1506015'
+        - '1501329'
+        - '1493241'
+        - '1493245'
+        - '1494253'
+        - '1493253'
+        - '1493258'
+        - '1514480'
+        - '1493270'
+        - '1493275'
+        - '1494283'
+        - '1507719'
+        - '1512724'
+        - '1512735'
+        - '1512745'
+        - '1512758'
+        - '1512766'
+        - '1525162'
+        - '1527560'
+        - '1527682'
+        - '1527566'
+        - '1527571'
+        - '1529266'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/C/shard1
+        command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+          OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+          T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/full/seed_101
+          T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+          uv run --no-sync python scripts/sequence_track/run_arm.py --arm C --config
+          experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/full/seed_101
+          --stats-version i7 --fixture-dir models/embeddings/seq_stage1/full/shards/1/fixtures
+          --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+          --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+          --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+          models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+          --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+          1 --output-dir models/embeddings/seq_stage1/full/C/shard1
+      - index: 2
+        fixture_dir: models/embeddings/seq_stage1/full/shards/2/fixtures
+        fixture_dir_md5: 3e0e1d2606ec6e607cd84948d6d6596c
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 26
+        fixture_ids:
+        - '1496924'
+        - '1491714'
+        - '1478910'
+        - '1506016'
+        - '1501330'
+        - '1501335'
+        - '1501340'
+        - '1501345'
+        - '1494258'
+        - '1493259'
+        - '1493264'
+        - '1494274'
+        - '1493276'
+        - '1494284'
+        - '1490238'
+        - '1512725'
+        - '1512736'
+        - '1512747'
+        - '1512760'
+        - '1523000'
+        - '1512771'
+        - '1527561'
+        - '1529380'
+        - '1527687'
+        - '1527690'
+        - '1527575'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/C/shard2
+        command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+          OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+          T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/full/seed_101
+          T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+          uv run --no-sync python scripts/sequence_track/run_arm.py --arm C --config
+          experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/full/seed_101
+          --stats-version i7 --fixture-dir models/embeddings/seq_stage1/full/shards/2/fixtures
+          --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+          --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+          --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+          models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+          --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+          1 --output-dir models/embeddings/seq_stage1/full/C/shard2
+      - index: 3
+        fixture_dir: models/embeddings/seq_stage1/full/shards/3/fixtures
+        fixture_dir_md5: 8040bcd62202618b1488d14f292e0b9e
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 26
+        fixture_ids:
+        - '1496925'
+        - '1505125'
+        - '1491724'
+        - '1501323'
+        - '1479578'
+        - '1493242'
+        - '1501341'
+        - '1493250'
+        - '1493254'
+        - '1493260'
+        - '1493265'
+        - '1493271'
+        - '1494279'
+        - '1490235'
+        - '1519637'
+        - '1512726'
+        - '1512737'
+        - '1512748'
+        - '1512761'
+        - '1523001'
+        - '1491735'
+        - '1527679'
+        - '1529381'
+        - '1528306'
+        - '1527691'
+        - '1527576'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/C/shard3
+        command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+          OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+          T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/full/seed_101
+          T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+          uv run --no-sync python scripts/sequence_track/run_arm.py --arm C --config
+          experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/full/seed_101
+          --stats-version i7 --fixture-dir models/embeddings/seq_stage1/full/shards/3/fixtures
+          --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+          --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+          --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+          models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+          --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+          1 --output-dir models/embeddings/seq_stage1/full/C/shard3
+      - index: 4
+        fixture_dir: models/embeddings/seq_stage1/full/shards/4/fixtures
+        fixture_dir_md5: 2ac21d139ea2553ba18bff41c2c87d65
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 26
+        fixture_ids:
+        - '1496926'
+        - '1501895'
+        - '1491725'
+        - '1501324'
+        - '1493238'
+        - '1501336'
+        - '1493246'
+        - '1494254'
+        - '1494259'
+        - '1494265'
+        - '1493266'
+        - '1494275'
+        - '1494280'
+        - '1493280'
+        - '1507720'
+        - '1512727'
+        - '1512738'
+        - '1512749'
+        - '1512762'
+        - '1525160'
+        - '1527556'
+        - '1529377'
+        - '1527564'
+        - '1527567'
+        - '1527572'
+        - '1529267'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/C/shard4
+        command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+          OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+          T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/full/seed_101
+          T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+          uv run --no-sync python scripts/sequence_track/run_arm.py --arm C --config
+          experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/full/seed_101
+          --stats-version i7 --fixture-dir models/embeddings/seq_stage1/full/shards/4/fixtures
+          --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+          --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+          --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+          models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+          --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+          1 --output-dir models/embeddings/seq_stage1/full/C/shard4
+      - index: 5
+        fixture_dir: models/embeddings/seq_stage1/full/shards/5/fixtures
+        fixture_dir_md5: e85d917e514d3515d6303ed85af8cd76
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 25
+        fixture_ids:
+        - '1496929'
+        - '1505126'
+        - '1491727'
+        - '1501325'
+        - '1501331'
+        - '1479580'
+        - '1501342'
+        - '1494255'
+        - '1494260'
+        - '1493261'
+        - '1493267'
+        - '1493272'
+        - '1493277'
+        - '1490236'
+        - '1519638'
+        - '1512728'
+        - '1512739'
+        - '1512751'
+        - '1512763'
+        - '1512767'
+        - '1527557'
+        - '1527562'
+        - '1527683'
+        - '1527568'
+        - '1527692'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/C/shard5
+        command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+          OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+          T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/full/seed_101
+          T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+          uv run --no-sync python scripts/sequence_track/run_arm.py --arm C --config
+          experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/full/seed_101
+          --stats-version i7 --fixture-dir models/embeddings/seq_stage1/full/shards/5/fixtures
+          --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+          --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+          --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+          models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+          --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+          1 --output-dir models/embeddings/seq_stage1/full/C/shard5
+      - index: 6
+        fixture_dir: models/embeddings/seq_stage1/full/shards/6/fixtures
+        fixture_dir_md5: 5b01fba2446a6a092edae7af9b6b2b9e
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 25
+        fixture_ids:
+        - '1496931'
+        - '1478908'
+        - '1502050'
+        - '1479576'
+        - '1501332'
+        - '1493243'
+        - '1493247'
+        - '1501346'
+        - '1493255'
+        - '1494266'
+        - '1494271'
+        - '1494276'
+        - '1494281'
+        - '1493281'
+        - '1507721'
+        - '1512729'
+        - '1512740'
+        - '1512752'
+        - '1512764'
+        - '1523002'
+        - '1527675'
+        - '1527680'
+        - '1527684'
+        - '1527688'
+        - '1527693'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/C/shard6
+        command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+          OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+          T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/full/seed_101
+          T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+          uv run --no-sync python scripts/sequence_track/run_arm.py --arm C --config
+          experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/full/seed_101
+          --stats-version i7 --fixture-dir models/embeddings/seq_stage1/full/shards/6/fixtures
+          --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+          --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+          --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+          models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+          --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+          1 --output-dir models/embeddings/seq_stage1/full/C/shard6
+      - index: 7
+        fixture_dir: models/embeddings/seq_stage1/full/shards/7/fixtures
+        fixture_dir_md5: 38f4cca66cf431f11131f254c615860b
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 25
+        fixture_ids:
+        - '1496933'
+        - '1501896'
+        - '1502051'
+        - '1501326'
+        - '1493239'
+        - '1501337'
+        - '1501343'
+        - '1493251'
+        - '1493256'
+        - '1493262'
+        - '1494272'
+        - '1493273'
+        - '1494282'
+        - '1494286'
+        - '1512719'
+        - '1512730'
+        - '1512741'
+        - '1512753'
+        - '1522998'
+        - '1523003'
+        - '1527676'
+        - '1529378'
+        - '1528299'
+        - '1528307'
+        - '1527573'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/C/shard7
+        command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+          OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+          T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/full/seed_101
+          T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+          uv run --no-sync python scripts/sequence_track/run_arm.py --arm C --config
+          experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/full/seed_101
+          --stats-version i7 --fixture-dir models/embeddings/seq_stage1/full/shards/7/fixtures
+          --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+          --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+          --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+          models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+          --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+          1 --output-dir models/embeddings/seq_stage1/full/C/shard7
+      - index: 8
+        fixture_dir: models/embeddings/seq_stage1/full/shards/8/fixtures
+        fixture_dir_md5: e9ae15b33b33adf2f3b2b2c8e1a44a4c
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 25
+        fixture_ids:
+        - '1496934'
+        - '1505127'
+        - '1502052'
+        - '1501327'
+        - '1501333'
+        - '1493244'
+        - '1501344'
+        - '1501347'
+        - '1494261'
+        - '1494267'
+        - '1493269'
+        - '1494277'
+        - '1493278'
+        - '1477609'
+        - '1512720'
+        - '1512732'
+        - '1512742'
+        - '1512754'
+        - '1522999'
+        - '1512768'
+        - '1527677'
+        - '1529379'
+        - '1528300'
+        - '1527569'
+        - '1529264'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/C/shard8
+        command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+          OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+          T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/full/seed_101
+          T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+          uv run --no-sync python scripts/sequence_track/run_arm.py --arm C --config
+          experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/full/seed_101
+          --stats-version i7 --fixture-dir models/embeddings/seq_stage1/full/shards/8/fixtures
+          --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+          --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+          --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+          models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+          --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+          1 --output-dir models/embeddings/seq_stage1/full/C/shard8
+      - index: 9
+        fixture_dir: models/embeddings/seq_stage1/full/shards/9/fixtures
+        fixture_dir_md5: 01d497ef5592766db5061b1d97e76925
+        fixture_dir_hash_contract: md5_file_or_sorted_relative_path_md5_lines_v1
+        fixture_count: 25
+        fixture_ids:
+        - '1496935'
+        - '1501897'
+        - '1502053'
+        - '1479577'
+        - '1493240'
+        - '1501338'
+        - '1493248'
+        - '1493252'
+        - '1493257'
+        - '1493263'
+        - '1494273'
+        - '1493274'
+        - '1490234'
+        - '1490237'
+        - '1512721'
+        - '1512733'
+        - '1512743'
+        - '1512755'
+        - '1525159'
+        - '1512769'
+        - '1527559'
+        - '1527563'
+        - '1527565'
+        - '1527689'
+        - '1529265'
+        cluster_source_dir: data/polymarket_test_v2
+        cluster_source_dir_role: iteration_set_v2
+        cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
+        output_dir: models/embeddings/seq_stage1/full/C/shard9
+        command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+          OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+          T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/full/seed_101
+          T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
+          uv run --no-sync python scripts/sequence_track/run_arm.py --arm C --config
+          experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/full/seed_101
+          --stats-version i7 --fixture-dir models/embeddings/seq_stage1/full/shards/9/fixtures
+          --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+          --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+          --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+          models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+          --clip-low 0.01 --clip-high 0.99 --n-sims 1600 --base-seed 20260910 --threads
+          1 --output-dir models/embeddings/seq_stage1/full/C/shard9
     smoke_1a:
       fixture_dir: models/embeddings/seq_stage1/smoke/fixtures
       fixture_dir_md5: 703f522de0f0384f42a250247b9a653d
       fixture_count: 4
+      cluster_source_dir: data/polymarket_test_v2
+      cluster_source_dir_role: iteration_set_v2
+      cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
       n_sims: 10
       base_seeds:
       - 20260910
@@ -817,32 +2842,37 @@ arms:
       - --fixture-dir
       - --n-sims
       - --output-dir
-      command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4
-        VECLIB_MAXIMUM_THREADS=4 NUMEXPR_NUM_THREADS=4 T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/full/seed_101
+      command: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+        VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/full/seed_101
         T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
         uv run --no-sync python scripts/sequence_track/run_arm.py --arm C --config
         experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/full/seed_101
         --stats-version i7 --fixture-dir models/embeddings/seq_stage1/smoke/fixtures
-        --context-dir data/t20s_json --odds betting_odds_polymarket_v2.json --player-metadata
-        data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
-        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
-        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
-        10 --base-seed 20260910 --threads 4 --output-dir models/embeddings/seq_stage1/smoke/C
+        --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+        --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+        --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+        models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+        --clip-low 0.01 --clip-high 0.99 --n-sims 10 --base-seed 20260910 --threads
+        1 --output-dir models/embeddings/seq_stage1/smoke/C
     timing_1b:
       purpose: 'the 1b convergence protocol and the variability rerun: the same
         timing shard simulated under each registered batch base seed at each candidate
         n_sims'
       fixture_dir: models/embeddings/seq_stage1/timing/fixtures
-      fixture_dir_status: 'absent: populated at 1b, re-pin after it is built'
-      fixture_dir_md5: null
-      fixture_count: null
+      fixture_dir_status: present
+      fixture_dir_md5: 857d03aa63c3f0114d8983a1e6f5a35e
+      fixture_count: 10
       fixture_count_expected: 10
+      cluster_source_dir: data/polymarket_test_v2
+      cluster_source_dir_role: iteration_set_v2
+      cluster_source_dir_md5: 8005cad729458d0234265a9b983a6819
       base_seeds:
       - 20260910
       - 20260911
       - 20260912
       n_sims: *id001
       candidates_screened:
+      - 50
       - 100
       - 200
       - 400
@@ -857,17 +2887,18 @@ arms:
       seed_cohort: the three batch base seeds share one seed line, so run_arm screens
         their JOINT intervals for any launch on this block and refuses a candidate
         above 3290
-      command_template: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=4 MKL_NUM_THREADS=4
-        OPENBLAS_NUM_THREADS=4 VECLIB_MAXIMUM_THREADS=4 NUMEXPR_NUM_THREADS=4 T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/full/seed_101
+      command_template: env -u T1_SIM_PREFIX_CACHE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+        OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 T1_SIM_MODEL_DIR=models/embeddings/seq_stage1/retrain_i7/full/seed_101
         T1_SIM_DEVICE=cpu T1_EXTRAS_GRAFT_PATH=models/auto/b18/extras_graft_v1.json
         uv run --no-sync python scripts/sequence_track/run_arm.py --arm C --config
         experiments/configs/seq_stage1_sim_v1.yaml --model-dir models/embeddings/seq_stage1/retrain_i7/full/seed_101
         --stats-version i7 --fixture-dir models/embeddings/seq_stage1/timing/fixtures
-        --context-dir data/t20s_json --odds betting_odds_polymarket_v2.json --player-metadata
-        data/all_players_enriched.csv --extras-graft models/auto/b18/extras_graft_v1.json
-        --bowler-usage-path models/bowler_phase_usage.json --bowler-roster-policy
-        models/bowler_roster_policy.json --clip-low 0.01 --clip-high 0.99 --n-sims
-        <candidate> --base-seed <batch_base_seed> --threads 4 --output-dir models/embeddings/seq_stage1/timing/C/seed<base_seed>_n<n_sims>
+        --context-dir data/t20s_json --cluster-source-dir data/polymarket_test_v2
+        --odds betting_odds_polymarket_v2.json --player-metadata data/all_players_enriched.csv
+        --extras-graft models/auto/b18/extras_graft_v1.json --bowler-usage-path
+        models/bowler_phase_usage.json --bowler-roster-policy models/bowler_roster_policy.json
+        --clip-low 0.01 --clip-high 0.99 --n-sims <candidate> --base-seed <batch_base_seed>
+        --threads 1 --output-dir models/embeddings/seq_stage1/timing/C/seed<base_seed>_n<n_sims>
     variability_rerun:
       what: 'the 1b Monte Carlo variability rerun: the timing shard at the chosen
         n_sims, re-run under the second registered base seed 20260911 (and the third,
@@ -1107,6 +3138,7 @@ seeds:
     fixture_dir_role: iteration_set_v2
     fixture_count: 255
     candidates:
+    - 50
     - 100
     - 200
     - 400
@@ -1118,6 +3150,12 @@ seeds:
       by this script so the screen and the runtime refusal are one implementation
     by_base_seed:
       '20260910':
+      - n_sims: 50
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 8353
       - n_sims: 100
         overlapping_pairs: 0
         disjoint: true
@@ -1161,6 +3199,12 @@ seeds:
         example_overlap: null
         min_seed_gap: 8353
       '20260911':
+      - n_sims: 50
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 9126
       - n_sims: 100
         overlapping_pairs: 0
         disjoint: true
@@ -1204,6 +3248,12 @@ seeds:
         example_overlap: null
         min_seed_gap: 9126
       '20260912':
+      - n_sims: 50
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 107535
       - n_sims: 100
         overlapping_pairs: 0
         disjoint: true
@@ -1258,6 +3308,12 @@ seeds:
         candidates need new base seeds and a re-screen, and run_arm refuses them
         at launch
       rows:
+      - n_sims: 50
+        overlapping_pairs: 0
+        disjoint: true
+        permitted: 'yes'
+        example_overlap: null
+        min_seed_gap: 3290
       - n_sims: 100
         overlapping_pairs: 0
         disjoint: true
@@ -1326,7 +3382,33 @@ clipping:
     or 100/100 draw must not cost an unbounded log loss, and a 0.05 floor would
     hide real confidence at the resolution stage 1 is trying to measure
 convergence_protocol:
-  candidates: 'n_sims doubles from 100 with no ceiling: 100, 200, 400, 800, ...'
+  candidates: 'n_sims doubles from 100 with no ceiling: 100, 200, 400, 800, ...;
+    the 1b run measures 50, 100, 200, 400, 800 (user decision 2026-09-11), where
+    50 is a noise-curve point only and never a full-run candidate (plug-in bias
+    about 0.01 at 50 simulations)'
+  timing_1b_candidates:
+  - 50
+  - 100
+  - 200
+  - 400
+  - 800
+  stop_rule_reading: 'USER DECISION 2026-09-11, recorded before 1d. The literal
+    rule (95% range of the paired C-B and B-A shard-mean contrast across three batches
+    below 0.002) was NOT met at any permitted count: on the 10-fixture shard the
+    raw range at 800 was 0.034961 (C-B) and 0.043664 (B-A), the full-set equivalent
+    (x sqrt(10/255)) 0.006923 and 0.008647, and the a/sqrt(n) fit crosses 0.002
+    on the scaled reading at about n = 5,264 (C-B) and 4,497 (B-A), above the 3,200
+    joint seed cap. The three-batch range is a poor estimator with n = 3 (non-monotone
+    200 -> 400). The operational reading adopted: the full-set-equivalent Monte
+    Carlo SD of the paired primary contrasts, measured as the per-fixture paired
+    difference between batch seeds 20260910 and 20260911 divided by sqrt(10) and
+    scaled by sqrt(10/255), must be at or below about 0.002 at the chosen count.
+    Measured at 800: C-B 0.002513, B-A 0.003221; extrapolated (/sqrt 2) at 1,600:
+    about 0.0018 and 0.0023. Chosen n_sims = 1,600, the 0.007 equivalence margin
+    being 3-4 x that SD. This is a change of statistic from the registered range
+    rule, made by the user with the numbers in hand, and is recorded as such'
+  stop_rule_reading_source: models/embeddings/seq_stage1/timing/convergence_1b.{md,json};
+    docs/sequence_track/stage1_acceptance.md D9
   first_candidate: 100
   batches_per_arm_per_candidate: 3
   batch_base_seeds:
@@ -1341,18 +3423,183 @@ convergence_protocol:
   stop_rule: stop at the smallest n_sims at which the 95% range of the paired C-B
     and B-A winner LL across the three batches is below 0.002
   threshold: 0.002
-  chosen_n_sims: to_be_filled_before_1d
+  chosen_n_sims: 1600
   chosen_n_sims_drives: the --n-sims token in every arm's full_run.command; both
     are rendered from pin_stage1.CHOSEN_N_SIMS
   spread_table_columns:
   - n_sims
   - contrast
-  - batch_1_delta_ll
-  - batch_2_delta_ll
-  - batch_3_delta_ll
   - range_95
+  - sd
   - below_threshold
-  spread_table: []
+  - scaled_range_95
+  - scaled_below_threshold
+  - variability_scaled_shard_mean_sd
+  spread_table_columns_note: 'the three per-batch paired-difference columns of the
+    original registration are deliberately NOT recorded: they are level-bearing
+    (a paired delta on the shard) and the 1b rule forbids reading any shard log
+    loss; only spreads are kept'
+  spread_table:
+  - n_sims: 50
+    contrast: C-B
+    range_95: 0.10104624247559968
+    sd: 0.05219607745009426
+    below_threshold: false
+    scaled_range_95: 0.020010137742848058
+    scaled_below_threshold: false
+    variability_scaled_shard_mean_sd: 0.010471073581794195
+  - n_sims: 100
+    contrast: C-B
+    range_95: 0.07002649027095109
+    sd: 0.035076234902496
+    below_threshold: false
+    scaled_range_95: 0.013867311457012442
+    scaled_below_threshold: false
+    variability_scaled_shard_mean_sd: 0.008367320026689315
+  - n_sims: 200
+    contrast: C-B
+    range_95: 0.044303715428499424
+    sd: 0.024133716296051322
+    below_threshold: false
+    scaled_range_95: 0.008773442995253296
+    scaled_below_threshold: false
+    variability_scaled_shard_mean_sd: 0.004176605578761389
+  - n_sims: 400
+    contrast: C-B
+    range_95: 0.05467993416715433
+    sd: 0.028518685673759307
+    below_threshold: false
+    scaled_range_95: 0.010828240493146834
+    scaled_below_threshold: false
+    variability_scaled_shard_mean_sd: 0.004182459518114295
+  - n_sims: 800
+    contrast: C-B
+    range_95: 0.03496099358680094
+    sd: 0.017856112147702368
+    below_threshold: false
+    scaled_range_95: 0.006923308379998843
+    scaled_below_threshold: false
+    variability_scaled_shard_mean_sd: 0.0025133460519637944
+  - n_sims: 50
+    contrast: B-A
+    range_95: 0.043837114494625906
+    sd: 0.022403371237477224
+    below_threshold: false
+    scaled_range_95: 0.008681042241608199
+    scaled_below_threshold: false
+    variability_scaled_shard_mean_sd: 0.010468363867875695
+  - n_sims: 100
+    contrast: B-A
+    range_95: 0.10553946023728145
+    sd: 0.055625230709193105
+    below_threshold: false
+    scaled_range_95: 0.020899927448205728
+    scaled_below_threshold: false
+    variability_scaled_shard_mean_sd: 0.009366189003720209
+  - n_sims: 200
+    contrast: B-A
+    range_95: 0.0550858408879602
+    sd: 0.0314116660732902
+    below_threshold: false
+    scaled_range_95: 0.010908622001603563
+    scaled_below_threshold: false
+    variability_scaled_shard_mean_sd: 0.007448478867097794
+  - n_sims: 400
+    contrast: B-A
+    range_95: 0.0810547990547652
+    sd: 0.0418710524280001
+    below_threshold: false
+    scaled_range_95: 0.016051242026108765
+    scaled_below_threshold: false
+    variability_scaled_shard_mean_sd: 0.005237345558440189
+  - n_sims: 800
+    contrast: B-A
+    range_95: 0.043664400716317386
+    sd: 0.022136056773577936
+    below_threshold: false
+    scaled_range_95: 0.00864683981696212
+    scaled_below_threshold: false
+    variability_scaled_shard_mean_sd: 0.003221436532445661
+  - n_sims: 50
+    contrast: C-A
+    range_95: 0.05720912798097377
+    sd: 0.029833210985118618
+    below_threshold: false
+    scaled_range_95: 0.011329095501239858
+    scaled_below_threshold: false
+    variability_scaled_shard_mean_sd: 0.009747819413675774
+  - n_sims: 100
+    contrast: C-A
+    range_95: 0.05186819486225569
+    sd: 0.026517208423634094
+    below_threshold: false
+    scaled_range_95: 0.010271433140299567
+    scaled_below_threshold: false
+    variability_scaled_shard_mean_sd: 0.004090408873922254
+  - n_sims: 200
+    contrast: C-A
+    range_95: 0.01634499929290012
+    sd: 0.008203030974503108
+    below_threshold: false
+    scaled_range_95: 0.0032367921779641066
+    scaled_below_threshold: false
+    variability_scaled_shard_mean_sd: 0.006853060212025925
+  - n_sims: 400
+    contrast: C-A
+    range_95: 0.039660476870977845
+    sd: 0.021817634726983576
+    below_threshold: false
+    scaled_range_95: 0.007853944745416386
+    scaled_below_threshold: false
+    variability_scaled_shard_mean_sd: 0.0044387463809198256
+  - n_sims: 800
+    contrast: C-A
+    range_95: 0.00870340712951645
+    sd: 0.00435171991556547
+    below_threshold: false
+    scaled_range_95: 0.0017235314369632765
+    scaled_below_threshold: true
+    variability_scaled_shard_mean_sd: 0.0026396530586900663
+  - n_sims: 50
+    contrast: A50-A
+    range_95: 0.10047519909112268
+    sd: 0.0524581567822798
+    below_threshold: false
+    scaled_range_95: 0.01989705430203346
+    scaled_below_threshold: false
+    variability_scaled_shard_mean_sd: 0.005370960106906405
+  - n_sims: 100
+    contrast: A50-A
+    range_95: 0.05865742572338806
+    sd: 0.029388150617029877
+    below_threshold: false
+    scaled_range_95: 0.011615901191469892
+    scaled_below_threshold: false
+    variability_scaled_shard_mean_sd: 0.0053917150128961885
+  - n_sims: 200
+    contrast: A50-A
+    range_95: 0.03958547778270405
+    sd: 0.022824173405494398
+    below_threshold: false
+    scaled_range_95: 0.007839092712820428
+    scaled_below_threshold: false
+    variability_scaled_shard_mean_sd: 0.00619893369804355
+  - n_sims: 400
+    contrast: A50-A
+    range_95: 0.064831383529531
+    sd: 0.033202139728199
+    below_threshold: false
+    scaled_range_95: 0.012838527021908708
+    scaled_below_threshold: false
+    variability_scaled_shard_mean_sd: 0.004155105889218925
+  - n_sims: 800
+    contrast: A50-A
+    range_95: 0.027953247408968207
+    sd: 0.014473877142105634
+    below_threshold: false
+    scaled_range_95: 0.005535567848041791
+    scaled_below_threshold: false
+    variability_scaled_shard_mean_sd: 0.0029150171830812466
   fill_before: 1d (the full 255-fixture run)
 decision_rule:
   primary_slice: '>=$50k (--min-volume 50000)'
@@ -1763,8 +4010,8 @@ known_limitations:
     it measures the FEATURE shift only, and measures no downstream model effect
   recorded_in: docs/sequence_track/stage1_acceptance.md, D2 check 2.4
 provenance:
-  pins_generated_at: '2026-09-11T04:55:00Z'
-  git_head_short: 85591b6
+  pins_generated_at: '2026-09-11T08:21:29Z'
+  git_head_short: 9c09e88
   not_verified:
   - provenance.pins_generated_at
   - provenance.git_head_short
@@ -1781,11 +4028,11 @@ provenance:
     to any of them moves stage-1 results, so a change to any of them must fail --verify'
   source_count: 35
   source_md5:
-    scripts/sequence_track/run_arm.py: 280a01ab9ef39bd1b955c7c75c9ff0ef
-    scripts/sequence_track/audit_cross_arm.py: 7a06e66f809426a8a9d68ce73cbe7865
+    scripts/sequence_track/run_arm.py: 09fb64313cfdc274ca993ed6aa8bf9ca
+    scripts/sequence_track/audit_cross_arm.py: 8722433daa82ae7de1d22eb13fb9673b
     scripts/sequence_track/score_realism.py: acc2aaffc0a2011c56d15d13d3b5d2fa
     scripts/sequence_track/score_props.py: 3aa0f6d31543fc9a590a188f90e72f33
-    scripts/sequence_track/pin_stage1.py: eac6771a45871169fc4006c9c140332d
+    scripts/sequence_track/pin_stage1.py: 66c9b00d22ed5166f5a5e1b91ddc7b58
     scripts/sequence_track/retrain_i7.py: ffce84863bfc151f07318eb9f3160aa8
     scripts/sim_eval/run_sim_eval.py: 30397dac0e5f226ae18cffde0a6af39a
     scripts/sim_eval/run_sim_eval_t1.py: ff3b0233be5acc8faa1af552ec2952de
@@ -1800,7 +4047,7 @@ provenance:
     scripts/sim_eval/prop_backtest.py: bd2020e653307ff8f8f231f41186613f
     scripts/sim_eval/prop_fair_baselines.py: 27bf4e8235496282772cef96328799df
     scripts/sim_v1_2.py: d7e7a70d443320e113e6b6fde5a566ae
-    scripts/sim_t1.py: 14d22aed98f350eaebf42d0ff5efd884
+    scripts/sim_t1.py: aeb31a9c20faae70bd5b4fe504f5dbdb
     scripts/transformer_t1.py: 2fa534412e8061352115014346b88100
     scripts/embeddings_e1.py: 3116a7506ee60eccbd4d7847d61b829d
     scripts/t1_ppc_common.py: c291c695ad08a0ee200bc43423733f82

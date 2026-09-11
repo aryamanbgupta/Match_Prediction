@@ -121,6 +121,20 @@ assert len(EXPECTED_FEATURE_NAMES) == N_FEATS, (
 )
 
 
+def _cpu_thread_cap(default: int = 4) -> int:
+    """Torch CPU thread count: OMP_NUM_THREADS if set and positive, else 4."""
+    raw = os.environ.get("OMP_NUM_THREADS")
+    try:
+        value = int(raw) if raw not in (None, "") else default
+    except ValueError:
+        raise RuntimeError(
+            f"OMP_NUM_THREADS={raw!r} is not an integer; refusing to guess a "
+            "torch thread count")
+    if value < 1:
+        raise RuntimeError(f"OMP_NUM_THREADS={raw!r} must be >= 1")
+    return value
+
+
 def _serving_cache_meta(provider, mdir) -> dict:
     """Return the serving stats cache's `_meta`, or refuse.
 
@@ -465,7 +479,13 @@ class TransformerT1SimModel(PredictionModel):
         self.model.to(self.device)
         self.model.eval()
         if self.device.type == "cpu":
-            torch.set_num_threads(4)
+            # Honour the caller's thread cap. run_arm.py (and any runner that
+            # caps BLAS/OMP pools) exports OMP_NUM_THREADS before torch is
+            # imported; forcing 4 here silently overrode that cap, so a
+            # "--threads 1" arm ran four torch threads and ten concurrent
+            # shards thrashed the cores (stage 1 1b probe, 2026-09-11).
+            # Without a cap the historical default of 4 stands.
+            torch.set_num_threads(_cpu_thread_cap())
 
         # The frozen runner passes max_seq_len=120 for its older transformer.
         # T1 trained on whole delivery-row innings (validation max 138; test

@@ -126,8 +126,10 @@ def _config_payload(tmp_path):
                      "sha256": "o" * 64},
             "context_dir": "data/t20s_json",
             "context_dir_md5": "context-md5",
+            "cluster_source_dir": "data/polymarket_test_v2",
+            "cluster_source_dir_md5": "cluster-md5",
             "clip": [0.01, 0.99],
-            "threads": 4,
+            "threads": 1,
             "device": "cpu",
             "base_seed": BASE_SEED,
             "smoke_1a": {"fixture_dir": str(smoke_dir),
@@ -200,7 +202,7 @@ def _payload(arm, fixture_dir, config=None, model_dir_hash="deadbeef",
             "n_sims": n_sims,
             "engine_md5": "engine-md5",
             "runner_md5": "runner-md5",
-            "threads": 4,
+            "threads": 1,
             "device": "cpu",
             "config_path": config_path,
             "config_sha256": config_sha,
@@ -212,6 +214,8 @@ def _payload(arm, fixture_dir, config=None, model_dir_hash="deadbeef",
             "player_metadata_sha256": "m" * 64,
             "context_dir": "data/t20s_json",
             "context_dir_hash": "context-md5",
+            "cluster_source_dir": "data/polymarket_test_v2",
+            "cluster_source_dir_hash": "cluster-md5",
             "odds": "betting_odds_polymarket_v2.json",
             "odds_sha256": "o" * 64,
         },
@@ -385,6 +389,7 @@ def test_identical_empty_fixture_sets_fail(tmp_path):
     "extras_graft_sha256", "config_sha256", "odds_sha256",
     "context_dir_hash", "engine_md5", "runner_md5", "clip", "base_seed",
     "selector_class", "bowler_usage_md5", "n_sims",
+    "cluster_source_dir", "cluster_source_dir_hash",
 ])
 def test_a_field_missing_from_every_arm_fails(tmp_path, field):
     fixture_dir = _fixture_dir(tmp_path)
@@ -523,7 +528,9 @@ def test_a_different_registered_config_fails(tmp_path):
 
 
 @pytest.mark.parametrize("field", [
-    "odds_sha256", "context_dir_hash", "engine_md5", "runner_md5"])
+    "odds_sha256", "context_dir_hash", "engine_md5", "runner_md5",
+    # 1c / D10: the corpus the I3 block ids were stamped from.
+    "cluster_source_dir_hash"])
 def test_shared_inputs_must_be_identical(tmp_path, field):
     def drift(payload):
         payload["run"][field] = "moved"
@@ -531,6 +538,26 @@ def test_shared_inputs_must_be_identical(tmp_path, field):
     failures = audit(_arms(tmp_path, drift))
     assert any(field in message and "arm B" in message
                for message in failures)
+
+
+def test_an_arm_that_stamped_clusters_from_its_own_shard_is_refused(tmp_path):
+    """Every arm agrees, and every arm used the wrong cluster corpus."""
+    fixture_dir = _fixture_dir(tmp_path)
+    config = _config_file(tmp_path)
+    arms = []
+    for arm in ("A", "B"):
+        payload = _payload(arm, fixture_dir, config)
+        payload["run"]["cluster_source_dir"] = str(fixture_dir)
+        payload["run"]["cluster_source_dir_hash"] = md5_directory(fixture_dir)
+        arms.append(load_arm(_write(tmp_path, arm, payload)))
+    # Cross-arm equality alone is satisfied …
+    assert (arms[0].run["cluster_source_dir_hash"]
+            == arms[1].run["cluster_source_dir_hash"])
+    # … and the audit still refuses both, against the registered pin.
+    failures = audit(arms)
+    for arm in ("A", "B"):
+        assert any(f"[config] arm {arm}: cluster_source_dir" in message
+                   for message in failures), arm
 
 
 # ---------------------------------------------------------------------------
@@ -923,3 +950,115 @@ def test_uniformly_changed_pins_fail(tmp_path, field, value):
     assert any(f"[config] arm A: {field}" in message
                for message in failures), failures
     assert any(f"[config] arm B: {field}" in message for message in failures)
+
+
+# ---------------------------------------------------------------------------
+# D11 check 11.2 — a 1d shard run is bound to its shard entry, not the block
+# ---------------------------------------------------------------------------
+
+SHARD_IDS = ("1600001", "1600002", "1600003")
+SHARD_N_SIMS = 1600
+
+
+def _shard_dir(tmp_path, index=0, ids=SHARD_IDS):
+    return _make_dir(tmp_path, f"shard{index}_fixtures", ids)
+
+
+def _shard_config(tmp_path, index=0, mutate=None):
+    """The synthetic config with a launchable, sharded `full_run` block."""
+    directory = _shard_dir(tmp_path, index)
+
+    def _add_shards(payload):
+        for arm in payload["arms"].values():
+            arm["full_run"]["n_sims"] = SHARD_N_SIMS
+            arm["full_run"]["shards"] = [{
+                "index": index,
+                "fixture_dir": str(directory),
+                "fixture_dir_md5": md5_directory(directory),
+                "fixture_count": len(SHARD_IDS),
+                "output_dir": f"models/embeddings/seq_stage1/full/A/shard"
+                              f"{index}",
+                "command": "env uv run",
+            }]
+        if mutate is not None:
+            mutate(payload)
+
+    return directory, _config_file(tmp_path, _add_shards)
+
+
+def _shard_arms(tmp_path, index=0, mutate=None, config=None, directory=None):
+    if config is None:
+        directory, config = _shard_config(tmp_path, index)
+    arms = []
+    for arm in ("A", "B"):
+        payload = _payload(arm, directory, config, block="full_run",
+                           ids=SHARD_IDS, n_sims=SHARD_N_SIMS)
+        payload["run"]["config_shard"] = index
+        if mutate is not None:
+            mutate(payload)
+        arms.append(load_arm(_write(tmp_path, arm, payload)))
+    return arms
+
+
+def test_a_shard_run_binds_to_its_shard_entry(tmp_path):
+    assert audit(_shard_arms(tmp_path)) == []
+
+
+def test_a_shard_run_whose_fixture_dir_hash_moved_fails(tmp_path):
+    directory, config = _shard_config(tmp_path)
+
+    def moved(payload):
+        payload["run"]["fixture_dir_hash"] = "0" * 32
+
+    failures = audit(_shard_arms(tmp_path, config=config, directory=directory,
+                                 mutate=moved))
+    assert any("fixture_dir_hash" in message
+               and "full_run shard 0 block pins" in message
+               for message in failures), failures
+
+
+def test_a_shard_run_whose_fixture_count_moved_fails(tmp_path):
+    directory, config = _shard_config(tmp_path)
+
+    def moved(payload):
+        payload["run"]["fixture_count"] = 255
+
+    failures = audit(_shard_arms(tmp_path, config=config, directory=directory,
+                                 mutate=moved))
+    assert any("fixture_count" in message
+               and "full_run shard 0 block registers" in message
+               for message in failures), failures
+
+
+def test_a_shard_run_claiming_the_whole_set_fails(tmp_path):
+    """Without the shard binding this read the 255-fixture pins and passed."""
+    directory, config = _shard_config(tmp_path)
+
+    def unshard(payload):
+        payload["run"]["config_shard"] = None
+
+    failures = audit(_shard_arms(tmp_path, config=config, directory=directory,
+                                 mutate=unshard))
+    assert any("fixture_dir" in message and "full_run block registers" in
+               message for message in failures), failures
+
+
+def test_an_unregistered_shard_index_fails(tmp_path):
+    directory, config = _shard_config(tmp_path)
+
+    def relabel(payload):
+        payload["run"]["config_shard"] = 7
+
+    failures = audit(_shard_arms(tmp_path, config=config, directory=directory,
+                                 mutate=relabel))
+    assert any("config_shard" in message and "not a registered shard" in
+               message for message in failures), failures
+
+
+def test_two_arms_on_different_shards_fail(tmp_path):
+    directory, config = _shard_config(tmp_path)
+    arms = _shard_arms(tmp_path, config=config, directory=directory)
+    arms[1].run["config_shard"] = 1
+    failures = audit(arms)
+    assert any("config_shard" in message and "arm B" in message
+               for message in failures), failures
