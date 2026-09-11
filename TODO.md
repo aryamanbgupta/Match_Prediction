@@ -547,6 +547,46 @@ What remains:
       the writer; the v2 file is correct). Decide whether to correct the
       shipped file's header in place in a separate, clearly-labelled commit.
 
+### Venue history is not recency-weighted (added 2026-09-11)
+
+The venue outcome distribution is a cumulative, unweighted count over a
+ground's whole history, shrunk toward the global prior at `k_venue = 200`
+(`parsing_v2.get_venue_outcome_dist`). Nothing decays. The same is true of the
+player EB vectors at `k_player = 30`, though `batting_recent` /
+`bowling_recent` cover some of that separately.
+
+This interacts badly with the I7 venue folding. Cricsheet renamed grounds to a
+`"<ground>, <city>"` convention in a corpus-wide feed migration around
+2020-21, so each of the 94 folds joins a pre-2021 record to a post-2021 one —
+and scoring at the big grounds moved far more across that boundary than the
+league did:
+
+| ground | six rate pre-2021 | post-2021 | change |
+|---|---|---|---|
+| Wankhede Stadium, Mumbai | 0.051866 | 0.072041 | +0.0202 |
+| Eden Gardens, Kolkata | 0.047394 | 0.075720 | +0.0283 |
+| M Chinnaswamy Stadium, Bengaluru | 0.061771 | 0.082215 | +0.0204 |
+| corpus-wide control | 0.045330 | 0.050540 | +0.0052 |
+
+Merging drags Eden Gardens' six rate from 0.0757 to 0.0560. Under the legacy
+467-string identity the canonical label held only post-2021 balls, so the
+broken identity was accidentally acting as a recency filter — a plausible
+mechanism for the I7 rebuild measuring slightly worse on every arm
+(`reports/i7_rebuild_checkpoint_20260725.md`).
+
+**Do not un-fold the aliases.** The labels are a formatting artifact: the 13
+overlapping pairs interleave by competition inside the same season, and one
+ground cannot have two pitches at once. Weight the history instead.
+
+- [ ] **Recency-weighted venue features.** Shape of the work is deliberately
+  not settled — decay versus an era-aware prior, per-venue versus global,
+  whether the player EB side needs the same treatment, and what the ball-level
+  gate looks like are all open. To be designed with the user; see
+  `docs/sequence_track/stage1_kickoff_brief.md` § "Backlog to shape with the
+  user" for the open questions and the evidence behind them. Related: the
+  sequence track's stage 4d (uncertainty-aware ratings) already proposes count
+  and recency as explicit features.
+
 ## Open decisions (human)
 - [x] **Adopt D16 no-weights RAW as the i7 ball model in the I17 bundle?**
   DONE 2026-08-02: promoted as `models/xgb_i7_noweights_production/`
@@ -1011,7 +1051,7 @@ prop feed, contingent on the ball-model showing prop edge first (B3/B4).**
   `research/reports/auto/A6.md`, `A12.md`.
 - [ ] **Ground dimensions** (boundary distances — affects 4/6 rates)
 - [ ] Ensemble stacking: 3-7 diverse models + logistic regression meta-learner
-- [ ] Add time decay to features
+- [ ] Add time decay to features — see "Venue history is not recency-weighted" above for the measured venue case
 - [ ] Consider regression model (predict E[runs]) instead of classification
 - [x] **Match-level model: predict P(team1 wins) directly from lineups** — **LANDED 2026-05-09**. XGBoost binary classifier on ~47 match-level features dominates v7 sim on winner-market LL across every liquidity slice. See "Match-level direct + sim ensemble" section below.
 
