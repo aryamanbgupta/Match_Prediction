@@ -48,6 +48,22 @@ docs summarize, they are not the evidence.
     — the future-player promotion gate. **Fails**: Delta/shot-xR does not
     beat EB at N=50/100/250, so the auction payload stays internal.
 
+## Sequence and embeddings track (2026-09, branch `embeddings-ladder`)
+
+The 2026-08 program above closed with three open findings; the track
+re-opens them under `docs/SEQUENCE_TRACK_PLAN.md` (v5, plan of record).
+
+13. [`SEQ_STAGE1_REPORT.md`](SEQ_STAGE1_REPORT.md) — stage 1: four ball
+    models through the fixed simulator on 255 fixtures x 1,600 simulations.
+    No arm advances (C-A and B-A inconclusive), but the transformer beats
+    the token MLP CI-clean in rollout (C-B -0.0257) where the teacher-forced
+    ablation had put the pair at -0.0004. Single checkpoint per arm; every
+    gate provisional; no market claim.
+14. [`SEQ_STAGE1_ADDENDUM_C_A50.md`](SEQ_STAGE1_ADDENDUM_C_A50.md) —
+    post-hoc: the transformer also beats the 50-feature XGBoost
+    (-0.0286 [-0.0462, -0.0101]). Outside the registered family, advances
+    nothing, recorded because the equal-information reading rests on it.
+
 ## Estimator conventions
 
 Two different seed-aware bootstrap estimators appear across these reports and

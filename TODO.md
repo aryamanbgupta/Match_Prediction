@@ -547,6 +547,45 @@ What remains:
       the writer; the v2 file is correct). Decide whether to correct the
       shipped file's header in place in a separate, clearly-labelled commit.
 
+### Sequence track stage 1 follow-ups (added 2026-09-11)
+
+Stage 1 (`research/reports/embeddings/SEQ_STAGE1_REPORT.md`, verdict `SQ1
+FAILED` = advancement not established) ended with no arm advancing, but with
+the transformer beating both other architectures at equal information:
+C-B -0.0257 [-0.0331, -0.0135] (registered) and C-A50 -0.0286 [-0.0462,
+-0.0101] (post-hoc, `SEQ_STAGE1_ADDENDUM_C_A50.md`). **User decision
+2026-09-11: proceed to stage 2 on that basis; the confirmation work below is
+backlog, not a blocker.** Every stage 1 arm is a single training checkpoint,
+so none of these findings is confirmed.
+
+- [ ] **Five-seed rollout confirmation of C-B.** Retrain the token MLP and
+  full T1 on five seeds each (the retrain path exists:
+  `scripts/sequence_track/retrain_i7.py`) and simulate two independent
+  batches, so the rollout gap is shown to be a property of the architecture
+  rather than of seed 101. Partly absorbed by stage 2, which runs five seeds
+  per arm but at ball level, not in rollout.
+- [ ] **Matched teacher-forced score of the stage 1 checkpoints.** The 2026-08
+  ablation found T1-MLP = -0.0004 with an interval crossing zero on
+  *different* checkpoints and the v3 frame; stage 1 found -0.0257 in rollout
+  on the i7 frame. Scoring exactly these two checkpoints teacher-forced is the
+  only way to test whether rollout and teacher forcing actually disagree.
+  Stage 2's own contrasts are teacher-forced, which answers the general
+  question on new checkpoints.
+- [ ] **Why the props beat the fair baselines here.** Every stage 1 arm beat
+  the as-of fair baselines on the innings-total, powerplay-total,
+  team-highest-score and batter-50+ families with intervals excluding zero,
+  and lost on bowler-wicket families. The original E2 v2 audit found no binary
+  family beating a fair baseline (retired v7 stack, 100 sims); BR2's
+  restatement already showed movement. Different engine state, different
+  simulation count, no multiplicity adjustment. Needs its own registered
+  protocol with a pre-committed family list before it is anything more than a
+  curiosity; it could matter for prop markets.
+- [ ] **C114 (full T1 on the production 114 features).** Registered in the
+  stage 1 config with `status: deferred` and no artifacts. Stage 1 showed the
+  64 production-only features are worth about 0.028 to XGBoost (A50-A) while
+  the transformer matches production without them; C114 tests whether learned
+  sequence adds anything *on top of* the hand-built history features.
+
 ### Venue history is not recency-weighted (added 2026-09-11)
 
 The venue outcome distribution is a cumulative, unweighted count over a

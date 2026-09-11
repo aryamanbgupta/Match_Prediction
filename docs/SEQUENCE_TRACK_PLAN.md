@@ -175,6 +175,30 @@ All of the following are recorded in the stage 1 config with hashes before
 
 ## Stage 1: three ball models through the fixed simulator
 
+**COMPLETE 2026-09-11. Outcome: no arm advances; the transformer wins at
+equal information.** Commits `504c17f` (one i7 cache, B and C retrained),
+`4109fc1` (1b/1c/1d, gate, report), `84cc1a8` (verdict). Ledger `SQ1
+FAILED` = advancement not established, not inferiority. Primary slice
+>=$50k, 18 blocks, Holm step-down: C-B -0.0257 [-0.0346, -0.0102]
+favourable; B-A +0.0247 inconclusive; C-A -0.0009 [-0.0277, +0.0288]
+inconclusive; A50-A +0.0276 [+0.0095, +0.0419] adverse (exploratory);
+C-A50 -0.0286 [-0.0462, -0.0101] favourable (post-hoc, addendum). Every
+arm is a single checkpoint, so every gate is provisional and no market
+claim is made. Report `research/reports/embeddings/SEQ_STAGE1_REPORT.md`;
+acceptance `docs/sequence_track/stage1_acceptance.md` (D1-D12); Astra
+signed off in two end-of-stage rounds. The pre-registered expectation was
+parity everywhere; C-B and C-A50 departed from it in the favourable
+direction and survived the gate.
+
+**User decision 2026-09-11, carried into stage 2:** the transformer is
+treated as the better architecture at equal information, on the strength of
+C-B and C-A50. The confirmation work (five-seed rollout repeat, matched
+teacher-forced score of these checkpoints) is backlog in `TODO.md`, not a
+precondition. Note that stage 2 re-measures the vanilla-T1-versus-token-MLP
+question at ball level on five seeds by its own design, so it is itself a
+partial confirmation.
+
+
 Question, restated precisely [A3, A10]: (i) system comparison: does the
 50-feature MLP or T1 stack, on the certified replay path, simulate the
 winner market as well as the production i7 ball model? (ii) incremental
@@ -280,8 +304,18 @@ realism close on all arms; no arm advances.
 
 ## Stage 2: sequence variants with forgetting and ownership
 
+**NEXT, authorized 2026-09-11.** Kickoff brief:
+`docs/sequence_track/stage2_kickoff_brief.md`.
+
 Question: does the death-over harm come from stale history, from history
 that belongs to other players, or from neither?
+
+Stage 1 sharpened why this matters: the transformer beats both the token
+MLP and the 50-feature XGBoost in rollout, so the history it reads is
+carrying something, and the open question is *which part* of that history
+and whether the death-over harm survives on the i7 frame. Stage 2 runs on
+the i7 frame (the retrain path landed in stage 1), five seeds per arm, on
+the Mac mini through the queue runner built in stage 0 and never yet used.
 
 Protocol: the ablation lineage (`experiments/configs/t1_ablation_v1_mps.yaml`),
 5 seeds, seed-mean plus match bootstrap, primary contrast per arm vs the

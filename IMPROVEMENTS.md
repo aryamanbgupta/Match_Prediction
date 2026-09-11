@@ -1,6 +1,54 @@
 # CricML Improvements & Research Findings
 
-**Last Updated**: 2026-09-10
+**Last Updated**: 2026-09-11
+
+---
+
+## Sequence track stage 1 — three ball models through the fixed simulator (2026-09-11)
+
+Four ball models simulated the same 255 iteration fixtures 1,600 times each
+through one runner, one chronology and one replay lifecycle, with a cross-arm
+audit asserting identical information: **A** production i7 XGBoost (114
+features), **A50** the same family on T1's 50 features, **B** token MLP (50
+features, no sequence memory), **C** full T1 transformer (same 50 features,
+attends over the innings). B and C were retrained on the i7 frame so all four
+arms share one stats cache. Primary slice >=$50k, 18 tournament blocks,
+10,000 block resamples, Holm step-down over the registered family.
+
+| contrast | ΔLL (candidate − reference) | interval | label |
+|---|---|---|---|
+| C − B | −0.0257 | [−0.0346, −0.0102] | favourable |
+| B − A | +0.0247 | [−0.0027, +0.0554] | inconclusive |
+| C − A | −0.0009 | [−0.0277, +0.0288] | inconclusive |
+| A50 − A (exploratory) | +0.0276 | [+0.0095, +0.0419] | adverse |
+| C − A50 (post-hoc) | −0.0286 | [−0.0462, −0.0101] | favourable |
+
+**No arm advances** under the registered rule (B advances only if B−A is
+favourable, C only if C−A is). Verdict `SQ1 FAILED`, which in this ledger
+means advancement not established, **not** inferiority. Production remains
+the model of record for match-winner prediction.
+
+The finding that matters: **at equal information the transformer beats both
+other architectures**, while the 64 production-only hand-built features are
+worth about 0.028 to XGBoost (A50−A). The transformer keeps up with
+production without being given hand-built history. This is the first clean
+rollout evidence in this repo that within-innings sequence carries something;
+the 2026-08 teacher-forced ablation put the same kind of pair at −0.0004 with
+an interval crossing zero, on different checkpoints and a different frame.
+Every arm is a single training checkpoint, so nothing is confirmed and no
+market claim is made.
+
+Engineering findings worth keeping: `sim_t1.py` hard-coded four torch threads
+and silently overrode the runner's cap, so ten concurrent shards thrashed the
+cores (fixed; threads registered at 1, 6.4x throughput); and the frozen
+runner derived the I3 tournament block id from each run's own fixture
+directory, so a sharded run would have handed the gate finer blocks than the
+registered set (fixed at the source with `run_arm --cluster-source-dir`,
+pinned and audited).
+
+Report: [`SEQ_STAGE1_REPORT.md`](research/reports/embeddings/SEQ_STAGE1_REPORT.md),
+addendum [`SEQ_STAGE1_ADDENDUM_C_A50.md`](research/reports/embeddings/SEQ_STAGE1_ADDENDUM_C_A50.md),
+every check and result in [stage 1 acceptance](docs/sequence_track/stage1_acceptance.md).
 
 ---
 
