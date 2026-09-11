@@ -425,6 +425,15 @@ class _TrackerStatsView:
         self._require_ready()
         return self._base_provider.get_phase_outcome_dist(balls_bowled)
 
+    def get_cache_meta(self):
+        """`_meta` of the sealed cache these trackers are rehydrated from.
+
+        Identity of the underlying cache, not replay state, so it is
+        readable before the first `begin_date` (serving-side guards run at
+        model construction) and deliberately skips `_require_ready`.
+        """
+        return self._base_provider.get_cache_meta()
+
     def get_t1_outcome_prior(self):
         """Raw six-class prior for the simulator's causal local overlay."""
         self._require_ready()

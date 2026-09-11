@@ -19,7 +19,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from sequence_track.run_arm import (SUB_SEED_STREAMS, _LifecycleRecorder,
+from sequence_track.run_arm import (ARMS, STATS_CACHE_ROLES,
+                                    SUB_SEED_STREAMS, _LifecycleRecorder,
                                     _resolve_device,
                                     assert_seed_intervals_disjoint,
                                     fixture_provenance, fixture_seed,
@@ -609,6 +610,35 @@ def test_registered_mismatches_refuses_clipping_left_off(tmp_path):
     problems = registered_mismatches(
         _config(tmp_path), "A", _effective(tmp_path, clip=None))
     assert any("clip bounds" in problem for problem in problems)
+
+
+# --------------------------------------------------------------------------
+# D6 6.3 — the runner's arm spec and the registered config move in lockstep
+# --------------------------------------------------------------------------
+
+def test_every_arm_spec_serves_the_i7_cache():
+    """The 2026-09-11 retrain moved B and C onto the i7 frame and cache."""
+    for arm in ("A", "A50", "B", "C"):
+        assert ARMS[arm]["stats_version"] == "i7", arm
+    assert STATS_CACHE_ROLES["i7"] == "stats_cache_i7"
+
+
+@pytest.mark.parametrize("arm", ["B", "C"])
+def test_a_config_still_pinning_v3_for_a_transformer_arm_is_refused(
+        tmp_path, arm):
+    """The drift check catches a config/spec disagreement in either
+    direction: the effective value is the runner's own spec default."""
+    config = _config(tmp_path)
+    config["arms"][arm] = dict(config["arms"]["A"])
+    config["arms"][arm]["stats_version"] = "v3"
+    effective = _effective(tmp_path,
+                           stats_version=ARMS[arm]["stats_version"])
+    problems = registered_mismatches(config, arm, effective)
+    assert any("stats version" in problem and "'v3'" in problem
+               for problem in problems), problems
+
+    config["arms"][arm]["stats_version"] = ARMS[arm]["stats_version"]
+    assert registered_mismatches(config, arm, effective) == []
 
 
 # --------------------------------------------------------------------------

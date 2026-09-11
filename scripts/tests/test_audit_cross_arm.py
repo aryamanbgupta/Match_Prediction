@@ -92,13 +92,16 @@ def _timing_dir(tmp_path):
 # The synthetic registered config: the audit re-derives every arm's pins
 # from this file, so the test fixture has to carry the same shape the real
 # `pin_stage1` template writes.
+# Since the 2026-09-11 retrain (D6 check 6.3) every arm serves the i7 cache
+# and B resolves from the retrain namespace, so the audit's synthetic pins
+# carry one cache hash across both arms.
 ARM_PINS = {
     "A": {"model_dir": "models/xgb_i7_noweights_production",
           "checkpoint_md5": "A-booster", "stats_version": "i7",
           "stats_cache_md5": "i7-cache"},
-    "B": {"model_dir": "models/embeddings/t1_ablation_v1_mps/mlp/seed_101",
-          "checkpoint_md5": "B-booster", "stats_version": "v3",
-          "stats_cache_md5": "v3-cache"},
+    "B": {"model_dir": "models/embeddings/seq_stage1/retrain_i7/mlp/seed_101",
+          "checkpoint_md5": "B-booster", "stats_version": "i7",
+          "stats_cache_md5": "i7-cache"},
 }
 PERMITTED_TIMING_N_SIMS = [100, 200, 400, 800, 1600, 3200]
 
@@ -245,9 +248,30 @@ def test_identical_arms_pass(tmp_path):
 
 
 def test_expected_asymmetries_do_not_fail(tmp_path):
+    """Model dir and checkpoint differ by design; the stats cache no longer
+    does, because the 2026-09-11 retrain put every arm on the i7 cache."""
     arms = _arms(tmp_path)
-    assert arms[0].run["stats_cache_md5"] != arms[1].run["stats_cache_md5"]
+    assert arms[0].run["stats_cache_md5"] == arms[1].run["stats_cache_md5"]
     assert arms[0].run["model_dir_hash"] != arms[1].run["model_dir_hash"]
+    assert audit(arms) == []
+
+
+def test_a_cross_arm_cache_difference_is_listed_not_asserted(tmp_path):
+    """The audit checks each arm against ITS OWN block; a cache difference
+    between arms is a listed field, so a future arm on another cache is
+    reported by the table rather than refused here."""
+    def use_another_cache(payload):
+        payload["arms"]["B"]["stats_version"] = "v3"
+        payload["arms"]["B"]["stats_cache_md5"] = "v3-cache"
+
+    config = _config_file(tmp_path, use_another_cache)
+
+    def drift(payload):
+        payload["run"]["stats_version"] = "v3"
+        payload["run"]["stats_cache_md5"] = "v3-cache"
+
+    arms = _arms(tmp_path, drift, config=config)
+    assert arms[0].run["stats_cache_md5"] != arms[1].run["stats_cache_md5"]
     assert audit(arms) == []
 
 
@@ -649,7 +673,7 @@ def test_a_config_changed_after_the_run_fails(tmp_path):
 @pytest.mark.parametrize("field,value", [
     ("model_dir", "models/somewhere_else"),
     ("checkpoint_md5", "moved"),
-    ("stats_version", "i7"),
+    ("stats_version", "v3"),
     ("stats_cache_md5", "moved"),
     ("extras_graft_sha256", "moved"),
     ("bowler_usage_md5", "moved"),

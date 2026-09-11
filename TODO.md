@@ -557,9 +557,11 @@ player EB vectors at `k_player = 30`, though `batting_recent` /
 
 This interacts badly with the I7 venue folding. Cricsheet renamed grounds to a
 `"<ground>, <city>"` convention in a corpus-wide feed migration around
-2020-21, so each of the 94 folds joins a pre-2021 record to a post-2021 one —
-and scoring at the big grounds moved far more across that boundary than the
-league did:
+2020-21. Of the 94 folds, 81 pairs are temporally disjoint and 63 of those
+cutovers land in 2020-21; the other 13 pairs overlap and interleave by
+competition within the same seasons (stage 1 kickoff brief § 4). So most, not
+all, folds join a pre-2021 record to a post-2021 one — and scoring at the big
+grounds moved far more across that boundary than the league did:
 
 | ground | six rate pre-2021 | post-2021 | change |
 |---|---|---|---|
@@ -575,8 +577,19 @@ mechanism for the I7 rebuild measuring slightly worse on every arm
 (`reports/i7_rebuild_checkpoint_20260725.md`).
 
 **Do not un-fold the aliases.** The labels are a formatting artifact: the 13
-overlapping pairs interleave by competition inside the same season, and one
-ground cannot have two pitches at once. Weight the history instead.
+overlapping pairs interleave by competition inside the same season, and the
+audited alias evidence (`config/identity/venue_aliases_v1.csv`, 94
+hand-approved folds) is the identity of record. Weight the history instead.
+
+**Framing fixed 2026-09-11 (user + Fable, after a Codex Astra review of the
+stage 1 cache decision):** "split the stadium by time" and "recency-weight the
+stadium" are one design, not two. A hard era split is the limiting case of a
+recency weight (a step kernel at one boundary), and any era boundary is a
+tuned quantity. Register both as points in one candidate set with a
+validation-only selection rule and a ball-level gate, rather than as separate
+ideas. Stage 1 of the sequence track runs on the current cumulative venue
+features for every arm; whatever weighting lands later changes six feature
+columns for all arms equally and does not reopen stage 1.
 
 - [ ] **Recency-weighted venue features.** Shape of the work is deliberately
   not settled — decay versus an era-aware prior, per-venue versus global,
@@ -586,6 +599,46 @@ ground cannot have two pitches at once. Weight the history instead.
   user" for the open questions and the evidence behind them. Related: the
   sequence track's stage 4d (uncertainty-aware ratings) already proposes count
   and recency as explicit features.
+
+### Global outcome prior is not as-of-date (recorded 2026-09-11)
+
+Schema-v4 caches store one global outcome prior π (`prior_p0 … prior_pw` in
+`_meta`) and three phase priors, computed at build time by summing the
+tracker's **final-state** counts over the whole corpus
+(`scripts/build_stats_cache.py`, "global prior π" block). Every
+empirical-Bayes feature shrinks toward it at every date, so a 2019 feature
+uses a base rate that includes 2026 balls. Found by Codex Astra during the
+stage 1 cache review; it has been in every schema-v4 number in this repo,
+production included. No per-player, per-venue or per-match count looks ahead;
+those stay as-of-date and first-write-wins (invariant 2).
+
+Magnitude, measured 2026-09-11 on `data/xgb_data_i7` (train 2005-02-17 →
+2024-12-30; whole corpus → 2026-04-16), prior from train-only vs whole corpus:
+
+| outcome | train only | whole corpus | diff |
+|---|---|---|---|
+| single | 0.413227 | 0.411313 | −0.001915 |
+| six | 0.045362 | 0.046711 | +0.001349 |
+| dot / two / four / wicket | | | |abs| < 0.0005 |
+
+The prior's weight in a feature is k/(n+k): max shift 0.001915 for a venue or
+player with no history, 0.000957 at n = k, 0.000174 at 2,000 balls (venue,
+k = 200) or 300 balls (player, k = 30), 0.000038 at 10,000 venue balls.
+Reproducible source: `scripts/sequence_track/measure_global_prior_asof.py`
+(its whole-corpus prior equals the cache's `_meta` prior to six decimals).
+This measures feature displacement only. Every arm that shares a cache has
+the same exposure, but how each model responds to that displacement is
+unknown and unmeasured, so it is not established that the exposure cancels
+in a cross-arm contrast. Recorded as an inherited limitation of the
+iteration screen in `docs/sequence_track/stage1_acceptance.md`.
+
+- [ ] **As-of global and phase priors.** Compute π per date (or freeze it at
+  the train/validation boundary) so no feature sees a post-cutoff base rate.
+  This is a cache schema change (`SCHEMA_VERSION` bump, invariant 3), a
+  materialization change, and a production retrain, so it belongs with the
+  venue recency item above, not in stage 1. The measured feature shift is
+  small, but its effect on any model's log loss has not been measured; the
+  reason to do it is invariant hygiene.
 
 ## Open decisions (human)
 - [x] **Adopt D16 no-weights RAW as the i7 ball model in the I17 bundle?**

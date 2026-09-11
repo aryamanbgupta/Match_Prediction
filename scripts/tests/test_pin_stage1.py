@@ -1,21 +1,33 @@
-"""Tests for the stage-1 config pin script (D5 check 5.1, 5.3, 5.4).
+"""Tests for the stage-1 config pin script (D5 check 5.1, 5.3, 5.4; D6).
 
-Four things have to hold for the registered config to mean anything:
+Five things have to hold for the registered config to mean anything:
 
 * `--verify` passes on the committed file, so the pinned hashes are the
   hashes of the artifacts actually on disk;
 * a tampered copy fails and names what moved, so the file cannot drift
   from the artifacts (or be hand-edited) unnoticed;
 * the checkpoint rule really is "lowest validation LL, ties to the lowest
-  seed", exercised on a synthetic summary where the answer is known;
+  seed", read from the i7 retrain summary, over exactly the five registered
+  training seeds, at full precision — exercised on synthetic summaries where
+  the answer is known (D6 check 6.2);
+* a retrained checkpoint is pinned with its training contract, and the
+  contract is checked against the frame and the LIVE stats cache (6.3);
 * the seed formula the config documents is the one `run_arm.py` runs.
 
-Only the first two touch repository artifacts; they carry the
-`needs_artifacts` marker so `-m "not needs_artifacts"` stays green.
+Tests that touch repository artifacts carry the `needs_artifacts` marker so
+`-m "not needs_artifacts"` stays green. Tests that additionally need the
+COMMITTED config to be current carry `needs_repin`: between the D6 code
+change and the post-retrain `--write`, the committed YAML is deliberately
+stale (acceptance D6 check 6.8), and there is nothing for them to assert
+until the retrain exists and the config is re-pinned.
 """
 from __future__ import annotations
 
+import atexit
+import json
 import shutil
+import tempfile
+from pathlib import Path
 
 import pytest
 import yaml
@@ -24,13 +36,21 @@ from sequence_track import pin_stage1
 from sequence_track.pin_stage1 import (
     CONFIG_PATH,
     PinError,
+    build_config,
     choose_seed,
+    decimal_places,
     diff_config,
+    expected_feature_names,
+    feature_names_sha256,
     fixture_seed,
     flatten,
+    frame_split_facts,
     main,
+    read_training_contract,
+    retrain_summary_block,
     selection_table,
     sub_seed,
+    training_frame_block,
     verify_config,
 )
 from sequence_track import run_arm
@@ -38,11 +58,25 @@ from sequence_track.run_arm import fixture_seed as run_arm_fixture_seed
 from sequence_track.run_arm import sub_seed as run_arm_sub_seed
 
 
+# The committed config is re-pinned by `--write` only after the D3 retrain
+# exists (acceptance D6 checks 6.8 and 6.10). Until then `build_config()`
+# fails closed on the missing summary and the committed YAML is knowingly
+# stale, so every assertion that compares the two is skipped rather than
+# asserted against a file that cannot be current yet.
+RETRAIN_SUMMARY_ON_DISK = pin_stage1.REPO_ROOT / pin_stage1.RETRAIN_SUMMARY
+needs_repin = pytest.mark.skipif(
+    not RETRAIN_SUMMARY_ON_DISK.is_file(),
+    reason=(f"{pin_stage1.RETRAIN_SUMMARY.as_posix()} does not exist yet: "
+            "arms B and C are pinned from the D3 i7 retrain, and the "
+            "committed config is re-pinned after it"))
+
+
 # ---------------------------------------------------------------------------
 # 5.1 — verify passes on the committed file, fails on a tampered copy
 # ---------------------------------------------------------------------------
 
 @pytest.mark.needs_artifacts
+@needs_repin
 def test_verify_passes_on_the_committed_config():
     assert CONFIG_PATH.exists(), (
         f"{CONFIG_PATH} is missing; run pin_stage1.py --write")
@@ -51,6 +85,7 @@ def test_verify_passes_on_the_committed_config():
 
 
 @pytest.mark.needs_artifacts
+@needs_repin
 def test_tampered_hash_fails_and_names_the_key(tmp_path):
     tampered = tmp_path / "seq_stage1_sim_v1.yaml"
     shutil.copyfile(CONFIG_PATH, tampered)
@@ -65,6 +100,7 @@ def test_tampered_hash_fails_and_names_the_key(tmp_path):
 
 
 @pytest.mark.needs_artifacts
+@needs_repin
 def test_tampered_prose_fails(tmp_path):
     """Prose lives in the script, so a hand-edited YAML line is a mismatch."""
     tampered = tmp_path / "seq_stage1_sim_v1.yaml"
@@ -79,6 +115,7 @@ def test_tampered_prose_fails(tmp_path):
 
 
 @pytest.mark.needs_artifacts
+@needs_repin
 def test_dropped_key_fails(tmp_path):
     tampered = tmp_path / "seq_stage1_sim_v1.yaml"
     shutil.copyfile(CONFIG_PATH, tampered)
@@ -116,18 +153,148 @@ def test_not_verified_keys_are_ignored_by_the_diff():
 
 
 # ---------------------------------------------------------------------------
-# 5.3 — checkpoint selection rule on a synthetic summary
+# 5.3 / D6 6.2 — checkpoint selection from the i7 retrain summary
+#
+# The rows the real retrain will write are full-precision float64 means that
+# differ in the fifth and sixth decimal, so the synthetic tables below use
+# values of the same shape. A four-decimal table would make the tie-break,
+# not the validation log loss, decide the selection, and is refused.
 # ---------------------------------------------------------------------------
 
-def _synthetic_summary(path, mlp_rows, full_rows):
+MLP_LLS = {7: 1.4381341, 13: 1.4380398, 29: 1.4380532, 42: 1.4386004,
+           101: 1.4377551}
+FULL_LLS = {7: 1.4369723, 13: 1.4383531, 29: 1.4374518, 42: 1.4372450,
+            101: 1.4366347}
+
+
+# ---------------------------------------------------------------------------
+# A synthetic i7 frame (Astra round 1, MUST-FIX 1)
+#
+# The pin no longer copies the training parquets' md5, row count and
+# match_date range out of the checkpoint's own contract — it hashes and reads
+# the files. So the synthetic checkpoints below need real parquets to be
+# checked against. Two tiny ones, named in the frame's own scheme, stand in
+# for the 830 MB pair; the test and golden splits are never written, because
+# the pin never names them.
+# ---------------------------------------------------------------------------
+
+FRAME_HASH = {
+    "hash": "c520a3ba08ae",
+    "version": "i7",
+    "n_features": 114,
+    "delivery_semantics": "inclusive_total_runs_v1",
+    "venue_alias_version": "venue_aliases_v1",
+    "venue_alias_sha256": "8" * 64,
+}
+CACHE_ROLE = "stats_cache_i7"
+CACHE_PATH = "models/player_stats_cache_i7.sqlite"
+CACHE_MD5 = "f" * 32
+SAME_DAY_ORDER = "date_then_match_id_lexicographic_v1"
+
+TRAIN_DATES = ["2005-02-17", "2015-06-01", "2024-12-30"]
+VALIDATION_DATES = ["2024-12-31", "2025-03-01", "2025-06-29"]
+
+
+def _write_split_parquet(path, dates):
+    import pandas as pd
+
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({
+        "match_date": list(dates),
+        "innings_id": [f"1_{index}" for index in range(len(dates))],
+    }).to_parquet(path, index=False)
+    return Path(path)
+
+
+def _build_frame(frame_dir, train_dates=None, validation_dates=None):
+    """A frame dir with a `.feature_hash` and the two training splits."""
+    frame_dir = Path(frame_dir)
+    frame_dir.mkdir(parents=True, exist_ok=True)
+    (frame_dir / pin_stage1.FEATURE_HASH_FILENAME).write_text(
+        json.dumps(FRAME_HASH))
+    _write_split_parquet(frame_dir / "cricket_data_i7_train.parquet",
+                         train_dates or TRAIN_DATES)
+    _write_split_parquet(frame_dir / "cricket_data_i7_validation.parquet",
+                         validation_dates or VALIDATION_DATES)
+    pin_stage1._FRAME_SPLIT_FACTS.pop((frame_dir.as_posix(), "i7"), None)
+    return frame_split_facts(frame_dir, "i7")
+
+
+_SHARED_FRAME: dict = {}
+
+
+def _shared_frame():
+    """One synthetic frame for the whole module, built on first use."""
+    if not _SHARED_FRAME:
+        root = Path(tempfile.mkdtemp(prefix="pin_stage1_frame_"))
+        atexit.register(shutil.rmtree, root, ignore_errors=True)
+        frame_dir = root / "xgb_data_i7"
+        _SHARED_FRAME["facts"] = _build_frame(frame_dir)
+        _SHARED_FRAME["dir"] = frame_dir.as_posix()
+    return _SHARED_FRAME["dir"], _SHARED_FRAME["facts"]
+
+
+def _frame_block_from(frame_dir, facts, feature_hash, cache_md5):
+    return {
+        "dir": frame_dir,
+        "version": feature_hash["version"],
+        "feature_hash": dict(feature_hash),
+        "split_md5s": {split: row["md5"] for split, row in facts.items()},
+        "split_rows": {split: row["n_rows"] for split, row in facts.items()},
+        "stats_cache": {
+            "role": CACHE_ROLE,
+            "path": CACHE_PATH,
+            "md5": cache_md5,
+            "venue_alias_version": feature_hash["venue_alias_version"],
+            "same_day_order_version": SAME_DAY_ORDER,
+        },
+    }
+
+
+def _rows(lls, retrain_arm):
+    return [
+        {"seed": seed, "ll": ll,
+         "checkpoint_dir": (
+             f"models/embeddings/seq_stage1/retrain_i7/{retrain_arm}/"
+             f"seed_{seed}")}
+        for seed, ll in sorted(lls.items())
+    ]
+
+
+def _synthetic_summary(path, mlp_rows=None, full_rows=None,
+                       with_checkpoints=True, frame_dir=None, facts=None,
+                       feature_hash=None, cache_md5=CACHE_MD5, **overrides):
+    """A retrain summary in the D3 layout, defaulting to a valid one.
+
+    The per-seed checkpoints are written beside it by default, because the
+    pin now checks every summary row against the `validation_ll` in that
+    seed's own metrics.json.
+    """
+    mlp = dict(MLP_LLS if mlp_rows is None else dict(mlp_rows))
+    full = dict(FULL_LLS if full_rows is None else dict(full_rows))
+    shared_dir, shared_facts = _shared_frame()
+    frame_dir = shared_dir if frame_dir is None else frame_dir
+    facts = shared_facts if facts is None else facts
+    feature_hash = dict(FRAME_HASH if feature_hash is None else feature_hash)
+    if with_checkpoints:
+        for retrain_arm, lls in (("mlp", mlp), ("full", full)):
+            for seed, ll in lls.items():
+                _write_checkpoint(Path(path).parent / retrain_arm
+                                  / f"seed_{seed}", None, validation_ll=ll)
     payload = {
+        "experiment": {
+            "config": pin_stage1.RETRAIN_CONFIG,
+            "config_sha256": pin_stage1.retrain_config_sha256()},
+        "frame": _frame_block_from(frame_dir, facts, feature_hash,
+                                   cache_md5),
         "splits": {
             "validation": {
+                "n_rows": facts["validation"]["n_rows"],
+                "n_matches": pin_stage1.validation_match_count(
+                    frame_dir, feature_hash["version"]),
                 "arms": {
-                    "mlp": {"per_seed": [
-                        {"seed": seed, "ll": ll} for seed, ll in mlp_rows]},
-                    "full": {"per_seed": [
-                        {"seed": seed, "ll": ll} for seed, ll in full_rows]},
+                    "mlp": {"per_seed": _rows(mlp, "mlp")},
+                    "full": {"per_seed": _rows(full, "full")},
                 },
             },
             # Deliberately better on a DIFFERENT seed: the rule must not
@@ -135,13 +302,16 @@ def _synthetic_summary(path, mlp_rows, full_rows):
             "test": {
                 "arms": {
                     "mlp": {"per_seed": [
-                        {"seed": seed, "ll": -ll} for seed, ll in mlp_rows]},
+                        {"seed": seed, "ll": -ll}
+                        for seed, ll in sorted(mlp.items())]},
                     "full": {"per_seed": [
-                        {"seed": seed, "ll": -ll} for seed, ll in full_rows]},
+                        {"seed": seed, "ll": -ll}
+                        for seed, ll in sorted(full.items())]},
                 },
             },
         },
     }
+    payload.update(overrides)
     path.write_text(yaml.safe_dump(payload, sort_keys=False))
     return path
 
@@ -163,31 +333,301 @@ def test_choose_seed_rejects_an_empty_table():
         choose_seed([])
 
 
-def test_selection_table_uses_validation_only(tmp_path):
-    summary = _synthetic_summary(
-        tmp_path / "summary.yaml",
-        mlp_rows=[(7, 1.30), (13, 1.10), (29, 1.10), (42, 1.40)],
-        full_rows=[(7, 1.05), (13, 1.20), (29, 1.30), (42, 1.40)],
-    )
+def test_selection_table_reads_the_retrain_summary_validation_split(tmp_path):
+    summary = _synthetic_summary(tmp_path / "summary.yaml")
     table = selection_table(summary)
 
-    # mlp: 13 and 29 tie at the minimum -> the lower seed wins.
+    # The minimum of each arm's table; the test split's argmin is the
+    # MAXIMUM of the validation table and is never consulted.
+    assert table["mlp"]["chosen_seed"] == 101
+    assert table["mlp"]["chosen_validation_ll"] == MLP_LLS[101]
+    assert table["full"]["chosen_seed"] == 101
+    assert table["full"]["chosen_validation_ll"] == FULL_LLS[101]
+    # The recorded table is seed-ordered and carries every registered seed
+    # at full precision.
+    assert [row["seed"] for row in table["mlp"]["per_seed"]] == list(
+        pin_stage1.REGISTERED_TRAINING_SEEDS)
+    assert [row["validation_ll"] for row in table["full"]["per_seed"]] == [
+        FULL_LLS[seed] for seed in pin_stage1.REGISTERED_TRAINING_SEEDS]
+
+
+def test_selection_table_breaks_a_tie_to_the_lowest_seed(tmp_path):
+    tied = dict(MLP_LLS)
+    tied[101] = tied[13] = 1.4370001
+    summary = _synthetic_summary(tmp_path / "summary.yaml", mlp_rows=tied)
+    table = selection_table(summary)
     assert table["mlp"]["chosen_seed"] == 13
-    assert table["mlp"]["chosen_validation_ll"] == pytest.approx(1.10)
-    # full: a clear minimum at seed 7. The test split's argmin is seed 42.
-    assert table["full"]["chosen_seed"] == 7
-    assert table["full"]["chosen_validation_ll"] == pytest.approx(1.05)
-    # The printed table is seed-ordered and carries every seed.
-    assert [row["seed"] for row in table["mlp"]["per_seed"]] == [7, 13, 29, 42]
+    assert table["mlp"]["chosen_validation_ll"] == 1.4370001
+
+
+def test_selection_table_refuses_a_missing_seed(tmp_path):
+    short = {seed: ll for seed, ll in MLP_LLS.items() if seed != 29}
+    summary = _synthetic_summary(tmp_path / "summary.yaml", mlp_rows=short)
+    with pytest.raises(PinError) as excinfo:
+        selection_table(summary)
+    assert "missing [29]" in str(excinfo.value)
+
+
+def test_selection_table_refuses_a_duplicate_seed(tmp_path):
+    summary = _synthetic_summary(tmp_path / "summary.yaml")
+    payload = yaml.safe_load(summary.read_text())
+    rows = payload["splits"]["validation"]["arms"]["full"]["per_seed"]
+    rows.append({"seed": 42, "ll": 1.4372451})
+    summary.write_text(yaml.safe_dump(payload, sort_keys=False))
+    with pytest.raises(PinError) as excinfo:
+        selection_table(summary)
+    assert "appear more than once" in str(excinfo.value)
+    assert "[42]" in str(excinfo.value)
+
+
+def test_selection_table_refuses_an_unregistered_seed(tmp_path):
+    extra = dict(MLP_LLS)
+    del extra[7]
+    extra[1234] = 1.4370002
+    summary = _synthetic_summary(tmp_path / "summary.yaml", mlp_rows=extra)
+    with pytest.raises(PinError) as excinfo:
+        selection_table(summary)
+    assert "unexpected [1234]" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"),
+                                   float("-inf")])
+def test_selection_table_refuses_a_non_finite_ll(tmp_path, value):
+    broken = dict(FULL_LLS)
+    broken[29] = value
+    summary = _synthetic_summary(tmp_path / "summary.yaml", full_rows=broken)
+    with pytest.raises(PinError) as excinfo:
+        selection_table(summary)
+    assert "not finite" in str(excinfo.value)
+
+
+def test_selection_table_refuses_a_four_decimal_rounded_table(tmp_path):
+    """The trainer used to round every stored log loss to four decimals."""
+    rounded = {seed: round(ll, 4) for seed, ll in MLP_LLS.items()}
+    summary = _synthetic_summary(tmp_path / "summary.yaml", mlp_rows=rounded)
+    with pytest.raises(PinError) as excinfo:
+        selection_table(summary)
+    message = str(excinfo.value)
+    assert "rounded to four decimals" in message
+    assert "seed 7" in message
+
+
+def test_selection_table_refuses_one_rounded_row(tmp_path):
+    """One rounded row is enough: it competes on a different scale."""
+    mixed = dict(FULL_LLS)
+    mixed[42] = round(mixed[42], 4)
+    summary = _synthetic_summary(tmp_path / "summary.yaml", full_rows=mixed)
+    with pytest.raises(PinError):
+        selection_table(summary)
+
+
+def test_selection_table_refuses_a_non_numeric_ll(tmp_path):
+    summary = _synthetic_summary(tmp_path / "summary.yaml")
+    payload = yaml.safe_load(summary.read_text())
+    payload["splits"]["validation"]["arms"]["mlp"]["per_seed"][0]["ll"] = "1.4"
+    summary.write_text(yaml.safe_dump(payload, sort_keys=False))
+    with pytest.raises(PinError) as excinfo:
+        selection_table(summary)
+    assert "expected a float" in str(excinfo.value)
 
 
 def test_selection_table_fails_closed_on_a_missing_arm(tmp_path):
     path = tmp_path / "summary.yaml"
     path.write_text(yaml.safe_dump(
-        {"splits": {"validation": {"arms": {"mlp": {"per_seed": [
-            {"seed": 7, "ll": 1.0}]}}}}}))
-    with pytest.raises(PinError):
+        {"splits": {"validation": {"arms": {"mlp": {"per_seed": _rows(
+            MLP_LLS, "mlp")}}}}}))
+    with pytest.raises(PinError) as excinfo:
         selection_table(path)
+    assert "no validation arm full" in str(excinfo.value)
+
+
+def test_selection_table_fails_closed_on_a_missing_summary(tmp_path):
+    with pytest.raises(PinError) as excinfo:
+        selection_table(tmp_path / "absent.yaml")
+    assert "missing retrain summary" in str(excinfo.value)
+
+
+def _summary_block(summary, **overrides):
+    """`retrain_summary_block` against the shared synthetic frame."""
+    frame_dir, facts = _shared_frame()
+    kwargs = {
+        "frame_dir": frame_dir,
+        "frame_hash": dict(FRAME_HASH),
+        "frame_facts": facts,
+        "validation_matches": pin_stage1.validation_match_count(
+            frame_dir, "i7"),
+        "stats_cache_role": CACHE_ROLE,
+        "stats_cache_path": CACHE_PATH,
+        "stats_cache_md5": CACHE_MD5,
+    }
+    kwargs.update(overrides)
+    return retrain_summary_block(summary, **kwargs)
+
+
+def _retouch(summary, mutate):
+    """Re-write a summary with one field changed."""
+    payload = yaml.safe_load(Path(summary).read_text())
+    mutate(payload)
+    Path(summary).write_text(yaml.safe_dump(payload, sort_keys=False))
+    return summary
+
+
+def test_retrain_summary_block_reads_the_validation_split(tmp_path):
+    frame_dir, facts = _shared_frame()
+    summary = _synthetic_summary(tmp_path / "summary.yaml")
+    block = _summary_block(summary)
+    assert block["validation_rows"] == facts["validation"]["n_rows"]
+    assert block["validation_matches"] == pin_stage1.validation_match_count(
+        frame_dir, "i7") == len(set(VALIDATION_DATES))
+    assert block["frame_dir"] == frame_dir
+    assert block["frame_dir_role"] == pin_stage1.ROLE_BALL_FRAME_I7
+    # The md5s the block records are the RECOMPUTED ones, not the summary's.
+    assert block["frame_split_md5s"] == {
+        split: row["md5"] for split, row in facts.items()}
+    assert block["frame_split_rows"] == {
+        split: row["n_rows"] for split, row in facts.items()}
+    assert block["retrain_config"] == pin_stage1.RETRAIN_CONFIG
+    assert block["retrain_config_sha256"] == (
+        pin_stage1.retrain_config_sha256())
+
+
+def test_retrain_summary_block_refuses_another_frame(tmp_path):
+    summary = _retouch(
+        _synthetic_summary(tmp_path / "summary.yaml"),
+        lambda payload: payload["frame"].update(dir="data/xgb_data_v3"))
+    with pytest.raises(PinError) as excinfo:
+        _summary_block(summary)
+    assert "frame.dir" in str(excinfo.value)
+
+
+def test_retrain_summary_block_refuses_a_missing_row_count(tmp_path):
+    summary = _retouch(
+        _synthetic_summary(tmp_path / "summary.yaml"),
+        lambda payload: payload["splits"]["validation"].pop("n_matches"))
+    with pytest.raises(PinError) as excinfo:
+        _summary_block(summary)
+    assert "splits.validation.n_matches" in str(excinfo.value)
+
+
+# --- drift: the summary is not evidence for itself (MUST-FIX 1) ------------
+
+def test_retrain_summary_refuses_a_row_count_the_parquet_denies(tmp_path):
+    summary = _retouch(
+        _synthetic_summary(tmp_path / "summary.yaml"),
+        lambda payload: payload["splits"]["validation"].update(n_rows=999))
+    with pytest.raises(PinError) as excinfo:
+        _summary_block(summary)
+    assert "splits.validation.n_rows" in str(excinfo.value)
+
+
+def test_retrain_summary_refuses_a_match_count_the_parquet_denies(tmp_path):
+    summary = _retouch(
+        _synthetic_summary(tmp_path / "summary.yaml"),
+        lambda payload: payload["splits"]["validation"].update(n_matches=99))
+    with pytest.raises(PinError) as excinfo:
+        _summary_block(summary)
+    assert "splits.validation.n_matches" in str(excinfo.value)
+
+
+def test_retrain_summary_refuses_a_split_md5_the_parquet_denies(tmp_path):
+    summary = _retouch(
+        _synthetic_summary(tmp_path / "summary.yaml"),
+        lambda payload: payload["frame"]["split_md5s"].update(
+            train="0" * 32))
+    with pytest.raises(PinError) as excinfo:
+        _summary_block(summary)
+    assert "frame.split_md5s" in str(excinfo.value)
+    assert "train" in str(excinfo.value)
+
+
+def test_retrain_summary_refuses_a_changed_feature_hash_key(tmp_path):
+    summary = _retouch(
+        _synthetic_summary(tmp_path / "summary.yaml"),
+        lambda payload: payload["frame"]["feature_hash"].update(
+            venue_alias_version="venue_aliases_v2"))
+    with pytest.raises(PinError) as excinfo:
+        _summary_block(summary)
+    assert "frame.feature_hash" in str(excinfo.value)
+    assert "venue_alias_version" in str(excinfo.value)
+
+
+def test_retrain_summary_refuses_a_changed_retrain_config(tmp_path,
+                                                          monkeypatch):
+    """The config sha256 is re-hashed from the file, not copied."""
+    config = tmp_path / "seq_stage1_retrain_i7_v1.yaml"
+    shutil.copyfile(
+        pin_stage1.REPO_ROOT / pin_stage1.RETRAIN_CONFIG, config)
+    monkeypatch.setattr(pin_stage1, "RETRAIN_CONFIG", config.as_posix())
+    summary = _synthetic_summary(tmp_path / "summary.yaml")
+    assert _summary_block(summary)["retrain_config_sha256"]
+
+    # One line appended to the config on disk, nothing else touched.
+    config.write_text(config.read_text() + "\n# drifted\n")
+    with pytest.raises(PinError) as excinfo:
+        _summary_block(summary)
+    assert "experiment.config_sha256" in str(excinfo.value)
+
+
+def test_retrain_summary_refuses_a_cache_that_moved(tmp_path):
+    summary = _synthetic_summary(tmp_path / "summary.yaml")
+    with pytest.raises(PinError) as excinfo:
+        _summary_block(summary, stats_cache_md5="0" * 32)
+    assert "frame.stats_cache.md5" in str(excinfo.value)
+
+
+def test_summary_row_must_match_the_seed_metrics_json(tmp_path):
+    """All ten rows are checked against the run that produced them."""
+    summary = _synthetic_summary(tmp_path / "summary.yaml")
+    assert selection_table(summary)["full"]["chosen_seed"] == 101
+
+    metrics = tmp_path / "full" / "seed_29" / "metrics.json"
+    metrics.write_text(json.dumps({"validation_ll": FULL_LLS[29] + 1e-6}))
+    with pytest.raises(PinError) as excinfo:
+        selection_table(summary)
+    message = str(excinfo.value)
+    assert "seed 29" in message
+    assert "metrics.json" in message
+
+
+def test_summary_row_without_a_checkpoint_is_refused(tmp_path):
+    summary = _synthetic_summary(tmp_path / "summary.yaml")
+    (tmp_path / "mlp" / "seed_42" / "metrics.json").unlink()
+    with pytest.raises(PinError) as excinfo:
+        selection_table(summary)
+    assert "missing metrics.json" in str(excinfo.value)
+
+
+def test_summary_row_pointing_at_another_seed_is_refused(tmp_path):
+    summary = _retouch(
+        _synthetic_summary(tmp_path / "summary.yaml"),
+        lambda payload: payload["splits"]["validation"]["arms"]["mlp"][
+            "per_seed"][0].update(
+                checkpoint_dir="models/embeddings/seq_stage1/retrain_i7/"
+                               "mlp/seed_13"))
+    with pytest.raises(PinError) as excinfo:
+        selection_table(summary)
+    assert "does not end in mlp/seed_7" in str(excinfo.value)
+
+
+# The full-precision rule, stated once in pin_stage1.FULL_PRECISION_RULE and
+# exercised here on the boundary values it is written for.
+@pytest.mark.parametrize("value,places", [
+    (1.4377, 4), (1.43775, 5), (1.437755, 6), (1.4377551, 7),
+    (1.0, 1), (1e-09, pin_stage1.FULL_PRECISION_MIN_DECIMALS),
+])
+def test_decimal_places_counts_the_round_trip_repr(value, places):
+    assert decimal_places(value) == places
+
+
+@pytest.mark.parametrize("value", [1.4377, 1.0, 0.5, 1.4375, 1.44])
+def test_four_decimal_values_are_refused(value):
+    assert pin_stage1._is_four_decimal_rounded(value) is True
+
+
+@pytest.mark.parametrize("value", [1.437755, 1.4377551, 1.43775, 1e-09,
+                                   1.4377512345])
+def test_full_precision_values_are_accepted(value):
+    assert pin_stage1._is_four_decimal_rounded(value) is False
 
 
 # ---------------------------------------------------------------------------
@@ -364,6 +804,7 @@ def test_c114_is_deferred_with_no_artifacts(committed):
 # Provenance: the source closure and the runtime are pinned facts
 # ---------------------------------------------------------------------------
 
+@needs_repin
 def test_source_closure_is_hashed_in_full(committed):
     """Every closure file on this checkout is hashed, with a live md5."""
     from artifacts import md5_file
@@ -421,6 +862,7 @@ def test_runtime_matches_this_environment(committed):
 
 
 @pytest.mark.needs_artifacts
+@needs_repin
 def test_tampered_source_md5_fails(tmp_path):
     tampered = tmp_path / "seq_stage1_sim_v1.yaml"
     shutil.copyfile(CONFIG_PATH, tampered)
@@ -432,6 +874,7 @@ def test_tampered_source_md5_fails(tmp_path):
 
 
 @pytest.mark.needs_artifacts
+@needs_repin
 def test_tampered_runtime_fails(tmp_path):
     tampered = tmp_path / "seq_stage1_sim_v1.yaml"
     shutil.copyfile(CONFIG_PATH, tampered)
@@ -586,3 +1029,651 @@ def test_overlap_prose_states_the_mechanism(committed):
             break
     else:
         raise AssertionError("the RNG-stream deviation is missing")
+
+
+# ---------------------------------------------------------------------------
+# D6 6.1 / 6.3 — B and C are pinned from the i7 retrain, with their contract
+# ---------------------------------------------------------------------------
+
+# The synthetic frame declaration (`FRAME_HASH`) and the parquets it names
+# are built once near the top of this module; the contract below agrees with
+# BOTH, and each test breaks one field at a time.
+
+def _contract(retrain_arm="mlp", seed=101, cache_md5=CACHE_MD5,
+              frame_dir=None, facts=None, feature_hash=None, **overrides):
+    """A training contract that agrees with the synthetic frame on disk."""
+    shared_dir, shared_facts = _shared_frame()
+    frame_dir = shared_dir if frame_dir is None else frame_dir
+    facts = shared_facts if facts is None else facts
+    feature_hash = dict(FRAME_HASH if feature_hash is None else feature_hash)
+    names = list(expected_feature_names())
+    contract = {
+        "contract_version": "t1_training_contract_v1",
+        "frame_dir": frame_dir,
+        "frame_version": feature_hash["version"],
+        "feature_hash": feature_hash,
+        "delivery_semantics": feature_hash["delivery_semantics"],
+        "venue_alias_version": feature_hash["venue_alias_version"],
+        "venue_alias_sha256": feature_hash["venue_alias_sha256"],
+        "split_files": {split: dict(row) for split, row in facts.items()},
+        "feature_names": names,
+        "feature_names_sha256": feature_names_sha256(names),
+        "architecture": {"dmodel": 128, "layers": 2, "heads": 4,
+                         "arm": retrain_arm},
+        "seed": seed,
+        "best_epoch": 4,
+        "stats_cache": {
+            "role": CACHE_ROLE,
+            "path": CACHE_PATH,
+            "md5": cache_md5,
+            "venue_alias_version": feature_hash["venue_alias_version"],
+            "same_day_order_version": SAME_DAY_ORDER,
+        },
+    }
+    contract.update(overrides)
+    return contract
+
+
+def _write_checkpoint(model_dir, contract, validation_ll=1.4377551):
+    model_dir = Path(model_dir)
+    model_dir.mkdir(parents=True, exist_ok=True)
+    (model_dir / "model.pt").write_bytes(str(model_dir).encode())
+    payload = {"validation_ll": validation_ll}
+    if contract is not None:
+        payload["training_contract"] = contract
+    (model_dir / "metrics.json").write_text(json.dumps(payload))
+    return model_dir
+
+
+def _frame_block(model_dir, *, frame_hash=None, cache_md5=CACHE_MD5,
+                 expected_seed=101, frame_dir=None, facts=None):
+    shared_dir, shared_facts = _shared_frame()
+    return training_frame_block(
+        read_training_contract(model_dir),
+        model_dir=model_dir,
+        frame_dir=shared_dir if frame_dir is None else frame_dir,
+        frame_hash=dict(frame_hash or FRAME_HASH),
+        frame_facts=shared_facts if facts is None else facts,
+        stats_cache_role=CACHE_ROLE,
+        stats_cache_path=CACHE_PATH,
+        stats_cache_md5=cache_md5,
+        expected_seed=expected_seed)
+
+
+def test_stage_1_resolves_b_and_c_from_the_retrain_namespace():
+    """6.1: composed from segments, and the ablation dir is not on the path."""
+    assert pin_stage1.RETRAIN_DIR == (
+        pin_stage1.SEQ_STAGE1_ROOT / "retrain_i7")
+    assert pin_stage1.RETRAIN_SUMMARY == (
+        pin_stage1.RETRAIN_DIR / "summary.yaml")
+    assert not hasattr(pin_stage1, "ABLATION_DIR")
+    assert not hasattr(pin_stage1, "ABLATION_SUMMARY")
+    for arm in ("B", "C"):
+        spec = pin_stage1.ARM_SPEC[arm]
+        assert spec["stats_version"] == "i7"
+        assert spec["retrain_arm"] in ("mlp", "full")
+        assert "ablation_arm" not in spec
+
+
+def test_arm_spec_stats_versions_match_the_runner_spec():
+    """6.3: the runner's spec and this config move in lockstep."""
+    for arm in ("A", "A50", "B", "C"):
+        assert (pin_stage1.ARM_SPEC[arm]["stats_version"]
+                == run_arm.ARMS[arm]["stats_version"]), arm
+
+
+def test_write_fails_closed_when_the_retrain_is_absent(tmp_path, monkeypatch,
+                                                       capsys):
+    """No traceback, a PinError naming the missing summary, nothing written."""
+    monkeypatch.setattr(pin_stage1, "RETRAIN_SUMMARY",
+                        tmp_path / "absent" / "summary.yaml")
+    target = tmp_path / "written.yaml"
+    assert main(["--write", "--config", str(target)]) == 1
+    assert not target.exists()
+    message = capsys.readouterr().err
+    assert "pin_stage1: ERROR: missing retrain summary" in message
+    assert "summary.yaml" in message
+
+
+def test_training_contract_pins_the_frame_and_the_cache(tmp_path):
+    frame_dir, facts = _shared_frame()
+    block = _frame_block(_write_checkpoint(tmp_path / "seed_101",
+                                           _contract()))
+    assert block["dir"] == frame_dir
+    assert block["dir_role"] == pin_stage1.ROLE_BALL_FRAME_I7
+    # The md5s, rows and date ranges are the RECOMPUTED ones.
+    assert block["split_md5s"] == {
+        split: row["md5"] for split, row in facts.items()}
+    assert block["split_rows"] == {
+        split: row["n_rows"] for split, row in facts.items()}
+    assert block["split_date_range"]["validation"] == [
+        VALIDATION_DATES[0], VALIDATION_DATES[-1]]
+    assert block["delivery_semantics"] == "inclusive_total_runs_v1"
+    assert block["venue_alias_version"] == "venue_aliases_v1"
+    assert block["venue_alias_sha256"] == FRAME_HASH["venue_alias_sha256"]
+    assert block["feature_names_sha256"] == feature_names_sha256(
+        expected_feature_names())
+    assert block["feature_count"] == 50
+    assert block["stats_cache_at_training"] == CACHE_PATH
+    assert block["stats_cache_at_training_role"] == CACHE_ROLE
+    assert block["stats_cache_at_training_md5"] == CACHE_MD5
+    assert block["training_seed"] == 101
+    assert block["stats_cache_same_day_order_version"] == (
+        "date_then_match_id_lexicographic_v1")
+
+
+def test_a_checkpoint_without_a_contract_is_refused(tmp_path):
+    model_dir = _write_checkpoint(tmp_path / "seed_101", None)
+    with pytest.raises(PinError) as excinfo:
+        read_training_contract(model_dir)
+    assert "no training_contract block" in str(excinfo.value)
+
+
+def test_a_checkpoint_without_metrics_is_refused(tmp_path):
+    (tmp_path / "seed_101").mkdir()
+    with pytest.raises(PinError) as excinfo:
+        read_training_contract(tmp_path / "seed_101")
+    assert "missing metrics.json" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("key", list(pin_stage1.REQUIRED_CONTRACT_KEYS))
+def test_every_required_contract_key_is_enforced(tmp_path, key):
+    contract = _contract()
+    contract[key] = None
+    model_dir = _write_checkpoint(tmp_path / "seed_101", contract)
+    with pytest.raises(PinError) as excinfo:
+        read_training_contract(model_dir)
+    assert key in str(excinfo.value)
+
+
+@pytest.mark.parametrize("patch,needle", [
+    ({"frame_dir": "data/xgb_data_v3"}, "frame_dir"),
+    ({"frame_version": "v3"}, "frame_version"),
+    ({"delivery_semantics": "legal_off_bat_v1"}, "delivery_semantics"),
+    ({"venue_alias_version": "venue_aliases_v2"}, "venue_alias_version"),
+    ({"venue_alias_sha256": "9" * 64}, "venue_alias_sha256"),
+    ({"seed": 42}, "seed"),
+    ({"feature_names": [f"feature_{index}" for index in range(49)]},
+     "feature count"),
+    ({"feature_names_sha256": "short"}, "feature_names_sha256"),
+])
+def test_a_drifted_contract_field_is_refused(tmp_path, patch, needle):
+    model_dir = _write_checkpoint(tmp_path / "seed_101", _contract(**patch))
+    with pytest.raises(PinError) as excinfo:
+        _frame_block(model_dir)
+    assert needle in str(excinfo.value)
+
+
+def test_a_contract_whose_cache_md5_moved_is_refused(tmp_path):
+    """The one check against the world as it is now (6.3)."""
+    model_dir = _write_checkpoint(tmp_path / "seed_101",
+                                  _contract(cache_md5="0" * 32))
+    with pytest.raises(PinError) as excinfo:
+        _frame_block(model_dir, cache_md5=CACHE_MD5)
+    assert "stats_cache.md5" in str(excinfo.value)
+    assert CACHE_PATH in str(excinfo.value)
+
+
+@pytest.mark.parametrize("field", list(pin_stage1.REQUIRED_CACHE_FIELDS))
+def test_an_incomplete_cache_block_is_refused(tmp_path, field):
+    contract = _contract()
+    contract["stats_cache"][field] = None
+    model_dir = _write_checkpoint(tmp_path / "seed_101", contract)
+    with pytest.raises(PinError) as excinfo:
+        _frame_block(model_dir)
+    assert field in str(excinfo.value)
+
+
+@pytest.mark.parametrize("field", list(pin_stage1.REQUIRED_SPLIT_FIELDS))
+def test_an_incomplete_split_block_is_refused(tmp_path, field):
+    contract = _contract()
+    contract["split_files"]["validation"][field] = None
+    model_dir = _write_checkpoint(tmp_path / "seed_101", contract)
+    with pytest.raises(PinError) as excinfo:
+        _frame_block(model_dir)
+    assert field in str(excinfo.value)
+
+
+def test_a_missing_split_is_refused(tmp_path):
+    contract = _contract()
+    del contract["split_files"]["train"]
+    model_dir = _write_checkpoint(tmp_path / "seed_101", contract)
+    with pytest.raises(PinError) as excinfo:
+        _frame_block(model_dir)
+    assert "no 'train' block" in str(excinfo.value)
+
+
+def test_a_cache_from_another_role_is_refused(tmp_path):
+    contract = _contract()
+    contract["stats_cache"]["role"] = "stats_cache_v3_legacy"
+    model_dir = _write_checkpoint(tmp_path / "seed_101", contract)
+    with pytest.raises(PinError) as excinfo:
+        _frame_block(model_dir)
+    assert "stats_cache.role" in str(excinfo.value)
+
+
+def test_a_cache_built_on_another_alias_version_is_refused(tmp_path):
+    contract = _contract()
+    contract["stats_cache"]["venue_alias_version"] = "venue_aliases_v0"
+    model_dir = _write_checkpoint(tmp_path / "seed_101", contract)
+    with pytest.raises(PinError) as excinfo:
+        _frame_block(model_dir)
+    assert "stats_cache.venue_alias_version" in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# Drift: the pin recomputes the training facts (Astra round 1, MUST-FIX 1)
+#
+# Each test below changes ONE underlying fact while leaving the contract, the
+# metrics, the summary and the YAML self-consistent. Before this change every
+# one of them verified.
+# ---------------------------------------------------------------------------
+
+def test_a_modified_training_parquet_fails_the_pin(tmp_path):
+    """A changed parquet, with the contract left untouched."""
+    frame_dir = tmp_path / "xgb_data_i7"
+    facts = _build_frame(frame_dir)
+    contract = _contract(frame_dir=frame_dir.as_posix(), facts=facts)
+    model_dir = _write_checkpoint(tmp_path / "seed_101", contract)
+    # As built, the contract and the files agree.
+    assert _frame_block(model_dir, frame_dir=frame_dir.as_posix(),
+                        facts=facts)["split_md5s"]["validation"] == (
+        facts["validation"]["md5"])
+
+    # One more ball in the validation split: same schema, different bytes.
+    _write_split_parquet(frame_dir / "cricket_data_i7_validation.parquet",
+                         VALIDATION_DATES + ["2025-06-29"])
+    pin_stage1._FRAME_SPLIT_FACTS.pop((frame_dir.as_posix(), "i7"), None)
+    moved = frame_split_facts(frame_dir, "i7")
+    assert moved["validation"]["md5"] != facts["validation"]["md5"]
+
+    with pytest.raises(PinError) as excinfo:
+        _frame_block(model_dir, frame_dir=frame_dir.as_posix(), facts=moved)
+    assert "split_files.validation.md5" in str(excinfo.value)
+
+
+def test_a_training_parquet_whose_rows_moved_fails_the_pin(tmp_path):
+    frame_dir = tmp_path / "xgb_data_i7"
+    facts = _build_frame(frame_dir)
+    contract = _contract(frame_dir=frame_dir.as_posix(), facts=facts)
+    # The md5 still matches; only the recorded row count is wrong.
+    contract["split_files"]["train"]["n_rows"] = facts["train"]["n_rows"] + 1
+    model_dir = _write_checkpoint(tmp_path / "seed_101", contract)
+    with pytest.raises(PinError) as excinfo:
+        _frame_block(model_dir, frame_dir=frame_dir.as_posix(), facts=facts)
+    assert "split_files.train.n_rows" in str(excinfo.value)
+
+
+def test_a_training_parquet_whose_dates_moved_fails_the_pin(tmp_path):
+    frame_dir = tmp_path / "xgb_data_i7"
+    facts = _build_frame(frame_dir)
+    contract = _contract(frame_dir=frame_dir.as_posix(), facts=facts)
+    contract["split_files"]["validation"]["match_date_max"] = "2026-06-17"
+    model_dir = _write_checkpoint(tmp_path / "seed_101", contract)
+    with pytest.raises(PinError) as excinfo:
+        _frame_block(model_dir, frame_dir=frame_dir.as_posix(), facts=facts)
+    assert "split_files.validation.match_date_max" in str(excinfo.value)
+
+
+def test_a_missing_training_parquet_fails_the_pin(tmp_path):
+    frame_dir = tmp_path / "xgb_data_i7"
+    _build_frame(frame_dir)
+    (frame_dir / "cricket_data_i7_train.parquet").unlink()
+    pin_stage1._FRAME_SPLIT_FACTS.pop((frame_dir.as_posix(), "i7"), None)
+    with pytest.raises(PinError) as excinfo:
+        frame_split_facts(frame_dir, "i7")
+    assert "missing training split parquet" in str(excinfo.value)
+    assert "cricket_data_i7_train.parquet" in str(excinfo.value)
+
+
+def test_an_unreadable_training_parquet_fails_the_pin(tmp_path):
+    frame_dir = tmp_path / "xgb_data_i7"
+    _build_frame(frame_dir)
+    (frame_dir / "cricket_data_i7_validation.parquet").write_bytes(b"PAR1junk")
+    pin_stage1._FRAME_SPLIT_FACTS.pop((frame_dir.as_posix(), "i7"), None)
+    with pytest.raises(PinError) as excinfo:
+        frame_split_facts(frame_dir, "i7")
+    assert "cricket_data_i7_validation.parquet" in str(excinfo.value)
+
+
+def test_a_permuted_feature_name_is_refused(tmp_path):
+    """Right length, right membership, wrong order: a different input."""
+    names = list(expected_feature_names())
+    names[0], names[1] = names[1], names[0]
+    contract = _contract(feature_names=names,
+                         feature_names_sha256=feature_names_sha256(names))
+    model_dir = _write_checkpoint(tmp_path / "seed_101", contract)
+    with pytest.raises(PinError) as excinfo:
+        _frame_block(model_dir)
+    message = str(excinfo.value)
+    assert "feature_names[0]" in message
+    assert "EB_BAT + EB_BOWL + VENUE + CTX + STATE" in message
+
+
+def test_a_renamed_feature_is_refused(tmp_path):
+    names = list(expected_feature_names())
+    names[-1] = "run_rate_required_v2"
+    contract = _contract(feature_names=names,
+                         feature_names_sha256=feature_names_sha256(names))
+    model_dir = _write_checkpoint(tmp_path / "seed_101", contract)
+    with pytest.raises(PinError) as excinfo:
+        _frame_block(model_dir)
+    assert f"feature_names[{len(names) - 1}]" in str(excinfo.value)
+
+
+def test_a_feature_names_sha_that_hashes_nothing_is_refused(tmp_path):
+    contract = _contract(feature_names_sha256="d" * 64)
+    model_dir = _write_checkpoint(tmp_path / "seed_101", contract)
+    with pytest.raises(PinError) as excinfo:
+        _frame_block(model_dir)
+    assert "feature_names_sha256" in str(excinfo.value)
+    assert "recomputed" in str(excinfo.value)
+
+
+def test_expected_feature_names_are_the_serving_order():
+    """The pin composes the same 50 names the T1 wrapper serves."""
+    from sim_t1 import EXPECTED_FEATURE_NAMES
+
+    assert tuple(expected_feature_names()) == tuple(EXPECTED_FEATURE_NAMES)
+    assert len(expected_feature_names()) == pin_stage1.T1_FEATURE_COUNT
+
+
+@pytest.mark.parametrize("key,value", [
+    ("venue_alias_version", "venue_aliases_v2"),
+    ("venue_alias_sha256", "9" * 64),
+    ("delivery_semantics", "legal_off_bat_v1"),
+    ("hash", "deadbeefcafe"),
+    ("n_features", 50),
+])
+def test_a_changed_feature_hash_key_in_the_contract_is_refused(
+        tmp_path, key, value):
+    """The whole frame declaration is compared, not three fields of it."""
+    feature_hash = dict(FRAME_HASH)
+    feature_hash[key] = value
+    contract = _contract()
+    contract["feature_hash"] = feature_hash
+    model_dir = _write_checkpoint(tmp_path / "seed_101", contract)
+    with pytest.raises(PinError) as excinfo:
+        _frame_block(model_dir)
+    message = str(excinfo.value)
+    assert "feature_hash" in message
+    assert key in message
+
+
+def test_a_contract_feature_hash_missing_a_key_is_refused(tmp_path):
+    feature_hash = dict(FRAME_HASH)
+    del feature_hash["n_features"]
+    contract = _contract()
+    contract["feature_hash"] = feature_hash
+    model_dir = _write_checkpoint(tmp_path / "seed_101", contract)
+    with pytest.raises(PinError) as excinfo:
+        _frame_block(model_dir)
+    assert "'n_features' is missing" in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# D6 6.1/6.3/6.4/6.5/6.6/6.7 — the config the pin script builds
+#
+# `build_config()` is exercised against a SYNTHETIC retrain tree, so the
+# wiring is tested before the real retrain exists. Everything else in the
+# config (the caches, the fixture set, the source closure) is the real
+# repository, which is why this test needs artifacts.
+# ---------------------------------------------------------------------------
+
+def _synthetic_retrain_tree(root, cache_md5, frame_dir, frame_hash, facts):
+    """A complete retrain output tree in the D3 layout.
+
+    The checkpoints declare the REAL i7 frame — its `.feature_hash`, its two
+    split parquets and their recomputed md5s, rows and date ranges — because
+    `build_config()` recomputes all of that from the repository.
+    """
+    for retrain_arm, lls in (("mlp", MLP_LLS), ("full", FULL_LLS)):
+        for seed, ll in lls.items():
+            contract = _contract(
+                retrain_arm=retrain_arm, seed=seed, cache_md5=cache_md5,
+                frame_dir=frame_dir, facts=facts, feature_hash=frame_hash)
+            _write_checkpoint(root / retrain_arm / f"seed_{seed}", contract,
+                              validation_ll=ll)
+    _synthetic_summary(root / "summary.yaml", with_checkpoints=False,
+                       frame_dir=frame_dir, facts=facts,
+                       feature_hash=frame_hash, cache_md5=cache_md5)
+    return root
+
+
+@pytest.fixture
+def synthetic_config(tmp_path, monkeypatch):
+    frame_dir = pin_stage1._role_path(pin_stage1.ROLE_BALL_FRAME_I7)
+    frame_hash = pin_stage1.frame_feature_hash(frame_dir)
+    facts = frame_split_facts(frame_dir, frame_hash["version"])
+    cache_md5 = pin_stage1._md5_file(
+        pin_stage1._role_path(pin_stage1.ROLE_STATS_CACHE["i7"]))
+    root = _synthetic_retrain_tree(tmp_path / "retrain_i7", cache_md5,
+                                   frame_dir, frame_hash, facts)
+    monkeypatch.setattr(pin_stage1, "RETRAIN_DIR", root)
+    monkeypatch.setattr(pin_stage1, "RETRAIN_SUMMARY", root / "summary.yaml")
+    return build_config()
+
+
+@pytest.mark.needs_artifacts
+def test_built_config_pins_b_and_c_on_the_retrain_and_the_i7_cache(
+        synthetic_config):
+    config = synthetic_config
+    for arm, retrain_arm in (("B", "mlp"), ("C", "full")):
+        block = config["arms"][arm]
+        assert block["model_dir"].endswith(f"retrain_i7/{retrain_arm}/"
+                                           "seed_101")
+        assert block["checkpoint"].endswith("model.pt")
+        assert block["retrain_arm"] == retrain_arm
+        assert block["checkpoint_seed"] == 101
+        assert "ablation_arm" not in block
+        # 6.3: one cache for every arm, by role and by hash.
+        assert block["stats_version"] == "i7"
+        assert block["stats_cache_role"] == "stats_cache_i7"
+        assert block["stats_cache_md5"] == config["arms"]["A"][
+            "stats_cache_md5"]
+        assert block["stats_cache_md5"] == config["arms"]["A50"][
+            "stats_cache_md5"]
+        frame = block["training_frame"]
+        assert frame["dir"] == pin_stage1._role_path(
+            pin_stage1.ROLE_BALL_FRAME_I7)
+        assert frame["dir_role"] == "ball_frame_i7"
+        assert frame["split_md5s"]["validation"]
+        assert frame["delivery_semantics"] == "inclusive_total_runs_v1"
+        assert frame["stats_cache_at_training_md5"] == block["stats_cache_md5"]
+    # 6.3 again, from the command line the config registers.
+    for arm in ("A", "A50", "B", "C"):
+        assert "--stats-version i7 " in (
+            config["arms"][arm]["smoke_1a"]["command"] + " ")
+
+
+@pytest.mark.needs_artifacts
+def test_built_config_records_the_superseded_ablation_checkpoints(
+        synthetic_config):
+    """6.1: the old dirs survive only as a record of what was dropped."""
+    record = synthetic_config["superseded_checkpoints"]
+    assert record["reason"] == pin_stage1.SUPERSEDED_REASON
+    assert "2026-09-11" in record["reason"]
+    seen = {}
+    for row in record["checkpoints"]:
+        seen[row["arm"]] = row
+        assert row["superseded_model_dir"].startswith(
+            "models/embeddings/t1_ablation_v1_mps/")
+        assert row["superseded_model_dir"].endswith("seed_101")
+        assert len(row["superseded_model_dir_md5"]) == 32
+        assert row["reason"] == pin_stage1.SUPERSEDED_REASON
+        assert "retrain_i7" in row["now_pinned_at"]
+    assert set(seen) == {"B", "C"}
+    assert (seen["B"]["superseded_model_dir_md5"]
+            != seen["C"]["superseded_model_dir_md5"])
+
+    # The ablation path appears nowhere else in the config.
+    flat = flatten(synthetic_config)
+    elsewhere = [key for key, value in flat.items()
+                 if isinstance(value, str)
+                 and "t1_ablation_v1_mps" in value
+                 and not key.startswith("superseded_checkpoints")]
+    assert elsewhere == []
+
+
+@pytest.mark.needs_artifacts
+def test_built_config_moves_the_two_cache_asymmetries_to_removed(
+        synthetic_config):
+    """6.4 and 6.5."""
+    config = synthetic_config
+    ids = [row["id"] for row in config["known_asymmetries"]]
+    assert "stats_cache_i7_vs_v3" not in ids
+    assert "training_frame_i7_vs_v3" not in ids
+    assert ids == ["feature_set_114_vs_50",
+                   "arm_a_path_is_the_replay_lifecycle",
+                   "br2_g1_is_not_a_stage_1_number"]
+
+    removed = {row["id"]: row for row in config["removed_asymmetries"]}
+    assert set(removed) == {"stats_cache_i7_vs_v3", "training_frame_i7_vs_v3"}
+    for row in removed.values():
+        assert row["removed_on"] == "2026-09-11"
+        assert "2026-09-11 retrain on the i7 frame" in row["reason"]
+
+    feature = config["known_asymmetries"][0]
+    assert "114" in feature["what"] and "50" in feature["what"]
+    assert "system contrasts" in feature["consequence"]
+    # Astra round 1, SHOULD 3: A50-A is an isolation only at equal
+    # information within one family, and C-B is not an isolation at all.
+    assert ("A50-A isolates the feature set at equal information, within "
+            "one model family") in feature["consequence"]
+    assert "isolates sequence memory" not in feature["consequence"]
+    assert ("full-sequence T1 versus token-MLP contrast"
+            in feature["consequence"])
+    assert ("outcome-history embedding, attention and parameter count"
+            in feature["consequence"])
+
+
+@pytest.mark.needs_artifacts
+def test_built_config_records_the_corpus_prior_limitation(synthetic_config):
+    """6.6: the D2.4 numbers, verbatim, and identical across arms."""
+    limitations = {row["id"]: row
+                   for row in synthetic_config["known_limitations"]}
+    row = limitations["global_prior_not_as_of"]
+    # Astra round 1, MUST-FIX 2: the EXPOSURE is shared; the downstream
+    # effect on each arm is unknown, and the feature shift is never compared
+    # with the log-loss equivalence margin.
+    assert row["identical_across_arms"] is True
+    assert "EXPOSURE is identical" in row["identical_across_arms_scope"]
+    assert row["differential_effect_on_arms"] == "unknown_and_unmeasured"
+    assert "shared exposure, unknown differential effect" in row["consequence"]
+    assert "cannot favour an arm" not in row["consequence"]
+    assert "equivalence margin" not in row["consequence"]
+    assert "not a log loss" not in row["consequence"]
+    assert "FEATURE space" in row["feature_shift_is_not_a_log_loss_bound"]
+    assert row["source"] == (
+        "scripts/sequence_track/measure_global_prior_asof.py")
+    # The 0.000174 row is 2,000 venue balls (k=200) / 300 player balls (k=30).
+    assert "2,000 balls in a VENUE cell" in row["feature_shift_units"]
+    assert "300 balls in a PLAYER cell" in row["feature_shift_units"]
+    assert row["max_abs_difference"] == 0.001915
+    assert row["difference_convention"] == "whole corpus minus train only"
+    pi = {entry["outcome"]: entry
+          for entry in row["pi_train_only_vs_whole_corpus"]}
+    assert set(pi) == {"wicket", "dot", "single", "two", "four", "six"}
+    assert pi["wicket"]["train_only"] == 0.054037
+    assert pi["wicket"]["whole_corpus"] == 0.054361
+    assert pi["single"]["difference"] == -0.001915
+    assert pi["six"]["difference"] == 0.001349
+    assert pi["four"]["whole_corpus"] == 0.107803
+    shifts = {(entry["cell"], entry["n"]): entry["shift"]
+              for entry in row["feature_shift"]}
+    assert shifts[("venue", 200)] == 0.000957
+    assert shifts[("venue", 2000)] == 0.000174
+    assert shifts[("player", 30)] == 0.000957
+    assert shifts[("player", 300)] == 0.000174
+
+
+@pytest.mark.needs_artifacts
+def test_built_config_labels_the_teacher_forced_gap_a_diagnostic(
+        synthetic_config):
+    """6.7."""
+    block = synthetic_config["checkpoint_selection"]
+    diagnostic = block["teacher_forced_diagnostic"]
+    assert diagnostic["label"] == (
+        "selection_conditioned_diagnostic_not_evidence")
+    assert diagnostic["selected_validation_ll"] == {
+        "B": MLP_LLS[101], "C": FULL_LLS[101]}
+    assert diagnostic["C_minus_B_validation_ll"] == pytest.approx(
+        FULL_LLS[101] - MLP_LLS[101])
+    assert "neither is a stage-1 contrast" in diagnostic["what"]
+    assert block["source"].endswith("summary.yaml")
+    assert block["split_rows"] == 124292
+    assert block["registered_seeds"] == list(
+        pin_stage1.REGISTERED_TRAINING_SEEDS)
+
+
+@pytest.mark.needs_artifacts
+def test_built_config_round_trips_through_yaml(synthetic_config):
+    """What --write would emit parses back to what --verify recomputes."""
+    reparsed = yaml.safe_load(pin_stage1.dump_config(synthetic_config))
+    assert diff_config(synthetic_config, reparsed) == []
+
+
+# ---------------------------------------------------------------------------
+# The committed config, once it has been re-pinned (6.8, 6.10)
+# ---------------------------------------------------------------------------
+
+@needs_repin
+def test_the_committed_config_pins_the_retrained_checkpoints(committed):
+    for arm, retrain_arm in (("B", "mlp"), ("C", "full")):
+        block = committed["arms"][arm]
+        assert block["model_dir"].startswith(
+            f"models/embeddings/seq_stage1/retrain_i7/{retrain_arm}/seed_")
+        assert block["stats_version"] == "i7"
+        assert block["stats_cache_md5"] == committed["arms"]["A"][
+            "stats_cache_md5"]
+        assert block["training_frame"]["dir_role"] == "ball_frame_i7"
+        assert "--stats-version i7 " in block["smoke_1a"]["command"] + " "
+    assert "superseded_checkpoints" in committed
+    assert [row["id"] for row in committed["removed_asymmetries"]] == [
+        "stats_cache_i7_vs_v3", "training_frame_i7_vs_v3"]
+    assert [row["id"] for row in committed["known_limitations"]] == [
+        "global_prior_not_as_of"]
+
+
+@pytest.mark.needs_artifacts
+def test_built_config_keeps_every_role_and_path_paired(synthetic_config):
+    """The new training_frame keys must name their manifest roles too.
+
+    The two committed-config role tests only run on the file; this runs the
+    same two rules on the config the script builds now, so a re-pin cannot
+    introduce an unrolled manifest path.
+    """
+    from artifacts import artifact_path, load_manifest
+
+    flat = flatten(synthetic_config)
+    checked = 0
+    for key, role in sorted(flat.items()):
+        if not isinstance(role, str):
+            continue
+        if key.endswith(".role"):
+            target = key[: -len(".role")] + ".path"
+        elif key.endswith("_role"):
+            target = key[: -len("_role")]
+        else:
+            continue
+        pinned = flat.get(target)
+        if pinned is None:
+            continue
+        assert pinned == artifact_path(role).as_posix(), (
+            f"{key} = {role!r} does not resolve to {target} = {pinned!r}")
+        checked += 1
+    assert checked >= 40, f"only {checked} role/path pairs were checked"
+
+    by_path = {row["path"]: role for role, row in load_manifest().items()}
+    for key, value in flat.items():
+        if not isinstance(value, str) or value not in by_path:
+            continue
+        if key.endswith(("_role", "_note", "_source", "_md5", "_sha256")):
+            continue
+        sibling = f"{key}_role" if not key.endswith(".path") else (
+            key.rsplit(".", 1)[0] + ".role")
+        if key.endswith(".fixture_dir"):
+            sibling = key + "_role"
+        assert flat.get(sibling) == by_path[value], (
+            f"{key} pins manifest-owned {value!r} but {sibling} is "
+            f"{flat.get(sibling)!r}, expected {by_path[value]!r}")

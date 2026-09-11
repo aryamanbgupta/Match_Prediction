@@ -67,6 +67,18 @@ class StatsProvider:
             self._backend.get_meta()
         )
 
+    def get_cache_meta(self) -> Dict[str, str]:
+        """The backing cache's `_meta` rows.
+
+        An explicit, named passthrough so serving-side identity guards can
+        reach `_meta` through a wrapping provider chain (StatsProviderCache,
+        SameDayReplayStatsProvider) without touching private attributes.
+        `__getattr__` would forward `get_meta` to the backend from a bare
+        StatsProvider, but not through a wrapper whose delegate is a tracker
+        view rather than a backend.
+        """
+        return dict(self._backend.get_meta())
+
     # --- backend selection ----------------------------------------------
 
     @staticmethod

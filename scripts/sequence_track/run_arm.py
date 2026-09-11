@@ -12,8 +12,9 @@ XGBoost wrappers as well:
   in `docs/sequence_track/stage0_acceptance.md`: the replay provider's
   tracker view implements every provider method `XGBoostModelV2`'s feature
   builder calls);
-* B/C bind `TransformerT1SimModel` to that provider over the legacy v3 cache
-  (the ablation checkpoints refuse any other frame), prefix cache OFF;
+* B/C bind `TransformerT1SimModel` to that provider over the SAME i7 cache
+  (the 2026-09-11 retrain moved both checkpoints onto the i7 identity
+  frame), prefix cache OFF;
 * A/A50 bind `XGBoostModelV2` to the SAME provider class over the i7 cache,
   with an explicit model dir and `ball_calibrator=None` (the promoted i7
   stack serves RAW — D16/D17).
@@ -117,16 +118,16 @@ ARMS = {
         "model_role": None,
         "model_dir": None,  # chosen by D5 check 5.3; must be explicit
         "artifact_suffix": None,
-        "stats_version": "v3",
-        "description": "T1 ablation `mlp` arm checkpoint",
+        "stats_version": "i7",
+        "description": "T1 i7-retrain `mlp` arm checkpoint",
     },
     "C": {
         "model_type": "transformer",
         "model_role": None,
         "model_dir": None,  # chosen by D5 check 5.3; must be explicit
         "artifact_suffix": None,
-        "stats_version": "v3",
-        "description": "T1 ablation `full` arm checkpoint",
+        "stats_version": "i7",
+        "description": "T1 i7-retrain `full` arm checkpoint",
     },
 }
 
@@ -737,7 +738,8 @@ def main(argv=None) -> None:
         raise SystemExit(
             f"arm {args.arm} has no default checkpoint: pass --model-dir "
             "with the seed directory chosen by the D5 check 5.3 rule "
-            "(lowest validation LL in t1_ablation_v1_mps/summary.yaml)")
+            "(lowest validation LL in the i7 retrain summary.yaml, ties to "
+            "the lowest seed)")
     graft_path = (None if str(args.extras_graft).lower() == "none"
                   else Path(args.extras_graft))
     usage_path = args.bowler_usage_path

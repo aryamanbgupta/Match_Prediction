@@ -1,0 +1,58 @@
+experiment:
+  name: seq_stage1_retrain_i7_v1
+  registered: 2026-09-11
+  purpose: >-
+    Retrain the stage-1 sequence arms B (mlp) and C (full) on the i7 identity
+    frame, so all four stage-1 arms share one training frame and one stats
+    cache. The 2026-08-11 ablation checkpoints live on the pre-I7 frame and
+    are superseded for stage 1 by these; they are not overwritten and their
+    numbers are not comparable to these (different frame, different rows).
+  predecessor: experiments/configs/t1_ablation_v1_mps.yaml
+  decision_record: docs/sequence_track/stage1_acceptance.md
+  runner: scripts/sequence_track/retrain_i7.py
+  forbidden_data:
+    - data/golden
+    - forward holdouts
+
+data:
+  directory: data/xgb_data_i7
+  frame_version: i7
+  stats_cache_role: stats_cache_i7
+  splits_read: [train, validation]
+  eval_kit: none
+  feature_contract: transformer_t1.build_features
+  n_features: 50
+
+arms: [mlp, full]
+arm_interpretation:
+  mlp: >-
+    stage-1 arm B: capacity-matched residual MLP over the current
+    50-feature token only, with no sequence access
+  full: >-
+    stage-1 arm C: causal attention over pre-ball feature states plus the
+    shifted previous-ball outcome
+
+training:
+  device: mps
+  seeds: [7, 13, 29, 42, 101]
+  dmodel: 128
+  layers: 2
+  heads: 4
+  batch: 128
+  epochs: 30
+  learning_rate: 0.0003
+  patience: 3
+  aux: false
+  no_kit: true
+  score_test: false
+
+outputs:
+  directory: models/embeddings/seq_stage1/retrain_i7
+  summary: summary.yaml
+  save_row_aligned_probabilities: false
+
+selection:
+  rule: lowest validation log loss; ties break to the lowest seed number
+  precision: full float64, never the rounded four-decimal field
+  consumer: scripts/sequence_track/pin_stage1.py
+  test_split: never loaded, never scored, never selected on

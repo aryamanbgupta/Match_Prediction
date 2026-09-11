@@ -18,11 +18,38 @@ change without the config's meaning changing: `pins_generated_at` and
 `git_head_short`. They are listed in the YAML itself under
 `provenance.not_verified`, which IS compared.
 
-Checkpoint selection (D5 check 5.3) is computed here, never hardcoded:
-for the `mlp` (arm B) and `full` (arm C) ablation arms, the seed with the
-lowest VALIDATION log loss in `models/embeddings/t1_ablation_v1_mps/
-summary.yaml` wins, ties break to the lowest seed number, and the test
-split is not read.
+Checkpoint selection (D5 check 5.3, rewired by D6 check 6.2) is computed
+here, never hardcoded: for the `mlp` (arm B) and `full` (arm C) retrain
+arms, the seed with the lowest VALIDATION log loss in the i7 retrain's
+`summary.yaml` (`RETRAIN_SUMMARY`) wins, ties break to the lowest seed
+number, and the test split is not read. The per-seed table must carry
+exactly the five registered training seeds, each once, each finite and none
+rejected by the rounded-value heuristic: a log loss indistinguishable from
+one rounded to four decimals before it was written is refused (the heuristic
+cannot prove full precision; that is established by the trainer's unrounded
+writer and by comparing every summary value to its own metrics.json), because the seeds in this family are separated in
+the fifth and sixth decimal and a rounded table would decide the selection
+by a tie-break rather than by validation log loss.
+
+Training facts are RECOMPUTED, never copied (Astra round 1, MUST-FIX 1).
+Checking that a checkpoint's training contract merely has the right shaped
+fields would let a training parquet be replaced while the contract, the
+metrics, the summary and the YAML all still verified. So both `--write` and
+`--verify`:
+
+* hash `data/xgb_data_i7/cricket_data_i7_{train,validation}.parquet` and read
+  their row counts and `match_date` ranges with pyarrow, and compare every
+  one against the contract and against the retrain summary;
+* compare the contract's and the summary's copies of the frame's
+  `.feature_hash` against the file on disk, key by key;
+* rebuild the 50 feature names from `embeddings_e1` / `transformer_t1` in
+  the wrapper's construction order, compare them position by position, and
+  recompute their sha256;
+* re-hash the retrain config on disk; and
+* compare every one of the ten per-seed log losses in `summary.yaml` against
+  the `validation_ll` in that seed's own `metrics.json`.
+
+Any disagreement is a `PinError` naming the key.
 
 Usage:
     uv run --no-sync python scripts/sequence_track/pin_stage1.py --write
@@ -34,6 +61,7 @@ import argparse
 import copy
 import hashlib
 import json
+import math
 import platform
 import subprocess
 import sys
@@ -115,14 +143,65 @@ ROLE_PROP_CORPUS = "prop_fair_baseline_corpus_v2"
 ROLE_FIXTURE_SET = "iteration_set_v2"
 ROLE_ODDS = "odds_iteration_v2"
 ROLE_STATS_CACHE = {"i7": "stats_cache_i7", "v3": "stats_cache_v3_legacy"}
+# The frame every stage-1 arm is now trained on; B and C reached it through
+# the 2026-09-11 retrain (D3), so the frame is a pinned fact of their arm
+# blocks rather than an asymmetry to declare.
+ROLE_BALL_FRAME_I7 = "ball_frame_i7"
 
 # The two artifact families with no manifest role — the stage-1 namespace and
 # the unpromoted B18 sidecar — are COMPOSED from segments, the way
 # `run_arm.py` composes them, rather than written as one literal.
 MODELS_ROOT = Path("models")
 SEQ_STAGE1_ROOT = MODELS_ROOT / "embeddings" / "seq_stage1"
-ABLATION_DIR = MODELS_ROOT / "embeddings" / "t1_ablation_v1_mps"
-ABLATION_SUMMARY = ABLATION_DIR / "summary.yaml"
+# D6 check 6.1: B and C resolve from the i7 retrain, never from the ablation
+# lineage. The ablation directory below survives ONLY inside the
+# `superseded_checkpoints` record, which names what stage 1 stopped using.
+RETRAIN_DIR = SEQ_STAGE1_ROOT / "retrain_i7"
+RETRAIN_SUMMARY = RETRAIN_DIR / "summary.yaml"
+SUPERSEDED_ABLATION_DIR = MODELS_ROOT / "embeddings" / "t1_ablation_v1_mps"
+SUPERSEDED_REASON = (
+    "superseded 2026-09-11 by the i7-frame retrain; not a stage 1 arm")
+# The five training seeds registered by the D2 cache decision. The retrain
+# summary must carry exactly these, once each.
+REGISTERED_TRAINING_SEEDS = (7, 13, 29, 42, 101)
+# The seed each superseded ablation arm had been pinned at before the
+# retrain, recorded so the record names the exact directories that moved.
+SUPERSEDED_SEEDS = {"mlp": 101, "full": 101}
+# A validation log loss written at four decimals cannot separate these
+# seeds; see `_is_four_decimal_rounded`.
+FULL_PRECISION_MIN_DECIMALS = 6
+# The frame contract every retrained checkpoint must declare (D3 check 3.5,
+# D4 check 4.1). The 50-column T1 feature list is a subset of the frame's
+# 114 columns, so the frame's own n_features is NOT the contract's.
+DELIVERY_SEMANTICS = "inclusive_total_runs_v1"
+T1_FEATURE_COUNT = 50
+FEATURE_HASH_FILENAME = ".feature_hash"
+METRICS_FILENAME = "metrics.json"
+# The training parquets the pin RECOMPUTES from (Astra round 1, MUST-FIX 1).
+# The stem is the one `transformer_t1.split_path` builds, so the pin reads the
+# same files the trainer read; the test and golden splits are never named,
+# never opened and never hashed.
+FRAME_SPLIT_STEM = "cricket_data_{version}_{split}.parquet"
+MATCH_DATE_COLUMN = "match_date"
+INNINGS_ID_COLUMN = "innings_id"
+# The D3 retrain config, hashed from disk rather than copied out of the
+# summary that the same runner wrote.
+RETRAIN_CONFIG = "experiments/configs/seq_stage1_retrain_i7_v1.yaml"
+# Every key the D3 training contract must carry before a checkpoint can be
+# pinned; a null or empty value is as bad as a missing key.
+REQUIRED_CONTRACT_KEYS = (
+    "contract_version", "frame_dir", "frame_version", "feature_hash",
+    "delivery_semantics",
+    "venue_alias_version", "venue_alias_sha256", "feature_names",
+    "feature_names_sha256", "split_files", "architecture", "seed",
+    "best_epoch", "stats_cache",
+)
+REQUIRED_CONTRACT_SPLITS = ("train", "validation")
+REQUIRED_SPLIT_FIELDS = ("path", "md5", "n_rows", "match_date_min",
+                         "match_date_max")
+REQUIRED_CACHE_FIELDS = ("role", "path", "md5", "venue_alias_version",
+                         "same_day_order_version")
+ASYMMETRIES_REMOVED_ON = "2026-09-11"
 SMOKE_FIXTURE_DIR = SEQ_STAGE1_ROOT / "smoke" / "fixtures"
 # Populated at 1b; registered now so the convergence and variability
 # batches can pass run_arm's --config preflight (Astra round 2, item 4c).
@@ -154,6 +233,9 @@ PROVENANCE_SOURCE_CLOSURE = [
     "scripts/sequence_track/score_realism.py",
     "scripts/sequence_track/score_props.py",
     "scripts/sequence_track/pin_stage1.py",
+    # the D3 retrain runner: it produced B's and C's checkpoints, so a
+    # change to it changes what those arms are.
+    "scripts/sequence_track/retrain_i7.py",
     # the delegated runner, the evaluator, the replay lifecycle, the loaders,
     # the reslicer, and the gate with its statistics and market arithmetic.
     "scripts/sim_eval/run_sim_eval.py",
@@ -259,19 +341,20 @@ ARM_SPEC = {
         "role": "nonlinear control (reference for C-B)",
         "description": (
             "token MLP over the same 50 pre-ball features, no sequence "
-            "memory; registered checkpoint from the t1_ablation_v1_mps "
-            "`mlp` arm"),
-        "ablation_arm": "mlp",
-        "stats_version": "v3",
+            "memory; registered checkpoint from the 2026-09-11 retrain of "
+            "the `mlp` arm on the i7 identity frame"),
+        "retrain_arm": "mlp",
+        "stats_version": "i7",
         "model_type": "transformer",
     },
     "C": {
         "role": "sequence candidate",
         "description": (
             "full T1 transformer over the same 50 pre-ball features; "
-            "registered checkpoint from the t1_ablation_v1_mps `full` arm"),
-        "ablation_arm": "full",
-        "stats_version": "v3",
+            "registered checkpoint from the 2026-09-11 retrain of the "
+            "`full` arm on the i7 identity frame"),
+        "retrain_arm": "full",
+        "stats_version": "i7",
         "model_type": "transformer",
     },
 }
@@ -370,6 +453,22 @@ def joint_overlap_block(fixture_ids, base_seeds, candidates=None) -> dict:
 # Checkpoint selection (D5 check 5.3)
 # ---------------------------------------------------------------------------
 
+SELECTION_RULE = (
+    "lowest VALIDATION log loss per retrain arm; ties break to the lowest "
+    "seed number; the test split is never consulted")
+
+FULL_PRECISION_RULE = (
+    "a per-seed log loss is refused when it equals its own round(ll, 4) AND "
+    f"its float repr carries fewer than {FULL_PRECISION_MIN_DECIMALS} "
+    "decimal places — i.e. when the value on disk is indistinguishable from "
+    "one that was rounded to four decimals before it was written. The "
+    "retrained seeds are separated in the fifth and sixth decimal, so a "
+    "four-decimal table would decide the selection by the tie-break instead "
+    "of by validation log loss. A value that is genuinely a four-decimal "
+    "number is refused too: it cannot be told apart from a rounded one, and "
+    "an unrounded float64 mean lands on one with vanishing probability")
+
+
 def choose_seed(per_seed_rows) -> tuple[int, float]:
     """Lowest validation LL; ties break to the lowest seed number.
 
@@ -383,29 +482,301 @@ def choose_seed(per_seed_rows) -> tuple[int, float]:
     return int(best["seed"]), float(best["ll"])
 
 
-def selection_table(summary_path: Path) -> dict:
-    """Per-seed validation LL tables plus the chosen seed for mlp and full."""
-    payload = yaml.safe_load(Path(summary_path).read_text())
+def decimal_places(value: float) -> int:
+    """Decimal places in the shortest round-trip repr of ``value``.
+
+    A scientific-notation repr (1e-05) carries its precision in the mantissa
+    and is never a four-decimal rounding of anything, so it reports the
+    full-precision floor rather than a misleading zero.
+    """
+    text = repr(float(value))
+    if "e" in text or "E" in text:
+        return FULL_PRECISION_MIN_DECIMALS
+    _, _, fraction = text.partition(".")
+    return len(fraction)
+
+
+def _is_four_decimal_rounded(value: float) -> bool:
+    """True when ``value`` cannot be told apart from round(value, 4).
+
+    Both halves of the rule are checked, in the order `FULL_PRECISION_RULE`
+    states them: the value equals its own four-decimal rounding, and its
+    repr shows fewer decimals than a full-precision mean would.
+    """
+    number = float(value)
+    return (number == round(number, 4)
+            and decimal_places(number) < FULL_PRECISION_MIN_DECIMALS)
+
+
+def _validated_ll(value, label: str) -> float:
+    """One per-seed log loss: a finite float that passes the rounded-value
+    rejection heuristic, or PinError."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise PinError(
+            f"{label}: validation ll is {value!r}, expected a float")
+    number = float(value)
+    if not math.isfinite(number):
+        raise PinError(f"{label}: validation ll {number!r} is not finite")
+    if _is_four_decimal_rounded(number):
+        raise PinError(
+            f"{label}: validation ll {number!r} is rounded to four decimals "
+            f"(repr shows {decimal_places(number)} decimal place(s)); "
+            "stage 1 selects on the unrounded float64 mean. "
+            + FULL_PRECISION_RULE)
+    return number
+
+
+def _validated_seeds(rows, label: str) -> None:
+    """Exactly the five registered training seeds, once each."""
+    seeds = []
+    for row in rows:
+        if not isinstance(row, dict) or "seed" not in row or "ll" not in row:
+            raise PinError(
+                f"{label}: per-seed row {row!r} needs both 'seed' and 'll'")
+        seeds.append(int(row["seed"]))
+    duplicates = sorted({seed for seed in seeds if seeds.count(seed) > 1})
+    if duplicates:
+        raise PinError(
+            f"{label}: seed(s) {duplicates} appear more than once; each "
+            "registered training seed must appear exactly once")
+    missing = sorted(set(REGISTERED_TRAINING_SEEDS) - set(seeds))
+    unexpected = sorted(set(seeds) - set(REGISTERED_TRAINING_SEEDS))
+    if missing or unexpected:
+        raise PinError(
+            f"{label}: per-seed table is {sorted(seeds)}, expected exactly "
+            f"the registered seeds {list(REGISTERED_TRAINING_SEEDS)} "
+            f"(missing {missing}, unexpected {unexpected})")
+
+
+def load_retrain_summary(summary_path) -> dict:
+    """The i7 retrain summary, or a PinError naming what is missing."""
+    path = Path(summary_path)
+    if not path.is_absolute():
+        path = _abs(path)
+    if not path.is_file():
+        raise PinError(
+            f"missing retrain summary: {_p(summary_path)}. Arms B and C are "
+            "pinned from the D3 i7 retrain "
+            "(scripts/sequence_track/retrain_i7.py); run it before pinning "
+            "stage 1")
+    payload = yaml.safe_load(path.read_text())
+    if not isinstance(payload, dict):
+        raise PinError(f"{_p(summary_path)}: top level is not a mapping")
+    return payload
+
+
+def checkpoint_dir_for(summary_path, retrain_arm: str, seed: int) -> Path:
+    """The seed's checkpoint directory, composed beside its own summary."""
+    return Path(summary_path).parent / retrain_arm / f"seed_{int(seed)}"
+
+
+def _checkpoint_validation_ll(model_dir, label: str) -> float:
+    """The `validation_ll` the seed's own metrics.json records."""
+    payload = read_metrics(model_dir)
+    if "validation_ll" not in payload:
+        raise PinError(
+            f"{label}: {_p(Path(model_dir) / METRICS_FILENAME)} records no "
+            "validation_ll, so the summary's row cannot be checked against "
+            "the run that produced it")
+    return _validated_ll(payload["validation_ll"], label)
+
+
+def _require_summary_matches_metrics(summary_path, retrain_arm: str,
+                                     rows, label: str) -> list:
+    """Every per-seed log loss, re-read from that seed's own metrics.json.
+
+    Astra round 1, MUST-FIX 1: the summary is written by the retrain runner,
+    so believing it is believing one writer twice. Each row is compared
+    against the `validation_ll` in the checkpoint directory the row names,
+    and the directory itself is composed rather than taken from the row.
+    """
+    checked = []
+    for row in rows:
+        seed = int(row["seed"])
+        seed_label = f"{label} seed {seed}"
+        model_dir = checkpoint_dir_for(summary_path, retrain_arm, seed)
+        recorded = row.get("checkpoint_dir")
+        if recorded is not None:
+            tail = Path(str(recorded)).parts[-2:]
+            if tail != (retrain_arm, f"seed_{seed}"):
+                raise PinError(
+                    f"{seed_label}: checkpoint_dir {recorded!r} does not end "
+                    f"in {retrain_arm}/seed_{seed}")
+        measured = _checkpoint_validation_ll(model_dir, seed_label)
+        if measured != row["validation_ll"]:
+            raise PinError(
+                f"{seed_label}: summary validation ll "
+                f"{row['validation_ll']!r} differs from the "
+                f"{METRICS_FILENAME} the run wrote "
+                f"({measured!r}, {_p(model_dir)}). The summary is not "
+                "evidence for itself")
+        checked.append({"seed": seed,
+                        "checkpoint_dir": _p(model_dir),
+                        "validation_ll": measured})
+    return checked
+
+
+def selection_table(summary_path) -> dict:
+    """Per-seed validation LL tables plus the chosen seed for mlp and full.
+
+    D6 check 6.2: the rows must be exactly the five registered training
+    seeds, each once, each finite and none rejected by the rounded-value
+    heuristic. Anything else
+    is a PinError, so a half-finished or rounded retrain table can never
+    silently decide which checkpoint stage 1 runs. Each surviving row is then
+    checked against the `validation_ll` in that seed's own metrics.json.
+    """
+    payload = load_retrain_summary(summary_path)
+    label_root = _p(summary_path)
     try:
         arms = payload["splits"]["validation"]["arms"]
     except (KeyError, TypeError) as exc:
         raise PinError(
-            f"{summary_path}: no splits.validation.arms block") from exc
+            f"{label_root}: no splits.validation.arms block") from exc
+    if not isinstance(arms, dict):
+        raise PinError(f"{label_root}: splits.validation.arms is not a "
+                       "mapping")
+    # The table's SHAPE first, for both arms, before any checkpoint is
+    # opened: a summary that is missing an arm or a seed fails on that,
+    # not on the first metrics.json the missing arm would have needed.
+    per_arm = {}
+    for retrain_arm in ("mlp", "full"):
+        if retrain_arm not in arms:
+            raise PinError(f"{label_root}: no validation arm {retrain_arm}")
+        label = f"{label_root} [{retrain_arm}]"
+        rows = (arms[retrain_arm] or {}).get("per_seed")
+        if not isinstance(rows, list) or not rows:
+            raise PinError(f"{label}: no per_seed rows")
+        _validated_seeds(rows, label)
+        per_arm[retrain_arm] = sorted(rows,
+                                      key=lambda row: int(row["seed"]))
+
     out = {}
-    for ablation_arm in ("mlp", "full"):
-        if ablation_arm not in arms:
-            raise PinError(f"{summary_path}: no validation arm {ablation_arm}")
-        rows = arms[ablation_arm].get("per_seed")
-        seed, ll = choose_seed(rows)
-        out[ablation_arm] = {
-            "per_seed": [
-                {"seed": int(row["seed"]), "validation_ll": float(row["ll"])}
-                for row in sorted(rows, key=lambda row: int(row["seed"]))
-            ],
+    for retrain_arm, ordered in per_arm.items():
+        label = f"{label_root} [{retrain_arm}]"
+        clean = [
+            {"seed": int(row["seed"]),
+             "validation_ll": _validated_ll(
+                 row["ll"], f"{label} seed {int(row['seed'])}")}
+            for row in ordered
+        ]
+        _require_summary_matches_metrics(
+            summary_path, retrain_arm,
+            [dict(row, checkpoint_dir=source.get("checkpoint_dir"))
+             for row, source in zip(clean, ordered)],
+            label)
+        seed, ll = choose_seed(
+            [{"seed": row["seed"], "ll": row["validation_ll"]}
+             for row in clean])
+        out[retrain_arm] = {
+            "per_seed": clean,
             "chosen_seed": seed,
             "chosen_validation_ll": ll,
         }
     return out
+
+
+def retrain_summary_block(summary_path, *, frame_dir: str, frame_hash: dict,
+                          frame_facts: dict, validation_matches: int,
+                          stats_cache_role: str,
+                          stats_cache_path: str,
+                          stats_cache_md5: str) -> dict:
+    """The retrain's identity, every fact checked against something else.
+
+    The summary is the retrain runner's own account of the retrain, so
+    nothing in it is taken on trust (Astra round 1, MUST-FIX 1): the frame
+    declaration is compared key by key against the frame's `.feature_hash` on
+    disk, the split md5s and row counts against `frame_facts` recomputed from
+    the parquets, the training cache against the LIVE cache, and the config
+    sha256 against a fresh hash of the config file.
+    """
+    payload = load_retrain_summary(summary_path)
+    label = _p(summary_path)
+    validation = ((payload.get("splits") or {}).get("validation") or {})
+    for field in ("n_rows", "n_matches"):
+        if not isinstance(validation.get(field), int) or isinstance(
+                validation.get(field), bool):
+            raise PinError(
+                f"{label}: splits.validation.{field} is "
+                f"{validation.get(field)!r}, expected an int")
+    _require(int(validation["n_rows"]),
+             int(frame_facts["validation"]["n_rows"]),
+             f"{label}: splits.validation.n_rows (vs the rows in "
+             f"{frame_facts['validation']['path']})")
+    _require(int(validation["n_matches"]), int(validation_matches),
+             f"{label}: splits.validation.n_matches (vs the distinct match "
+             f"ids in {frame_facts['validation']['path']})")
+
+    experiment = payload.get("experiment") or {}
+    _require(experiment.get("config"), RETRAIN_CONFIG,
+             f"{label}: experiment.config")
+    _require(experiment.get("config_sha256"), retrain_config_sha256(),
+             f"{label}: experiment.config_sha256 (recorded vs recomputed "
+             f"from {RETRAIN_CONFIG} on disk)")
+
+    frame = payload.get("frame") or {}
+    _require(frame.get("dir"), frame_dir,
+             f"{label}: frame.dir (vs role {ROLE_BALL_FRAME_I7})")
+    _require(frame.get("version"), frame_hash.get("version"),
+             f"{label}: frame.version (vs the frame's "
+             f"{FEATURE_HASH_FILENAME})")
+    _require_mapping(frame.get("feature_hash"), frame_hash,
+                     f"{label}: frame.feature_hash (vs "
+                     f"{_p(Path(frame_dir) / FEATURE_HASH_FILENAME)})")
+    split_md5s = frame.get("split_md5s")
+    if not isinstance(split_md5s, dict) or not split_md5s:
+        raise PinError(f"{label}: frame.split_md5s is {split_md5s!r}, "
+                       "expected a mapping of split -> md5")
+    _require_mapping(
+        split_md5s,
+        {split: facts["md5"] for split, facts in frame_facts.items()},
+        f"{label}: frame.split_md5s (recorded vs recomputed from the "
+        "parquets)")
+    split_rows = frame.get("split_rows")
+    if split_rows is not None:
+        _require_mapping(
+            split_rows,
+            {split: facts["n_rows"] for split, facts in frame_facts.items()},
+            f"{label}: frame.split_rows (recorded vs the parquets)")
+    cache = frame.get("stats_cache")
+    if not isinstance(cache, dict):
+        raise PinError(f"{label}: frame.stats_cache is {cache!r}, expected a "
+                       "mapping")
+    _require(cache.get("role"), stats_cache_role,
+             f"{label}: frame.stats_cache.role")
+    _require(cache.get("path"), stats_cache_path,
+             f"{label}: frame.stats_cache.path")
+    _require(cache.get("md5"), stats_cache_md5,
+             f"{label}: frame.stats_cache.md5 (recorded at training vs the "
+             f"live {stats_cache_path})")
+    _require(cache.get("venue_alias_version"),
+             frame_hash.get("venue_alias_version"),
+             f"{label}: frame.stats_cache.venue_alias_version (vs the "
+             "frame's)")
+
+    return {
+        "validation_rows": int(frame_facts["validation"]["n_rows"]),
+        "validation_matches": int(validation_matches),
+        "validation_split_source": (
+            "row count and distinct-match count recomputed from "
+            f"{frame_facts['validation']['path']} (match ids are innings ids "
+            "with the leading '<innings>_' prefix stripped) and compared "
+            "against the summary's copy"),
+        "retrain_config": RETRAIN_CONFIG,
+        "retrain_config_sha256": retrain_config_sha256(),
+        "retrain_config_sha256_source": (
+            f"recomputed from {RETRAIN_CONFIG} on disk and compared against "
+            "the summary's copy"),
+        "frame_dir": frame_dir,
+        "frame_dir_role": ROLE_BALL_FRAME_I7,
+        "frame_split_md5s": {split: facts["md5"]
+                             for split, facts in sorted(frame_facts.items())},
+        "frame_split_rows": {split: facts["n_rows"]
+                             for split, facts in sorted(frame_facts.items())},
+        "frame_split_md5s_source": (
+            "recomputed from the parquets by pin_stage1.frame_split_facts, "
+            "then compared against the summary's copy"),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -455,6 +826,386 @@ def _json_count(relative: str) -> int:
 def _require(actual, expected, label: str) -> None:
     if actual != expected:
         raise PinError(f"{label}: expected {expected!r}, found {actual!r}")
+
+
+def _require_mapping(actual, expected: dict, label: str) -> None:
+    """Key-by-key equality, so an added or dropped key is a failure too."""
+    if not isinstance(actual, dict):
+        raise PinError(f"{label}: expected a mapping, found {actual!r}")
+    for key in sorted(set(expected) | set(actual), key=str):
+        if key not in actual:
+            raise PinError(
+                f"{label}: key {key!r} is missing (expected "
+                f"{expected[key]!r})")
+        if key not in expected:
+            raise PinError(
+                f"{label}: unexpected key {key!r} = {actual[key]!r}")
+        if actual[key] != expected[key]:
+            raise PinError(
+                f"{label}: key {key!r} is {actual[key]!r}, expected "
+                f"{expected[key]!r}")
+
+
+# ---------------------------------------------------------------------------
+# Recomputed training facts (Astra round 1, MUST-FIX 1)
+#
+# The checkpoint's training contract, the retrain summary and the config all
+# record the same facts about the training frame. Comparing them against each
+# other proves only that one writer was self-consistent. Everything below
+# reads the FILES instead: the parquets are hashed and their row counts and
+# date ranges read with pyarrow, the feature list is rebuilt from the modules
+# that define it, and the retrain config is re-hashed from disk.
+# ---------------------------------------------------------------------------
+
+# Hashing ~830 MB of parquet is the expensive half of a pin, and one
+# `--write` or `--verify` asks for the same frame three times (arm B, arm C,
+# and the retrain summary). It is read once per process and handed out as a
+# copy, so no caller can mutate another's facts.
+_FRAME_SPLIT_FACTS: dict = {}
+
+
+def _compute_frame_split_facts(frame_dir: str, frame_version: str) -> dict:
+    # Imported late and only here: pyarrow costs a second to import and the
+    # seed-overlap screen has no use for it.
+    import pyarrow.compute as pc  # noqa: PLC0415
+    import pyarrow.parquet as pq  # noqa: PLC0415
+
+    facts = {}
+    for split in REQUIRED_CONTRACT_SPLITS:
+        stem = FRAME_SPLIT_STEM.format(version=frame_version, split=split)
+        relative = f"{frame_dir}/{stem}"
+        path = Path(relative)
+        if not path.is_absolute():
+            path = _abs(relative)
+        if not path.is_file():
+            raise PinError(
+                f"missing training split parquet: {relative}. Stage 1 "
+                "recomputes every training fact from the frame, so a split "
+                "that is not on disk cannot be pinned")
+        try:
+            table = pq.read_table(path, columns=[MATCH_DATE_COLUMN])
+        except Exception as exc:  # noqa: BLE001 - any read failure fails the pin
+            raise PinError(
+                f"{relative}: cannot read column "
+                f"{MATCH_DATE_COLUMN!r} ({exc})") from exc
+        if table.num_rows == 0:
+            raise PinError(f"{relative}: no rows")
+        bounds = pc.min_max(table.column(MATCH_DATE_COLUMN)).as_py()
+        if bounds.get("min") is None or bounds.get("max") is None:
+            raise PinError(
+                f"{relative}: {MATCH_DATE_COLUMN} is entirely null, so the "
+                "split's date range cannot be established")
+        facts[split] = {
+            "path": relative,
+            "md5": md5_file(path),
+            "n_rows": int(table.num_rows),
+            "match_date_min": str(bounds["min"]),
+            "match_date_max": str(bounds["max"]),
+        }
+    return facts
+
+
+def frame_split_facts(frame_dir, frame_version: str) -> dict:
+    """`{split: {path, md5, n_rows, match_date_min, match_date_max}}`.
+
+    Read from the parquets themselves, for the two splits a stage-1
+    checkpoint is allowed to have been trained on. `data/golden` and
+    `data/forward_holdout` have no stem here and are never opened.
+    """
+    key = (_p(frame_dir), str(frame_version))
+    if key not in _FRAME_SPLIT_FACTS:
+        _FRAME_SPLIT_FACTS[key] = _compute_frame_split_facts(*key)
+    return copy.deepcopy(_FRAME_SPLIT_FACTS[key])
+
+
+_VALIDATION_MATCH_COUNT: dict = {}
+
+
+def validation_match_count(frame_dir, frame_version: str) -> int:
+    """Distinct matches in the validation split, read from the parquet.
+
+    The same rule the retrain runner records using
+    (`registered_experiment.match_ids`): strip the leading ``<innings>_``
+    prefix from ``innings_id`` and count what is left.
+    """
+    key = (_p(frame_dir), str(frame_version))
+    if key not in _VALIDATION_MATCH_COUNT:
+        import pyarrow.parquet as pq  # noqa: PLC0415
+
+        from registered_experiment import match_ids  # noqa: PLC0415
+
+        stem = FRAME_SPLIT_STEM.format(version=key[1], split="validation")
+        relative = f"{key[0]}/{stem}"
+        path = Path(relative)
+        if not path.is_absolute():
+            path = _abs(relative)
+        try:
+            column = pq.read_table(
+                path, columns=[INNINGS_ID_COLUMN]).column(INNINGS_ID_COLUMN)
+        except Exception as exc:  # noqa: BLE001 - any read failure fails the pin
+            raise PinError(
+                f"{relative}: cannot read column "
+                f"{INNINGS_ID_COLUMN!r} ({exc})") from exc
+        _VALIDATION_MATCH_COUNT[key] = int(
+            len(set(match_ids(column.to_pylist()))))
+    return _VALIDATION_MATCH_COUNT[key]
+
+
+_EXPECTED_FEATURE_NAMES: tuple = ()
+
+
+def expected_feature_names() -> tuple:
+    """The 50 T1 feature names, in the wrapper's construction order.
+
+    IMPORTED from the modules that define them — `embeddings_e1` for the four
+    column groups, `transformer_t1` for the state columns — never restated
+    here. A contract whose list is a permutation of these names has the right
+    length and the right membership and is still a different model input, so
+    the order is compared position by position.
+    """
+    global _EXPECTED_FEATURE_NAMES  # noqa: PLW0603 - one-shot import cache
+    if not _EXPECTED_FEATURE_NAMES:
+        # Late: both modules import torch.
+        from embeddings_e1 import (CTX_COLS, EB_BAT_COLS,  # noqa: PLC0415
+                                   EB_BOWL_COLS, VENUE_COLS)
+        from transformer_t1 import STATE_COLS  # noqa: PLC0415
+
+        names = tuple(list(EB_BAT_COLS) + list(EB_BOWL_COLS)
+                      + list(VENUE_COLS) + list(CTX_COLS) + list(STATE_COLS))
+        if len(names) != T1_FEATURE_COUNT or len(set(names)) != len(names):
+            raise PinError(
+                f"the T1 feature stack builds {len(names)} names "
+                f"({len(set(names))} distinct); stage 1 pins "
+                f"{T1_FEATURE_COUNT}")
+        _EXPECTED_FEATURE_NAMES = names
+    return _EXPECTED_FEATURE_NAMES
+
+
+def feature_names_sha256(names) -> str:
+    """sha256 of the newline-joined names, as `transformer_t1` records it."""
+    return hashlib.sha256("\n".join(names).encode("utf-8")).hexdigest()
+
+
+def _require_feature_names(actual, expected, label: str) -> None:
+    if not isinstance(actual, list) or not all(
+            isinstance(name, str) for name in actual):
+        raise PinError(f"{label}: feature_names is not a list of strings")
+    if len(actual) != len(expected):
+        raise PinError(
+            f"{label}: feature count: expected {len(expected)}, found "
+            f"{len(actual)}")
+    for index, (found, wanted) in enumerate(zip(actual, expected)):
+        if found != wanted:
+            raise PinError(
+                f"{label}: feature_names[{index}] is {found!r}, expected "
+                f"{wanted!r}. The registered order is EB_BAT + EB_BOWL + "
+                "VENUE + CTX + STATE (embeddings_e1, transformer_t1); a "
+                "permutation is a different model input, not a relabelling")
+
+
+def retrain_config_sha256() -> str:
+    """sha256 of the registered retrain config, read from disk."""
+    return _sha256(RETRAIN_CONFIG)
+
+
+# ---------------------------------------------------------------------------
+# The D3 training contract (D6 check 6.3)
+#
+# `metrics.json` beside every retrained checkpoint carries the frame, the
+# delivery semantics, the venue-alias identity, the split md5s and the
+# stats cache the checkpoint was TRAINED against. Stage 1 pins those facts
+# and `--verify` re-reads them, so a checkpoint that was retrained, or a
+# frame or cache that moved underneath it, fails the pin instead of quietly
+# serving.
+# ---------------------------------------------------------------------------
+
+def read_metrics(model_dir) -> dict:
+    """A checkpoint's `metrics.json`, parsed, or a PinError naming it."""
+    metrics = _abs(Path(model_dir) / METRICS_FILENAME)
+    if not metrics.is_file():
+        raise PinError(
+            f"missing {METRICS_FILENAME} for checkpoint dir "
+            f"{_p(model_dir)}: a stage-1 transformer arm is pinned from its "
+            "training contract")
+    try:
+        return json.loads(metrics.read_text())
+    except json.JSONDecodeError as exc:
+        raise PinError(f"{_p(metrics)}: unparseable JSON ({exc})") from exc
+
+
+def read_training_contract(model_dir) -> dict:
+    """The `training_contract` block of a checkpoint's metrics.json."""
+    payload = read_metrics(model_dir)
+    contract = payload.get("training_contract")
+    if not isinstance(contract, dict):
+        raise PinError(
+            f"{_p(Path(model_dir) / METRICS_FILENAME)}: no training_contract "
+            "block. A checkpoint trained without --stats-cache-role records "
+            "no contract and is refused (D3 check 3.5, D4 check 4.1)")
+    missing = [key for key in REQUIRED_CONTRACT_KEYS
+               if contract.get(key) in (None, "", [], {})]
+    if missing:
+        raise PinError(
+            f"{_p(Path(model_dir) / METRICS_FILENAME)}: training_contract is "
+            f"missing or null for {missing}")
+    return contract
+
+
+def frame_feature_hash(frame_dir) -> dict:
+    """The frame's own `.feature_hash` declaration."""
+    path = _abs(Path(frame_dir) / FEATURE_HASH_FILENAME)
+    if not path.is_file():
+        raise PinError(
+            f"missing {_p(Path(frame_dir) / FEATURE_HASH_FILENAME)}")
+    return json.loads(path.read_text())
+
+
+def training_frame_block(contract: dict, *, model_dir, frame_dir: str,
+                         frame_hash: dict, frame_facts: dict,
+                         stats_cache_role: str,
+                         stats_cache_path: str, stats_cache_md5: str,
+                         expected_seed: int,
+                         expected_names=None) -> dict:
+    """The pinned training identity of one retrained checkpoint.
+
+    Every field is read from the checkpoint's own contract and checked
+    against something that lives outside it: the frame's `.feature_hash`,
+    the parquets themselves (`frame_facts`), the feature list the serving
+    stack builds, the manifest role paths, the LIVE stats-cache md5, and the
+    seed the selection rule chose. A disagreement is a PinError naming the
+    field.
+    """
+    label = _p(Path(model_dir) / METRICS_FILENAME)
+    expected_names = (expected_feature_names() if expected_names is None
+                      else tuple(expected_names))
+
+    _require(contract["frame_dir"], frame_dir, f"{label}: frame_dir")
+    _require(contract["frame_version"], frame_hash.get("version"),
+             f"{label}: frame_version (vs the frame's .feature_hash)")
+    # The whole frame declaration, key by key: a contract that copied only
+    # the three fields below could disagree with the frame about the split
+    # boundaries, the gender filter or the shrinkage constants and still pass.
+    _require_mapping(contract["feature_hash"], frame_hash,
+                     f"{label}: feature_hash (vs "
+                     f"{_p(Path(frame_dir) / FEATURE_HASH_FILENAME)})")
+    _require(contract["delivery_semantics"], DELIVERY_SEMANTICS,
+             f"{label}: delivery_semantics")
+    _require(contract["delivery_semantics"],
+             frame_hash.get("delivery_semantics"),
+             f"{label}: delivery_semantics (vs the frame's .feature_hash)")
+    _require(contract["venue_alias_version"],
+             frame_hash.get("venue_alias_version"),
+             f"{label}: venue_alias_version (vs the frame's .feature_hash)")
+    _require(contract["venue_alias_sha256"],
+             frame_hash.get("venue_alias_sha256"),
+             f"{label}: venue_alias_sha256 (vs the frame's .feature_hash)")
+    _require(int(contract["seed"]), int(expected_seed),
+             f"{label}: seed (vs the seed the selection rule chose)")
+
+    names = contract["feature_names"]
+    _require_feature_names(names, expected_names, label)
+    names_sha = contract["feature_names_sha256"]
+    if not isinstance(names_sha, str) or len(names_sha) != 64:
+        raise PinError(
+            f"{label}: feature_names_sha256 is {names_sha!r}, expected a "
+            "64-character sha256")
+    _require(names_sha, feature_names_sha256(names),
+             f"{label}: feature_names_sha256 (recorded vs recomputed from "
+             "the names it claims to hash)")
+
+    splits = contract["split_files"]
+    if not isinstance(splits, dict):
+        raise PinError(f"{label}: split_files is not a mapping")
+    for split in REQUIRED_CONTRACT_SPLITS:
+        row = splits.get(split)
+        if not isinstance(row, dict):
+            raise PinError(f"{label}: split_files has no {split!r} block")
+        absent = [field for field in REQUIRED_SPLIT_FIELDS
+                  if row.get(field) in (None, "")]
+        if absent:
+            raise PinError(
+                f"{label}: split_files.{split} is missing {absent}")
+        # The comparison that makes the contract mean something: the parquet
+        # as it is NOW, hashed and read, against what training recorded.
+        measured = frame_facts.get(split)
+        if not isinstance(measured, dict):
+            raise PinError(
+                f"{label}: no recomputed facts for split {split!r}; "
+                "frame_split_facts must cover every contracted split")
+        for field in REQUIRED_SPLIT_FIELDS:
+            found = row[field]
+            wanted = measured[field]
+            if field == "n_rows":
+                found, wanted = int(found), int(wanted)
+            _require(found, wanted,
+                     f"{label}: split_files.{split}.{field} (recorded at "
+                     f"training vs {measured['path']} on disk)")
+
+    cache = contract["stats_cache"]
+    if not isinstance(cache, dict):
+        raise PinError(f"{label}: stats_cache is not a mapping")
+    absent = [field for field in REQUIRED_CACHE_FIELDS
+              if cache.get(field) in (None, "")]
+    if absent:
+        raise PinError(f"{label}: stats_cache is missing {absent}")
+    _require(cache["role"], stats_cache_role, f"{label}: stats_cache.role")
+    _require(cache["path"], stats_cache_path, f"{label}: stats_cache.path")
+    # The one comparison against the world as it is NOW: the cache this
+    # checkpoint was trained against must still be the cache stage 1 serves.
+    _require(cache["md5"], stats_cache_md5,
+             f"{label}: stats_cache.md5 (recorded at training vs the live "
+             f"{stats_cache_path})")
+    _require(cache["venue_alias_version"], contract["venue_alias_version"],
+             f"{label}: stats_cache.venue_alias_version (vs the frame's)")
+
+    return {
+        "dir": frame_dir,
+        "dir_role": ROLE_BALL_FRAME_I7,
+        "frame_version": contract["frame_version"],
+        # Written from the RECOMPUTED facts, not from the contract: the two
+        # are equal by the checks above, and pinning the measured value makes
+        # the YAML a record of the files rather than of the trainer's claim.
+        "split_md5s": {split: frame_facts[split]["md5"]
+                       for split in sorted(frame_facts)},
+        "split_rows": {split: frame_facts[split]["n_rows"]
+                       for split in sorted(frame_facts)},
+        "split_date_range": {
+            split: [frame_facts[split]["match_date_min"],
+                    frame_facts[split]["match_date_max"]]
+            for split in sorted(frame_facts)},
+        "split_facts_source": (
+            "recomputed from the parquets (md5, row count and match_date "
+            "range) and compared against the checkpoint's training contract"),
+        "delivery_semantics": contract["delivery_semantics"],
+        "venue_alias_version": contract["venue_alias_version"],
+        "venue_alias_sha256": contract["venue_alias_sha256"],
+        "feature_count": len(names),
+        "feature_names_sha256": feature_names_sha256(expected_names),
+        "feature_names_source": (
+            "EB_BAT + EB_BOWL + VENUE (embeddings_e1) + CTX (embeddings_e1) "
+            "+ STATE (transformer_t1), imported in that order; the contract's "
+            "list is compared position by position and its sha256 "
+            "recomputed"),
+        "architecture": copy.deepcopy(contract["architecture"]),
+        "training_seed": int(contract["seed"]),
+        "best_epoch": contract["best_epoch"],
+        "contract_version": contract["contract_version"],
+        "contract_source": _p(Path(model_dir) / METRICS_FILENAME),
+        "stats_cache_at_training": stats_cache_path,
+        "stats_cache_at_training_role": stats_cache_role,
+        "stats_cache_at_training_md5": cache["md5"],
+        "stats_cache_same_day_order_version": cache["same_day_order_version"],
+        "verified_by": (
+            "pin_stage1.py --verify RECOMPUTES rather than copies: it "
+            f"re-reads the checkpoint's {METRICS_FILENAME}, hashes both "
+            "training parquets and re-reads their row counts and match_date "
+            "ranges, compares the contract's whole frame declaration against "
+            f"{_p(Path(frame_dir) / FEATURE_HASH_FILENAME)} key by key, "
+            "rebuilds the 50 feature names from embeddings_e1 and "
+            "transformer_t1 and re-derives their sha256, and compares "
+            "stats_cache.md5 against the live cache; any difference fails "
+            "the pin"),
+    }
 
 
 def _runout_rule() -> dict:
@@ -620,9 +1371,9 @@ def _arm_block(arm: str, shared: dict, selection: dict) -> dict:
     spec = ARM_SPEC[arm]
     model_dir_role = spec.get("model_dir_role")
     if spec["model_type"] == "transformer":
-        ablation_arm = spec["ablation_arm"]
-        seed = selection[ablation_arm]["chosen_seed"]
-        model_dir = _p(ABLATION_DIR / ablation_arm / f"seed_{seed}")
+        retrain_arm = spec["retrain_arm"]
+        seed = selection[retrain_arm]["chosen_seed"]
+        model_dir = _p(RETRAIN_DIR / retrain_arm / f"seed_{seed}")
         checkpoint = _p(Path(model_dir) / "model.pt")
     elif model_dir_role:
         model_dir = _role_path(model_dir_role)
@@ -651,14 +1402,24 @@ def _arm_block(arm: str, shared: dict, selection: dict) -> dict:
         "checkpoint_md5": _md5_file(checkpoint),
     }
     if spec["model_type"] == "transformer":
-        chosen = selection[spec["ablation_arm"]]
-        block["ablation_arm"] = spec["ablation_arm"]
+        chosen = selection[spec["retrain_arm"]]
+        block["retrain_arm"] = spec["retrain_arm"]
         block["checkpoint_seed"] = chosen["chosen_seed"]
         block["checkpoint_validation_ll"] = chosen["chosen_validation_ll"]
         block["checkpoint_selection"] = (
-            "see checkpoint_selection: lowest validation LL in "
-            f"{_p(ABLATION_SUMMARY)}, ties to the lowest seed, test LL not "
-            "consulted")
+            f"see checkpoint_selection: {SELECTION_RULE}, read from "
+            f"{_p(RETRAIN_SUMMARY)}")
+        block["training_frame"] = training_frame_block(
+            read_training_contract(model_dir),
+            model_dir=model_dir,
+            frame_dir=_role_path(ROLE_BALL_FRAME_I7),
+            frame_hash=shared["frame_feature_hash"],
+            frame_facts=shared["frame_split_facts"],
+            stats_cache_role=ROLE_STATS_CACHE[spec["stats_version"]],
+            stats_cache_path=_role_path(
+                ROLE_STATS_CACHE[spec["stats_version"]]),
+            stats_cache_md5=shared["stats_cache_md5"][spec["stats_version"]],
+            expected_seed=chosen["chosen_seed"])
     block.update({
         "stats_version": stats_version,
         "stats_cache": stats_cache,
@@ -798,7 +1559,23 @@ def _arm_block(arm: str, shared: dict, selection: dict) -> dict:
 
 
 def build_config() -> dict:
-    selection = selection_table(_abs(ABLATION_SUMMARY))
+    selection = selection_table(RETRAIN_SUMMARY)
+    frame_dir = _role_path(ROLE_BALL_FRAME_I7)
+    frame_hash = frame_feature_hash(frame_dir)
+    frame_facts = frame_split_facts(frame_dir, frame_hash.get("version"))
+    i7_cache_role = ROLE_STATS_CACHE["i7"]
+    i7_cache_path = _role_path(i7_cache_role)
+    i7_cache_md5 = _md5_file(i7_cache_path)
+    retrain_summary = retrain_summary_block(
+        RETRAIN_SUMMARY,
+        frame_dir=frame_dir,
+        frame_hash=frame_hash,
+        frame_facts=frame_facts,
+        validation_matches=validation_match_count(
+            frame_dir, frame_hash.get("version")),
+        stats_cache_role=i7_cache_role,
+        stats_cache_path=i7_cache_path,
+        stats_cache_md5=i7_cache_md5)
     odds = _odds_block()
     extras_sha = _sha256(EXTRAS_GRAFT)
     _require(extras_sha, EXTRAS_GRAFT_SHA256,
@@ -812,9 +1589,22 @@ def build_config() -> dict:
     joint_overlap = joint_overlap_block(fixture_ids, BATCH_BASE_SEEDS)
 
     shared = {
+        # Only the versions the arms actually use: since the 2026-09-11
+        # retrain every stage-1 arm reads the i7 cache, and the legacy v3
+        # cache is no longer a stage-1 artifact to hash.
         "stats_cache_md5": {
-            version: _md5_file(_role_path(role))
-            for version, role in ROLE_STATS_CACHE.items()},
+            version: (i7_cache_md5 if version == "i7"
+                      else _md5_file(_role_path(ROLE_STATS_CACHE[version])))
+            for version in sorted(
+                {spec["stats_version"] for spec in ARM_SPEC.values()})},
+        # Read once and handed to every transformer arm: the frame's own
+        # declaration is what each checkpoint's training contract is checked
+        # against.
+        "frame_feature_hash": frame_hash,
+        # Recomputed once from the two training parquets (md5, row count,
+        # match_date range) and handed to both transformer arms; the test and
+        # golden splits are never named or opened.
+        "frame_split_facts": frame_facts,
         "context_dir_md5": _md5_dir(CONTEXT_DIR),
         "context_dir_json_count": _json_count(CONTEXT_DIR),
         "player_metadata_sha256": _sha256(PLAYER_METADATA),
@@ -893,7 +1683,9 @@ def build_config() -> dict:
             "one bowler selector, one extras law and one per-fixture seed "
             "schedule, so the winner-market comparison isolates the model "
             "and nothing else. Two questions: system comparison (B-A, C-A) "
-            "and incremental sequence value in rollout (C-B)."),
+            "and the registered full-sequence T1 versus token-MLP contrast "
+            "in rollout (C-B), which compares two specific architectures "
+            "rather than isolating sequence memory."),
         "plan": 'docs/SEQUENCE_TRACK_PLAN.md, sections "Stage 0" and "Stage 1"',
         "acceptance": 'docs/sequence_track/stage0_acceptance.md, section "D5"',
         "statistical_rules": (
@@ -963,41 +1755,114 @@ def build_config() -> dict:
             "observed"),
     }
 
+    selected_ll = {
+        arm: selection[retrain_arm]["chosen_validation_ll"]
+        for arm, retrain_arm in (("B", "mlp"), ("C", "full"))
+    }
     config["checkpoint_selection"] = {
-        "rule": (
-            "lowest validation LL in "
-            f"{_p(ABLATION_SUMMARY)} per arm; ties break to the lowest seed "
-            "number; test LL is not consulted"),
+        "rule": SELECTION_RULE,
         "computed_by": "scripts/sequence_track/pin_stage1.py (not hardcoded)",
-        "source": _p(ABLATION_SUMMARY),
+        "source": _p(RETRAIN_SUMMARY),
         "source_role": None,
         "source_role_note": (
-            "the T1 ablation lineage is an unpromoted research artifact with "
-            "no manifest role; its path is composed from segments and its "
-            "identity is the sha256 below"),
-        "source_sha256": _sha256(ABLATION_SUMMARY),
+            "the stage-1 retrain namespace is an unpromoted research "
+            "artifact with no manifest role; its path is composed from "
+            "segments and its identity is the sha256 below"),
+        "source_sha256": _sha256(RETRAIN_SUMMARY),
+        "registered_seeds": list(REGISTERED_TRAINING_SEEDS),
+        "registered_seeds_rule": (
+            "the per-seed table must carry exactly these seeds, once each, "
+            "every log loss finite and none rejected by the rounded-value "
+            "heuristic (a value indistinguishable from a four-decimal "
+            "rounding); anything else fails the pin rather than selecting "
+            "from a partial table"),
+        "full_precision_rule": FULL_PRECISION_RULE,
         "split": "validation",
-        "split_rows": 124292,
+        "split_rows": retrain_summary["validation_rows"],
+        "split_matches": retrain_summary["validation_matches"],
+        "split_source": retrain_summary["validation_split_source"],
+        "retrain_config": retrain_summary["retrain_config"],
+        "retrain_config_sha256": retrain_summary["retrain_config_sha256"],
+        "retrain_config_sha256_source": retrain_summary[
+            "retrain_config_sha256_source"],
+        "frame_dir": retrain_summary["frame_dir"],
+        "frame_dir_role": retrain_summary["frame_dir_role"],
+        "frame_split_md5s": retrain_summary["frame_split_md5s"],
+        "frame_split_rows": retrain_summary["frame_split_rows"],
+        "frame_split_md5s_source": retrain_summary["frame_split_md5s_source"],
         "per_seed_validation_ll": {
-            ablation_arm: selection[ablation_arm]["per_seed"]
-            for ablation_arm in ("mlp", "full")
+            retrain_arm: selection[retrain_arm]["per_seed"]
+            for retrain_arm in ("mlp", "full")
         },
+        "per_seed_validation_ll_source": (
+            "read from the retrain summary and then checked, seed by seed, "
+            "against the validation_ll in that seed's own metrics.json; a "
+            "summary row that disagrees with the run that produced it fails "
+            "the pin, so the summary is never evidence for itself"),
         "chosen": {
             "B": {
-                "ablation_arm": "mlp",
+                "retrain_arm": "mlp",
                 "seed": selection["mlp"]["chosen_seed"],
                 "validation_ll": selection["mlp"]["chosen_validation_ll"],
                 "model_dir": config["arms"]["B"]["model_dir"],
                 "checkpoint": config["arms"]["B"]["checkpoint"],
             },
             "C": {
-                "ablation_arm": "full",
+                "retrain_arm": "full",
                 "seed": selection["full"]["chosen_seed"],
                 "validation_ll": selection["full"]["chosen_validation_ll"],
                 "model_dir": config["arms"]["C"]["model_dir"],
                 "checkpoint": config["arms"]["C"]["checkpoint"],
             },
         },
+        # D6 check 6.7. Teacher-forced validation log loss on the split the
+        # seed was CHOSEN on: it is the selection statistic itself, not an
+        # independent read of either arm, and it is not a rollout number.
+        "teacher_forced_diagnostic": {
+            "label": "selection_conditioned_diagnostic_not_evidence",
+            "selected_validation_ll": dict(selected_ll),
+            "C_minus_B_validation_ll": selected_ll["C"] - selected_ll["B"],
+            "what": (
+                "the selected checkpoints' own teacher-forced validation log "
+                "loss, and C minus B on it. Both numbers are conditioned on "
+                "the selection that produced them (the minimum over five "
+                "seeds), they are measured on next-ball prediction rather "
+                "than on simulated match outcomes, and neither is a stage-1 "
+                "contrast. The stage-1 C-B result is the paired winner log "
+                "loss from the registered run; this line is recorded so the "
+                "selection is auditable, and it advances nothing"),
+        },
+    }
+
+    # D6 check 6.1: the ablation checkpoints stage 1 used to pin, named with
+    # their hashes so the record says exactly what was dropped and what it
+    # was replaced by. They are NOT a stage-1 path: no arm resolves here.
+    config["superseded_checkpoints"] = {
+        "reason": SUPERSEDED_REASON,
+        "replaced_by": _p(RETRAIN_DIR),
+        "dir_hash_contract": DIR_HASH_CONTRACT,
+        "checkpoints": [
+            {
+                "arm": arm,
+                "retrain_arm": retrain_arm,
+                "superseded_model_dir": _p(
+                    SUPERSEDED_ABLATION_DIR / retrain_arm
+                    / f"seed_{SUPERSEDED_SEEDS[retrain_arm]}"),
+                "superseded_model_dir_md5": _md5_dir(
+                    SUPERSEDED_ABLATION_DIR / retrain_arm
+                    / f"seed_{SUPERSEDED_SEEDS[retrain_arm]}"),
+                "seed": SUPERSEDED_SEEDS[retrain_arm],
+                "reason": SUPERSEDED_REASON,
+                "now_pinned_at": config["arms"][arm]["model_dir"],
+            }
+            for arm, retrain_arm in (("B", "mlp"), ("C", "full"))
+        ],
+        "note": (
+            "these directories are read-only for stage 1 (D3 check 3.8 "
+            "records their hashes before and after the retrain) and are "
+            "listed here only so the change of source is auditable. They "
+            "were trained on the legacy v3 frame, so no number produced "
+            "from them is comparable to a retrained arm's"),
     }
 
     config["seeds"] = {
@@ -1149,11 +2014,16 @@ def build_config() -> dict:
         "confirmatory_family": [
             {"contrast": "C-B", "candidate": "C", "reference": "B",
              "slice": "50000",
-             "question": "incremental sequence value in rollout",
+             "question": (
+                 "the registered full-sequence T1 versus token-MLP contrast "
+                 "in rollout, on the same 50 features; the two architectures "
+                 "differ in outcome-history embedding, attention and "
+                 "parameter count, so this is a comparison of that specific "
+                 "pair and not an isolation of sequence memory"),
              "decision_it_feeds": (
-                 "whether learned sequence adds anything over the same "
-                 "features without sequence memory; it is evidence, not by "
-                 "itself an advancement")},
+                 "whether this T1 beats this MLP on the same features; it is "
+                 "evidence about that pair, not by itself an advancement, "
+                 "and not a measurement of what sequence memory is worth")},
             {"contrast": "B-A", "candidate": "B", "reference": "A",
              "slice": "50000",
              "question": "system comparison, token MLP vs production",
@@ -1190,7 +2060,8 @@ def build_config() -> dict:
         "advancement": (
             "symmetric: B advances only if B-A is favourable, C advances "
             "only if C-A is favourable; a favourable C-B on its own is "
-            "sequence evidence for stage 2, not an advancement"),
+            "evidence about that architecture pair for stage 2, not an "
+            "advancement and not a measurement of sequence memory"),
         "market_claim": (
             "no winner-LL result is a market claim. A market claim "
             "additionally requires the claim gate's market comparison with "
@@ -1460,36 +2331,27 @@ def build_config() -> dict:
 
     config["known_asymmetries"] = [
         {
-            "id": "stats_cache_i7_vs_v3",
+            # D6 check 6.5. What the cache unification did NOT remove: the
+            # two arms still see different information.
+            "id": "feature_set_114_vs_50",
             "what": (
-                "A and A50 serve from the i7 stats cache "
-                f"({_role_path(ROLE_STATS_CACHE['i7'])}); B and C serve from "
-                f"the legacy v3 cache "
-                f"({_role_path(ROLE_STATS_CACHE['v3'])})"),
+                "A carries 114 features; A50, B and C carry 50"),
             "why": (
-                "the ablation checkpoints were trained on data/xgb_data_v3 "
-                "and sim_t1.py refuses any other frame"),
+                "the T1 stack was built on a 50-column pre-ball feature "
+                "list; the production ball model uses the full 114-column "
+                "i7 frame"),
             "consequence": (
-                "B-A and C-A are system contrasts across two caches, not "
-                "model-only contrasts. C-B is within one cache and is the "
-                "only clean incremental comparison"),
-            "removable_in_stage_0": False,
-        },
-        {
-            "id": "training_frame_i7_vs_v3",
-            "what": (
-                "A and A50 are trained on the i7 identity frame "
-                "(data/xgb_data_i7); B and C are trained on the pre-I7 v3 "
-                "frame (data/xgb_data_v3, 467 raw venue strings)"),
-            "why": (
-                "the same constraint: the ablation lineage predates the I7 "
-                "identity contract, and the v3 frame fail-closes under it, "
-                "so those checkpoints cannot be retrained on i7 without a "
-                "new training run outside stage 1's scope"),
-            "consequence": (
-                "any A-vs-B or A-vs-C difference confounds venue identity "
-                "resolution with the model; A50 narrows the feature-set part "
-                "of that confound but not the frame part"),
+                "B-A and C-A are system contrasts, not model-only "
+                "contrasts: they compare a 114-feature system with a "
+                "50-feature one. A50-A isolates the feature set at equal "
+                "information, within one model family (same family, same "
+                "frame, same cache, same hyperparameters, 50 columns instead "
+                "of 114). C-B is the registered full-sequence T1 versus "
+                "token-MLP contrast (architectures differ in outcome-history "
+                "embedding, attention and parameter count), so it is not an "
+                "isolation of sequence memory: it is a comparison of two "
+                "specific architectures that happen to differ in several "
+                "ways at once"),
             "removable_in_stage_0": False,
         },
         {
@@ -1531,6 +2393,127 @@ def build_config() -> dict:
                 "for B-A, C-A and A50-A is arm A's own run under this "
                 "config"),
             "removable_in_stage_0": False,
+        },
+    ]
+
+    # D6 check 6.4: the two asymmetries the retrain removed, kept as a
+    # record so a reader of an earlier config sees where they went.
+    config["removed_asymmetries"] = [
+        {
+            "id": "stats_cache_i7_vs_v3",
+            "removed_on": ASYMMETRIES_REMOVED_ON,
+            "what_it_said": (
+                "A and A50 served from the i7 stats cache while B and C "
+                "served from the legacy v3 cache, so B-A and C-A were "
+                "contrasts across two caches"),
+            "reason": (
+                "removed by the 2026-09-11 retrain on the i7 frame: all "
+                "four arms now serve from "
+                f"{_role_path(ROLE_STATS_CACHE['i7'])}, and every arm "
+                "block pins the same cache md5"),
+        },
+        {
+            "id": "training_frame_i7_vs_v3",
+            "removed_on": ASYMMETRIES_REMOVED_ON,
+            "what_it_said": (
+                "A and A50 were trained on the i7 identity frame while B "
+                "and C were trained on the pre-I7 v3 frame, so any A-vs-B "
+                "or A-vs-C difference confounded venue identity resolution "
+                "with the model"),
+            "reason": (
+                "removed by the 2026-09-11 retrain on the i7 frame: B and C "
+                "are retrained on "
+                f"{_role_path(ROLE_BALL_FRAME_I7)}, and each arm block pins "
+                "that frame's split md5s and alias identity from the "
+                "checkpoint's own training contract"),
+        },
+    ]
+
+    # D6 check 6.6: what the shared cache does NOT fix. Recorded as a
+    # limitation of the screen, not as an asymmetry between arms.
+    config["known_limitations"] = [
+        {
+            "id": "global_prior_not_as_of",
+            "what": (
+                "the stats cache's global outcome prior π is summed over "
+                "the tracker's FINAL-state counts (scripts/"
+                "build_stats_cache.py, the 'global prior π' block: 'Fixed "
+                "constant — not rolling, not as-of-date'), so it reflects "
+                "the whole corpus rather than the state before each match. "
+                "Per-player, per-venue and per-match counts remain "
+                "as-of-date (invariant 2)"),
+            "measured": (
+                "2026-09-11 on "
+                f"{_role_path(ROLE_BALL_FRAME_I7)} (train 2005-02-17 -> "
+                "2024-12-30; corpus -> 2026-04-16)"),
+            "pi_train_only_vs_whole_corpus": [
+                {"outcome": "wicket", "train_only": 0.054037,
+                 "whole_corpus": 0.054361, "difference": 0.000324},
+                {"outcome": "dot", "train_only": 0.303601,
+                 "whole_corpus": 0.304017, "difference": 0.000415},
+                {"outcome": "single", "train_only": 0.413227,
+                 "whole_corpus": 0.411313, "difference": -0.001915},
+                {"outcome": "two", "train_only": 0.076086,
+                 "whole_corpus": 0.075796, "difference": -0.000291},
+                {"outcome": "four", "train_only": 0.107686,
+                 "whole_corpus": 0.107803, "difference": 0.000117},
+                {"outcome": "six", "train_only": 0.045362,
+                 "whole_corpus": 0.046711, "difference": 0.001349},
+            ],
+            "difference_convention": "whole corpus minus train only",
+            "max_abs_difference": 0.001915,
+            "feature_shift_rule": "difference x k/(n+k)",
+            "feature_shift_units": (
+                "n is the number of balls the cell itself has seen and k is "
+                "its shrinkage constant, so k/(n+k) is the prior's share of "
+                "the shrunk cell. The 0.000174 row is therefore reached at "
+                "2,000 balls in a VENUE cell (k = 200) and at 300 balls in a "
+                "PLAYER cell (k = 30) — not at the same ball count for both"),
+            "feature_shift": [
+                {"cell": "venue", "k": 200, "n": 0, "shift": 0.001915},
+                {"cell": "venue", "k": 200, "n": 200, "shift": 0.000957},
+                {"cell": "venue", "k": 200, "n": 2000, "shift": 0.000174},
+                {"cell": "player", "k": 30, "n": 0, "shift": 0.001915},
+                {"cell": "player", "k": 30, "n": 30, "shift": 0.000957},
+                {"cell": "player", "k": 30, "n": 300, "shift": 0.000174},
+            ],
+            "feature_shift_is_not_a_log_loss_bound": (
+                "the shifts above are measured in FEATURE space: they are "
+                "how far one shrunk probability column moves. Nothing here "
+                "measures how far a model's winner log loss moves as a "
+                "result, and the two are not the same quantity. They are "
+                "deliberately NOT compared with the "
+                f"{EQUIVALENCE_MARGIN_LL} equivalence margin, which is a log "
+                "loss; an earlier version of this block made that comparison "
+                "and it was withdrawn (Astra round 1)"),
+            "identical_across_arms": True,
+            "identical_across_arms_scope": (
+                "the EXPOSURE is identical, and that is all this key claims: "
+                "all four stage-1 arms read one cache, so every arm's "
+                "features carry the same non-as-of prior. It does NOT claim "
+                "the exposure affects the arms equally"),
+            "differential_effect_on_arms": "unknown_and_unmeasured",
+            "consequence": (
+                "shared exposure, unknown differential effect. The shift "
+                "enters every arm's inputs identically, but the four arms "
+                "are different functions of those inputs — a 114-feature "
+                "gradient-boosted model, the same family at 50 columns, a "
+                "token MLP and a transformer — and how much each one's "
+                "output moves in response has not been measured. This "
+                "limitation therefore cannot be used to argue that a "
+                "stage-1 contrast is unaffected, nor that any arm is "
+                "favoured or disfavoured: the direction and size of the "
+                "effect on B-A, C-A, C-B and A50-A are simply unknown. It "
+                "is an inherited limitation of the iteration screen, not a "
+                "stage-1 defect, and it is on the backlog (TODO.md, 'Global "
+                "outcome prior is not as-of-date')"),
+            "source": "scripts/sequence_track/measure_global_prior_asof.py",
+            "source_note": (
+                "the script that measures the two priors and the k/(n+k) "
+                "table above; it measures the FEATURE shift only, and "
+                "measures no downstream model effect"),
+            "recorded_in": (
+                'docs/sequence_track/stage1_acceptance.md, D2 check 2.4'),
         },
     ]
 
@@ -1674,16 +2657,21 @@ def verify_config(path: Path = CONFIG_PATH) -> list[str]:
 def print_selection(config: dict) -> None:
     block = config["checkpoint_selection"]
     print("checkpoint selection (validation LL only; ties -> lowest seed):")
-    for arm, ablation_arm in (("B", "mlp"), ("C", "full")):
+    for arm, retrain_arm in (("B", "mlp"), ("C", "full")):
         chosen = block["chosen"][arm]
-        print(f"  arm {arm} <- ablation arm {ablation_arm!r}")
-        for row in block["per_seed_validation_ll"][ablation_arm]:
+        print(f"  arm {arm} <- retrain arm {retrain_arm!r}")
+        for row in block["per_seed_validation_ll"][retrain_arm]:
             mark = " <-- chosen" if row["seed"] == chosen["seed"] else ""
             print(f"    seed {row['seed']:>3}  "
                   f"validation LL {row['validation_ll']:.6f}{mark}")
         print(f"    chosen: seed {chosen['seed']}, "
               f"validation LL {chosen['validation_ll']:.6f}")
         print(f"    checkpoint: {chosen['checkpoint']}")
+    diagnostic = block.get("teacher_forced_diagnostic") or {}
+    if diagnostic:
+        print(f"  teacher-forced C-B validation LL "
+              f"{diagnostic['C_minus_B_validation_ll']:+.6f} "
+              f"({diagnostic['label']})")
 
 
 def print_overlap_check(n_sims=None) -> int:

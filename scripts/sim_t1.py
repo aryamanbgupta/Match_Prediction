@@ -77,6 +77,186 @@ assert set(_GENERATED_PLAYER_KEYS) == set(EB_BAT_COLS + EB_BOWL_COLS), (
     "OnlineT1OutcomeDists feature names diverged from the training columns"
 )
 
+# --- serving contract guard (sequence track stage 1, D4) -----------------
+# A checkpoint retrained by transformer_t1.py carries a `training_contract`
+# block naming the frame's delivery semantics, its venue-identity version,
+# the ordered feature names, and the stats cache the frame was materialized
+# from. Features are rebuilt here from live tracker state, so an i7-frame
+# checkpoint served over a cache with different venue identity (or none)
+# silently gets the wrong venue rows.
+#
+# EXACTLY what this guard checks, and what it does not (Astra round 1):
+#   * contract.delivery_semantics == SERVING_DELIVERY_SEMANTICS — equality;
+#   * contract.venue_alias_version == serving `_meta.venue_alias_version` —
+#     equality, both non-null;
+#   * serving `_meta.same_day_order_version` — PRESENCE only. It is not
+#     compared with the contract's recorded ordering version;
+#   * contract.stats_cache.md5 — PRESENCE only (non-null). It is NOT
+#     compared against the cache being served: the wrapper is handed a
+#     provider, not a file path, and cannot hash what is behind it. So a
+#     contracted checkpoint whose training cache has since been rebuilt
+#     LOADS here as long as the alias versions still agree;
+#   * contract.feature_names == EXPECTED_FEATURE_NAMES — ordered equality.
+# The training-cache md5 is compared against the live cache file by
+# `scripts/sequence_track/pin_stage1.py --verify` (`_require(cache["md5"],
+# stats_cache_md5, ...)`), which `run_arm.py --config` re-runs before it
+# launches a registered arm. That is the boundary: this guard makes an
+# identity mismatch unservable, the pin makes a *drifted* cache unrunnable.
+#
+# A checkpoint WITHOUT the block is a legacy v3 checkpoint: the old
+# `config.data_dir` substring rule stands, and the serving cache must carry
+# no venue identity at all, so the uncontracted-checkpoint-on-the-i7-cache
+# pairing is refused rather than assumed benign. Since the SHOULD 2 fix,
+# transformer_t1.py writes no contract at all for a frame that declares no
+# delivery semantics, so such checkpoints arrive on this path by design
+# rather than carrying a contract full of nulls.
+from embeddings_e1 import CTX_COLS  # noqa: E402
+from transformer_t1 import STATE_COLS  # noqa: E402
+
+SERVING_DELIVERY_SEMANTICS = "inclusive_total_runs_v1"
+EXPECTED_FEATURE_NAMES = tuple(
+    EB_BAT_COLS + EB_BOWL_COLS + VENUE_COLS + CTX_COLS + STATE_COLS)
+assert len(EXPECTED_FEATURE_NAMES) == N_FEATS, (
+    "serving feature-name order diverged from N_FEATS"
+)
+
+
+def _serving_cache_meta(provider, mdir) -> dict:
+    """Return the serving stats cache's `_meta`, or refuse.
+
+    Production hands the wrapper a `SameDayReplayStatsProvider`, whose
+    `StatsProviderCache.__getattr__` forwards to the `_TrackerStatsView`,
+    which forwards `get_cache_meta()` to the `StatsProvider` it rehydrated
+    from, which reads the SQLite backend's `_meta`. A provider that cannot
+    expose `_meta` leaves the serving identity unverifiable, so it is
+    refused instead of assumed compatible.
+    """
+    getter = getattr(provider, "get_cache_meta", None)
+    if not callable(getter):
+        raise RuntimeError(
+            f"T1 checkpoint {mdir}: serving provider "
+            f"{type(provider).__name__} cannot expose the stats cache "
+            "`_meta` (no get_cache_meta()), so its venue identity is "
+            "unverifiable. Serve through a StatsProvider-backed chain "
+            "(SameDayReplayStatsProvider -> StatsProvider -> SQLite "
+            "get_meta())."
+        )
+    try:
+        return dict(getter())
+    except Exception as exc:
+        raise RuntimeError(
+            f"T1 checkpoint {mdir}: serving provider "
+            f"{type(provider).__name__}.get_cache_meta() did not yield a "
+            f"`_meta` mapping ({exc!r}); refusing to serve without a "
+            "verified cache identity."
+        ) from exc
+
+
+def _verify_training_contract(metrics: dict, mdir, provider):
+    """Refuse any checkpoint / serving-cache pair whose delivery semantics
+    or venue identity do not match. Returns the contract block (or None for
+    a legacy, uncontracted checkpoint).
+
+    See the boundary note above the module's guard constants: the recorded
+    stats-cache md5 is required to be present but is NOT compared with the
+    cache being served — that comparison is pin_stage1.py --verify's.
+    """
+    cfg = metrics.get("config", {})
+    meta = _serving_cache_meta(provider, mdir)
+    serving_alias = meta.get("venue_alias_version")
+    contract = metrics.get("training_contract")
+
+    if contract is None:
+        # The online overlay counts EVERY delivery on total runs — the v3
+        # materializer's rule. A checkpoint trained on another corpus (e.g.
+        # the I5 legal/off-bat frame, which counts legal off-bat runs only)
+        # would silently receive wrong features here.
+        trained_data_dir = cfg.get("data_dir")
+        if trained_data_dir is not None and (
+                "xgb_data_v3" not in str(trained_data_dir)):
+            raise RuntimeError(
+                f"T1 checkpoint {mdir} was trained on {trained_data_dir!r}; "
+                "this wrapper implements the v3 inclusive_total_runs_v1 "
+                "delivery semantics and only serves data/xgb_data_v3 "
+                "checkpoints."
+            )
+        if serving_alias is not None:
+            raise RuntimeError(
+                f"T1 checkpoint {mdir} carries no training_contract "
+                f"(config.data_dir={trained_data_dir!r}), but the serving "
+                "stats cache declares _meta.venue_alias_version="
+                f"{serving_alias!r} (expected absent). An uncontracted "
+                "checkpoint may only be served from a cache with no venue "
+                "identity; retrain on the i7 frame to serve the i7 cache."
+            )
+        return None
+
+    if not isinstance(contract, dict):
+        raise RuntimeError(
+            f"T1 checkpoint {mdir}: training_contract is "
+            f"{type(contract).__name__}, expected an object."
+        )
+
+    semantics = contract.get("delivery_semantics")
+    if semantics != SERVING_DELIVERY_SEMANTICS:
+        raise RuntimeError(
+            f"T1 checkpoint {mdir}: training_contract.delivery_semantics="
+            f"{semantics!r}, this wrapper serves "
+            f"{SERVING_DELIVERY_SEMANTICS!r}."
+        )
+
+    contract_alias = contract.get("venue_alias_version")
+    if contract_alias is None:
+        raise RuntimeError(
+            f"T1 checkpoint {mdir}: training_contract.venue_alias_version="
+            f"{contract_alias!r}; a contracted checkpoint must name the "
+            "venue identity of the frame it was trained on."
+        )
+
+    stats_cache = contract.get("stats_cache")
+    cache_md5 = (stats_cache.get("md5")
+                 if isinstance(stats_cache, dict) else None)
+    if cache_md5 is None:
+        raise RuntimeError(
+            f"T1 checkpoint {mdir}: training_contract.stats_cache.md5="
+            f"{cache_md5!r} (stats_cache={stats_cache!r}); a checkpoint "
+            "trained without a resolved --stats-cache-role cannot be "
+            "served."
+        )
+
+    if serving_alias != contract_alias:
+        raise RuntimeError(
+            f"T1 checkpoint {mdir}: venue_alias_version mismatch — "
+            f"training_contract.venue_alias_version={contract_alias!r}, "
+            f"serving cache _meta.venue_alias_version={serving_alias!r}."
+        )
+
+    order_version = meta.get("same_day_order_version")
+    if not order_version:
+        raise RuntimeError(
+            f"T1 checkpoint {mdir}: serving cache "
+            f"_meta.same_day_order_version={order_version!r} (expected "
+            f"present, e.g. the contract's "
+            f"{(stats_cache or {}).get('same_day_order_version')!r}); "
+            "same-day ordering is a versioned data contract."
+        )
+
+    names = list(contract.get("feature_names") or [])
+    expected = list(EXPECTED_FEATURE_NAMES)
+    if names != expected:
+        if len(names) != len(expected):
+            where = f"length {len(names)} != {len(expected)}"
+        else:
+            i = next(j for j in range(len(names)) if names[j] != expected[j])
+            where = f"position {i}: {names[i]!r} != {expected[i]!r}"
+        raise RuntimeError(
+            f"T1 checkpoint {mdir}: training_contract.feature_names does "
+            f"not match this wrapper's serving order ({where}); "
+            f"training_contract.feature_names={names!r}, "
+            f"wrapper order={expected!r}."
+        )
+    return contract
+
 
 def _outcome_class(runs: int, wicket: int) -> int:
     if wicket:
@@ -253,19 +433,10 @@ class TransformerT1SimModel(PredictionModel):
         with (mdir / "metrics.json").open() as fh:
             metrics = json.load(fh)
         cfg = metrics.get("config", {})
-        # The online overlay counts EVERY delivery on total runs — the v3
-        # materializer's rule. A checkpoint trained on another corpus (e.g.
-        # the I5 legal/off-bat frame, which counts legal off-bat runs only)
-        # would silently receive wrong features here.
-        trained_data_dir = cfg.get("data_dir")
-        if trained_data_dir is not None and (
-                "xgb_data_v3" not in str(trained_data_dir)):
-            raise RuntimeError(
-                f"T1 checkpoint {mdir} was trained on {trained_data_dir!r}; "
-                "this wrapper implements the v3 inclusive_total_runs_v1 "
-                "delivery semantics and only serves data/xgb_data_v3 "
-                "checkpoints."
-            )
+        # Delivery semantics, venue identity and feature order of the frame
+        # this checkpoint was trained on, checked against the cache actually
+        # being served. See `_verify_training_contract`.
+        _verify_training_contract(metrics, mdir, self.stats_provider)
         self.arm = cfg.get("arm", "full")
         self.model = T1Model(
             N_FEATS,

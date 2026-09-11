@@ -36,9 +36,12 @@ It fails closed rather than passing on absent evidence:
   ad-hoc set in which NO arm claims a registered config.
 
 Deliberately NOT asserted (expected to differ; listed in the table for the
-record): model directory hash, checkpoint md5, stats version and cache md5
-(B/C serve the legacy v3 cache, A/A50 the i7 cache — the registered stage-1
-asymmetry), device and threads.
+record): model directory hash, checkpoint md5, device and threads. Stats
+version and cache md5 are listed too, but since the 2026-09-11 retrain on the
+i7 frame all four arms serve the SAME i7 cache, so a difference there is now
+a defect rather than the registered asymmetry it used to be (the old
+`stats_cache_i7_vs_v3` and `training_frame_i7_vs_v3` entries were moved to
+`removed_asymmetries` in the stage-1 config).
 """
 from __future__ import annotations
 
