@@ -2854,3 +2854,22 @@ retained; no confirmation run.** Reading: the M7 sweep's conclusion that the
 config sits on a flat optimum holds under rolling-origin selection; the
 0.0034 grid spread is smaller than one seed's noise. Table and config in
 `research/handoff/R3/` (`sweep.md`, `sweep.json`, `c_rolling_grid.yaml`).
+
+## SQ1 [P1] [FAILED] Sequence track stage 1: three ball models through the fixed simulator (single-checkpoint screen)
+**Hypothesis:** on the certified replay path with identical information, the
+50-feature token MLP (B) and full T1 (C) simulate the winner market as well
+as the production i7 ball model (A); full T1 does not improve on the MLP in
+rollout. Pre-registered expectation: parity everywhere, no arm advancing
+(`docs/SEQUENCE_TRACK_PLAN.md` § Stage 1).
+**Method:** `experiments/configs/seq_stage1_sim_v1.yaml` (pinned; every
+arm, seed rule, clip, selector, sidecars, shards and command lines); one
+runner (`scripts/sequence_track/run_arm.py`), one chronology, cross-arm
+audit; 255 iteration fixtures × 1,600 simulations per arm; gate
+`claim_gate --kind match_model` against `odds_iteration_v2` on the ≥$50k
+slice with `tournament_time_block_v1`; Holm step-down over C−B, B−A, C−A;
+A50−A exploratory. Acceptance `docs/sequence_track/stage1_acceptance.md`.
+**Gate:** the registered decision rule: B advances only if B−A is
+favourable (interval excludes zero, point < −0.007 after Holm), C only if
+C−A is; anything else is no advancement. Provisional by construction (one
+checkpoint per neural arm), so LANDED is impossible here.
+**Result:** FAILED 2026-09-11 — meaning "advancement not established", not "inferiority established". Primary slice ≥$50k (167 paired, 18 blocks), Holm step-down: C−B −0.0257 [−0.0346, −0.0102] favourable (Holm p 0.0018); B−A +0.0247 [−0.0027, +0.0554] inconclusive; C−A −0.0009 [−0.0277, +0.0288] inconclusive; A50−A +0.0276 [+0.0095, +0.0419] adverse (exploratory). No arm advances. Every gate provisional (single checkpoint). Evidence: `full/gate/C-A_50000.json` (this row's gate), supporting `B-A_50000.json`, `holm_50000.json`. Report `research/reports/embeddings/SEQ_STAGE1_REPORT.md`; Astra SIGN-OFF recorded in acceptance D12.9. C−B goes to stage 2 as evidence about the full-T1 vs token-MLP pair; five-seed, two-batch confirmation required before any claim.
