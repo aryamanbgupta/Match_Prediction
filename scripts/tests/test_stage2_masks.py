@@ -183,3 +183,86 @@ def test_padded_keys_are_never_read_and_no_row_is_empty():
 def test_same_entity_refuses_to_build_a_mask_without_ids():
     with pytest.raises(ValueError, match="batter/bowler"):
         t1.attention_mask("same_entity", "unr", None, None, PAD)
+
+
+# ---------------------------------- stage 3: the registered mask property
+#
+# `attention_mask` used to spell the ownership restriction as the literal
+# `arm == "same_entity"`. It is now read from `t1.ARM_MASK_OWNERSHIP`, so a
+# later same-entity variant cannot silently lose its mask by being given a
+# different name. These tests pin BOTH halves of that change: the table says
+# exactly what the literal said, and every arm that existed before the
+# refactor produces byte-identical masks.
+
+# The fixture innings as integer codes (`attention_set` takes id arrays).
+BAT_CODE = np.array([0, 0, 1, 1, 2, 2, 0, 0, 1])
+BOWL_CODE = np.array([0, 0, 0, 0, 0, 1, 1, 1, 0])
+
+# Verified against the pre-refactor `transformer_t1.py` (git HEAD before the
+# stage 3 edit) for EVERY arm, every registered k and every target row: zero
+# differences. The two ownership-sensitive arms are pinned literally here.
+SAME_ENTITY_K3 = [[0], [0, 1], [0, 1, 2], [0, 1, 2, 3], [1, 2, 3, 4],
+                  [4, 5], [5, 6], [5, 6, 7], [8]]
+SAME_ENTITY_UNR = [[0], [0, 1], [0, 1, 2], [0, 1, 2, 3], [0, 1, 2, 3, 4],
+                   [4, 5], [0, 1, 5, 6], [0, 1, 5, 6, 7],
+                   [0, 1, 2, 3, 4, 8]]
+RECENCY_K3 = [[0], [0, 1], [0, 1, 2], [0, 1, 2, 3], [1, 2, 3, 4],
+              [2, 3, 4, 5], [3, 4, 5, 6], [4, 5, 6, 7], [5, 6, 7, 8]]
+
+
+def test_arm_mask_ownership_is_exactly_the_old_literal():
+    """The table must name every arm, and restrict only `same_entity`."""
+    assert set(t1.ARM_MASK_OWNERSHIP) == set(t1.ALL_ARMS)
+    owning = {arm for arm, flag in t1.ARM_MASK_OWNERSHIP.items() if flag}
+    assert owning == {"same_entity"}
+
+
+def test_unregistered_arm_raises_rather_than_reading_the_full_prefix():
+    """The point of the table: a missing arm is loud, not silently unmasked."""
+    with pytest.raises(KeyError):
+        t1.attention_mask("not_an_arm", None, BAT_T, BOWL_T, PAD)
+
+
+@pytest.mark.parametrize("k, expected", [(3, SAME_ENTITY_K3),
+                                         ("unr", SAME_ENTITY_UNR)])
+def test_same_entity_sets_unchanged_by_the_refactor(k, expected):
+    got = [sorted(t1.attention_set("same_entity", k, target,
+                                   BAT_CODE, BOWL_CODE, 9))
+           for target in range(9)]
+    assert got == expected
+
+
+def test_recency_sets_unchanged_by_the_refactor():
+    got = [sorted(t1.attention_set("recency", 3, target,
+                                   BAT_CODE, BOWL_CODE, 9))
+           for target in range(9)]
+    assert got == RECENCY_K3
+
+
+@pytest.mark.parametrize("arm", [
+    arm for arm in t1.STAGE1_ARMS + t1.STAGE2_ARMS
+    if arm not in t1.ARMS_NEEDING_K
+    and t1.ARM_WIRING[arm] in ("standard", "relay_free")
+    and arm != "no_attention"])
+def test_unwindowed_arms_still_read_the_full_causal_prefix(arm):
+    """Every pre-stage-3 arm without a window is unchanged: full prefix."""
+    causal = torch.tril(torch.ones(9, 9, dtype=torch.bool)).unsqueeze(0)
+    assert torch.equal(t1.attention_mask(arm, None, BAT_T, BOWL_T, PAD),
+                       causal)
+
+
+def test_aligned_hist_decay_is_not_an_ownership_arm():
+    """Block A's arm is `aligned_hist` plus decay: ownership is in its history
+    INPUT, never in its mask, so it reads the full causal prefix."""
+    assert t1.ARM_MASK_OWNERSHIP["aligned_hist_decay"] is False
+    causal = torch.tril(torch.ones(9, 9, dtype=torch.bool)).unsqueeze(0)
+    assert torch.equal(
+        t1.attention_mask("aligned_hist_decay", None, BAT_T, BOWL_T, PAD),
+        causal)
+    # Its history sources are the participant-aligned ones, exactly as
+    # `aligned_hist`'s are.
+    for target in range(9):
+        assert (t1.history_source_rows("aligned_hist_decay", target,
+                                       BAT_CODE, BOWL_CODE)
+                == t1.history_source_rows("aligned_hist", target,
+                                          BAT_CODE, BOWL_CODE))

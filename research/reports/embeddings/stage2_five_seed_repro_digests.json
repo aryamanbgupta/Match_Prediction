@@ -1,0 +1,69 @@
+{
+  "digest_version": "seq_stage2_five_seed_repro_digests_v1",
+  "what_this_is": "the canonical digests of the landed Stage 2 five-seed analysis documents. They are the reproduction gate for any change to scripts/sequence_track/stage2_stats.py: the generalised family, role, screen and slice machinery must leave every number of the landed analysis untouched, and this file is what asserts it without depending on any session's scratch directory.",
+  "canonical_digest_recipe": "sha256 of json.dumps(payload, sort_keys=True, default=str) where payload is the document with `removed_fields` deleted from its top level",
+  "removed_fields": {
+    "generated_at_utc": "wall-clock stamp; differs on every run by construction",
+    "selection_record_sha256": "k_selection only: the sha256 of the record INCLUDING its generated_at_utc, so it is timestamp-derived and moves with it"
+  },
+  "git_head_short_at_write": "62db553",
+  "files_of_record": {
+    "stats.json": "eval_out/seq_stage2_5seed/stats.json",
+    "k_selection.json": "eval_out/seq_stage2_5seed/k_selection.json"
+  },
+  "invocations": {
+    "statistics": [
+      "uv",
+      "run",
+      "--no-sync",
+      "python",
+      "scripts/sequence_track/stage2_stats.py",
+      "stats",
+      "--config",
+      "experiments/configs/seq_stage2_5seed_v1.yaml",
+      "--runs-root",
+      "models/embeddings/seq_stage2/runs",
+      "--frame-dir",
+      "data/xgb_data_i7",
+      "--block-source-dir",
+      "data/t20s_json",
+      "--base-logits",
+      "models/embeddings/seq_stage2/base_logits/validation.npz",
+      "--out",
+      "eval_out/seq_stage2_5seed/stats.json",
+      "--reps",
+      "2000",
+      "--rng-seed",
+      "29",
+      "--seeds",
+      "7,13,29,42,101"
+    ],
+    "ksweep": [
+      "uv",
+      "run",
+      "--no-sync",
+      "python",
+      "scripts/sequence_track/stage2_stats.py",
+      "ksweep",
+      "--config",
+      "experiments/configs/seq_stage2_5seed_v1.yaml",
+      "--runs-root",
+      "models/embeddings/seq_stage2/runs",
+      "--out",
+      "eval_out/seq_stage2_5seed/k_selection.json",
+      "--seeds",
+      "7,13,29,42,101"
+    ]
+  },
+  "invocation_note": "the argv is the pinned one from docs/sequence_track/stage2_five_seed_analysis_pin.json, verbatim except `--out`, which a reproduction may redirect to a scratch path",
+  "digests": {
+    "stats.json": "19bcb604d243c70e338e24da00751672c91af2a0ee16da84ff70be9ac66f9ef6",
+    "k_selection.json": "f46fa4759f25211a570b208e5314cbbe286e271e1ae08e2a08d30f2ebe1c1989"
+  },
+  "verified_against": [
+    "the shipped files of record under eval_out/seq_stage2_5seed/",
+    "a fresh capture on the pre-change code (stats_before)",
+    "a fresh capture on the post-change code (stats_after)"
+  ],
+  "enforced_by": "scripts/tests/test_stage2_stats.py::test_the_five_seed_analysis_reproduces_byte_identically"
+}

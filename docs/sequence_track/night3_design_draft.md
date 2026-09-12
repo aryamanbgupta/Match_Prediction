@@ -1,4 +1,4 @@
-# Sequence track — night 3 design (v6, 2026-09-12, after Astra rounds 1–4 and user decisions)
+# Sequence track — night 3 design (v7, 2026-09-12 evening: preparation results folded in)
 
 Round 1 verdict was NO SIGN-OFF with ten MUST-FIX items; this revision
 answers each (mapping at the end). Scope tonight, in queue order:
@@ -102,7 +102,10 @@ so there are 6 configurations and 30 runs.
   associate side is not.
 - Exploratory readout slice `big3` = E ∩ matches involving at least one of
   India, Australia or England (an elite subset; matches of those teams
-  against associates are NOT in it). Descriptive only: fixed contrasts
+  against associates are NOT in it). The freeze found only **8 validation
+  matches (16 innings, 1,895 rows)** in it, so it is far below the
+  ten-block rule and is reported as a thin descriptive readout only.
+  Descriptive only: fixed contrasts
   (the same six configs' deltas), ball-weighted, row and block counts
   reported, no family and no "tier above" inference.
 
@@ -237,7 +240,14 @@ waits for it.
 ## Block E — Stage 4 (20 runs if both land; 4d first)
 
 References (fitted on i7 training rows, then frozen, deterministic, one
-fit each, never presented as five seeds):
+fit each, never presented as five seeds). Landed 2026-09-12 evening,
+StandardScaler (train-only) + multinomial logistic, C = 1.0, lbfgs,
+max_iter 2000, all converged; validation LL `ref_eb_ctx` **1.4500**,
+`ref_raw_ctx` **1.4534**, `ref_lin_50` **1.4433** (so EB shrinkage is
+worth ~0.003 over raw as-of rates in the linear regime and the four
+continuous state features ~0.007 on top of the EB set); preflight guard
+7/7 including the symlink trap; sidecar train 1,876,971 / validation
+124,292 rows; pair graph one connected component of 11,016 nodes:
 - `ref_eb_ctx`: 42 EB columns + the 4 match-state columns of the E15/E2
   fair control; stated explicitly to omit the four state features the
   50-feature arms see;
@@ -306,8 +316,21 @@ certificate, and a registered total-FLOP budget for the equal-compute
 control (steps-matched `full` is supplementary only). These are written
 tomorrow with a fresh `fixed_decay` family if that comparison is kept.
 
-## Deferred: 3c (masked pretraining)
+## Deferred: 3c (masked pretraining) — audit result: NOT VIABLE on this contract
 
+The leakage audit (`scripts/sequence_track/stage3c_leakage_audit.py`,
+`research/reports/embeddings/STAGE3C_LEAKAGE_AUDIT.md`, validation split)
+found that a depth-4 tree on the ball-to-ball differences of the 50
+features recovers the outcome **exactly (accuracy 1.0000)**; `score`
+alone reaches 0.946 and 24 of the 36 EB tracker columns exceed 0.50
+because the tracker state increments with the observed outcome. Greedy
+elimination has to strip 43 of 50 features to return to the 0.405
+baseline, leaving only the six innings-constant venue columns plus
+`is_chase`. A 6-ball span mask recovers in-span wickets exactly from the
+endpoints. Conclusion: a masked-outcome objective cannot be made
+leak-free on this contract without a frame change (EB anchors and
+scoreboard frozen at span start, no post-span endpoint exposed). 3c is
+not scheduled; a future design must start from that frame change.
 Design and audit only; no training tonight. The design written tomorrow
 must choose the actual visibility scheme (forward-only visible context, or
 removal of every downstream channel) and freeze the same-row total-compute

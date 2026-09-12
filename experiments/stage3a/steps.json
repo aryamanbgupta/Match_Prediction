@@ -1,0 +1,8 @@
+{
+  "batch": 128,
+  "epochs": 30,
+  "eval_every": 128,
+  "max_steps": 3840,
+  "n_train_innings": 16319,
+  "rule": "one optimiser step = one batch of --batch innings, final partial batch of an epoch kept; E = ceil(n_train_innings / batch), S = epochs * E"
+}

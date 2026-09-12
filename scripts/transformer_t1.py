@@ -110,6 +110,21 @@ AUX_WEIGHT_DEFAULT = 0.2
 # Bookkeeping column read only to record each split's date range; it is
 # never part of the feature tensor.
 DATE_COL = "match_date"
+# Sequence track stage 3, Block B (night 3 draft § "Block B"). The frame's
+# pre-match competition tier, whose membership is the event-name rule in
+# `parsing_v2.classify_match_context`. Read as a per-row array WHEN THE FRAME
+# HAS IT and never appended to the feature tensor: `build_features` still
+# returns exactly `N_FEATS` columns, and the 50-feature contract is unchanged.
+# The tier reaches the model only through the optional `--tier-embed`
+# conditioning, which is off by default.
+TIER_COL = "competition_tier"
+# The within-innings ball index, read only so a row-aligned stage 4 sidecar can
+# be verified against the frame key by key. Never a feature.
+BALL_IDX_COL = "ball_idx"
+# Tier vocabulary for the conditioning embeddings: real tiers are 1..4 and
+# index 0 is the unused UNK slot, so a row whose tier is missing or out of
+# range conditions on UNK rather than on some other tier.
+N_TIER_SLOTS = 5
 
 # --------------------------------------------------------------------------
 # Sequence track stage 2 (docs/sequence_track/stage2_acceptance.md, D3).
@@ -121,13 +136,40 @@ STAGE1_ARMS = ("full", "mlp", "no_attention", "no_history")
 STAGE2_ARMS = ("fixed_decay", "fox", "aligned_hist", "aligned_hist_rf",
                "recency", "same_entity", "residual_mlp", "residual_t1",
                "lstm", "xlstm")
-ALL_ARMS = STAGE1_ARMS + STAGE2_ARMS
+# Sequence track stage 3, Block A (docs/sequence_track/night3_design_draft.md).
+# `aligned_hist_decay` is `aligned_hist`'s participant-aligned history input
+# under `fixed_decay`'s ALiBi bias: standard causal wiring (it does NOT
+# exclude other participants), the same per-head slopes as `fixed_decay`, and
+# therefore — by the derived `ARM_POS_EMB` rule — no positional embedding.
+# Consequently `aligned_hist_decay - aligned_hist` moves the decay bias AND
+# the positional encoding together, and the draft labels it so.
+STAGE3_ARMS = ("aligned_hist_decay",)
+# Sequence track stage 4, rung 4b (night 3 draft § "Block E"). An
+# IDENTITY-ONLY residual over a frozen linear reference: the base log-
+# probabilities cannot move, and the only learned inputs are a batter and a
+# bowler embedding. The 50-feature contract is deliberately NOT read by this
+# arm — the reference already consumes the context, and the rung asks what
+# identity adds on top of it.
+STAGE4_ARMS = ("identity_residual",)
+ALL_ARMS = STAGE1_ARMS + STAGE2_ARMS + STAGE3_ARMS + STAGE4_ARMS
 
 # Arms whose attention set is parameterised by a window k (D3.3: --k is
 # required for these and refused for every other arm).
 ARMS_NEEDING_K = ("recency", "same_entity")
 # Arms that consume a base log-probability input (D3.3 / D4).
 ARMS_NEEDING_BASE_LOGITS = ("residual_mlp", "residual_t1")
+# Arms that consume a frozen REFERENCE's per-row probabilities (rung 4b). This
+# is a different artifact from `ARMS_NEEDING_BASE_LOGITS`' production base
+# logits: a different directory layout, a different file name and a different
+# key set, so the two are registered separately and never share a flag.
+ARMS_NEEDING_BASE_PROBS = ("identity_residual",)
+# Rung 4b's fixed architecture, frozen here rather than exposed as a flag so
+# the two registered lambda configs differ ONLY in lambda.
+IDENTITY_EMBED_DIM = 16
+# Probability of replacing a player id by UNK during TRAINING only, so the
+# learned UNK row is trained and a rare id cannot be memorised outright.
+IDENTITY_ID_DROPOUT = 0.05
+IDENTITY_LAMBDA_DEFAULT = 1e-3
 
 # How every arm is wired. "token_mlp" has no sequence access at all;
 # "standard" is `nn.TransformerEncoder`-shaped (queries, keys and values all
@@ -143,6 +185,12 @@ ARM_WIRING = {
     "aligned_hist_rf": "relay_free", "recency": "relay_free",
     "same_entity": "relay_free",
     "lstm": "recurrent", "xlstm": "recurrent",
+    "aligned_hist_decay": "standard",
+    # Its own wiring for the same reason the recurrent arms have theirs: the
+    # arm owns its whole token pathway. It is in the token_mlp FAMILY in the
+    # sense that it has no sequence access at all, but it builds no
+    # `feat_proj` and no `token_mlp`, because it reads no features.
+    "identity_residual": "identity_residual",
 }
 # The history input each arm reads. "innings_previous" is the stage 1
 # `out_emb(prev_y)`; "participant_aligned" replaces it with
@@ -158,6 +206,8 @@ ARM_HISTORY = {
     "aligned_hist": "participant_aligned",
     "aligned_hist_rf": "participant_aligned",
     "same_entity": "participant_aligned",
+    "aligned_hist_decay": "participant_aligned",
+    "identity_residual": "none",
 }
 # How the KEY/VALUE token of an earlier row is built (handoff § 3.1, the
 # `relay_free_keys_carry_own_outcome` asymmetry).
@@ -191,11 +241,26 @@ N_OUTCOME_CLASSES = 6
 ARM_BIAS = {arm: "none" for arm in ALL_ARMS}
 ARM_BIAS["fixed_decay"] = "alibi"
 ARM_BIAS["fox"] = "fox"
+# Stage 3 Block A: the same ALiBi bias, and therefore the same `alibi_slopes`,
+# as `fixed_decay`. Nothing about the bias depends on the arm name, so the two
+# arms' per-head slopes are the same object by construction.
+ARM_BIAS["aligned_hist_decay"] = "alibi"
 # Positional embedding: every attention arm except the two bias arms, which
 # are registered "pos emb: no" because their bias carries position.
 ARM_POS_EMB = {
     arm: ARM_WIRING[arm] in ("standard", "relay_free")
     and ARM_BIAS[arm] == "none" for arm in ALL_ARMS}
+# Whether the arm's attention set is restricted to rows sharing the query's
+# batter or bowler (the ownership mask). Registered as a table rather than
+# spelled `arm == "same_entity"` inside `attention_mask`, so that a future
+# same-entity variant (a same-entity + decay arm, say) cannot silently lose
+# its mask by having a different name: an arm missing from this table is a
+# KeyError at mask time, not a quietly unmasked full causal prefix.
+#
+# Stage 3 Block A note: `aligned_hist_decay` is False here on purpose. It is
+# `aligned_hist` plus decay, and `aligned_hist` reads the full causal prefix;
+# ownership enters its history INPUT (participant-aligned), never its mask.
+ARM_MASK_OWNERSHIP = {arm: arm == "same_entity" for arm in ALL_ARMS}
 # The FoX gate bias initialiser: sigma(4) ~ 0.982, so the gate is ~1 (no
 # forgetting) at initialisation and the arm starts from vanilla attention.
 FOX_GATE_BIAS_INIT = 4.0
@@ -273,6 +338,15 @@ def feature_names() -> list[str]:
 
 def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def sha256_file(path: Path, chunk: int = 8 * 1024 * 1024) -> str:
+    """sha256 of a file's bytes — the digest stage 3/4 sidecars are pinned by."""
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        while block := handle.read(chunk):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def md5_file(path: Path, chunk: int = 8 * 1024 * 1024) -> str:
@@ -360,12 +434,29 @@ def resolve_stats_cache(role: str, explicit: Path | None,
 
 
 def load_split(name: str, data_dir: Path = DATA,
-               version: str | None = None) -> pd.DataFrame:
+               version: str | None = None,
+               extra_columns: list[str] | None = None) -> pd.DataFrame:
     cols = (["innings_id", "batter_id", "bowler_id", "ball_outcome"]
             + EB_BAT_COLS + EB_BOWL_COLS + VENUE_COLS + CTX_COLS + STATE_COLS)
+    # C114: the alternative feature contract needs columns the 50-feature one
+    # never reads. Added here (deduplicated, order preserved) rather than by a
+    # second read, so one parquet pass still serves the whole run.
+    for name_ in (extra_columns or []):
+        if name_ not in cols:
+            cols.append(name_)
     path = split_path(data_dir, resolve_frame_version(data_dir, version), name)
-    if DATE_COL in set(pq.ParquetFile(path).schema_arrow.names):
+    available = set(pq.ParquetFile(path).schema_arrow.names)
+    if DATE_COL in available:
         cols = cols + [DATE_COL]
+    # Stage 3 Block B: an OPTIONAL bookkeeping/conditioning column, read only
+    # when the frame carries it so that a frame without it still loads. It is
+    # not in `build_features`, so reading it cannot move the 50-feature vector.
+    if TIER_COL in available:
+        cols = cols + [TIER_COL]
+    # Stage 4 rung 4d: the sidecar alignment key. Bookkeeping only, never a
+    # feature, and read only when the frame has it.
+    if BALL_IDX_COL in available:
+        cols = cols + [BALL_IDX_COL]
     df = pd.read_parquet(path, columns=cols)
     df["y"] = df["ball_outcome"].map(CLASS_MAPPING).astype(np.int64)
     return df
@@ -399,9 +490,298 @@ def build_features(df: pd.DataFrame) -> np.ndarray:
     ])
 
 
+# --------------------------------------------------------------------------
+# C114 — the production ball model's 114-column feature contract.
+#
+# Naming, recorded once so nothing has to guess. The contract is spelled
+# `v7_114` because it is the feature list of the v7 BALL MODEL line (114
+# features, CLAUDE.md § "Ball-level sim"), but the `feature_registry` group set
+# that produces it is `V6_GROUPS`, NOT `V7_GROUPS`: v7 differs from v6 only in
+# the hierarchical shrinkage COMPOSITION, and `phase_outcome_dist` (which
+# `V7_GROUPS` adds, taking the list to 120) is deliberately not in the model's
+# feature list because the Phase 3 ablation showed it regresses LL. A guard
+# below asserts the resolved list is byte-identical to the production
+# artifact's own `feature_columns_i7.txt`, so this cannot drift.
+V7_114_CONTRACT = "v7_114"
+FEATURE_CONTRACTS = (V7_114_CONTRACT,)
+N_FEATS_V7_114 = 114
+# The four columns of the contract that are not in the frame: the production
+# trainer derives them from raw string columns with `LabelEncoder`s.
+V7_114_CATEGORICALS = {
+    "batter_encoded": "batter_id",
+    "bowler_encoded": "bowler_id",
+    "venue_encoded": "venue",
+    "matchup_type_encoded": "matchup_type",
+}
+# STATED DEVIATION FROM PRODUCTION, and the reason it is deliberate.
+# `scripts/xgboost_v2.py` fits its LabelEncoders on the union of the train,
+# validation AND test unique values, so the production model's category
+# vocabulary is a function of the held-out splits. This contract fits them on
+# TRAIN ROWS ONLY and maps everything unseen to index 0 (UNK), which is what
+# the C114 registration asks for. The consequence is that these four columns
+# are not numerically identical to the production model's, and the contract
+# block below records that.
+V7_114_ENCODER_DEVIATION = (
+    "categorical encoders are fitted on TRAIN rows only with index 0 = UNK; "
+    "the production ball model (scripts/xgboost_v2.py) fits its LabelEncoders "
+    "on train+validation+test unique values, so these four columns are not "
+    "numerically identical to production's")
+# A second stated limitation: an ordinal category code carries little for a
+# LINEAR projection (unlike a tree split, which is what production uses them
+# for). So `full_114 - full_50` is mostly the 60 extra NUMERIC features.
+V7_114_ORDINAL_LIMITATION = (
+    "the four *_encoded columns enter as standardised ORDINAL codes. A tree "
+    "can split on them; a linear feat_proj essentially cannot, so any 114-vs-50 "
+    "contrast is carried by the 60 extra numeric columns, not by identity")
+
+
+def v7_114_columns() -> list[str]:
+    """The ordered 114 columns, resolved from `feature_registry`.
+
+    Refuses to return anything but the production artifact's own ordered list,
+    so this contract cannot silently diverge from the model of record.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from feature_registry import V6_GROUPS, resolve_feature_list  # noqa: PLC0415
+    cols = resolve_feature_list(V6_GROUPS)
+    if len(cols) != N_FEATS_V7_114:
+        raise RuntimeError(
+            f"feature_registry V6_GROUPS resolves to {len(cols)} columns, "
+            f"expected {N_FEATS_V7_114}")
+    pinned = REPO_ROOT / ("models/xgb_i7_noweights_production/"
+                          "feature_columns_i7.txt")
+    if pinned.is_file():
+        want = [line.strip() for line in pinned.read_text().splitlines()
+                if line.strip()]
+        if want != cols:
+            raise RuntimeError(
+                f"the {V7_114_CONTRACT} column list disagrees with the "
+                f"production artifact {pinned}: first difference at index "
+                f"{next(i for i, (a, b) in enumerate(zip(cols, want)) if a != b)}")
+    return cols
+
+
+def v7_114_source_columns() -> list[str]:
+    """Frame columns the contract needs read: the numerics plus the raw
+    categorical sources the four `*_encoded` columns are derived from."""
+    numeric = [name for name in v7_114_columns()
+               if name not in V7_114_CATEGORICALS]
+    return numeric + sorted(set(V7_114_CATEGORICALS.values()))
+
+
+def fit_categorical_encoders(train_df: pd.DataFrame) -> dict:
+    """Train-only ``{source column: {value: code}}``, index 0 = UNK."""
+    encoders = {}
+    for source in sorted(set(V7_114_CATEGORICALS.values())):
+        if source not in train_df.columns:
+            raise RuntimeError(
+                f"the {V7_114_CONTRACT} contract needs the frame column "
+                f"{source!r} to build its encoded categoricals")
+        values = sorted(train_df[source].astype(str).unique())
+        encoders[source] = {value: index + 1
+                            for index, value in enumerate(values)}
+    return encoders
+
+
+def build_features_v7_114(df: pd.DataFrame, encoders: dict) -> np.ndarray:
+    """The 114-column matrix, in the production artifact's column order."""
+    cols = v7_114_columns()
+    frame = {}
+    for name in cols:
+        if name in V7_114_CATEGORICALS:
+            source = V7_114_CATEGORICALS[name]
+            frame[name] = (df[source].astype(str)
+                           .map(encoders[source]).fillna(0)
+                           .astype(np.float32).to_numpy())
+        else:
+            if name not in df.columns:
+                raise RuntimeError(
+                    f"the frame carries no {V7_114_CONTRACT} column {name!r}")
+            frame[name] = df[name].to_numpy(np.float32)
+    matrix = np.stack([frame[name] for name in cols], axis=1)
+    if matrix.shape[1] != N_FEATS_V7_114:
+        raise RuntimeError(
+            f"{V7_114_CONTRACT} built {matrix.shape[1]} columns, expected "
+            f"{N_FEATS_V7_114}")
+    return np.nan_to_num(matrix, nan=0.0, posinf=0.0, neginf=0.0)
+
+
+def tier_codes(df: pd.DataFrame) -> np.ndarray:
+    """Per-row tier index in ``0..N_TIER_SLOTS-1``, 0 = UNK (stage 3 Block B).
+
+    Returns an all-zero (all-UNK) array when the frame carries no tier column,
+    so every caller can treat the array as always present. Real tiers are the
+    frame's 1..4; anything missing or out of range maps to the UNK slot rather
+    than silently to another tier.
+    """
+    n = len(df)
+    if TIER_COL not in df.columns:
+        return np.zeros(n, dtype=np.int64)
+    raw = pd.to_numeric(df[TIER_COL], errors="coerce")
+    codes = raw.fillna(0).astype(np.int64).to_numpy()
+    codes[(codes < 1) | (codes >= N_TIER_SLOTS)] = 0
+    return codes
+
+
+def match_id_of(innings_id) -> str:
+    """The Cricsheet match id inside an ``innings_id`` (``"1_211048"``).
+
+    The frame spells an innings as ``<innings number>_<match id>``, so the
+    match id is the suffix after the underscore. Ids with no underscore are
+    returned whole, which is what a frame that already keys by match would
+    give.
+    """
+    return str(innings_id).rsplit("_", 1)[-1]
+
+
+# Stage 4 rung 4d (night 3 draft § "Block E"). Sidecar columns whose stored
+# value is a VARIANCE; the model reads the standard deviation, so they are
+# sqrt-ed at load. Named by suffix rather than listed so a new class cannot be
+# added to the sidecar and quietly enter as a variance.
+EXTRA_VARIANCE_SUFFIX = "_var_p"
+# The sidecar's join keys. Both are compared against the frame row by row:
+# the sidecar is row-ALIGNED, not merged, so a silent reordering would put one
+# ball's exposure on another ball.
+EXTRA_KEY_COLS = ("innings_id", "ball_idx")
+
+
+def load_extra_features(extra_dir: Path, split: str, df: pd.DataFrame,
+                        cols: list[str]) -> tuple[np.ndarray, str]:
+    """Row-aligned sidecar columns for one split (rung 4d).
+
+    Refuses anything that is not this split's own sidecar: the row count must
+    equal the split's, and `innings_id` and `ball_idx` must match the frame
+    ROW BY ROW. `*_var_p*` columns are sqrt-ed, so the model reads a standard
+    deviation rather than a variance. Returns ``(matrix (n, len(cols))
+    float32, sha256 of the parquet)``.
+    """
+    path = Path(extra_dir) / f"{split}.parquet"
+    if not path.exists():
+        raise RuntimeError(f"extra-feature sidecar for split {split!r} not "
+                           f"found: {path}")
+    available = set(pq.ParquetFile(path).schema_arrow.names)
+    missing = [name for name in cols if name not in available]
+    if missing:
+        raise RuntimeError(f"{path} carries no column(s) {missing}")
+    keys = [name for name in EXTRA_KEY_COLS if name in available]
+    side = pd.read_parquet(path, columns=keys + list(cols))
+    if len(side) != len(df):
+        raise RuntimeError(
+            f"{path} has {len(side)} rows but split {split!r} has {len(df)}; "
+            "the sidecar must be row-aligned to the frame")
+    for key in keys:
+        if key not in df.columns:
+            raise RuntimeError(
+                f"the frame does not carry {key!r}, so {path}'s alignment "
+                "cannot be verified; refusing to train on an unverified "
+                "sidecar")
+        want = df[key].to_numpy()
+        got = side[key].to_numpy()
+        if key == "innings_id":
+            want, got = want.astype(str), got.astype(str)
+        if not np.array_equal(want, got):
+            bad = int(np.argmax(want != got))
+            raise RuntimeError(
+                f"{path} is not row-aligned to split {split!r}: {key} differs "
+                f"first at row {bad} ({got[bad]!r} != {want[bad]!r})")
+    if not keys:
+        raise RuntimeError(
+            f"{path} carries neither of {EXTRA_KEY_COLS}, so its alignment "
+            "cannot be verified; refusing to train on it")
+    matrix = side[list(cols)].to_numpy(np.float32)
+    for index, name in enumerate(cols):
+        if EXTRA_VARIANCE_SUFFIX in name:
+            # A variance is read as a standard deviation: same information,
+            # on the scale the standardiser and the linear layer want.
+            matrix[:, index] = np.sqrt(
+                np.clip(matrix[:, index], 0.0, None))
+    if not np.isfinite(matrix).all():
+        raise RuntimeError(f"{path} columns {cols} contain non-finite values")
+    return matrix, sha256_file(path)
+
+
+def standardise_train_only(train_matrix: np.ndarray) -> tuple[np.ndarray,
+                                                              np.ndarray]:
+    """``(mean, std)`` of the TRAIN sidecar matrix, for every split to use.
+
+    A zero-variance column keeps std 1.0 rather than dividing by zero, which
+    leaves it as a constant the bias absorbs.
+    """
+    mean = train_matrix.mean(axis=0, dtype=np.float64).astype(np.float32)
+    std = train_matrix.std(axis=0, dtype=np.float64).astype(np.float32)
+    std[std <= 0] = 1.0
+    return mean, std
+
+
 def build_innings(df: pd.DataFrame):
     """Per-innings row-index lists, preserving parquet (ball) order."""
     return list(df.groupby("innings_id", sort=False).indices.values())
+
+
+def innings_tier(df: pd.DataFrame, index_lists) -> np.ndarray:
+    """One tier code per innings, refusing a tier that varies within one.
+
+    The tier is a match-level property, so every row of an innings must carry
+    the same code; a frame where it does not is a data defect and training on
+    "the innings' tier" would be undefined, so this raises instead of picking.
+    """
+    codes = tier_codes(df)
+    out = np.zeros(len(index_lists), dtype=np.int64)
+    for position, index_list in enumerate(index_lists):
+        values = np.unique(codes[index_list])
+        if len(values) != 1:
+            raise RuntimeError(
+                f"{TIER_COL} is not constant within innings "
+                f"{df['innings_id'].to_numpy()[index_list[0]]!r}: "
+                f"{values.tolist()}")
+        out[position] = int(values[0])
+    return out
+
+
+def select_train_innings(df: pd.DataFrame, index_lists, tier: int | None,
+                         match_ids: set[str] | None):
+    """The training innings kept by the stage 3 Block B row filters.
+
+    Both filters are WHOLE-INNINGS (and therefore whole-match) selections, so
+    no innings is ever truncated mid-sequence: an arm trained on tier 3 sees
+    complete tier-3 innings, and the row-matched control sees complete innings
+    of the sampled matches. Validation is never filtered by either.
+    """
+    kept = list(index_lists)
+    if tier is not None:
+        tiers = innings_tier(df, index_lists)
+        kept = [ix for ix, code in zip(index_lists, tiers) if code == tier]
+        if not kept:
+            raise RuntimeError(
+                f"--train-tier {tier} selects no training innings")
+    if match_ids is not None:
+        ids = df["innings_id"].to_numpy()
+        kept = [ix for ix in kept if match_id_of(ids[ix[0]]) in match_ids]
+        if not kept:
+            raise RuntimeError(
+                "--train-match-list selects no training innings")
+    return kept
+
+
+def load_match_list(path: Path) -> tuple[set[str], str]:
+    """``(match ids, sha256 of the file bytes)`` for ``--train-match-list``.
+
+    Accepts a bare JSON list of ids or an object with a ``match_ids`` key (the
+    form `stage3a_freeze_tiers.py` writes). The digest is over the file as it
+    sits on disk, so it can be recorded in the training signature and the
+    frozen list cannot be edited under a run.
+    """
+    path = Path(path)
+    raw = path.read_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    payload = json.loads(raw.decode("utf-8"))
+    if isinstance(payload, dict):
+        payload = payload.get("match_ids")
+    if not isinstance(payload, list) or not payload:
+        raise RuntimeError(
+            f"{path} must hold a non-empty JSON list of match ids, or an "
+            "object with a non-empty 'match_ids' list")
+    return {str(value) for value in payload}, digest
 
 
 def aligned_history(y, batter_ids, bowler_ids, innings_index_lists):
@@ -454,10 +834,16 @@ def attention_mask(arm: str, k, batter, bowler, pad_mask) -> torch.Tensor:
       * ``recency`` — W_k(i) = {j : i-k <= j <= i}; ``k`` may be ``"unr"``
         (or ``None``) for the whole innings prefix, and ``k = 0`` leaves the
         target alone;
-      * ``same_entity`` — {j in W_k(i) : batter[j] == batter[i] or
+      * every arm with ``ARM_MASK_OWNERSHIP[arm]`` (today only
+        ``same_entity``) — {j in W_k(i) : batter[j] == batter[i] or
         bowler[j] == bowler[i]} union {i};
       * anything else (``aligned_hist_rf``, and the standard-wiring biased
-        arms) — the full causal prefix.
+        arms including stage 3's ``aligned_hist_decay``) — the full causal
+        prefix.
+
+    The ownership restriction is read from the registered
+    ``ARM_MASK_OWNERSHIP`` table, so an unregistered arm raises rather than
+    silently falling through to the full prefix.
 
     k counts delivery ROWS inclusive of extras, because the frame's row order
     is the delivery order.
@@ -470,9 +856,9 @@ def attention_mask(arm: str, k, batter, bowler, pad_mask) -> torch.Tensor:
     if arm in ARMS_NEEDING_K and k is not None and k != "unr":
         allowed = allowed & (lag <= int(k))
     allowed = allowed.unsqueeze(0).expand(B, L, L)
-    if arm == "same_entity":
+    if ARM_MASK_OWNERSHIP[arm]:
         if batter is None or bowler is None:
-            raise ValueError("same_entity needs batter/bowler id tensors")
+            raise ValueError(f"arm {arm!r} needs batter/bowler id tensors")
         same = ((batter.unsqueeze(2) == batter.unsqueeze(1))
                 | (bowler.unsqueeze(2) == bowler.unsqueeze(1)))
         allowed = allowed & same
@@ -716,11 +1102,23 @@ class RelayFreeLayer(nn.Module):
 class T1Model(nn.Module):
     def __init__(self, n_feats: int, dmodel: int, layers: int, heads: int,
                  aux_sizes: dict | None = None, arm: str = "full",
-                 k=None, dropout: float = 0.1):
+                 k=None, dropout: float = 0.1, tier_embed: int = 0,
+                 n_batters: int = 0, n_bowlers: int = 0):
         super().__init__()
         if arm not in ALL_ARMS:
             raise ValueError(f"unknown T1 ablation arm: {arm}")
         self.arm = arm
+        # Stage 3 Block B. `tier_embed == 0` is OFF and must leave the model
+        # byte-identical to the pre-stage-3 one: no module is created, no
+        # parameter shape changes, and the RNG stream every existing parameter
+        # draws from is therefore untouched.
+        self.tier_embed = int(tier_embed)
+        if self.tier_embed and ARM_WIRING[arm] != "token_mlp":
+            raise ValueError(
+                f"tier conditioning is implemented for the token_mlp wiring "
+                f"only; arm {arm!r} is {ARM_WIRING[arm]!r}")
+        if self.tier_embed < 0:
+            raise ValueError(f"tier_embed must be >= 0, got {tier_embed!r}")
         self.wiring = ARM_WIRING[arm]
         self.history_input = ARM_HISTORY[arm]
         self.key_construction = ARM_KEY_CONSTRUCTION[arm]
@@ -729,10 +1127,40 @@ class T1Model(nn.Module):
         self.heads = heads
         self.n_layers = layers
         self.residual = arm in ARMS_NEEDING_BASE_LOGITS
+        self.identity_residual = arm in ARMS_NEEDING_BASE_PROBS
         if (arm in ARMS_NEEDING_K) != (k is not None):
             verb = "requires" if arm in ARMS_NEEDING_K else "does not accept"
             raise ValueError(f"arm {arm!r} {verb} a window k (got {k!r})")
         self.k = k
+
+        # Rung 4b — the identity-only residual owns its whole pathway: two
+        # embeddings and one linear readout, and NOTHING that reads the 50
+        # features. Built before every other branch so no feature projection,
+        # token MLP or encoder is created for it at all.
+        if self.identity_residual:
+            if aux_sizes:
+                raise ValueError("identity_residual carries no aux heads")
+            if tier_embed:
+                raise ValueError(
+                    "identity_residual reads no feature vector, so there is "
+                    "nothing for a tier embedding to be concatenated to")
+            if n_batters < 1 or n_bowlers < 1:
+                raise ValueError(
+                    "identity_residual needs the train-only vocabulary sizes "
+                    f"(got n_batters={n_batters}, n_bowlers={n_bowlers}); "
+                    "index 0 is the learned UNK, so each must be >= 1")
+            self.bat_id_emb = nn.Embedding(n_batters, IDENTITY_EMBED_DIM)
+            self.bowl_id_emb = nn.Embedding(n_bowlers, IDENTITY_EMBED_DIM)
+            # r = W [e_bat ; e_bowl] + b. Zero-initialised, so at step 0 the
+            # residual is identically zero and p == p_base EXACTLY: the rung's
+            # claim is what identity ADDS to the frozen reference, and it must
+            # start from the reference itself.
+            self.residual_readout = nn.Linear(2 * IDENTITY_EMBED_DIM, 6)
+            nn.init.zeros_(self.residual_readout.weight)
+            nn.init.zeros_(self.residual_readout.bias)
+            self.id_dropout = IDENTITY_ID_DROPOUT
+            self.aux_heads = nn.ModuleDict()
+            return
 
         # D3.10 — the recurrent arms live in their own module and own their
         # whole token pathway, so nothing else here is built for them.
@@ -751,7 +1179,7 @@ class T1Model(nn.Module):
             self.aux_heads = nn.ModuleDict()
             return
 
-        self.feat_proj = nn.Linear(n_feats, dmodel)
+        self.feat_proj = nn.Linear(n_feats + self.tier_embed, dmodel)
         if self.wiring == "token_mlp":
             # Two token-local FF blocks per transformer layer approximately
             # match the full arm's parameter budget without sequence access.
@@ -802,6 +1230,17 @@ class T1Model(nn.Module):
         # they never reach this branch at all).
         if self.key_construction == "own_outcome":
             self.own_out_emb = nn.Embedding(N_OUTCOME_CLASSES, dmodel)
+        # Stage 3 Block B conditioning, created LAST for the same reason as
+        # every other late addition: an arm that does not use it draws exactly
+        # the RNG stream it drew before. The per-tier output bias is
+        # ZERO-initialised — it is added straight to the logits, so an
+        # N(0, 1) draw would start the model several nats away from the
+        # unconditioned one and the conditioning would be a perturbation
+        # rather than a free parameter.
+        if self.tier_embed:
+            self.tier_emb = nn.Embedding(N_TIER_SLOTS, self.tier_embed)
+            self.tier_bias = nn.Embedding(N_TIER_SLOTS, 6)
+            nn.init.zeros_(self.tier_bias.weight)
 
     # --------------------------------------------------------------- biases
 
@@ -822,7 +1261,8 @@ class T1Model(nn.Module):
     # -------------------------------------------------------------- forward
 
     def forward(self, feats, prev_y, pad_mask, prev_bat=None, prev_bowl=None,
-                batter=None, bowler=None, base_logp=None, own_y=None):
+                batter=None, bowler=None, base_logp=None, own_y=None,
+                tier=None):
         """One forward pass.
 
         `own_y` is the ``(B, L)`` realised outcome class of each row — the
@@ -831,10 +1271,44 @@ class T1Model(nn.Module):
         built from hist(i), so y_i is never readable at row i. Padded rows'
         own outcomes are immaterial because their keys are masked off.
         """
+        if self.identity_residual:
+            if batter is None or bowler is None:
+                raise ValueError(
+                    "identity_residual needs train-vocabulary batter/bowler "
+                    "id codes")
+            if base_logp is None:
+                raise ValueError(
+                    "identity_residual needs base_logp (the frozen "
+                    "reference's per-row log-probabilities)")
+            # Padded rows carry -1; their logits are discarded, and clamping
+            # keeps them a legal index (the UNK row).
+            bat = batter.clamp(min=0)
+            bowl = bowler.clamp(min=0)
+            if self.training and self.id_dropout > 0:
+                # Id dropout: replace an id by the learned UNK with
+                # probability p, TRAINING only. Drawn independently for the
+                # batter and the bowler, so a row can lose either or both.
+                for ids in (bat, bowl):
+                    drop = torch.rand(ids.shape, device=ids.device
+                                      ) < self.id_dropout
+                    ids[drop] = 0
+            pair = torch.cat([self.bat_id_emb(bat), self.bowl_id_emb(bowl)],
+                             dim=-1)
+            residual = self.residual_readout(pair)
+            # The base cannot move (the stated difference from E4): the
+            # reference's log-probabilities enter as a constant offset.
+            return base_logp + residual, {"residual": residual}
+
         if self.wiring == "recurrent":
             return self.recurrent(feats, prev_y, pad_mask)
 
         L = feats.shape[1]
+        if self.tier_embed:
+            if tier is None:
+                raise ValueError(
+                    f"arm {self.arm!r} was built with tier conditioning and "
+                    "needs the per-row tier codes")
+            feats = torch.cat([feats, self.tier_emb(tier)], dim=-1)
         if self.wiring == "token_mlp":
             h = self.token_mlp(self.feat_proj(feats))
         else:
@@ -868,6 +1342,9 @@ class T1Model(nn.Module):
                     x_kv = x_kv + pos
             h = self._mix(x, pad_mask, batter, bowler, L, x_kv)
         logits = self.head(h)
+        if self.tier_embed:
+            # Per-tier output bias, added to the logits (stage 3 Block B).
+            logits = logits + self.tier_bias(tier)
         aux = {t: hd(h) for t, hd in self.aux_heads.items()}
         if self.residual:
             if base_logp is None:
@@ -939,10 +1416,11 @@ class Batch(NamedTuple):
     prev_bat: torch.Tensor | None = None  # (B, L) participant-aligned history
     prev_bowl: torch.Tensor | None = None
     base_logp: torch.Tensor | None = None  # (B, L, 6) base log-probabilities
+    tier: torch.Tensor | None = None      # (B, L) tier codes, 0 where padded
 
 
 def collate(idx_lists, feats, y, device, aux=None, batter=None, bowler=None,
-            prev_bat=None, prev_bowl=None, base_logp=None) -> Batch:
+            prev_bat=None, prev_bowl=None, base_logp=None, tier=None) -> Batch:
     """Pad one chunk of innings into a `Batch`.
 
     Stage 2 additions (D3.2): integer batter/bowler codes so the attention
@@ -966,6 +1444,8 @@ def collate(idx_lists, feats, y, device, aux=None, batter=None, bowler=None,
     pbowl = None if prev_bowl is None else np.full((B, L), BOS, dtype=np.int64)
     blp = (None if base_logp is None
            else np.zeros((B, L, base_logp.shape[1]), dtype=np.float32))
+    # Padded positions keep the UNK slot 0; their logits are discarded anyway.
+    tr = None if tier is None else np.zeros((B, L), dtype=np.int64)
     for b, ix in enumerate(idx_lists):
         n = len(ix)
         f[b, :n] = feats[ix]
@@ -984,6 +1464,8 @@ def collate(idx_lists, feats, y, device, aux=None, batter=None, bowler=None,
             pbowl[b, :n] = prev_bowl[ix]
         if blp is not None:
             blp[b, :n] = base_logp[ix]
+        if tr is not None:
+            tr[b, :n] = tier[ix]
 
     def to_device(array):
         return None if array is None else torch.tensor(array).to(device)
@@ -993,7 +1475,8 @@ def collate(idx_lists, feats, y, device, aux=None, batter=None, bowler=None,
         y=torch.tensor(ty).to(device), pad=torch.tensor(pad).to(device),
         aux={t: torch.tensor(v).to(device) for t, v in ax.items()},
         batter=to_device(bat), bowler=to_device(bwl), prev_bat=to_device(pbat),
-        prev_bowl=to_device(pbowl), base_logp=to_device(blp))
+        prev_bowl=to_device(pbowl), base_logp=to_device(blp),
+        tier=to_device(tr))
 
 
 def parse_k(raw):
@@ -1046,6 +1529,66 @@ def load_base_logits(base_dir: Path, split: str, n_rows: int,
             f"{path} was built from parquet md5 {declared_md5}, but split "
             f"{split!r} read md5 {parquet_md5}; refusing to train")
     return logp, md5_file(path)
+
+
+def load_base_probs(base_dir: Path, name: str, split: str, n_rows: int,
+                    y: np.ndarray) -> tuple[np.ndarray, str]:
+    """A frozen reference's per-row LOG-probabilities for one split (rung 4b).
+
+    The stage 4 reference npz carries `probs` and `y` (no parquet md5), so the
+    alignment check available here is the row count plus the stored labels,
+    which must equal the split's own targets row for row — a reference scored
+    on a different split, or on a reordered one, fails on `y`.
+    Returns ``(log p (n_rows, 6) float32, sha256 of the npz)``.
+    """
+    path = Path(base_dir) / f"{name}_{split}_probs.npz"
+    if not path.exists():
+        raise RuntimeError(
+            f"frozen reference probabilities for split {split!r} not found: "
+            f"{path}")
+    with np.load(path, allow_pickle=False) as archive:
+        for key in ("probs", "y"):
+            if key not in archive:
+                raise RuntimeError(f"{path} carries no {key!r} key")
+        probs = np.asarray(archive["probs"], dtype=np.float64)
+        stored_y = np.asarray(archive["y"]).astype(np.int64).reshape(-1)
+    if probs.ndim != 2 or probs.shape[1] != 6:
+        raise RuntimeError(f"{path} probs must be (n_rows, 6), got "
+                           f"{probs.shape}")
+    if probs.shape[0] != n_rows or len(stored_y) != n_rows:
+        raise RuntimeError(
+            f"{path} holds {probs.shape[0]} rows of probabilities and "
+            f"{len(stored_y)} labels, but split {split!r} has {n_rows} rows")
+    if not np.array_equal(stored_y, np.asarray(y, dtype=np.int64)):
+        bad = int(np.argmax(stored_y != np.asarray(y, dtype=np.int64)))
+        raise RuntimeError(
+            f"{path} is not row-aligned to split {split!r}: its stored label "
+            f"differs from the frame's first at row {bad} "
+            f"({stored_y[bad]} != {int(y[bad])}); refusing to train")
+    logp = np.log(np.clip(probs, 1e-15, None)).astype(np.float32)
+    return logp, sha256_file(path)
+
+
+def identity_vocab(train_df: pd.DataFrame) -> tuple[dict, dict]:
+    """Train-only ``(batter, bowler)`` id vocabularies, index 0 = UNK.
+
+    Rung 4b. Fitted on TRAIN rows only, so a player who appears for the first
+    time in validation reads the learned UNK embedding rather than a code the
+    model never trained. Sorted, so the vocabulary is a deterministic function
+    of the train split alone.
+    """
+    return tuple(
+        {value: index + 1 for index, value
+         in enumerate(sorted(train_df[column].astype(str).unique()))}
+        for column in ("batter_id", "bowler_id"))
+
+
+def encode_identities(df: pd.DataFrame, vocabs: tuple[dict, dict]
+                      ) -> tuple[np.ndarray, np.ndarray]:
+    """Per-row vocabulary codes for one split; 0 (UNK) for unseen ids."""
+    return tuple(
+        df[column].astype(str).map(vocab).fillna(0).astype(np.int64).to_numpy()
+        for column, vocab in zip(("batter_id", "bowler_id"), vocabs))
 
 
 def arm_params_block(arm: str, k, residual_l2, base_logits_md5,
@@ -1149,6 +1692,73 @@ def main() -> None:
                     help="explicit path overriding --stats-cache-role's "
                          "manifest resolution (the role is still recorded)")
     ap.add_argument("--aux-dir", type=Path, default=AUX_DIR)
+    # Stage 3 Block B (night 3 draft § "Block B"). Every one of these is
+    # DEFAULT-OFF and, when off, leaves the model, the data and the optimiser
+    # schedule exactly as they were.
+    ap.add_argument("--tier-embed", type=int, default=0,
+                    help="dimension of the competition_tier embedding "
+                         "concatenated to the token input, plus a per-tier "
+                         "output bias on the logits; 0 (default) = off. "
+                         "Implemented for the token_mlp wiring only")
+    ap.add_argument("--train-tier", type=int, default=None,
+                    help="restrict TRAINING rows to this competition tier "
+                         "(whole innings); validation is never filtered and "
+                         "the full validation split is always scored")
+    ap.add_argument("--target-tier", type=int, default=None,
+                    help="REPORTING ONLY: count training tokens of this tier "
+                         "in metrics.json. Changes nothing about training, so "
+                         "a pooled arm can record its target-tier exposure "
+                         "alongside a --train-tier arm. Defaults to "
+                         "--train-tier when that is given")
+    ap.add_argument("--train-match-list", type=Path, default=None,
+                    help="JSON list (or {'match_ids': [...]}) of Cricsheet "
+                         "match ids; restricts TRAINING rows to those "
+                         "matches, for the row-matched control")
+    ap.add_argument("--report-match-lists", default=None,
+                    help="REPORTING ONLY: comma-separated JSON match-list "
+                         "files (same format as --train-match-list). During "
+                         "training, the REAL (non-padded) tokens whose match "
+                         "is in each list are counted and written to "
+                         "metrics.json as training_schedule."
+                         "tokens_seen_by_list, keyed by the file's basename. "
+                         "It selects nothing, changes no tensor and no "
+                         "weight, so it never enters any identity block")
+    # Stage 4 rung 4d: a row-aligned sidecar of extra numeric columns,
+    # standardised on train rows only and concatenated to the token input.
+    ap.add_argument("--feature-contract", choices=list(FEATURE_CONTRACTS),
+                    default=None,
+                    help="alternative feature contract; default (unset) is "
+                         "the 50-feature build_features. 'v7_114' is the "
+                         "production ball model's ordered 114 columns "
+                         "(feature_registry V6_GROUPS), with the four "
+                         "*_encoded categoricals fitted on train rows only")
+    ap.add_argument("--extra-features", type=Path, default=None,
+                    help="directory of row-aligned <split>.parquet sidecars "
+                         "(e.g. models/embeddings/stage4/exposure); requires "
+                         "--extra-cols. token_mlp wiring only")
+    ap.add_argument("--extra-cols", default=None,
+                    help="comma-separated sidecar columns, in order; "
+                         "'*_var_p*' columns are sqrt-ed at load so the model "
+                         "reads a standard deviation")
+    # Stage 4 rung 4b: the frozen reference the identity residual sits on.
+    ap.add_argument("--base-probs-dir", type=Path, default=None,
+                    help="directory of a frozen reference's per-row "
+                         "probabilities (<name>_<split>_probs.npz); required "
+                         "for --arm identity_residual and refused otherwise")
+    ap.add_argument("--base-probs-name", default="eb_ctx",
+                    help="the reference's name inside --base-probs-dir")
+    ap.add_argument("--residual-lambda", type=float,
+                    default=IDENTITY_LAMBDA_DEFAULT,
+                    help="lambda of the lambda*mean_rows(||r||^2) shrinkage "
+                         "identity_residual adds to the loss")
+    ap.add_argument("--max-steps", type=int, default=None,
+                    help="fixed optimiser-step budget; requires "
+                         "--eval-every. Without it the epoch loop runs "
+                         "unchanged")
+    ap.add_argument("--eval-every", type=int, default=None,
+                    help="with --max-steps, evaluate the validation split "
+                         "every N optimiser steps; patience is counted in "
+                         "evaluations, not epochs")
     ap.add_argument("--save-predictions", action="store_true",
                     help="write row-aligned probabilities for paired audits")
     ap.add_argument("--out", type=Path, default=Path("models/embeddings/t1"))
@@ -1177,6 +1787,92 @@ def main() -> None:
                  f"{', '.join(ARMS_NEEDING_BASE_LOGITS)}")
     # Recorded in `config` as the normalised value the model was built with.
     args.k = k_value
+    # Stage 3 Block B — the step-budget and tier contracts, also before any
+    # loading. A half-specified step budget is refused rather than silently
+    # falling back to the epoch loop, which would make two arms in one family
+    # run different schedules without saying so.
+    if (args.max_steps is None) != (args.eval_every is None):
+        ap.error("--max-steps and --eval-every must be given together: a "
+                 "step budget with no evaluation schedule has no early-"
+                 "stopping signal, and an evaluation schedule with no budget "
+                 "would not bound the run")
+    if args.max_steps is not None and args.max_steps < 1:
+        ap.error("--max-steps must be >= 1")
+    if args.eval_every is not None and args.eval_every < 1:
+        ap.error("--eval-every must be >= 1")
+    if args.tier_embed < 0:
+        ap.error("--tier-embed must be >= 0")
+    if args.tier_embed and ARM_WIRING[args.arm] != "token_mlp":
+        ap.error(f"--tier-embed is implemented for the token_mlp wiring "
+                 f"only; --arm {args.arm} is {ARM_WIRING[args.arm]}")
+    if args.train_tier is not None and not 1 <= args.train_tier < N_TIER_SLOTS:
+        ap.error(f"--train-tier must be in 1..{N_TIER_SLOTS - 1}")
+    if (args.target_tier is not None
+            and not 1 <= args.target_tier < N_TIER_SLOTS):
+        ap.error(f"--target-tier must be in 1..{N_TIER_SLOTS - 1}")
+    if (args.target_tier is not None and args.train_tier is not None
+            and args.target_tier != args.train_tier):
+        ap.error(f"--target-tier {args.target_tier} contradicts --train-tier "
+                 f"{args.train_tier}: a tier-restricted arm's target tier is "
+                 "the tier it trains on")
+    # The reporting tier: explicit if given, otherwise the trained tier. A
+    # pooled arm names it with --target-tier and trains on everything.
+    report_tier = (args.train_tier if args.target_tier is None
+                   else args.target_tier)
+    # Stage 4 rung 4d contract.
+    if (args.extra_features is None) != (args.extra_cols is None):
+        ap.error("--extra-features and --extra-cols must be given together")
+    extra_cols: list[str] = []
+    if args.extra_cols:
+        extra_cols = [name.strip() for name in args.extra_cols.split(",")
+                      if name.strip()]
+        if not extra_cols:
+            ap.error("--extra-cols is empty")
+        if len(set(extra_cols)) != len(extra_cols):
+            ap.error(f"--extra-cols repeats a column: {extra_cols}")
+        if ARM_WIRING[args.arm] != "token_mlp":
+            ap.error(f"--extra-features is implemented for the token_mlp "
+                     f"wiring only; --arm {args.arm} is "
+                     f"{ARM_WIRING[args.arm]}")
+    # Stage 4 rung 4b contract.
+    needs_probs = args.arm in ARMS_NEEDING_BASE_PROBS
+    if needs_probs and args.base_probs_dir is None:
+        ap.error(f"--arm {args.arm} requires --base-probs-dir")
+    if not needs_probs and args.base_probs_dir is not None:
+        ap.error(f"--base-probs-dir is not accepted by --arm {args.arm}; it "
+                 f"is only meaningful for "
+                 f"{', '.join(ARMS_NEEDING_BASE_PROBS)}")
+    train_match_ids = train_match_list_sha256 = None
+    if args.train_match_list is not None:
+        train_match_ids, train_match_list_sha256 = load_match_list(
+            args.train_match_list)
+        print(f"train match list: {args.train_match_list} "
+              f"({len(train_match_ids)} matches, sha256 "
+              f"{train_match_list_sha256})", flush=True)
+
+    # REPORTING ONLY (night-3 reviewer MUST-FIX 2): target exposure. Every
+    # night-3 configuration names the two target lists here, so a pooled arm
+    # and a target-only arm can be compared on how many of each target's
+    # tokens they actually saw. It filters nothing.
+    report_match_lists: dict[str, tuple[set[str], str, str]] = {}
+    if args.report_match_lists:
+        for raw in str(args.report_match_lists).split(","):
+            raw = raw.strip()
+            if not raw:
+                continue
+            path = Path(raw)
+            ids, digest = load_match_list(path)
+            if path.name in report_match_lists:
+                ap.error("--report-match-lists names two files with the same "
+                         f"basename {path.name!r}; the metrics are keyed by "
+                         "basename")
+            report_match_lists[path.name] = (ids, digest, path.as_posix())
+        if report_match_lists:
+            print("report match lists: "
+                  + ", ".join(f"{name} ({len(ids)} matches, sha256 "
+                              f"{digest[:12]})"
+                              for name, (ids, digest, _) in
+                              report_match_lists.items()), flush=True)
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -1241,28 +1937,96 @@ def main() -> None:
     print("loading splits...", flush=True)
     split_names = (["train", "validation", "test"] if score_test
                    else ["train", "validation"])
-    frames = {name: load_split(name, args.data_dir, version)
+    # C114 reads extra frame columns; the default contract reads none.
+    contract_cols = (v7_114_source_columns()
+                     if args.feature_contract == V7_114_CONTRACT else None)
+    frames = {name: load_split(name, args.data_dir, version, contract_cols)
               for name in split_names}
     split_files = {name: split_record(split_path(args.data_dir, version, name),
                                       frame)
                    for name, frame in frames.items()}
     train, val = frames["train"], frames["validation"]
     test = frames.get("test")
-    F_tr, F_va = build_features(train), build_features(val)
+    # The feature contract: the 50-feature default, or C114's 114 columns.
+    contract_block = None
+    if args.feature_contract == V7_114_CONTRACT:
+        contract_names = v7_114_columns()
+        cat_encoders = fit_categorical_encoders(train)
+
+        def build_contract(df):
+            return build_features_v7_114(df, cat_encoders)
+
+        n_contract_feats = N_FEATS_V7_114
+        contract_block = {
+            "name": V7_114_CONTRACT,
+            "feature_registry_groups": "V6_GROUPS",
+            "n_features": N_FEATS_V7_114,
+            "feature_names": contract_names,
+            "feature_names_sha256": sha256_text("\n".join(contract_names)),
+            "categoricals": dict(V7_114_CATEGORICALS),
+            "categorical_vocab_sizes": {
+                source: len(mapping) + 1
+                for source, mapping in sorted(cat_encoders.items())},
+            "categorical_unk_index": 0,
+            "standardiser": "train-only mean/std over all 114 columns",
+            "deviations": [V7_114_ENCODER_DEVIATION,
+                           V7_114_ORDINAL_LIMITATION],
+        }
+    else:
+        contract_names = feature_names()
+        build_contract = build_features
+        n_contract_feats = N_FEATS
+    F_tr, F_va = build_contract(train), build_contract(val)
+    for name, matrix in (("train", F_tr), ("validation", F_va)):
+        if matrix.shape[1] != n_contract_feats:
+            raise RuntimeError(
+                f"expected {n_contract_feats} features on split {name!r}, got "
+                f"{matrix.shape[1]}")
+    if contract_block is not None:
+        # Standardised train-only, so the 114 mixed-scale columns (balls,
+        # rates, probabilities, ordinal codes) reach a linear projection on
+        # one scale. The 50-feature contract is NOT standardised here — it
+        # already normalises inside `build_features` — so this branch cannot
+        # move any existing arm.
+        c_mean, c_std = standardise_train_only(F_tr)
+        F_tr = ((F_tr - c_mean) / c_std).astype(np.float32)
+        F_va = ((F_va - c_mean) / c_std).astype(np.float32)
+        contract_block["standardiser_mean"] = [float(v) for v in c_mean]
+        contract_block["standardiser_std"] = [float(v) for v in c_std]
     y_tr, y_va = train["y"].to_numpy(), val["y"].to_numpy()
     inn_tr, inn_va = build_innings(train), build_innings(val)
     F_te = y_te = inn_te = None
     if test is not None:
-        F_te, y_te, inn_te = (build_features(test), test["y"].to_numpy(),
+        F_te, y_te, inn_te = (build_contract(test), test["y"].to_numpy(),
                               build_innings(test))
+        if contract_block is not None:
+            F_te = ((F_te - c_mean) / c_std).astype(np.float32)
     # --- stage 2 per-split inputs (D3.2) ---------------------------------
     # Built once per split and row-gathered by `collate`. Only what the arm
     # actually reads is built, so a stage 1 arm's run does no extra work.
     wants_ids = ARM_WIRING[args.arm] == "relay_free"
     wants_aligned = ARM_HISTORY[args.arm] == "participant_aligned"
+    # Stage 3 Block B: the tier codes are needed as a model INPUT only under
+    # --tier-embed, but the token accounting below needs them on the training
+    # split whenever a target tier is named, so they are computed separately.
+    wants_tier = bool(args.tier_embed)
+    # Rung 4b reads identity codes from a TRAIN-fitted vocabulary, not the
+    # per-split factorisation the relay-free arms use (which only ever asks
+    # whether two rows of one innings match).
+    id_vocabs = identity_vocab(train) if needs_probs else None
+    if (args.train_tier is not None or wants_tier
+            or args.target_tier is not None) and (
+            TIER_COL not in train.columns):
+        raise RuntimeError(
+            f"frame {Path(args.data_dir).as_posix()} carries no {TIER_COL!r} "
+            "column, so --tier-embed / --train-tier / --target-tier have "
+            "nothing to read")
+    train_tier_codes = tier_codes(train)
     extras: dict[str, dict] = {}
     for name, frame in frames.items():
         block: dict = {}
+        if wants_tier:
+            block["tier"] = tier_codes(frame)
         if wants_ids:
             # Factorised per split; only equality between rows of one innings
             # is ever asked, so a per-split coding is sufficient.
@@ -1270,6 +2034,11 @@ def main() -> None:
                 np.int64)
             block["bowler"] = pd.factorize(frame["bowler_id"])[0].astype(
                 np.int64)
+        if id_vocabs is not None:
+            # Rung 4b: the SAME codes on every split, from the train-only
+            # vocabulary, with 0 = the learned UNK.
+            block["batter"], block["bowler"] = encode_identities(
+                frame, id_vocabs)
         if wants_aligned:
             prev_bat, prev_bowl = aligned_history(
                 frame["y"].to_numpy(), frame["batter_id"].to_numpy(),
@@ -1295,11 +2064,95 @@ def main() -> None:
             .encode("utf-8")).hexdigest()
         print(f"base logits: {per_split}", flush=True)
 
+    # --- stage 4 rung 4d: the row-aligned extra-feature sidecar -----------
+    extra_features_block = None
+    if extra_cols:
+        matrices, digests = {}, {}
+        for name, frame in frames.items():
+            matrices[name], digests[name] = load_extra_features(
+                args.extra_features, name, frame, extra_cols)
+        mean, std = standardise_train_only(matrices["train"])
+        widened = {}
+        for name, base in (("train", F_tr), ("validation", F_va),
+                           ("test", F_te)):
+            if base is None:
+                continue
+            widened[name] = np.hstack(
+                [base, (matrices[name] - mean) / std]).astype(np.float32)
+        F_tr, F_va = widened["train"], widened["validation"]
+        if F_te is not None:
+            F_te = widened["test"]
+        extra_features_block = {
+            "dir": Path(args.extra_features).as_posix(),
+            "cols": list(extra_cols),
+            "n_cols": len(extra_cols),
+            "sqrt_applied": [name for name in extra_cols
+                             if EXTRA_VARIANCE_SUFFIX in name],
+            "standardiser": {
+                "kind": "train-only mean/std",
+                "mean": [float(v) for v in mean],
+                "std": [float(v) for v in std]},
+            "sha256_by_split": dict(sorted(digests.items())),
+        }
+        print(f"extra features: {len(extra_cols)} cols from "
+              f"{args.extra_features} -> {F_tr.shape[1]} token inputs",
+              flush=True)
+
+    # --- stage 4 rung 4b: the frozen reference's log-probabilities ---------
+    base_probs_block = None
+    if needs_probs:
+        digests = {}
+        for name, frame in frames.items():
+            logp, digest = load_base_probs(
+                args.base_probs_dir, args.base_probs_name, name, len(frame),
+                frame["y"].to_numpy())
+            extras[name]["base_logp"] = logp
+            digests[name] = digest
+        base_probs_block = {
+            "dir": Path(args.base_probs_dir).as_posix(),
+            "name": args.base_probs_name,
+            "sha256_by_split": dict(sorted(digests.items())),
+            "identity_embed_dim": IDENTITY_EMBED_DIM,
+            "id_dropout": IDENTITY_ID_DROPOUT,
+            "residual_lambda": float(args.residual_lambda),
+            "vocab": {"n_batters": len(id_vocabs[0]) + 1,
+                      "n_bowlers": len(id_vocabs[1]) + 1,
+                      "unk_index": 0,
+                      "fitted_on": "train rows only"},
+        }
+        print(f"base probs: {digests}; vocab "
+              f"{base_probs_block['vocab']}", flush=True)
+
+    # Stage 3 Block B row filters. TRAINING innings only: `inn_va` is never
+    # touched, so the full validation split is scored and the saved
+    # predictions stay row-aligned with the validation parquet whatever the
+    # training subset was.
+    inn_tr_all = inn_tr
+    if args.train_tier is not None or train_match_ids is not None:
+        inn_tr = select_train_innings(train, inn_tr, args.train_tier,
+                                      train_match_ids)
+        kept_rows = int(sum(len(ix) for ix in inn_tr))
+        print(f"train filter: tier={args.train_tier} "
+              f"match_list={'yes' if train_match_ids else 'no'} -> "
+              f"{len(inn_tr)}/{len(inn_tr_all)} innings, {kept_rows} rows",
+              flush=True)
+
+    # Code gate finding 3: the tier rows the training subset actually covers.
+    selected_rows = (np.concatenate(inn_tr) if inn_tr else
+                     np.array([], dtype=np.int64))
+    tiers_seen = sorted({int(v) for v in train_tier_codes[selected_rows]})
+    val_tiers = sorted({int(v) for v in tier_codes(val)})
+    untrained_tiers = [code for code in val_tiers if code not in tiers_seen]
+
     print(f"innings: train {len(inn_tr)}, val {len(inn_va)}, "
           f"test {'-' if inn_te is None else len(inn_te)}; "
           f"feats {F_tr.shape[1]}", flush=True)
-    if F_tr.shape[1] != N_FEATS:
-        raise RuntimeError(f"expected {N_FEATS} features, got {F_tr.shape[1]}")
+    # The 50-feature contract was asserted on the BASE matrices above; a rung
+    # 4d run legitimately widens the token input past it.
+    if F_tr.shape[1] != n_contract_feats + len(extra_cols):
+        raise RuntimeError(
+            f"expected {n_contract_feats + len(extra_cols)} token inputs, got "
+            f"{F_tr.shape[1]}")
 
     aux_tr = aux_va = aux_te = None
     aux_sizes = None
@@ -1313,9 +2166,36 @@ def main() -> None:
         print(f"aux tasks: {aux_sizes}", flush=True)
 
     model = T1Model(F_tr.shape[1], args.dmodel, args.layers, args.heads,
-                    aux_sizes, arm=args.arm, k=args.k).to(device)
+                    aux_sizes, arm=args.arm, k=args.k,
+                    tier_embed=args.tier_embed,
+                    n_batters=0 if id_vocabs is None else len(id_vocabs[0]) + 1,
+                    n_bowlers=0 if id_vocabs is None else len(id_vocabs[1]) + 1
+                    ).to(device)
     print(f"params: {sum(p.numel() for p in model.parameters()):,}", flush=True)
-    opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
+    # Code gate finding 3: the tier embedding and the per-tier output bias get
+    # their OWN param group at weight_decay 0.0. AdamW's decay is applied to
+    # every parameter whether or not it received a gradient, so a tier the arm
+    # never trains on would have its row pulled toward zero anyway — measured
+    # at up to 0.025 of logit movement on unseen-tier rows, i.e. the control
+    # arms would silently disagree about tiers they never saw. The branch is
+    # entered only when the conditioning exists, so the off path builds the
+    # single-group optimiser it always built.
+    tier_param_names = ("tier_emb.weight", "tier_bias.weight")
+    if args.tier_embed:
+        named = dict(model.named_parameters())
+        undecayed = [named[name] for name in tier_param_names if name in named]
+        decayed = [param for name, param in named.items()
+                   if name not in tier_param_names]
+        if len(undecayed) != len(tier_param_names):
+            raise RuntimeError(
+                f"expected the tier conditioning parameters {tier_param_names}"
+                f", found {[n for n in tier_param_names if n in named]}")
+        opt = torch.optim.AdamW(
+            [{"params": decayed, "weight_decay": 0.01},
+             {"params": undecayed, "weight_decay": 0.0}], lr=args.lr)
+    else:
+        opt = torch.optim.AdamW(model.parameters(), lr=args.lr,
+                                weight_decay=0.01)
     loss_fn = nn.CrossEntropyLoss(reduction="none")
 
     def run_model(batch: Batch):
@@ -1323,7 +2203,8 @@ def main() -> None:
         return model(batch.feats, batch.prev_y, batch.pad,
                      prev_bat=batch.prev_bat, prev_bowl=batch.prev_bowl,
                      batter=batch.batter, bowler=batch.bowler,
-                     base_logp=batch.base_logp, own_y=batch.y)
+                     base_logp=batch.base_logp, own_y=batch.y,
+                     tier=batch.tier)
 
     def eval_split(feats, y, innings, df, aux=None, extra=None):
         model.eval()
@@ -1356,52 +2237,160 @@ def main() -> None:
     best_val, best_state, bad = np.inf, None, 0
     best_epoch, epochs_run = -1, 0
     order = np.arange(len(inn_tr))
-    for epoch in range(args.epochs):
-        epochs_run = epoch + 1
-        model.train()
-        np.random.shuffle(order)
-        t0, tot, cnt = time.time(), 0.0, 0
-        for s in range(0, len(order), args.batch):
-            chunk = [inn_tr[i] for i in order[s:s + args.batch]]
-            batch = collate(chunk, F_tr, y_tr, device, aux_tr,
-                            **extras["train"])
-            ty, pad, ax = batch.y, batch.pad, batch.aux
-            opt.zero_grad()
-            logits, aux_out = run_model(batch)
-            raw = loss_fn(logits.reshape(-1, 6), ty.reshape(-1))
-            keep = (~pad).reshape(-1).float()
-            loss = (raw * keep).sum() / keep.sum()
-            if "residual" in aux_out:
+    # Stage 3 Block B accounting. `total_steps` counts optimiser steps,
+    # `tokens_seen` REAL (non-padded) training tokens fed to the optimiser, and
+    # `target_tokens_seen` those of the named target tier. The per-innings
+    # target count is precomputed once so the counter costs an index-sum per
+    # batch rather than a comparison over the batch's rows.
+    total_steps = tokens_seen = target_tokens_seen = 0
+    best_step = -1
+    target_per_innings = (
+        None if report_tier is None else
+        np.array([int((train_tier_codes[ix] == report_tier).sum())
+                  for ix in inn_tr], dtype=np.int64))
+    # Reviewer MUST-FIX 2, reporting only: the same per-innings precomputation
+    # for each named match list. An innings belongs to exactly one match, so
+    # its contribution is all of its REAL tokens or none of them.
+    report_tokens = {name: 0 for name in report_match_lists}
+    report_per_innings: dict[str, np.ndarray] = {}
+    if report_match_lists:
+        _inn_ids = train["innings_id"].to_numpy()
+        _inn_match = [match_id_of(_inn_ids[ix[0]]) for ix in inn_tr]
+        _inn_len = np.array([len(ix) for ix in inn_tr], dtype=np.int64)
+        for name, (ids, _digest, _path) in report_match_lists.items():
+            member = np.array([mid in ids for mid in _inn_match], dtype=bool)
+            report_per_innings[name] = np.where(member, _inn_len, 0)
+
+    def train_step(positions) -> tuple[float, float]:
+        """One optimiser step over the innings at `positions` in `inn_tr`.
+
+        Extracted verbatim from the stage 1/2 epoch loop so the epoch schedule
+        and the stage 3 step schedule run the SAME arithmetic in the same
+        order; nothing here is conditional on which schedule called it.
+        Returns `(loss * tokens, tokens)` for the running train-LL average.
+        """
+        nonlocal total_steps, tokens_seen, target_tokens_seen
+        chunk = [inn_tr[i] for i in positions]
+        batch = collate(chunk, F_tr, y_tr, device, aux_tr,
+                        **extras["train"])
+        ty, pad, ax = batch.y, batch.pad, batch.aux
+        opt.zero_grad()
+        logits, aux_out = run_model(batch)
+        raw = loss_fn(logits.reshape(-1, 6), ty.reshape(-1))
+        keep = (~pad).reshape(-1).float()
+        loss = (raw * keep).sum() / keep.sum()
+        if "residual" in aux_out:
+            residual = aux_out.pop("residual")
+            if model.identity_residual:
+                # Rung 4b: lambda * mean over REAL rows of ||r||^2, i.e. the
+                # SUM over the six classes, not their mean.
+                penalty = (residual.pow(2).sum(dim=-1).reshape(-1) * keep
+                           ).sum() / keep.sum()
+                loss = loss + args.residual_lambda * penalty
+            else:
                 # lambda * mean(r^2) over REAL tokens only (arm register).
-                residual = aux_out.pop("residual")
                 penalty = (residual.pow(2).mean(dim=-1).reshape(-1) * keep
                            ).sum() / keep.sum()
                 loss = loss + args.residual_l2 * penalty
-            for t, tgt in ax.items():
-                sel = (tgt >= 0).reshape(-1)
-                if sel.any():
-                    a = nn.functional.cross_entropy(
-                        aux_out[t].reshape(-1, aux_out[t].shape[-1])[sel],
-                        tgt.reshape(-1)[sel])
-                    loss = loss + args.aux_weight * a
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            opt.step()
-            tot += loss.item() * keep.sum().item()
-            cnt += keep.sum().item()
-        _, vll, _, _ = eval_split(F_va, y_va, inn_va, val,
-                                  extra=extras["validation"])
-        print(f"epoch {epoch}: train_ll={tot/cnt:.4f} val_ll={vll:.4f} "
-              f"({time.time()-t0:.0f}s)", flush=True)
-        if vll < best_val - 1e-5:
-            best_val, bad, best_epoch = vll, 0, epoch
+        for t, tgt in ax.items():
+            sel = (tgt >= 0).reshape(-1)
+            if sel.any():
+                a = nn.functional.cross_entropy(
+                    aux_out[t].reshape(-1, aux_out[t].shape[-1])[sel],
+                    tgt.reshape(-1)[sel])
+                loss = loss + args.aux_weight * a
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        opt.step()
+        n_tokens = keep.sum().item()
+        total_steps += 1
+        tokens_seen += int(n_tokens)
+        if target_per_innings is not None:
+            target_tokens_seen += int(target_per_innings[positions].sum())
+        for _name, _counts in report_per_innings.items():
+            report_tokens[_name] += int(_counts[positions].sum())
+        return loss.item() * n_tokens, n_tokens
+
+    def evaluate() -> float:
+        _, value, _, _ = eval_split(F_va, y_va, inn_va, val,
+                                    extra=extras["validation"])
+        return value
+
+    def record(value: float, epoch: int, margin: float) -> bool:
+        """Checkpoint selection; True when patience is exhausted.
+
+        `margin` is the improvement an evaluation must clear to become the new
+        best. The epoch schedule keeps stage 1/2's 1e-5, so its behaviour is
+        unchanged. The step schedule passes 0.0: its registered rule is the
+        best ball-weighted mean NLL over ALL validation rows with ties broken
+        by the EARLIEST step, and a strict `<` is exactly that.
+        """
+        nonlocal best_val, bad, best_epoch, best_step, best_state
+        if value < best_val - margin:
+            best_val, bad, best_epoch, best_step = value, 0, epoch, total_steps
             best_state = {k: v.detach().cpu().clone()
                           for k, v in model.state_dict().items()}
-        else:
-            bad += 1
-            if bad >= args.patience:
+            return False
+        bad += 1
+        return bad >= args.patience
+
+    if args.max_steps is None:
+        # The stage 1/2 schedule, unchanged: one evaluation per epoch and
+        # patience counted in epochs.
+        for epoch in range(args.epochs):
+            epochs_run = epoch + 1
+            model.train()
+            np.random.shuffle(order)
+            t0, tot, cnt = time.time(), 0.0, 0
+            for s in range(0, len(order), args.batch):
+                weighted, n_tokens = train_step(order[s:s + args.batch])
+                tot += weighted
+                cnt += n_tokens
+            vll = evaluate()
+            print(f"epoch {epoch}: train_ll={tot/cnt:.4f} val_ll={vll:.4f} "
+                  f"({time.time()-t0:.0f}s)", flush=True)
+            if record(vll, epoch, 1e-5):
                 print("early stop", flush=True)
                 break
+    else:
+        # Stage 3 Block B: a fixed optimiser-step budget shared by every arm of
+        # a family. There is NO early termination (night 3 draft v5, § Block B
+        # "every arm trains for exactly S optimiser steps"): `--patience` is
+        # inert here, so the four arms of a family are compute-matched by
+        # construction and a smaller training set simply sees more epochs.
+        # Checkpoints are evaluated every E steps and the selected one is the
+        # best ball-weighted mean NLL over ALL validation rows (`eval_split`
+        # averages over every validation row and `inn_va` is never filtered),
+        # ties broken by the earliest step.
+        n_evals, epoch = 0, -1
+        while total_steps < args.max_steps:
+            epoch += 1
+            epochs_run = epoch + 1
+            np.random.shuffle(order)
+            t0, tot, cnt = time.time(), 0.0, 0
+            # The final partial batch of an epoch is kept, exactly as in the
+            # epoch schedule, so one step is one batch of up to --batch
+            # innings throughout.
+            for s in range(0, len(order), args.batch):
+                model.train()
+                weighted, n_tokens = train_step(order[s:s + args.batch])
+                tot += weighted
+                cnt += n_tokens
+                budget_done = total_steps >= args.max_steps
+                # The final step is always evaluated even when the budget is
+                # not a multiple of --eval-every, so the last checkpoint is
+                # never silently unscored.
+                if total_steps % args.eval_every == 0 or budget_done:
+                    vll = evaluate()
+                    n_evals += 1
+                    print(f"step {total_steps} (eval {n_evals}, epoch "
+                          f"{epoch}): train_ll={tot/cnt:.4f} "
+                          f"val_ll={vll:.4f} ({time.time()-t0:.0f}s)",
+                          flush=True)
+                    record(vll, epoch, 0.0)
+                    tot, cnt, t0 = 0.0, 0, time.time()
+                if budget_done:
+                    break
     if best_state is None:
         raise RuntimeError("no epoch completed; nothing to save")
     model.load_state_dict(best_state)
@@ -1429,6 +2418,74 @@ def main() -> None:
     if base_logits_by_split is not None:
         metrics["arm_params"]["base_logits_md5_by_split"] = dict(
             base_logits_by_split)
+    # Stage 4: the artifacts each rung read, with their content digests, so a
+    # checkpoint names the sidecar and the frozen reference it was trained on.
+    if extra_features_block is not None:
+        metrics["arm_params"]["extra_features"] = extra_features_block
+    if base_probs_block is not None:
+        metrics["arm_params"]["base_probs"] = base_probs_block
+    if contract_block is not None:
+        metrics["arm_params"]["feature_contract"] = contract_block
+    # Stage 3 Block B accounting. Written for EVERY run (the step counters are
+    # maintained by both schedules), so a pooled arm and a target-only arm can
+    # be compared on tokens as well as on steps. `arm_params` and the
+    # `training_contract` optimiser block are deliberately NOT grown: both are
+    # identity blocks the stage 1/2 contract tests and the driver's training
+    # signature pin, and this is measurement, not identity.
+    metrics["training_schedule"] = {
+        "mode": "epochs" if args.max_steps is None else "max_steps",
+        "max_steps": args.max_steps,
+        "eval_every": args.eval_every,
+        "early_stopping": ("patience in epochs" if args.max_steps is None
+                           else "none (fixed step budget)"),
+        "selection_rule": (
+            "best validation LL, improvement margin 1e-5"
+            if args.max_steps is None else
+            "best ball-weighted mean NLL over ALL validation rows among the "
+            "--eval-every checkpoints; ties broken by the earliest step"),
+        "total_steps": int(total_steps),
+        "steps_to_best": int(best_step),
+        "epochs_run": int(epochs_run),
+        "best_epoch": int(best_epoch),
+        "tokens_seen": int(tokens_seen),
+        # Rows whose competition_tier equals the reporting tier (--train-tier,
+        # or --target-tier for a pooled arm that trains on everything). With no
+        # target tier named at all there is nothing to count against, so it is
+        # NaN rather than a zero that would read as "saw none of the target
+        # tier".
+        "target_tier": report_tier,
+        "target_tier_tokens_seen": (float("nan") if report_tier is None
+                                    else int(target_tokens_seen)),
+        "target_tier_source": (None if report_tier is None else
+                               "--train-tier" if args.target_tier is None
+                               else "--target-tier (reporting only)"),
+        "train_innings_selected": int(len(inn_tr)),
+        "train_innings_available": int(len(inn_tr_all)),
+        "train_rows_selected": int(sum(len(ix) for ix in inn_tr)),
+        "train_match_list": (None if args.train_match_list is None
+                             else Path(args.train_match_list).as_posix()),
+        "train_match_list_sha256": train_match_list_sha256,
+        "train_match_list_n": (None if train_match_ids is None
+                               else len(train_match_ids)),
+        # Reviewer MUST-FIX 2: target exposure, reported for EVERY run that
+        # names the lists. `{}` when --report-match-lists was not given.
+        "tokens_seen_by_list": {name: int(report_tokens[name])
+                                for name in report_match_lists},
+        "report_match_lists": {
+            name: {"path": path, "sha256": digest, "n_matches": len(ids)}
+            for name, (ids, digest, path) in report_match_lists.items()},
+        "tier_embed": int(args.tier_embed),
+        # Code gate finding 3: which tier rows the conditioning actually
+        # trained. An untrained tier's embedding and output-bias rows stay at
+        # initialisation (zero for the bias) and are used unchanged at scoring
+        # time, so they are recorded rather than inferred.
+        "tiers_seen_in_training": tiers_seen,
+        "untrained_tiers": untrained_tiers,
+        "untrained_tiers_note": (
+            "tier codes present in the validation split but absent from the "
+            "training rows; their tier_emb / tier_bias rows are at "
+            "initialisation (weight_decay 0.0 keeps them there)"),
+    }
     scored = [("validation", F_va, y_va, inn_va, val, aux_va)]
     if test is not None:
         scored.append(("test", F_te, y_te, inn_te, test, aux_te))
@@ -1470,7 +2527,7 @@ def main() -> None:
 
     # Always built (its length/uniqueness assertion is an invariant of every
     # run); recorded only when this frame gets a contract.
-    names_50 = feature_names()
+    names_50 = contract_names
     if write_contract:
         metrics["training_contract"] = {
             "contract_version": CONTRACT_VERSION,
@@ -1483,7 +2540,10 @@ def main() -> None:
             "split_files": split_files,
             "feature_names": names_50,
             "feature_names_sha256": sha256_text("\n".join(names_50)),
-            "state_normalisers": STATE_NORMALISERS,
+            "state_normalisers": (STATE_NORMALISERS if contract_block is None
+                                  else contract_block["standardiser"]),
+            "feature_contract": (None if contract_block is None
+                                 else V7_114_CONTRACT),
             "class_mapping": {str(k): v for k, v in CLASS_MAPPING.items()},
             "architecture": {"dmodel": args.dmodel, "layers": args.layers,
                              "heads": args.heads, "arm": args.arm,

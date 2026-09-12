@@ -1,0 +1,225 @@
+# Sequence-track job queue — NIGHT 3, MAC MINI HALF. Read by
+# research/sequence_track/run_queue.sh.
+#
+# Jobs run in listed order, one at a time, on the machine whose tag matches
+# --machine. A job is skipped when its output_dir holds a COMPLETE marker whose
+# config_sha256 equals the sha256 of its config file, so a night that was
+# stopped resumes where it left off.
+#
+# Paths are relative to the repository root unless absolute. Commands run
+# through /bin/bash -c with the repository root as the working directory.
+#
+# ---------------------------------------------------------------------------
+# NIGHT 3, BLOCK B (docs/sequence_track/night3_acceptance.md; design
+# docs/sequence_track/night3_design_draft.md v7 § "Block B"). THE NIGHT IS
+# SPLIT BY SEED ACROSS TWO MACHINES: seeds 7, 29 and 42 on the laptop
+# (research/sequence_track/queue_laptop_night3.yaml) and seeds 13 and 101 on the
+# Mac mini (this file). Every configuration runs on both machines. The split is
+# by SEED and never by arm, so every arm carries the same three-laptop /
+# two-mini mix and no arm is advantaged relative to another; the residual
+# seed-machine confounding is reported, not modelled.
+#
+# This half holds TWELVE Block B jobs: 6 configurations x 2 seeds.
+#
+# ORDER IS SEED-MAJOR, registered configuration order within each seed pass
+# (mlp_pool, mlp_pool_tiercond, mlp_P_tiercond, mlp_rowmatch_P_tiercond,
+# mlp_E_tiercond, mlp_rowmatch_E_tiercond) — the same rule as the laptop half,
+# so a truncated night leaves whole paired seeds across all six arms.
+#
+# --config IS EXPLICIT ON EVERY COMMAND. retrain_stage2.py defaults --config to
+# experiments/configs/seq_stage2_v1.yaml, so a night-3 job that omitted it would
+# silently train STAGE 2 arms into stage-3 output directories.
+#
+# --queue IS MANDATORY ON THE MINI. run_queue.sh defaults to
+# queue_laptop.yaml, whose jobs are all tagged laptop, so
+# `run_queue.sh --machine mini` with no --queue selects ZERO jobs and exits
+# zero: a silent no-op night. Pass --queue explicitly on both machines.
+#
+# WHY output_dir IS SEED-SPECIFIC: run_queue.sh decides skip-vs-run from the
+# COMPLETE marker in output_dir and the config sha256 ALONE. Each job's
+# output_dir is exactly the directory retrain_stage2.py writes that seed's run
+# into, so one marker means one finished run and neither machine's markers can
+# suppress the other's once the trees are synced.
+#
+# THREAD CAPS LIVE IN EACH COMMAND, NOT IN defaults:
+# scripts/sequence_track/queue_lib.py validates `defaults` against
+# {memory_floor_gb, memory_cap_gb, poll_seconds, stop_file} and IGNORES every
+# other field with a warning.
+#
+# EXPECTED HOURS: 0.25 h per Block B run on the mini — the laptop's 0.15 h
+# budget scaled by the mini's slower measured throughput on this architecture
+# family, rounded up to the 0.05 h grid. All six arms are the same token-MLP
+# architecture under the same 3,840-step budget, so one budget covers them all.
+# The populated per-configuration, per-machine capacity table -- smoke seconds,
+# budgeted hours, maximum duration, overheads and the queue deadline -- is
+# docs/sequence_track/night3_runbook.md § "Capacity". LAUNCH IS REFUSED IF ANY
+# ROW OF THAT TABLE IS BLANK.
+#
+# RETRY BUDGET: run_queue.sh gives each job a per-attempt alarm of
+# 2 * expected_hours (0.50 h here) AND retries once, so a hung job can consume
+# up to 4 * expected_hours (1.00 h) before the queue moves on. Sum of
+# expected_hours over these twelve jobs is 3.00 h; sum of 4 * expected_hours is
+# 12.00 h.
+# ---------------------------------------------------------------------------
+
+defaults:
+  # Refuse to launch a job when available memory (vm_stat: free + inactive +
+  # speculative) is below this. Mini-sized: the Mac mini has 16 GB and runs
+  # nothing else.
+  memory_floor_gb: 3
+  # Kill a job whose process-tree RSS exceeds this.
+  memory_cap_gb: 12
+  # Watchdog poll interval, seconds.
+  poll_seconds: 30
+  # Touch this file to stop THIS queue between jobs; remove it to resume.
+  # Each half has its own stop file so stopping one machine never stops the
+  # other, and night 3's files are distinct from night 1's.
+  stop_file: research/sequence_track/STOP_mini_night3
+
+jobs:
+  - id: mlp_pool-s13
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_pool --seeds 13 --machine mini
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_pool/seed_13
+    expected_hours: 0.25
+    machine: mini
+    notes: >
+      Block B job 1 of 12 (mini): configuration 1 of 6, seed 13.
+      pooled UNCONDITIONED control; the shared control of every family's gates.
+      Budget 0.25 h from the mini smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_pool_tiercond-s13
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_pool_tiercond --seeds 13 --machine mini
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_pool_tiercond/seed_13
+    expected_hours: 0.25
+    machine: mini
+    notes: >
+      Block B job 2 of 12 (mini): configuration 2 of 6, seed 13.
+      pooled, tier-conditioned (dim-8 embedding + per-tier output bias); candidate of family_3a_cond and the conditioning-matched reference of both target families.
+      Budget 0.25 h from the mini smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_P_tiercond-s13
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_P_tiercond --seeds 13 --machine mini
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_P_tiercond/seed_13
+    expected_hours: 0.25
+    machine: mini
+    notes: >
+      Block B job 3 of 12 (mini): configuration 3 of 6, seed 13.
+      target P only (--train-tier 3); candidate of family_3a_P.
+      Budget 0.25 h from the mini smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_rowmatch_P_tiercond-s13
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_rowmatch_P_tiercond --seeds 13 --machine mini
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_rowmatch_P_tiercond/seed_13
+    expected_hours: 0.25
+    machine: mini
+    notes: >
+      Block B job 4 of 12 (mini): configuration 4 of 6, seed 13.
+      row-matched pooled control for target P (rowmatch_P_matches.json); reference only.
+      Budget 0.25 h from the mini smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_E_tiercond-s13
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_E_tiercond --seeds 13 --machine mini
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_E_tiercond/seed_13
+    expected_hours: 0.25
+    machine: mini
+    notes: >
+      Block B job 5 of 12 (mini): configuration 5 of 6, seed 13.
+      target E only (target_E_matches.json); candidate of family_3a_E.
+      Budget 0.25 h from the mini smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_rowmatch_E_tiercond-s13
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_rowmatch_E_tiercond --seeds 13 --machine mini
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_rowmatch_E_tiercond/seed_13
+    expected_hours: 0.25
+    machine: mini
+    notes: >
+      Block B job 6 of 12 (mini): configuration 6 of 6, seed 13.
+      row-matched pooled control for target E (rowmatch_E_matches.json); reference only.
+      Budget 0.25 h from the mini smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_pool-s101
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_pool --seeds 101 --machine mini
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_pool/seed_101
+    expected_hours: 0.25
+    machine: mini
+    notes: >
+      Block B job 7 of 12 (mini): configuration 1 of 6, seed 101.
+      pooled UNCONDITIONED control; the shared control of every family's gates.
+      Budget 0.25 h from the mini smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_pool_tiercond-s101
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_pool_tiercond --seeds 101 --machine mini
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_pool_tiercond/seed_101
+    expected_hours: 0.25
+    machine: mini
+    notes: >
+      Block B job 8 of 12 (mini): configuration 2 of 6, seed 101.
+      pooled, tier-conditioned (dim-8 embedding + per-tier output bias); candidate of family_3a_cond and the conditioning-matched reference of both target families.
+      Budget 0.25 h from the mini smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_P_tiercond-s101
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_P_tiercond --seeds 101 --machine mini
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_P_tiercond/seed_101
+    expected_hours: 0.25
+    machine: mini
+    notes: >
+      Block B job 9 of 12 (mini): configuration 3 of 6, seed 101.
+      target P only (--train-tier 3); candidate of family_3a_P.
+      Budget 0.25 h from the mini smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_rowmatch_P_tiercond-s101
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_rowmatch_P_tiercond --seeds 101 --machine mini
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_rowmatch_P_tiercond/seed_101
+    expected_hours: 0.25
+    machine: mini
+    notes: >
+      Block B job 10 of 12 (mini): configuration 4 of 6, seed 101.
+      row-matched pooled control for target P (rowmatch_P_matches.json); reference only.
+      Budget 0.25 h from the mini smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_E_tiercond-s101
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_E_tiercond --seeds 101 --machine mini
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_E_tiercond/seed_101
+    expected_hours: 0.25
+    machine: mini
+    notes: >
+      Block B job 11 of 12 (mini): configuration 5 of 6, seed 101.
+      target E only (target_E_matches.json); candidate of family_3a_E.
+      Budget 0.25 h from the mini smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_rowmatch_E_tiercond-s101
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_rowmatch_E_tiercond --seeds 101 --machine mini
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_rowmatch_E_tiercond/seed_101
+    expected_hours: 0.25
+    machine: mini
+    notes: >
+      Block B job 12 of 12 (mini): configuration 6 of 6, seed 101.
+      row-matched pooled control for target E (rowmatch_E_matches.json); reference only.
+      Budget 0.25 h from the mini smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+  # Deferred at the 2026-09-13 00:30 IST freeze: 4d, 4b and C114 run as a
+  # separately frozen batch after their own code gate; nothing is appended to
+  # this queue once launched.

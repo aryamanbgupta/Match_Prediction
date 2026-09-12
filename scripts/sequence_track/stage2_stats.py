@@ -118,6 +118,23 @@ FIVE_SEED_ELIGIBILITY_RULE = (
     "failed by it")
 FAMILY_SIZE = 3
 FAMILY_MEMBER_ORDER = ("primary", "death_gate", "chase_gate")
+# A general family registers 2-6 members. The legacy fixed
+# {primary, death_gate, chase_gate} form is translated into the general form,
+# so FAMILY_SIZE remains the legacy size and is no longer the only size.
+FAMILY_MIN_MEMBERS = 2
+FAMILY_MAX_MEMBERS = 6
+MEMBER_KINDS = ("superiority", "non_inferiority")
+# The shared control is a config key (`statistics.families.shared_control`).
+# It defaults to the Stage 2 literal so a config carrying none of the night-3
+# keys behaves exactly as before.
+DEFAULT_SHARED_CONTROL = "mlp"
+CONTROL_ROLE = "control"
+CANDIDATE_ROLE = "candidate"
+# `all_row_condition` values. "inherited" is the Stage 2 behaviour: the extra
+# `candidate - shared_control @ all` clean-interval condition, read outside the
+# family. "member" discharges it through a registered family member instead;
+# "none" registers that the family carries no such extra condition.
+ALL_ROW_CONDITIONS = ("inherited", "member", "none")
 
 # The frame's own class mapping. Held here so the tool imports no torch;
 # `test_stage2_stats.py` asserts it equals `embeddings_e1.CLASS_MAPPING`.
@@ -188,16 +205,29 @@ class RefusalError(RuntimeError):
 
 
 def guard_path(path: Path | str) -> Path:
-    """Refuse the cohort, the smoke tree and the two sealed holdouts."""
-    resolved = Path(path)
-    text = resolved.as_posix()
+    """Refuse the cohort, the smoke tree and the two sealed holdouts.
+
+    The fragments are tested against BOTH the path as written and its resolved
+    form, so a symlink, a `..` hop or a relative spelling cannot carry a read
+    into the cohort, the smoke tree or a sealed holdout. The path is returned as
+    written: resolving it here would turn every reported path absolute.
+    """
+    given = Path(path)
+    candidates = [given.as_posix()]
+    try:
+        candidates.append(given.resolve().as_posix())
+    except OSError:  # pragma: no cover - an unresolvable path is still checked
+        pass
     for fragment in FORBIDDEN_FRAGMENTS:
-        if fragment in text:
-            raise RefusalError(
-                f"refusing to open {text}: this stage may not read "
-                f"{fragment!r} (cohort DEFERRED_UNOPENED; no smoke log loss; "
-                "no sealed holdout)")
-    return resolved
+        for text in candidates:
+            if fragment in text:
+                raise RefusalError(
+                    f"refusing to open {candidates[0]}: this stage may not "
+                    f"read {fragment!r} (cohort DEFERRED_UNOPENED; no smoke "
+                    "log loss; no sealed holdout)"
+                    + ("" if text == candidates[0] else
+                       f"; it resolves to {text}"))
+    return given
 
 
 def read_text(path: Path | str) -> str:
@@ -469,6 +499,147 @@ SLICE_PREDICATES: tuple[SlicePredicate, ...] = (
                    lambda df: df["inning_idx"].to_numpy(np.int64) == 2),
 )
 
+# D-night3 — optional registered slices (tier, match-list, and composed).
+#
+# Every optional slice is OPT-IN through `statistics.slice_predicates`, never
+# added by default: the frozen `SLICE_PREDICATES` tuple above is what
+# `statistics.slices` is checked against, and a Stage 2 config that registers
+# eight slice names must keep computing exactly those eight.
+#
+# `statistics.slice_predicates` is a mapping of slice name -> spec, read in
+# config order. `thin_pair` keeps its own inherited spec shape; every other
+# entry is one of
+#
+#   <name>: {tier: 3}                     competition_tier == 3
+#                                         (`target_P` and `tier3` are the same
+#                                          slice under two registered names)
+#   <name>: {match_list: <path>,          the frame rows whose innings_id
+#            sha256: <pinned digest>}     SUFFIX (the match id) is in the
+#                                         registered JSON list. The sha256 is
+#                                         REQUIRED: an unpinned match list is
+#                                         refused at config load.
+#   <name>: {base: death,                 an existing slice AND an optional one
+#            restrict: target_P}
+#   death@target_P: {}                    the same composition by naming
+#                                         convention
+#
+# A composed name written as `<base>@<restrict>` needs no body. If the frame
+# cannot serve a slice — no `competition_tier` column, or a match-list file
+# that is absent or whose sha256 does not match the pin — the slice is reported
+# UNAVAILABLE with its reason, exactly as `thin_pair` is, rather than invented
+# or silently dropped.
+TIER_COLUMN = "competition_tier"
+REGISTERED_TIERS = (1, 2, 3, 4)
+TIER_COLUMN_MISSING_REASON = (
+    f"the pinned frame carries no {TIER_COLUMN!r} column, so this tier slice "
+    "is reported unavailable rather than invented. The i7 ball frame does "
+    "carry it; a frame that does not cannot serve a tier slice.")
+
+
+def optional_slice_specs(config: Mapping[str, Any]) -> list[dict]:
+    """The registered optional slices, in config order.
+
+    Returns ``[{"name", "kind", ...}]`` with ``kind`` one of ``tier``,
+    ``match_list`` or ``composed``. ``thin_pair`` is excluded: it keeps its own
+    inherited reader. Absent key -> no optional slice, and the computed slice
+    list is exactly the frozen one.
+    """
+    raw = ((config.get("statistics") or {}).get("slice_predicates") or {})
+    if not isinstance(raw, Mapping):
+        raise RefusalError(
+            "statistics.slice_predicates must be a mapping of slice name to "
+            "its registered spec")
+    base_names = {p.name for p in SLICE_PREDICATES}
+    out: list[dict] = []
+    for name, spec in raw.items():
+        name = str(name)
+        if name == THIN_PAIR_NAME:
+            continue
+        spec = spec if isinstance(spec, Mapping) else {}
+        base, _, restrict = name.rpartition("@")
+        if spec.get("base") or spec.get("restrict"):
+            base = str(spec.get("base") or "")
+            restrict = str(spec.get("restrict") or "")
+        if base:
+            if base not in base_names:
+                raise RefusalError(
+                    f"slice {name!r} restricts {base!r}, which is not a "
+                    f"registered slice predicate {sorted(base_names)}")
+            if not restrict:
+                raise RefusalError(
+                    f"slice {name!r} names no slice to restrict to")
+            out.append({"name": name, "kind": "composed", "base": base,
+                        "restrict": restrict})
+            continue
+        if "tier" in spec:
+            tier = int(spec["tier"])
+            if tier not in REGISTERED_TIERS:
+                raise RefusalError(
+                    f"slice {name!r} names tier {tier}, which is not one of "
+                    f"{list(REGISTERED_TIERS)}")
+            out.append({"name": name, "kind": "tier", "tier": tier})
+            continue
+        if spec.get("match_list"):
+            if not spec.get("sha256"):
+                raise RefusalError(
+                    f"slice {name!r} registers the match list "
+                    f"{spec['match_list']!r} with no `sha256`; an unpinned "
+                    "match list is not a registered slice, because the rows it "
+                    "selects could change under the analysis")
+            out.append({"name": name, "kind": "match_list",
+                        "match_list": str(spec["match_list"]),
+                        "sha256": str(spec["sha256"])})
+            continue
+        raise RefusalError(
+            f"slice {name!r} registers none of `tier`, `match_list` or "
+            "`base`/`restrict`; an optional slice is never invented")
+    names = [row["name"] for row in out]
+    duplicated = sorted({n for n in names if names.count(n) > 1})
+    if duplicated:
+        raise RefusalError(f"slices {duplicated} are registered twice")
+    by_name = {row["name"]: row for row in out}
+    for row in out:
+        if row["kind"] != "composed":
+            continue
+        target = by_name.get(row["restrict"])
+        if target is None:
+            raise RefusalError(
+                f"slice {row['name']!r} restricts to {row['restrict']!r}, "
+                "which is not a registered optional slice")
+        if target["kind"] == "composed":
+            raise RefusalError(
+                f"slice {row['name']!r} restricts to {row['restrict']!r}, "
+                "which is itself composed; compose once, not twice")
+        if names.index(row["restrict"]) > names.index(row["name"]):
+            raise RefusalError(
+                f"slice {row['name']!r} is registered before the "
+                f"{row['restrict']!r} it restricts to")
+    return out
+
+
+def _match_list_mask(spec: Mapping[str, Any], match_id: np.ndarray,
+                     ) -> tuple[Any, str | None]:
+    """The mask for a match-list slice, or (None, reason) when unavailable."""
+    path = guard_path(Path(spec["match_list"]))
+    if not path.exists():
+        return None, (f"the registered match list {rel(path)} does not exist, "
+                      "so this slice is reported unavailable rather than "
+                      "invented")
+    digest = sha256_file(path)
+    if digest != spec["sha256"]:
+        return None, (f"the registered match list {rel(path)} has sha256 "
+                      f"{digest}, the config pins {spec['sha256']}: the list "
+                      "drifted and no number may be computed from it")
+    payload = json.loads(path.read_text())
+    if isinstance(payload, Mapping):
+        payload = (payload.get("match_ids") or payload.get("matches") or [])
+    wanted = {str(value) for value in payload}
+    if not wanted:
+        return None, (f"the registered match list {rel(path)} names no "
+                      "matches")
+    return np.isin(match_id, sorted(wanted)), None
+
+
 THIN_PAIR_NAME = "thin_pair"
 THIN_PAIR_UNAVAILABLE_REASON = (
     "thin_pair needs per-row batter and bowler EXPOSURE columns (career or "
@@ -556,10 +727,14 @@ def load_frame(frame_dir: Path, config: Mapping[str, Any] | None = None,
             f"frame dir {rel(frame_dir)} is not the pinned "
             f"{pin.frame_dir!r}")
     spec = thin_pair_spec(config)
+    optional = optional_slice_specs(config)
     present = set(pq.ParquetFile(path).schema_arrow.names)
     wanted = ["innings_id", "ball_outcome"]
     for predicate in SLICE_PREDICATES:
         wanted.extend(predicate.columns)
+    tier_column_present = TIER_COLUMN in present
+    if tier_column_present and any(r["kind"] == "tier" for r in optional):
+        wanted.append(TIER_COLUMN)
     # A registered exposure column that the frame does not carry makes
     # thin_pair unavailable; it must not break the read of every other slice.
     thin_pair_missing = ([] if spec is None else
@@ -638,6 +813,77 @@ def load_frame(frame_dir: Path, config: Mapping[str, Any] | None = None,
                 "role": "exploratory", "available": True,
                 "n_rows": int(mask.sum())})
 
+    # Optional registered slices, appended after thin_pair in config order so
+    # an existing slice list keeps its order and its contents.
+    row_match_id = match_ids(innings)
+    for request in optional:
+        name, kind = request["name"], request["kind"]
+        role = "exploratory"
+        columns: list[str] = []
+        expression: str | None = None
+        mask = None
+        reason: str | None = None
+        if kind == "tier":
+            columns = [TIER_COLUMN]
+            expression = f"{TIER_COLUMN} == {request['tier']}"
+            if not tier_column_present:
+                reason = TIER_COLUMN_MISSING_REASON
+            elif df[TIER_COLUMN].isna().any():
+                raise RefusalError(
+                    f"slice {name!r} reads {TIER_COLUMN!r}, which has null "
+                    "values in the pinned frame; missing-value handling must "
+                    "be registered before the slice is computed")
+            else:
+                mask = df[TIER_COLUMN].to_numpy(np.int64) == request["tier"]
+        elif kind == "match_list":
+            columns = ["innings_id"]
+            expression = (f"the innings_id match-id suffix is in "
+                          f"{request['match_list']}")
+            mask, reason = _match_list_mask(request, row_match_id)
+        else:
+            base_predicate = next(p for p in SLICE_PREDICATES
+                                  if p.name == request["base"])
+            role = "gate" if request["base"] in GATE_SLICES else "exploratory"
+            columns = list(base_predicate.columns)
+            target = next(r for r in optional
+                          if r["name"] == request["restrict"])
+            restrict_row = next(row for row in predicates
+                                if row["slice"] == request["restrict"])
+            expression = (f"{base_predicate.expression} and "
+                          f"{restrict_row['predicate']}")
+            if request["restrict"] not in masks:
+                reason = (f"the {request['restrict']!r} slice this one "
+                          f"restricts to is unavailable: "
+                          f"{restrict_row.get('unavailable_reason')}")
+                expression = None
+            else:
+                mask = masks[request["base"]] & masks[request["restrict"]]
+                columns = list(dict.fromkeys(
+                    columns + list(restrict_row["columns"])))
+            del target
+        if mask is None:
+            predicates.append({
+                "slice": name, "predicate": None, "columns": columns,
+                "role": role, "available": False,
+                "unavailable_reason": reason, "n_rows": 0})
+            continue
+        mask = np.asarray(mask, dtype=bool)
+        masks[name] = mask
+        row = {"slice": name, "predicate": expression, "columns": columns,
+               "role": role, "slice_kind": kind, "available": True,
+               "n_rows": int(mask.sum())}
+        if kind == "tier":
+            row["tier"] = request["tier"]
+        elif kind == "match_list":
+            row["match_list"] = request["match_list"]
+            row["match_list_sha256"] = sha256_file(
+                guard_path(Path(request["match_list"])))
+            row["n_matches"] = int(len(set(row_match_id[mask])))
+        else:
+            row["restricts_slice"] = request["base"]
+            row["restricted_to"] = request["restrict"]
+        predicates.append(row)
+
     if (pin.validation_rows is not None
             and int(len(df)) != pin.validation_rows):
         raise RefusalError(
@@ -645,7 +891,7 @@ def load_frame(frame_dir: Path, config: Mapping[str, Any] | None = None,
             f"{pin.validation_rows}")
     return Frame(path=path, sha256=sha256_file(path), md5=frame_md5,
                  n_rows=int(len(df)), innings_id=innings, y=y,
-                 match_id=match_ids(innings), masks=masks,
+                 match_id=row_match_id, masks=masks,
                  predicates=predicates)
 
 
@@ -994,6 +1240,11 @@ class Admission:
     metrics_validation_ll: float | None = None
     metrics_arm_params: dict = field(default_factory=dict)
     arm_params_expected: dict = field(default_factory=dict)
+    # The implementation files the run itself hashed (`training_signature_sources`
+    # in run_record.json). A run is anchored to the pin's hashes of ITS OWN
+    # source list, so a later stage that widens the driver's source set does
+    # not retroactively refuse a sealed earlier stage's runs.
+    signature_sources: list = field(default_factory=list)
     artefact_manifest: dict = field(default_factory=dict)
 
 
@@ -1192,6 +1443,8 @@ def verify_run_admission(directory: Path, config_id: str, seed: int,
         metrics_validation_ll=validation_ll,
         metrics_arm_params=dict(arm_params),
         arm_params_expected=dict(record.get("arm_params_expected") or {}),
+        signature_sources=[str(x) for x in
+                           (record.get("training_signature_sources") or [])],
         artefact_manifest={name: dict(facts)
                            for name, facts in manifest.items()})
 
@@ -1205,6 +1458,27 @@ def _reads_base_logits(entry: Mapping[str, Any] | None) -> bool:
     access = (entry or {}).get("access") or {}
     return bool(access.get("prod_logits")) or bool(
         ((entry or {}).get("params") or {}).get("base_logits_dir"))
+
+
+def driver_effective_settings(config: Mapping[str, Any],
+                              entry: Mapping[str, Any], pin: Pin) -> dict:
+    """The driver's own `effective_settings` for one registered entry.
+
+    The entry is checked through the driver's `_check_params` when it has not
+    already been (a config read straight from yaml has no `_params`), so the
+    stage 3 params reach `effective_settings` exactly as a launch would
+    present them — including the sha256 of a frozen train-match list.
+    """
+    driver = training_driver()
+    entry = dict(entry)
+    if not entry.get("_params"):
+        entry["_params"] = driver._check_params(  # noqa: SLF001 - registered
+            Path(str(config.get("_config_path") or "config.yaml")), entry)
+    digest = (pin.base_logits_digest
+              if str(entry.get("arm")) in driver.t1.ARMS_NEEDING_BASE_LOGITS
+              else None)
+    return driver.effective_settings(dict(config), entry,
+                                     base_logits_digest=digest)
 
 
 def pinned_component_digests(config: Mapping[str, Any], pin: Pin) -> dict:
@@ -1236,20 +1510,36 @@ def pinned_component_digests(config: Mapping[str, Any], pin: Pin) -> dict:
         raise RefusalError(
             f"the config's `training` block carries no {missing}, so the "
             "registered training identity cannot be recomputed")
-    training_block = {
-        "arch": {"dmodel": int(training["dmodel"]),
-                 "layers": int(training["layers"]),
-                 "heads": int(training["heads"])},
-        "optimiser": {
-            "lr": float(training["learning_rate"]),
-            "batch": int(training["batch"]),
-            "epochs": int(training["epochs"]),
-            "patience": int(training["patience"]),
-            "aux": bool(training["aux"]),
-            "aux_weight": float(training.get(
-                "aux_weight", driver.t1.AUX_WEIGHT_DEFAULT)),
-        },
-    }
+    # Night 3 Block B: the expected `training_block` and `arm_params` are
+    # DERIVED from the driver's own `effective_settings`, never rebuilt in a
+    # fixed shape here. A stage 3 configuration's step budget lives in a
+    # `schedule` sub-block the driver adds when the config sets it, and a
+    # reconstruction that did not know about it made every night-3 run
+    # incomparable against an expectation nothing could produce. Reading the
+    # driver means every future default-off param is picked up for free, and a
+    # stage 2 configuration — which sets none — digests exactly as before.
+    training_block_by_config: dict[str, str] = {}
+    arm_params_by_config: dict[str, str] = {}
+    for config_id, entry in driver.configurations(config).items():
+        effective = driver_effective_settings(config, entry, pin)
+        block = {"arch": effective["arch"], "optimiser": effective["optimiser"]}
+        if effective.get("schedule"):
+            block["schedule"] = effective["schedule"]
+        training_block_by_config[config_id] = component_digest(block)
+        arm_params_by_config[config_id] = component_digest(
+            effective["arm_params"])
+    distinct_blocks = sorted(set(training_block_by_config.values()))
+    if len(distinct_blocks) == 1:
+        training_block_digest = distinct_blocks[0]
+    elif not distinct_blocks:
+        raise RefusalError(
+            "the config registers no configuration, so the registered "
+            "training identity cannot be recomputed")
+    else:
+        # Configurations that disagree about the training block are caught by
+        # the per-configuration comparison below; there is no single shared
+        # digest to publish in that case.
+        training_block_digest = None
     pinned_splits = (pin.frame_block.get("splits") or {})
     split_files = {}
     for split in driver.CONTRACT_SPLITS:
@@ -1294,7 +1584,9 @@ def pinned_component_digests(config: Mapping[str, Any], pin: Pin) -> dict:
                for name in common + (driver.RECURRENT_SOURCE,)},
     }
     return {
-        "training_block": component_digest(training_block),
+        "training_block": training_block_digest,
+        "training_block_by_config": dict(training_block_by_config),
+        "arm_params_by_config": dict(arm_params_by_config),
         "frame": component_digest(frame_raw),
         "stats_cache": component_digest(cache_raw),
         "implementation_by_recurrent": {
@@ -1387,6 +1679,7 @@ def assert_comparable(admissions: Mapping[str, Mapping[int, Admission]],
     inadmissible: list[dict] = []
     per_config: dict[str, str] = {}
     shared: dict[str, tuple[str, str]] = {}
+    run_source_sets: dict = {}  # per-run hashed source lists (not emitted)
     anchored: dict[str, Any] | None = None
     if entries is not None and config is not None and pin is not None:
         anchored = pinned_component_digests(config, pin)
@@ -1440,7 +1733,17 @@ def assert_comparable(admissions: Mapping[str, Mapping[int, Admission]],
                         "no contrast between them is admissible")
             if anchored is not None:
                 for name in SIGNATURE_SHARED_COMPONENTS:
-                    if components[name] != anchored[name]:
+                    want = anchored[name]
+                    if name == "training_block":
+                        # Derived per configuration from the driver, because a
+                        # stage 3 configuration's step schedule joins it.
+                        want = anchored["training_block_by_config"].get(
+                            config_id, want)
+                    if want is None:
+                        problems.append(
+                            f"{where}: no registered {name!r} digest could be "
+                            "recomputed for this configuration")
+                    elif components[name] != want:
                         problems.append(
                             f"{where}: training signature component {name!r} "
                             f"{components[name][:12]}… is not the pinned "
@@ -1449,6 +1752,33 @@ def assert_comparable(admissions: Mapping[str, Mapping[int, Admission]],
                 if identity is not None:
                     want_impl = anchored["implementation_by_recurrent"][
                         identity["recurrent"]]
+                    run_sources = list(value.signature_sources or [])
+                    if run_sources:
+                        # Anchor to the pin's hashes of the run's OWN source
+                        # list (night 3: the driver hashes feature_registry.py
+                        # too; the sealed stage 2 runs hashed four files).
+                        missing = [n for n in run_sources
+                                   if not (pin.source_sha256 or {}).get(n)]
+                        if missing:
+                            problems.append(
+                                f"{where}: the run hashed {missing} but the pin "
+                                "records no hash for them, so its implementation "
+                                "cannot be anchored")
+                            continue
+                        want_impl = component_digest(
+                            {n: pin.source_sha256[n] for n in run_sources})
+                        non_rec = tuple(sorted(
+                            n for n in run_sources
+                            if n != training_driver().RECURRENT_SOURCE))
+                        prev = run_source_sets.get("common")
+                        if prev is None:
+                            run_source_sets["common"] = (non_rec, where)
+                        elif prev[0] != non_rec:
+                            problems.append(
+                                f"{where}: hashed implementation sources "
+                                f"{list(non_rec)} differ from {prev[1]}'s "
+                                f"{list(prev[0])}; the common implementation "
+                                "sources must agree across arms")
                     if components["implementation"] != want_impl:
                         problems.append(
                             f"{where}: the `implementation` component "
@@ -2011,35 +2341,278 @@ def readout_of(record: Mapping[str, Any], readout: str) -> dict | None:
 # D10.4 / D10.6 — families, Holm, gates
 # ---------------------------------------------------------------------------
 
+def shared_control(config: Mapping[str, Any]) -> str:
+    """The config's shared control id.
+
+    `statistics.families.shared_control` replaces the `"mlp"` literal that was
+    written into the family count, the candidate check, the screen's extra
+    all-row condition and the exploratory pair generator. Absent -> `"mlp"`,
+    so a config carrying none of the night-3 keys behaves exactly as before.
+    """
+    families = ((config.get("statistics") or {}).get("families") or {})
+    return str(families.get("shared_control") or DEFAULT_SHARED_CONTROL)
+
+
+def config_roles(config: Mapping[str, Any]) -> dict[str, str]:
+    """Per-configuration role: `candidate` (default) or `control`.
+
+    The shared control is a control whether or not it says so. A control-role
+    configuration need not be a candidate in any family, so the "every
+    non-control configuration is a candidate exactly once" check applies to
+    candidates only.
+    """
+    control = shared_control(config)
+    roles: dict[str, str] = {}
+    for entry in (config.get("configurations") or []):
+        config_id = str(entry["id"])
+        role = str(entry.get("role") or CANDIDATE_ROLE)
+        if role not in (CANDIDATE_ROLE, CONTROL_ROLE):
+            raise RefusalError(
+                f"configuration {config_id!r} registers role {role!r}, which "
+                f"is not one of {[CANDIDATE_ROLE, CONTROL_ROLE]}")
+        roles[config_id] = CONTROL_ROLE if config_id == control else role
+    return roles
+
+
+def candidate_ids(config: Mapping[str, Any]) -> set[str]:
+    """The configuration ids that must each be a family candidate once."""
+    return {cid for cid, role in config_roles(config).items()
+            if role == CANDIDATE_ROLE}
+
+
 def expected_family_count(config: Mapping[str, Any]) -> int:
     """How many families this config must register, derived from the config.
 
-    Every configuration except the shared `mlp` control is a family candidate
-    exactly once (asserted at the end of `registered_families`), so the count
-    is the number of registered configurations minus `mlp`. Astra gate 2 round
-    2: this was the constant 15, so a config registering seven families — or
-    any other legitimate subset — refused unless the caller happened to pass a
-    flag. Deriving it lets a seven-family and a fifteen-family config both run
-    with no flag, and still refuses a config whose family map does not cover
-    its own configurations.
+    Every candidate-role configuration is a family candidate exactly once
+    (asserted at the end of `registered_families`), so the count is the number
+    of registered configurations minus the shared control and minus every
+    explicit `role: control` configuration. Astra gate 2 round 2: this was the
+    constant 15, so a config registering seven families — or any other
+    legitimate subset — refused unless the caller happened to pass a flag.
+    Deriving it lets a seven-family and a fifteen-family config both run with
+    no flag, and still refuses a config whose family map does not cover its own
+    candidates.
     """
-    ids = {str(entry["id"]) for entry in (config.get("configurations") or [])}
-    return len(ids - {"mlp"})
+    return len(candidate_ids(config))
+
+
+def _legacy_members(entry: Mapping[str, Any], candidate: str,
+                    ids: set[str], expected_slices: Mapping[str, str],
+                    ) -> list[dict]:
+    """Translate the fixed {primary, death_gate, chase_gate} form.
+
+    This is the ONLY place the legacy shape is read. Everything downstream sees
+    the general member form, so the Stage 2 families and a night-3 family go
+    through identical Holm, gate, screen and reporting code.
+    """
+    members = []
+    for name in FAMILY_MEMBER_ORDER:
+        member = entry.get(name)
+        if not isinstance(member, Mapping):
+            raise RefusalError(
+                f"family {candidate!r} has no {name!r} member; every "
+                f"family needs exactly {FAMILY_SIZE}")
+        reference = str(member.get("reference"))
+        if reference not in ids:
+            raise RefusalError(
+                f"family {candidate!r} member {name!r} names reference "
+                f"{reference!r}, which is not a registered configuration")
+        slice_name = str(member.get("slice"))
+        if slice_name != expected_slices[name]:
+            raise RefusalError(
+                f"family {candidate!r} member {name!r} is registered on "
+                f"slice {slice_name!r}, expected "
+                f"{expected_slices[name]!r}")
+        members.append({"member": name, "candidate": candidate,
+                        "reference": reference, "slice": slice_name,
+                        "contrast": str(member.get("contrast")
+                                        or f"{candidate} - {reference}"),
+                        "threshold": (0.0 if name == "primary"
+                                      else MARGIN_LL),
+                        "kind": ("superiority" if name == "primary"
+                                 else "non_inferiority"),
+                        "primary": name == "primary"})
+    return members
+
+
+def _general_members(entry: Mapping[str, Any], candidate: str,
+                     ids: set[str]) -> list[dict]:
+    """Read the general `members:` list — 2 to 6 members, each self-describing.
+
+    Each member carries its own name, contrast (candidate and reference), slice,
+    threshold and kind. Exactly one member is flagged `primary: true`; that is
+    the member the 4/5 favourable-direction rule reads. Registered member order
+    is the Holm tie order, unchanged.
+    """
+    raw = entry.get("members")
+    if not isinstance(raw, list):
+        raise RefusalError(
+            f"family {candidate!r} registers `members` that is not a list")
+    if not FAMILY_MIN_MEMBERS <= len(raw) <= FAMILY_MAX_MEMBERS:
+        raise RefusalError(
+            f"family {candidate!r} registers {len(raw)} members; a family has "
+            f"{FAMILY_MIN_MEMBERS}-{FAMILY_MAX_MEMBERS}")
+    members: list[dict] = []
+    for position, member in enumerate(raw):
+        if not isinstance(member, Mapping):
+            raise RefusalError(
+                f"family {candidate!r} member {position} is not a mapping")
+        name = str(member.get("name") or "")
+        if not name:
+            raise RefusalError(
+                f"family {candidate!r} member {position} has no name")
+        if any(m["member"] == name for m in members):
+            raise RefusalError(
+                f"family {candidate!r} registers member {name!r} twice")
+        contrast = member.get("contrast")
+        if not isinstance(contrast, Mapping):
+            raise RefusalError(
+                f"family {candidate!r} member {name!r} has no "
+                "`contrast: {candidate, reference}`")
+        member_candidate = str(contrast.get("candidate") or candidate)
+        reference = str(contrast.get("reference") or "")
+        for who, cid in (("candidate", member_candidate),
+                         ("reference", reference)):
+            if cid not in ids:
+                raise RefusalError(
+                    f"family {candidate!r} member {name!r} names {who} "
+                    f"{cid!r}, which is not a registered configuration")
+        kind = str(member.get("kind") or "superiority")
+        if kind not in MEMBER_KINDS:
+            raise RefusalError(
+                f"family {candidate!r} member {name!r} registers kind "
+                f"{kind!r}, not one of {list(MEMBER_KINDS)}")
+        if "threshold" in member:
+            threshold = float(member["threshold"])
+        else:
+            threshold = 0.0 if kind == "superiority" else MARGIN_LL
+        if kind == "superiority" and threshold != 0.0:
+            raise RefusalError(
+                f"family {candidate!r} member {name!r} is a superiority test, "
+                f"whose threshold is 0, not {threshold}")
+        slice_name = str(member.get("slice") or "")
+        if not slice_name:
+            raise RefusalError(
+                f"family {candidate!r} member {name!r} names no slice")
+        members.append({
+            "member": name, "candidate": member_candidate,
+            "reference": reference, "slice": slice_name,
+            "contrast": str(member.get("label")
+                            or f"{member_candidate} - {reference}"),
+            "threshold": threshold, "kind": kind,
+            "primary": bool(member.get("primary")),
+        })
+    flagged = [m["member"] for m in members if m["primary"]]
+    if len(flagged) != 1:
+        raise RefusalError(
+            f"family {candidate!r} flags {len(flagged)} members "
+            f"`primary: true` ({flagged}); exactly one is required, and it is "
+            "the member the favourable-direction rule reads")
+    return members
+
+
+def _family_screen_spec(entry: Mapping[str, Any], candidate: str,
+                        members: Sequence[Mapping[str, Any]],
+                        legacy: bool) -> dict:
+    """The per-family screen condition and its all-row condition.
+
+    Default, when the family registers no `screen`, is the inherited rule: the
+    primary rejects and every non-inferiority member holds. `screen.require`
+    names the members that must ALL reject favourably for SCREEN_PASS.
+    `all_row_condition` is `inherited` unless registered otherwise.
+    `direction_required` names the members the >=4/5 favourable-direction rule
+    is enforced on; the default is the primary member alone, so Stage 2 and
+    every legacy family are unchanged.
+    """
+    names = [m["member"] for m in members]
+    raw = entry.get("screen")
+    if raw is None:
+        require = list(names) if legacy else [
+            m["member"] for m in members
+            if m["primary"] or m["kind"] == "non_inferiority"]
+        registered = False
+    else:
+        if not isinstance(raw, Mapping):
+            raise RefusalError(
+                f"family {candidate!r} registers a `screen` that is not a "
+                "mapping")
+        require = [str(n) for n in (raw.get("require") or [])]
+        if not require:
+            raise RefusalError(
+                f"family {candidate!r} registers a screen with no "
+                "`require: [member names]`")
+        unknown = [n for n in require if n not in names]
+        if unknown:
+            raise RefusalError(
+                f"family {candidate!r} screen requires members {unknown} that "
+                f"the family does not register ({names})")
+        registered = True
+    condition = str(entry.get("all_row_condition") or "inherited")
+    if condition not in ALL_ROW_CONDITIONS:
+        raise RefusalError(
+            f"family {candidate!r} registers all_row_condition "
+            f"{condition!r}, not one of {list(ALL_ROW_CONDITIONS)}")
+    primary_names = [m["member"] for m in members if m.get("primary")]
+    raw_directions = entry.get("direction_required")
+    if raw_directions is None:
+        directions = list(primary_names)
+    else:
+        if not isinstance(raw_directions, (list, tuple)):
+            raise RefusalError(
+                f"family {candidate!r} registers `direction_required` that is "
+                "not a list of member names")
+        directions = [str(n) for n in raw_directions]
+        if not directions:
+            raise RefusalError(
+                f"family {candidate!r} registers an empty "
+                "`direction_required`; the rule is enforced on at least the "
+                "primary member")
+        unknown = [n for n in directions if n not in names]
+        if unknown:
+            raise RefusalError(
+                f"family {candidate!r} requires favourable directions on "
+                f"members {unknown} that the family does not register "
+                f"({names})")
+        missing_primary = [n for n in primary_names if n not in directions]
+        if missing_primary:
+            raise RefusalError(
+                f"family {candidate!r} registers `direction_required` "
+                f"{directions}, which omits its primary member "
+                f"{missing_primary}; the rule always covers the primary")
+    return {"require": require,
+            "screen_is_registered_per_family": registered,
+            "all_row_condition": condition,
+            "all_row_condition_is_registered": (
+                "all_row_condition" in entry),
+            "direction_required": directions,
+            "direction_required_is_registered": (
+                "direction_required" in entry)}
 
 
 def registered_families(config: Mapping[str, Any],
                         expected: int | None = None) -> list[dict]:
-    """Assert and return the config's explicit three-member families.
+    """Assert and return the config's explicit families.
+
+    A family entry uses either the legacy fixed
+    {primary, death_gate, chase_gate} form — translated internally into the
+    general form by `_legacy_members` — or the general
+    ``members: [{name, contrast: {candidate, reference}, slice, threshold,
+    kind}]`` form with 2 to 6 members. Holm step-down, tie order (registered
+    member order), the missing-member placeholder, strict bounds, both
+    estimands, the 4/5 favourable-direction rule on the member flagged
+    `primary: true` and the ten-block rule are the same for both.
 
     ``expected`` is the registered family count. When it is None — the default
     — it is DERIVED from the config by `expected_family_count`, one family per
-    registered configuration other than the shared `mlp` control. A caller may
-    still pass a number to assert a specific count.
+    candidate-role configuration. A caller may still pass a number to assert a
+    specific count.
     """
     if expected is None:
         expected = expected_family_count(config)
     statistics = config.get("statistics") or {}
     families = (statistics.get("families") or {})
+    control = shared_control(config)
+    roles = config_roles(config)
     raw = families.get("map")
     if not isinstance(raw, list):
         raise RefusalError(
@@ -2065,49 +2638,50 @@ def registered_families(config: Mapping[str, Any],
         if candidate in seen:
             raise RefusalError(f"family candidate {candidate!r} is repeated")
         seen.add(candidate)
-        members = []
-        for name in FAMILY_MEMBER_ORDER:
-            member = entry.get(name)
-            if not isinstance(member, Mapping):
-                raise RefusalError(
-                    f"family {candidate!r} has no {name!r} member; every "
-                    f"family needs exactly {FAMILY_SIZE}")
-            reference = str(member.get("reference"))
-            if reference not in ids:
-                raise RefusalError(
-                    f"family {candidate!r} member {name!r} names reference "
-                    f"{reference!r}, which is not a registered configuration")
-            slice_name = str(member.get("slice"))
-            if slice_name != expected_slices[name]:
-                raise RefusalError(
-                    f"family {candidate!r} member {name!r} is registered on "
-                    f"slice {slice_name!r}, expected "
-                    f"{expected_slices[name]!r}")
-            members.append({"member": name, "candidate": candidate,
-                            "reference": reference, "slice": slice_name,
-                            "contrast": str(member.get("contrast")
-                                            or f"{candidate} - {reference}"),
-                            "threshold": (0.0 if name == "primary"
-                                          else MARGIN_LL),
-                            "kind": ("superiority" if name == "primary"
-                                     else "non_inferiority")})
-        extra = [k for k in entry
-                 if k not in {"candidate", "holm_group", "note",
-                              *FAMILY_MEMBER_ORDER}]
-        out.append({"candidate": candidate,
-                    "holm_group": str(entry.get("holm_group")
-                                      or f"family_{candidate}"),
-                    "note": entry.get("note"),
-                    "unknown_keys": extra,
-                    "members": members})
-    extra_candidates = ids - seen - {"mlp"}
+        legacy = "members" not in entry
+        if legacy:
+            members = _legacy_members(entry, candidate, ids, expected_slices)
+        else:
+            members = _general_members(entry, candidate, ids)
+        known = {"candidate", "holm_group", "note"}
+        known |= (set(FAMILY_MEMBER_ORDER) if legacy
+                  else {"members", "screen", "all_row_condition"})
+        extra = [k for k in entry if k not in known]
+        family = {"candidate": candidate,
+                  "holm_group": str(entry.get("holm_group")
+                                    or f"family_{candidate}"),
+                  "note": entry.get("note"),
+                  "unknown_keys": extra,
+                  "members": members,
+                  # Carried on every family so the screen reads the registered
+                  # control rather than a literal. Emitted only for a general
+                  # family, so a legacy family's payload is unchanged.
+                  "shared_control": control}
+        if not legacy:
+            # Only a general family carries the generalised keys, so a legacy
+            # config's family payload is byte-for-byte what it was.
+            family["legacy_member_form_translated"] = False
+            family["shared_control"] = control
+            family["screen_spec"] = _family_screen_spec(
+                entry, candidate, members, legacy)
+        out.append(family)
+    required = {cid for cid in ids if roles.get(cid) == CANDIDATE_ROLE}
+    extra_candidates = required - seen
     if extra_candidates:
         raise RefusalError(
-            "every configuration except mlp must be a family candidate "
+            f"every candidate-role configuration must be a family candidate "
             f"exactly once; missing {sorted(extra_candidates)}")
-    if "mlp" in seen:
-        raise RefusalError("mlp is the shared control and is a candidate in "
-                           "no family")
+    controls_as_candidates = sorted(
+        cid for cid in seen if roles.get(cid) == CONTROL_ROLE)
+    if controls_as_candidates:
+        which = controls_as_candidates[0]
+        if which == control:
+            raise RefusalError(
+                f"{which} is the shared control and is a candidate in "
+                "no family")
+        raise RefusalError(
+            f"{which} registers `role: control` and is a candidate in "
+            "no family")
     return out
 
 
@@ -2128,7 +2702,7 @@ def member_status(member: Mapping[str, Any], readout: Mapping[str, Any] | None,
     if readout["descriptive_only"]:
         return _check_status(STATUS_NOT_EVALUABLE)
     if member["kind"] == "non_inferiority":
-        numerical = readout["u95"] < MARGIN_LL
+        numerical = readout["u95"] < float(member.get("threshold", MARGIN_LL))
     else:
         numerical = readout["u95"] < 0.0
     return _check_status(STATUS_PASS if (numerical and rejected)
@@ -2138,7 +2712,7 @@ def member_status(member: Mapping[str, Any], readout: Mapping[str, Any] | None,
 def holm_family(family: Mapping[str, Any],
                 contrasts: Mapping[str, Mapping[str, Any]],
                 readout: str) -> dict:
-    """Holm step-down over one family's three members, for one readout.
+    """Holm step-down over one family's members (2-6), for one readout.
 
     An unavailable member takes a non-rejecting placeholder (raw p 1.0,
     adjusted 1.0, no rejection) and the family cannot pass (D10.4).  The
@@ -2178,7 +2752,7 @@ def holm_family(family: Mapping[str, Any],
         favourable = (None if values is None
                       else bool(values["point"] < member["threshold"]))
         strict = (None if values is None else
-                  bool(values["u95"] < (MARGIN_LL
+                  bool(values["u95"] < (float(member["threshold"])
                                         if member["kind"] == "non_inferiority"
                                         else 0.0)))
         rejected = bool(reject and not row["placeholder"]
@@ -2186,7 +2760,7 @@ def holm_family(family: Mapping[str, Any],
         status = member_status(member, values, rejected)
         if status == STATUS_NOT_EVALUABLE:
             family_evaluable = False
-        level = holm_level(rank, FAMILY_SIZE)
+        level = holm_level(rank, len(family["members"]))
         members_out.append({
             "member": member["member"],
             "contrast_key": row["key"],
@@ -2215,7 +2789,7 @@ def holm_family(family: Mapping[str, Any],
             "rank_local_note": RANK_LOCAL_NOTE,
             "status": status,
         })
-    return {"readout": readout, "alpha": ALPHA, "m": FAMILY_SIZE,
+    return {"readout": readout, "alpha": ALPHA, "m": len(family["members"]),
             "holm_formula": HOLM_FORMULA,
             "scope": "within this family only; never pooled across the 15 "
                      "families and never applied across the k search",
@@ -2241,9 +2815,14 @@ def family_screen(family: Mapping[str, Any], tables: Mapping[str, Any],
                   readout: str) -> dict:
     """The registered numerical validation screen for one candidate (D10.6).
 
-    A candidate clears it only when its registered primary is favourable
-    under Holm with an ordinary upper 95% endpoint below 0, BOTH gates pass,
-    and its all-row ``candidate - mlp`` interval is CI-clean favourable.
+    A candidate clears it only when every member the family's screen REQUIRES
+    rejects favourably under Holm with a strict bound (U95 < 0 for a
+    superiority member, U95 < its margin for a non-inferiority member) and, when
+    the family's ``all_row_condition`` is the inherited default, its all-row
+    ``candidate - shared_control`` interval is CI-clean favourable. Default
+    ``require`` is the old rule: the registered primary plus both gates. A
+    family may register ``screen: {require: [...]}`` and
+    ``all_row_condition: member|none``; the screen records which it used.
     That last reading is exploratory wherever it falls outside the family; it
     is a necessary condition here and never a replacement for the primary.
 
@@ -2257,41 +2836,124 @@ def family_screen(family: Mapping[str, Any], tables: Mapping[str, Any],
     """
     table = tables[readout]
     by_member = {row["member"]: row for row in table["members"]}
-    primary = by_member["primary"]
-    gates = [by_member["death_gate"], by_member["chase_gate"]]
+    spec = family.get("screen_spec") or {
+        "require": list(FAMILY_MEMBER_ORDER),
+        "screen_is_registered_per_family": False,
+        "all_row_condition": "inherited",
+        "all_row_condition_is_registered": False,
+        "direction_required": None,
+        "direction_required_is_registered": False}
+    registered = [m for m in family["members"] if m.get("primary")]
+    primary_name = registered[0]["member"] if registered else "primary"
+    primary = by_member[primary_name]
+    required = [by_member[name] for name in spec["require"]]
+    gates = [row for row in required if row["member"] != primary_name]
+    control = family.get("shared_control") or DEFAULT_SHARED_CONTROL
     candidate = family["candidate"]
-    all_row_key = f"{candidate}-mlp@{PRIMARY_SLICE}"
-    all_row = readout_of(contrasts.get(all_row_key) or {}, readout)
-    all_row_clean = (None if all_row is None
-                     else bool(all_row["ci_clean_favourable"]))
+    all_row_key = f"{candidate}-{control}@{PRIMARY_SLICE}"
+    if spec["all_row_condition"] == "inherited":
+        all_row = readout_of(contrasts.get(all_row_key) or {}, readout)
+        all_row_clean = (None if all_row is None
+                         else bool(all_row["ci_clean_favourable"]))
+    else:
+        # `member` discharges the condition through a registered member, whose
+        # own status already enters the screen; `none` registers that this
+        # family carries no extra all-row condition. Either way the extra
+        # exploratory read is not a necessary condition here, and the screen
+        # cannot be made NOT_EVALUABLE by its absence.
+        all_row = None
+        all_row_clean = None
 
-    # The registered five-seed extension qualification, read off the primary
-    # contrast's own per-seed points rather than any one readout.
+    # The registered five-seed extension qualification, read off each covered
+    # member's own per-seed points rather than any one readout. The default
+    # coverage is the primary member alone — the Stage 2 rule — and a family may
+    # register `direction_required` to enforce it on several members, as the 3a
+    # families do on BOTH superiority members.
     primary_record = contrasts.get(primary["contrast_key"]) or {}
     n_seeds = int(primary_record.get("n_seeds") or 0)
     direction_count = primary_record.get("favourable_direction_count")
     applies = n_seeds >= FIVE_SEED_MINIMUM
-    if not applies:
-        direction_ok: bool | None = None
-    elif direction_count is None:
-        direction_ok = False
-    else:
-        direction_ok = int(direction_count) >= FIVE_SEED_FAVOURABLE_DIRECTIONS
 
-    statuses = [primary["status"], *[g["status"] for g in gates]]
-    if (STATUS_NOT_EVALUABLE in statuses or all_row is None
-            or all_row["descriptive_only"]):
+    def _direction_ok(record: Mapping[str, Any]) -> bool | None:
+        """None when the rule cannot apply; else whether the member meets it."""
+        seeds_seen = int(record.get("n_seeds") or 0)
+        if seeds_seen < FIVE_SEED_MINIMUM:
+            return None
+        count = record.get("favourable_direction_count")
+        if count is None:
+            return False
+        return int(count) >= FIVE_SEED_FAVOURABLE_DIRECTIONS
+
+    covered = [name for name in spec.get("direction_required")
+               or [primary_name]]
+    by_direction_member: dict[str, dict] = {}
+    for name in covered:
+        row = by_member[name]
+        record = contrasts.get(row["contrast_key"]) or {}
+        by_direction_member[name] = {
+            "contrast_key": row["contrast_key"],
+            "n_seeds": int(record.get("n_seeds") or 0),
+            "favourable_direction_count": record.get(
+                "favourable_direction_count"),
+            "requirement_applies": (
+                int(record.get("n_seeds") or 0) >= FIVE_SEED_MINIMUM),
+            "favourable_direction_requirement_met": _direction_ok(record),
+        }
+    per_member_ok = [row["favourable_direction_requirement_met"]
+                     for row in by_direction_member.values()]
+    if any(value is False for value in per_member_ok):
+        direction_ok: bool | None = False
+    elif per_member_ok and all(value is True for value in per_member_ok):
+        direction_ok = True
+    else:
+        # No covered member reaches the registered seed minimum, so the rule
+        # neither applies nor can fail the status.
+        direction_ok = None
+
+    # GENERAL-form families (the night-3 schema) are five-seed screens by
+    # construction: a reduced-seed run makes the direction requirement "not
+    # applicable", and without this a three-seed or two-seed screen could
+    # still report SCREEN_PASS. Every REQUIRED member must carry five complete
+    # paired seeds, whatever `--seeds` was passed. Legacy-form families keep
+    # the Stage 2 behaviour, so the two-seed screen reproduces exactly.
+    general_form = "screen_spec" in family
+    required_seed_counts = {
+        row["member"]: int(
+            (contrasts.get(row["contrast_key"]) or {}).get("n_seeds") or 0)
+        for row in required}
+    members_below_five = sorted(
+        name for name, count in required_seed_counts.items()
+        if count < FIVE_SEED_MINIMUM)
+    seeds_complete = not members_below_five
+    status_reason = None
+
+    statuses = [row["status"] for row in required]
+    inherited = spec["all_row_condition"] == "inherited"
+    if (STATUS_NOT_EVALUABLE in statuses
+            or (inherited and (all_row is None
+                               or all_row["descriptive_only"]))):
         status = STATUS_NOT_EVALUABLE
-    elif (primary["status"] == STATUS_PASS
-          and all(g["status"] == STATUS_PASS for g in gates)
-          and all_row_clean
+    elif general_form and not seeds_complete:
+        status = STATUS_NOT_PASS
+        status_reason = "fewer_than_five_seeds"
+    elif (all(row["status"] == STATUS_PASS for row in required)
+          and (all_row_clean if inherited else True)
           and (direction_ok is not False)):
         status = STATUS_PASS
     else:
         status = STATUS_NOT_PASS
+    # The five-complete-seeds keys are emitted for GENERAL-form families only:
+    # a legacy stage 2 family's payload must stay byte-identical.
+    five_seed_keys = ({
+        "status_reason": status_reason,
+        "five_complete_seeds_required": general_form,
+        "required_member_n_seeds": dict(required_seed_counts),
+        "required_members_below_five_seeds": list(members_below_five),
+    } if general_form else {})
     return {"readout": readout,
             "candidate": candidate,
             "status": _check_status(status),
+            **five_seed_keys,
             "n_seeds": n_seeds,
             "five_seed_eligibility_rule": FIVE_SEED_ELIGIBILITY_RULE,
             "five_seed_direction_requirement_applies": applies,
@@ -2328,12 +2990,31 @@ def family_screen(family: Mapping[str, Any], tables: Mapping[str, Any],
             "primary_rejected": primary["rejected"],
             "primary_u95_below_zero": (
                 None if primary["u95"] is None else primary["u95"] < 0.0),
-            "death_gate_status": by_member["death_gate"]["status"],
-            "chase_gate_status": by_member["chase_gate"]["status"],
+            **({} if "screen_spec" not in family else {
+                "direction_required_members": list(covered),
+                "direction_required_is_registered":
+                    spec["direction_required_is_registered"],
+                "direction_requirement_by_member": by_direction_member,
+                "all_direction_requirements_met": direction_ok}),
+            **({"death_gate_status": by_member["death_gate"]["status"],
+                "chase_gate_status": by_member["chase_gate"]["status"]}
+               if "screen_spec" not in family else
+               {"primary_member": primary_name,
+                "shared_control": control,
+                "screen_required_members": list(spec["require"]),
+                "screen_is_registered_per_family":
+                    spec["screen_is_registered_per_family"],
+                "screen_required_member_statuses": {
+                    row["member"]: row["status"] for row in required},
+                "all_row_condition": spec["all_row_condition"],
+                "all_row_condition_is_registered":
+                    spec["all_row_condition_is_registered"],
+                "gate_statuses": {row["member"]: row["status"]
+                                  for row in gates}}),
             "all_row_candidate_minus_mlp_key": all_row_key,
             "all_row_candidate_minus_mlp_ci_clean_favourable": all_row_clean,
             "all_row_reading_is_exploratory_when_outside_the_family": (
-                family["members"][0]["reference"] != "mlp"),
+                family["members"][0]["reference"] != control),
             # Astra gate 2 round 3 SHOULD 5: this said "two seeds" whatever the
             # run's seed count, so a five-seed family JSON described itself as
             # a two-seed screen. The count is derived from the primary
@@ -2361,6 +3042,57 @@ MECHANISM_CONTRASTS = (
      "the relay-free wiring PLUS the key construction, not the wiring alone"),
     ("aligned_hist", "full", "the aligned history input"),
 )
+
+MECHANISM_SOURCE_CONFIG = "statistics.contrasts entries with role: mechanism"
+MECHANISM_SOURCE_BUILTIN = "the frozen Stage 2 MECHANISM_CONTRASTS tuple"
+
+
+def mechanism_contrasts(config: Mapping[str, Any]
+                        ) -> tuple[tuple[tuple[str, str, str], ...], str]:
+    """The registered mechanism contrasts, and where they came from.
+
+    Read from `statistics.contrasts` entries with `role: mechanism` when EVERY
+    such entry carries an explicit non-empty `registered_pairs`. A config in
+    which some mechanism entries name their pairs and others only describe them
+    in prose is not a complete registration, so the frozen tuple is used and
+    Stage 2 reproduces exactly. Each pair is `[candidate, reference]`,
+    `[candidate, reference, label]`, or
+    `{candidate, reference, label}`; the label defaults to the entry's `tests`
+    text, then its `name`.
+    """
+    entries = [e for e in ((config.get("statistics") or {}).get("contrasts")
+                           or []) if isinstance(e, Mapping)
+               and str(e.get("role") or "") == "mechanism"]
+    if not entries or not all(e.get("registered_pairs") for e in entries):
+        return MECHANISM_CONTRASTS, MECHANISM_SOURCE_BUILTIN
+    out: list[tuple[str, str, str]] = []
+    for entry in entries:
+        default_label = str(entry.get("tests") or entry.get("name") or "")
+        for pair in entry["registered_pairs"]:
+            if isinstance(pair, Mapping):
+                candidate = str(pair.get("candidate") or "")
+                reference = str(pair.get("reference") or "")
+                label = str(pair.get("label") or default_label)
+            else:
+                items = list(pair)
+                if len(items) not in (2, 3):
+                    raise RefusalError(
+                        f"mechanism contrast {entry.get('name')!r} registers "
+                        f"pair {pair!r}, which is not [candidate, reference] "
+                        "or [candidate, reference, label]")
+                candidate, reference = str(items[0]), str(items[1])
+                label = str(items[2]) if len(items) == 3 else default_label
+            if not candidate or not reference:
+                raise RefusalError(
+                    f"mechanism contrast {entry.get('name')!r} registers a "
+                    "pair with no candidate or no reference")
+            if not label:
+                raise RefusalError(
+                    f"mechanism contrast {candidate} - {reference} carries no "
+                    "label; a mechanism contrast states what it tests")
+            out.append((candidate, reference, label))
+    return tuple(out), MECHANISM_SOURCE_CONFIG
+
 
 MECHANISM_GUARD = (
     "a mechanism contrast is inferential only in its registered family and "
@@ -2888,6 +3620,8 @@ def compute_statistics(config_path: Path, runs_root: Path, frame_dir: Path,
     families = registered_families(config, expected_families)
     readouts = readouts_for(seeds)
     pin = load_pin(config)
+    control = shared_control(config)
+    mechanisms, mechanism_source = mechanism_contrasts(config)
 
     frame = load_frame(frame_dir, config)
     expect = dict(expect or {})
@@ -2900,7 +3634,8 @@ def compute_statistics(config_path: Path, runs_root: Path, frame_dir: Path,
     runs, runs_report, comparability = load_runs(runs_root, config_ids, frame,
                                                  seeds, entries, config, pin)
 
-    slice_names = [p.name for p in SLICE_PREDICATES] + [THIN_PAIR_NAME]
+    slice_names = ([p.name for p in SLICE_PREDICATES] + [THIN_PAIR_NAME]
+                   + [r["name"] for r in optional_slice_specs(config)])
     declared = (config.get("statistics") or {}).get("slices")
     if declared is not None and [str(s) for s in declared] != slice_names:
         raise RefusalError(
@@ -2928,20 +3663,23 @@ def compute_statistics(config_path: Path, runs_root: Path, frame_dir: Path,
             add(member["candidate"], member["reference"], member["slice"],
                 f"family_{member['member']}", member["contrast"],
                 member["threshold"])
-    for candidate, reference, label in MECHANISM_CONTRASTS:
+    for candidate, reference, label in mechanisms:
         add(candidate, reference, PRIMARY_SLICE, "mechanism", label)
     # Exploratory: every registered contrast on every available slice.
     registered_pairs = {(m["candidate"], m["reference"])
                         for f in families for m in f["members"]}
-    registered_pairs |= {(c, r) for c, r, _ in MECHANISM_CONTRASTS}
-    registered_pairs |= {(cid, "mlp") for cid in config_ids if cid != "mlp"}
+    registered_pairs |= {(c, r) for c, r, _ in mechanisms}
+    registered_pairs |= {(cid, control) for cid in config_ids
+                         if cid != control}
+    gate_slice_names = set(GATE_SLICES) | {
+        row["slice"] for row in frame.predicates if row["role"] == "gate"}
     for candidate, reference in sorted(registered_pairs):
         for name in slice_names:
             if name not in frame.masks:
                 continue
             add(candidate, reference, name, "exploratory",
                 f"{candidate} - {reference} on {name} (exploratory)",
-                MARGIN_LL if name in GATE_SLICES and reference == "mlp"
+                MARGIN_LL if name in gate_slice_names and reference == control
                 else 0.0)
 
     family_out = []
@@ -2953,33 +3691,44 @@ def compute_statistics(config_path: Path, runs_root: Path, frame_dir: Path,
             tables[readout] = table
         screens = {readout: family_screen(family, tables, contrasts, readout)
                    for readout in readouts}
+        general = "screen_spec" in family
         family_out.append({
             "candidate": family["candidate"],
             "holm_group": family["holm_group"],
             "note": family["note"],
-            "members": family["members"],
+            # The `primary` flag is an artefact of the general form; a
+            # translated legacy family emits exactly the member fields it
+            # always emitted.
+            "members": (family["members"] if general else
+                        [{k: v for k, v in member.items() if k != "primary"}
+                         for member in family["members"]]),
             "holm": tables,
             "screen": screens,
             "registered_for_confirmation_results_remain_screening": True,
+            **({"shared_control": family["shared_control"],
+                "screen_spec": family["screen_spec"]} if general else {}),
         })
 
     gates = []
     for family in families:
         for member in family["members"]:
-            if member["member"] == "primary":
+            # Every non-inferiority member of every family is a gate row. In
+            # the legacy form that is exactly "not the primary".
+            if member["kind"] != "non_inferiority":
                 continue
             key = f"{member['candidate']}-{member['reference']}@{member['slice']}"
             record = contrasts.get(key) or {}
+            margin = float(member["threshold"])
             row = {"candidate": member["candidate"],
                    "reference": member["reference"],
                    "slice": member["slice"],
                    "contrast_key": key,
-                   "margin_ll": MARGIN_LL,
-                   "numerical_pass_rule": "strictly U95 < 0.002",
+                   "margin_ll": margin,
+                   "numerical_pass_rule": f"strictly U95 < {margin}",
                    "family_adjusted_gate_additionally_requires": (
-                       "favourable Holm rejection against the +0.002 "
-                       "boundary, at least 10 blocks, and complete paired "
-                       "seeds"),
+                       f"favourable Holm rejection against the +{margin} "
+                       f"boundary, at least {MIN_BLOCKS} blocks, and complete "
+                       "paired seeds"),
                    "slice_stats": record.get("slice_stats"),
                    "readouts": {}}
             for readout in readouts:
@@ -3004,27 +3753,30 @@ def compute_statistics(config_path: Path, runs_root: Path, frame_dir: Path,
                                       else holm_row["rejected"]),
                     "u95_strictly_below_margin": (
                         None if values is None
-                        else bool(values["u95"] < MARGIN_LL)),
+                        else bool(values["u95"] < margin)),
                     "status": (STATUS_NOT_EVALUABLE if holm_row is None
                                else holm_row["status"]),
                 }
             gates.append(row)
 
     mechanism = []
-    for candidate, reference, label in MECHANISM_CONTRASTS:
+    for candidate, reference, label in mechanisms:
         key = f"{candidate}-{reference}@{PRIMARY_SLICE}"
         in_family = any(m["candidate"] == candidate
                         and m["reference"] == reference
                         and m["slice"] == PRIMARY_SLICE
-                        and m["member"] == "primary"
+                        and m.get("primary")
                         for f in families for m in f["members"])
-        mechanism.append({
+        row = {
             "contrast_key": key, "candidate": candidate,
             "reference": reference, "registered_label": label,
             "inferential_in_a_registered_family": in_family,
             "guard": MECHANISM_GUARD,
             "record": contrasts.get(key),
-        })
+        }
+        if mechanism_source != MECHANISM_SOURCE_BUILTIN:
+            row["registered_in"] = mechanism_source
+        mechanism.append(row)
 
     base_sidecar = Path(base_npz).with_suffix(".json")
     base = base_only_readout(Path(base_npz), base_sidecar, frame, blocks, pin)
@@ -3169,8 +3921,12 @@ def _summary_lines(payload: Mapping[str, Any]) -> list[str]:
                   or len(REGISTERED_SEEDS))
     lines.append(f"  readouts     {', '.join(readouts)} "
                  f"({n_seeds} registered seeds)")
+    sizes = sorted({len(family["members"])
+                    for family in payload["families"]})
+    shape = (f"{sizes[0]} members each" if len(sizes) == 1
+             else f"{sizes[0]}-{sizes[-1]} members")
     lines.append(f"  families     {len(payload['families'])} "
-                 f"(3 members each)")
+                 f"({shape})")
     for family in payload["families"]:
         statuses = {readout: family["screen"][readout]["status"]
                     for readout in readouts}

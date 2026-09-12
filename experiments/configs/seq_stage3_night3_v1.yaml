@@ -1,0 +1,1151 @@
+# Sequence track — stage 3, night 3, Block B (3a negative-transfer screen).
+#
+# Registered BEFORE any Block B run, from docs/sequence_track/night3_design_draft.md
+# (v7, 2026-09-12) § "Block B", § "Family machinery" and § "Capacity". The
+# acceptance contract is docs/sequence_track/night3_acceptance.md and the
+# launch procedure is docs/sequence_track/night3_runbook.md.
+#
+# This file registers SIX configurations, THREE families and TWO targets. It
+# is the whole of Block B; the 4d, 4b and C114 experiments of the same night
+# are registered separately and are appended to the queues, never to this
+# config's family map.
+#
+# SCHEMA: identical to experiments/configs/seq_stage2_5seed_v1.yaml, which
+# scripts/sequence_track/retrain_stage2.py `load_config` validates and
+# scripts/sequence_track/stage2_stats.py reads. Two generalised keys of the
+# night-3 stats code are used here for the first time:
+#   * `configurations[].role: candidate | control` — an explicit role, so a
+#     reference-only arm need not be a family candidate;
+#   * `statistics.families.shared_control` — replaces the `"mlp"` literal;
+#   * `statistics.slice_predicates` — the registered optional slices;
+#   * `statistics.families.map[].members` — the general 2..6 member form with
+#     per-member contrast, slice, kind and threshold, plus `screen.require`,
+#     `all_row_condition` and `direction_required`.
+
+experiment:
+  name: seq_stage3_night3
+  registered: 2026-09-12
+  block: B
+  purpose: >-
+    Screen for negative transfer from pooled T20 training onto two registered
+    "elite" targets. Six token-MLP arms under one step budget: a pooled
+    unconditioned control, a pooled tier-conditioned arm, and for each target
+    T in {P, E} a tier-conditioned arm trained on that target's matches only
+    plus a row-matched pooled control trained on a deterministic subsample of
+    whole training matches of the same row count. The question is whether
+    restricting training to the target buys anything on the target's own
+    validation rows over (a) the pooled conditioned arm and (b) a pooled arm
+    with the same number of rows; and, separately, whether tier conditioning
+    alone buys anything on all rows.
+  predecessor: experiments/configs/seq_stage2_5seed_v1.yaml
+  predecessor_note: >-
+    the stage 2 five-seed analysis registration. Nothing here reuses a stage 2
+    checkpoint: every arm is trained fresh (D2.2), and `mlp_pool` is a NEW run
+    of the stage 2 `mlp` arm under the STEP schedule, not the epoch schedule,
+    so it is not stage 2's `mlp` and must never be tabled against it.
+  decision_record: docs/sequence_track/night3_acceptance.md
+  design: docs/sequence_track/night3_design_draft.md
+  runbook: docs/sequence_track/night3_runbook.md
+  runner: scripts/sequence_track/retrain_stage2.py
+  pin: scripts/sequence_track/pin_stage2.py
+  queue:
+    - research/sequence_track/queue_laptop_night3.yaml
+    - research/sequence_track/queue_mini_night3.yaml
+  queue_note: >-
+    night 3 is split BY SEED across two machines, as night 1 was: laptop seeds
+    7, 29, 42 and mini seeds 13, 101, every configuration on both. The split is
+    by seed and never by arm, so no arm's five seeds are confounded with a
+    machine relative to another arm's. Each half's job output_dir is
+    models/embeddings/seq_stage3/night3/runs/<config_id>/seed_<seed>, because
+    run_queue.sh decides skip-vs-run from the COMPLETE marker in output_dir
+    plus the config sha256 alone and reads neither the command nor the seed
+    subset.
+  sign_convention: >-
+    candidate minus reference, in validation log loss, negative favourable.
+  evidence_status: >-
+    VALIDATION-ONLY, PROVISIONAL. Every number of this block is screening
+    evidence: checkpoint selection is on the same validation split the
+    contrasts are computed on, the target definitions and the whole screening
+    hypothesis are OUTCOME-INFORMED by the stage 2 five-seed readout (they are
+    frozen here before any night-3 performance read, which makes them
+    pre-registered, not confirmatory), the untouched cohort is NOT opened, and
+    no test split, market price or betting layer is touched anywhere. Nothing
+    here can be LANDED (CLAUDE.md invariant 9), nothing advances, and no
+    artifact of record changes.
+  forbidden_data:
+    - data/golden
+    - data/forward_holdout
+  forbidden_data_note: >-
+    no step of this block reads either tree. The frozen match lists under
+    experiments/stage3a/ were built from the i7 train and validation parquets
+    and data/t20s_json only (see experiments/stage3a/manifest.json).
+
+data:
+  # Identical to stage 2's data block.
+  directory: data/xgb_data_i7
+  frame_version: i7
+  frame_role: ball_frame_i7
+  stats_cache_role: stats_cache_i7
+  splits_read: [train, validation]
+  eval_kit: none
+  feature_contract: transformer_t1.build_features
+  n_features: 50
+  extra_column_read: >-
+    `competition_tier`, loaded per row by transformer_t1.load_split for the
+    tier embedding, the training-row filter and the tier slices. It is NOT one
+    of the 50 features: the unconditioned control never sees it, and a
+    conditioned arm sees it only through the registered embedding.
+
+training:
+  # Identical to stage 2's training block, including the epoch fields, which
+  # are kept so the schema and the training signature are comparable. EVERY
+  # configuration overrides the epoch schedule with the registered step budget
+  # (params.max_steps / params.eval_every), so `epochs: 30` is carried for the
+  # schema and is not what any night-3 arm runs.
+  device: mps
+  seeds: [7, 13, 29, 42, 101]
+  dmodel: 128
+  layers: 2
+  heads: 4
+  batch: 128
+  epochs: 30
+  learning_rate: 0.0003
+  patience: 3
+  aux: false
+  no_kit: true
+  score_test: false
+  save_predictions: true
+  early_stopping: >-
+    NONE. Under the step budget there is no early termination: every arm runs
+    exactly max_steps optimiser steps, the validation split is scored every
+    eval_every steps, and the selected checkpoint is the best validation log
+    loss among those evaluations with ties broken by the earliest step. The
+    `patience: 3` field above is the schema's epoch-mode value and is inert.
+  step_budget:
+    source: experiments/stage3a/steps.json
+    max_steps: 3840
+    eval_every: 128
+    n_train_innings: 16319
+    batch: 128
+    epochs_equivalent: 30
+    rule: >-
+      one optimiser step = one batch of 128 innings, the final partial batch of
+      an epoch kept; E = ceil(n_train_innings / batch) = 128 and
+      S = 30 * E = 3840, with n_train_innings the UNFILTERED pooled training
+      innings count (16,319). Both integers are identical for all six arms and
+      were computed by scripts/sequence_track/stage3a_freeze_tiers.py from the
+      pinned train parquet before any performance read.
+    residual_confounding: >-
+      equal steps, equal tokens and equal target-tier exposure cannot all hold
+      at the pool's proportions. EQUAL STEPS is registered; tokens seen and
+      target-tier tokens seen therefore DIFFER across arms, a smaller training
+      set sees more epochs, and every arm reports total tokens seen,
+      target-tier tokens seen and steps-to-best so the difference is visible.
+  selection_rule: >-
+    validation log loss = ball-weighted mean negative log-likelihood over ALL
+    validation rows, for EVERY arm including the target-only arms. Checkpoint
+    selection is never re-done per target (see the shared-artifact contract).
+  seed_policy: >-
+    all five registered seeds run for every configuration on the first night;
+    a family with fewer than five complete paired seeds is NOT_EVALUABLE and is
+    never reported at a reduced seed count. Seeds are split laptop 7/29/42 and
+    mini 13/101.
+  # REPORTING ONLY (reviewer MUST-FIX 2, 2026-09-13). Rendered as one
+  # `--report-match-lists` flag on EVERY configuration of this block, so every
+  # arm — pooled, conditioned and target-only alike — records how many of each
+  # target's training tokens it actually saw, in
+  # metrics.json training_schedule.tokens_seen_by_list keyed by basename. The
+  # registered step budget makes tokens seen and target-tier tokens seen DIFFER
+  # across arms (see training.step_budget.residual_confounding); this is the
+  # measurement that makes that difference readable instead of assumed. It
+  # selects nothing, changes no tensor, enters neither `arm_params` nor the
+  # training signature, and therefore cannot fork a shared pooled checkpoint.
+  report_match_lists:
+    - experiments/stage3a/target_P_matches.json
+    - experiments/stage3a/target_E_matches.json
+
+outputs:
+  # The driver writes <outputs.directory>/<config_id>/seed_<seed>, and each
+  # queue job's output_dir must be exactly that directory, so this ends in
+  # `/runs` and the night's tree is models/embeddings/seq_stage3/night3/.
+  directory: models/embeddings/seq_stage3/night3/runs
+  summary: summary.yaml
+  per_run: [metrics.json, model.pt, run_record.json, predictions_validation.npz]
+  save_row_aligned_probabilities: true
+
+# ---------------------------------------------------------------------------
+# The frozen Block B inputs. Written by
+# scripts/sequence_track/stage3a_freeze_tiers.py before any run; every sha256
+# below is the sha256 of the file's bytes as committed, and the driver
+# recomputes the sha256 of every `params.train_match_list` into the training
+# signature, so a list that drifts changes every affected run's identity.
+# ---------------------------------------------------------------------------
+freeze:
+  generator: scripts/sequence_track/stage3a_freeze_tiers.py
+  manifest: experiments/stage3a/manifest.json
+  # Re-frozen 2026-09-13 (reviewer MUST-FIX 1): the freeze script now records
+  # the ICC full-member name set, the big-3 names and the (empty) alias table
+  # it evaluated the E and big3 rules against. The re-run is PURELY ADDITIVE —
+  # every list file and steps.json is byte-identical and every sha256 below is
+  # unchanged; only manifest.json gained the `team_name_rules` block, so this
+  # digest moved from 006ce060f1b17093194aa370a44b2a0491ffec8eac3e551e3cab2bf37138c3eb.
+  # retrain_stage2.py now VERIFIES this digest and every list sha256 below
+  # against the manifest on disk and refuses on any mismatch.
+  manifest_sha256: 6cad98e0766d8112fb7f63fe6645b6b157b3cf888a690bcf167e74cce4c8db4a
+  rowmatch_seed: 42
+  frame:
+    train_parquet_md5: fac0b7bededf0aae1989d654e3eba9e8
+    validation_parquet_md5: 326436317310adadabe0175825e57d1b
+  steps_json: experiments/stage3a/steps.json
+  steps_json_sha256: 10c342e4729bfe5289fe94e1bc2ebbcd079bea503a212105882b6bf598061ac8
+  target_definitions:
+    target_P: >-
+      premium leagues: frame `competition_tier == 3`, the pre-match event-name
+      rule in parsing_v2.classify_match_context (PREMIUM_LEAGUES: IPL, BBL,
+      CPL, PSL, SA20, ILT20, MLC).
+    target_E: >-
+      elite: target P union every international (frame `is_international == 1`)
+      in which BOTH teams are ICC full members under the frozen name mapping
+      parsing_v2.ICC_FULL_MEMBERS, team names as they appear in the cricsheet
+      info.teams. The event name plays no role: a qualifier or World Cup match
+      between two full members is in E, and any match with an associate side
+      is not.
+    big3: >-
+      E intersected with matches involving at least one of India, Australia or
+      England. An elite SUBSET, not a tier above E; those teams' matches
+      against associates are not in it. Descriptive readout only.
+  lists:
+    - id: target_P
+      file: experiments/stage3a/target_P_matches.json
+      sha256: ad05b7fd1b75feaa15b1b3c2a2013dadfbd04094d72e429a3520c245458a9413
+      split: train
+      n_matches: 2516
+      n_innings: 5063
+      n_rows: 591342
+      used_by: {training: [mlp_P_tiercond], slices: []}
+    - id: rowmatch_P
+      file: experiments/stage3a/rowmatch_P_matches.json
+      sha256: 82ab077b71d895a70934c6e796e8cc8854bee378fe7d57c3c658dde6a586a605
+      split: train
+      n_matches: 2570
+      n_innings: 5152
+      n_rows: 591582
+      overshoot_rows: 240
+      target_rows: 591342
+      used_by: {training: [mlp_rowmatch_P_tiercond], slices: []}
+    - id: target_E
+      file: experiments/stage3a/target_E_matches.json
+      sha256: 5ff0ebd088079139a2fcbca62ac3c30b4506164715e6202bae99aaab2ab7385d
+      split: train
+      n_matches: 3475
+      n_innings: 6990
+      n_rows: 812169
+      n_from_tier3: 2516
+      n_from_elite_intl: 959
+      used_by: {training: [mlp_E_tiercond], slices: []}
+    - id: target_E_validation
+      file: experiments/stage3a/target_E_validation_matches.json
+      sha256: 626889fa8d70f0fbcfa9b5690aec6cb651fdbb742c2ccf300a9b9af971019b6d
+      split: validation
+      n_matches: 243
+      n_innings: 480
+      n_rows: 55981
+      n_from_tier3: 222
+      definition: >-
+        the SAME E rule applied to the validation split: validation matches
+        whose competition_tier is 3, plus validation internationals in which
+        both teams are ICC full members. Disjoint from target_E by
+        construction, which is exactly why it is a separate file. 222 of its
+        243 matches are tier 3, i.e. the target_P validation slice, and 21 are
+        elite internationals outside tier 3.
+      used_by: {training: [], slices: [target_E]}
+    - id: rowmatch_E
+      file: experiments/stage3a/rowmatch_E_matches.json
+      sha256: 4237f52132db20f5da465199773a4b9f952b29eb5be8060f0a830ea65ffc8f9e
+      split: train
+      n_matches: 3525
+      n_innings: 7070
+      n_rows: 812250
+      overshoot_rows: 81
+      target_rows: 812169
+      used_by: {training: [mlp_rowmatch_E_tiercond], slices: []}
+    - id: big3_validation
+      file: experiments/stage3a/big3_validation_matches.json
+      sha256: 49e8f62476d9b21352e324da7a660bd1407423fa12a995c166a9a6a545929b77
+      split: validation
+      n_matches: 8
+      n_innings: 16
+      n_rows: 1895
+      used_by: {training: [], slices: [big3]}
+  assertions_recorded_in_manifest:
+    - no match id in any frozen TRAINING list appears in the validation parquet
+    - competition_tier and is_international are constant within a match
+  train_validation_disjointness: >-
+    0 leaked matches for each of target_P, rowmatch_P, target_E, rowmatch_E
+    (manifest `train_validation_disjoint`). This is why the E VALIDATION slice
+    cannot be read off target_E_matches.json and is its own frozen list — see
+    deviations.target_E_validation_list_repointed.
+
+# ---------------------------------------------------------------------------
+# Shared-artifact contract (night 3 draft § Block B).
+# ---------------------------------------------------------------------------
+shared_artifact_contract:
+  statement: >-
+    exactly ONE checkpoint and ONE row-aligned validation prediction file is
+    trained per (configuration, seed) — 6 x 5 = 30 runs — and every family that
+    names a configuration reads that same artifact. No configuration is
+    retrained per target, per family or per slice.
+  selection: >-
+    the common all-validation rule (best validation log loss over ALL
+    validation rows among the eval_every checkpoints, earliest step on a tie),
+    for every configuration, never re-selected per target.
+  disclosure: >-
+    all-row selection can select AGAINST target-only performance for the
+    target-only arms, because their checkpoint is chosen on rows they were not
+    trained on. It is registered anyway: one artifact per (config, seed) is
+    what makes the two families share controls and keeps the run count at 30.
+  multiplicity: >-
+    claims are FAMILY-LOCAL only. family_3a_P and family_3a_E are correlated
+    screens over overlapping rows with shared controls, not independent
+    replications; no aggregate "either target passes" claim is made, and no
+    Holm correction is pooled across families.
+
+configurations:
+  - id: mlp_pool
+    arm: mlp
+    role: control
+    params: {max_steps: 3840, eval_every: 128}
+    access: {features: true, history: false, identity: false, prod_logits: false}
+    history_input: none
+    wiring: token_mlp
+    reference: []
+    reference_note: >-
+      the SHARED CONTROL of this config (statistics.families.shared_control):
+      every family's non-inferiority gates are taken against it, and it is a
+      candidate in no family.
+    tests: >-
+      control — pooled, UNCONDITIONED token model: all training rows, no tier
+      input of any kind. It carries NO reporting-only tier param: a pooled
+      checkpoint must be shareable by every family that names it, and a
+      reporting flag that entered the training signature would fork the
+      artifact for no modelling reason. Target-tier exposure for this arm is
+      read from the training-row counts in the freeze manifest instead.
+    queue_order: 1
+    command:
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 7 --data-dir data/xgb_data_i7 --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_pool/seed_7
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 13 --data-dir data/xgb_data_i7 --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_pool/seed_13
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 29 --data-dir data/xgb_data_i7 --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_pool/seed_29
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 42 --data-dir data/xgb_data_i7 --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_pool/seed_42
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 101 --data-dir data/xgb_data_i7 --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_pool/seed_101
+
+  - id: mlp_pool_tiercond
+    arm: mlp
+    role: candidate
+    params: {max_steps: 3840, eval_every: 128, tier_embed: 8}
+    access: {features: true, history: false, identity: false, prod_logits: false}
+    history_input: none
+    wiring: token_mlp
+    reference: [mlp_pool]
+    reference_note: >-
+      candidate of family_3a_cond against mlp_pool, and the CONDITIONING-MATCHED
+      reference (superiority_1) of both family_3a_P and family_3a_E.
+    tests: >-
+      tier conditioning alone — all training rows, plus a dim-8
+      `competition_tier` embedding concatenated to the token input and a
+      per-tier output bias on the six logits. The night-3 plan's "partially
+      pooled" arm and its conditioning-matched pooled control collapse to this
+      one arm under shared weights; recorded as such.
+    queue_order: 2
+    command:
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 7 --data-dir data/xgb_data_i7 --tier-embed 8 --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_pool_tiercond/seed_7
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 13 --data-dir data/xgb_data_i7 --tier-embed 8 --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_pool_tiercond/seed_13
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 29 --data-dir data/xgb_data_i7 --tier-embed 8 --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_pool_tiercond/seed_29
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 42 --data-dir data/xgb_data_i7 --tier-embed 8 --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_pool_tiercond/seed_42
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 101 --data-dir data/xgb_data_i7 --tier-embed 8 --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_pool_tiercond/seed_101
+
+  - id: mlp_P_tiercond
+    arm: mlp
+    role: candidate
+    params: {max_steps: 3840, eval_every: 128, tier_embed: 8, train_tier: 3}
+    access: {features: true, history: false, identity: false, prod_logits: false}
+    history_input: none
+    wiring: token_mlp
+    reference: [mlp_pool_tiercond, mlp_rowmatch_P_tiercond, mlp_pool]
+    tests: >-
+      target P only — identical conditioning to mlp_pool_tiercond, trained on
+      whole innings of `competition_tier == 3` training matches only (2,516
+      matches, 5,063 innings, 591,342 rows). Validation is NEVER filtered: the
+      full validation split is scored and the checkpoint is selected on all of
+      it. Tier embeddings and biases for tiers this arm never sees stay at
+      initialisation and are recorded as untrained.
+    train_row_filter: >-
+      `--train-tier 3`, the frame column, which is exactly the membership of
+      experiments/stage3a/target_P_matches.json (a tier filter and that list
+      select the same training innings; the list is carried in `freeze.lists`
+      for provenance and row counts, and the filter is what the driver passes).
+    queue_order: 3
+    command:
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 7 --data-dir data/xgb_data_i7 --tier-embed 8 --train-tier 3 --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_P_tiercond/seed_7
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 13 --data-dir data/xgb_data_i7 --tier-embed 8 --train-tier 3 --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_P_tiercond/seed_13
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 29 --data-dir data/xgb_data_i7 --tier-embed 8 --train-tier 3 --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_P_tiercond/seed_29
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 42 --data-dir data/xgb_data_i7 --tier-embed 8 --train-tier 3 --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_P_tiercond/seed_42
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 101 --data-dir data/xgb_data_i7 --tier-embed 8 --train-tier 3 --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_P_tiercond/seed_101
+
+  - id: mlp_rowmatch_P_tiercond
+    arm: mlp
+    role: control
+    params:
+      max_steps: 3840
+      eval_every: 128
+      tier_embed: 8
+      train_match_list: experiments/stage3a/rowmatch_P_matches.json
+    access: {features: true, history: false, identity: false, prod_logits: false}
+    history_input: none
+    wiring: token_mlp
+    reference: [mlp_pool]
+    reference_note: >-
+      reference-only (superiority_2 of family_3a_P). It is a candidate in no
+      family, which is what `role: control` declares.
+    tests: >-
+      row-matched pooled control for target P — identical conditioning,
+      trained on a POOLED subsample of whole training matches: matches
+      shuffled with seed 42 and added in order until the cumulative row count
+      first reaches or exceeds mlp_P_tiercond's 591,342 rows (2,570 matches,
+      5,152 innings, 591,582 rows, overshoot 240 rows, at most one match).
+      mlp_P_tiercond - mlp_rowmatch_P_tiercond is therefore "target rows rather
+      than the same number of pooled rows", with conditioning, step budget and
+      row count matched.
+    queue_order: 4
+    command:
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 7 --data-dir data/xgb_data_i7 --tier-embed 8 --train-match-list experiments/stage3a/rowmatch_P_matches.json --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_rowmatch_P_tiercond/seed_7
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 13 --data-dir data/xgb_data_i7 --tier-embed 8 --train-match-list experiments/stage3a/rowmatch_P_matches.json --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_rowmatch_P_tiercond/seed_13
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 29 --data-dir data/xgb_data_i7 --tier-embed 8 --train-match-list experiments/stage3a/rowmatch_P_matches.json --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_rowmatch_P_tiercond/seed_29
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 42 --data-dir data/xgb_data_i7 --tier-embed 8 --train-match-list experiments/stage3a/rowmatch_P_matches.json --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_rowmatch_P_tiercond/seed_42
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 101 --data-dir data/xgb_data_i7 --tier-embed 8 --train-match-list experiments/stage3a/rowmatch_P_matches.json --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_rowmatch_P_tiercond/seed_101
+
+  - id: mlp_E_tiercond
+    arm: mlp
+    role: candidate
+    params:
+      max_steps: 3840
+      eval_every: 128
+      tier_embed: 8
+      train_match_list: experiments/stage3a/target_E_matches.json
+    access: {features: true, history: false, identity: false, prod_logits: false}
+    history_input: none
+    wiring: token_mlp
+    reference: [mlp_pool_tiercond, mlp_rowmatch_E_tiercond, mlp_pool]
+    tests: >-
+      target E only — identical conditioning, trained on whole innings of the
+      frozen E training list (3,475 matches = 2,516 tier-3 plus 959 elite
+      internationals, 6,990 innings, 812,169 rows). Validation is never
+      filtered; the checkpoint is selected on all validation rows.
+    queue_order: 5
+    command:
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 7 --data-dir data/xgb_data_i7 --tier-embed 8 --train-match-list experiments/stage3a/target_E_matches.json --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_E_tiercond/seed_7
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 13 --data-dir data/xgb_data_i7 --tier-embed 8 --train-match-list experiments/stage3a/target_E_matches.json --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_E_tiercond/seed_13
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 29 --data-dir data/xgb_data_i7 --tier-embed 8 --train-match-list experiments/stage3a/target_E_matches.json --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_E_tiercond/seed_29
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 42 --data-dir data/xgb_data_i7 --tier-embed 8 --train-match-list experiments/stage3a/target_E_matches.json --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_E_tiercond/seed_42
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 101 --data-dir data/xgb_data_i7 --tier-embed 8 --train-match-list experiments/stage3a/target_E_matches.json --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_E_tiercond/seed_101
+
+  - id: mlp_rowmatch_E_tiercond
+    arm: mlp
+    role: control
+    params:
+      max_steps: 3840
+      eval_every: 128
+      tier_embed: 8
+      train_match_list: experiments/stage3a/rowmatch_E_matches.json
+    access: {features: true, history: false, identity: false, prod_logits: false}
+    history_input: none
+    wiring: token_mlp
+    reference: [mlp_pool]
+    reference_note: >-
+      reference-only (superiority_2 of family_3a_E); a candidate in no family.
+    tests: >-
+      row-matched pooled control for target E — identical conditioning, trained
+      on a pooled subsample of whole training matches under the same seed-42
+      rule (3,525 matches, 7,070 innings, 812,250 rows, overshoot 81 rows).
+    queue_order: 6
+    command:
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 7 --data-dir data/xgb_data_i7 --tier-embed 8 --train-match-list experiments/stage3a/rowmatch_E_matches.json --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_rowmatch_E_tiercond/seed_7
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 13 --data-dir data/xgb_data_i7 --tier-embed 8 --train-match-list experiments/stage3a/rowmatch_E_matches.json --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_rowmatch_E_tiercond/seed_13
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 29 --data-dir data/xgb_data_i7 --tier-embed 8 --train-match-list experiments/stage3a/rowmatch_E_matches.json --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_rowmatch_E_tiercond/seed_29
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 42 --data-dir data/xgb_data_i7 --tier-embed 8 --train-match-list experiments/stage3a/rowmatch_E_matches.json --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_rowmatch_E_tiercond/seed_42
+      - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 101 --data-dir data/xgb_data_i7 --tier-embed 8 --train-match-list experiments/stage3a/rowmatch_E_matches.json --max-steps 3840 --eval-every 128 --report-match-lists experiments/stage3a/target_P_matches.json,experiments/stage3a/target_E_matches.json --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/night3/runs/mlp_rowmatch_E_tiercond/seed_101
+
+queue_order_note: >-
+  registered Block B order: mlp_pool, mlp_pool_tiercond, mlp_P_tiercond,
+  mlp_rowmatch_P_tiercond, mlp_E_tiercond, mlp_rowmatch_E_tiercond. Five seeds
+  each: 30 runs, three on the laptop (7, 29, 42) and two on the mini (13, 101)
+  per configuration. Block B is FIRST in the night's queue order (B, E(4d),
+  C114, E(4b)).
+
+statistics:
+  registered_for: docs/sequence_track/night3_acceptance.md
+  per_row_log_loss: >-
+    computed from the row-aligned validation probabilities each run saves
+    (predictions_validation.npz), never from a scalar.
+  contrasts:
+    - name: tier_conditioning
+      definition: "mlp_pool_tiercond - mlp_pool"
+      role: mechanism
+      registered_pairs: [[mlp_pool_tiercond, mlp_pool]]
+      tests: >-
+        the conditioning benefit — a dim-8 competition_tier embedding plus a
+        per-tier output bias, on all rows, with the training rows and the step
+        budget held fixed. This is the ONLY difference between the two arms.
+    - {name: target_minus_pooled_conditioned,
+       definition: "mlp_<T>_tiercond - mlp_pool_tiercond", role: primary_screen,
+       tests: does training on the target's rows beat pooled training under
+              identical conditioning, on the target's own validation rows}
+    - {name: target_minus_rowmatched,
+       definition: "mlp_<T>_tiercond - mlp_rowmatch_<T>_tiercond",
+       role: primary_screen,
+       tests: does training on the target's rows beat the SAME NUMBER of
+              pooled rows, on the target's own validation rows}
+  mechanism_note: >-
+    exactly one mechanism entry carries `registered_pairs`, so
+    stage2_stats.mechanism_contrasts reads the mechanism set FROM THIS CONFIG
+    and not from the frozen stage 2 tuple (whose arm ids do not exist here).
+    The two `primary_screen` entries above are prose registrations of the two
+    superiority members; they are read from the family map, never as mechanism
+    pairs, because they are family-local and target-sliced.
+  slice_predicates:
+    # Optional slices, in the order the tool computes them (they are appended
+    # to the eight frozen names below). A composed `<base>@<restrict>` name
+    # must be registered AFTER the slice it restricts to, and the restricted
+    # slice may not itself be composed.
+    # target_P: competition_tier == 3 on the validation rows. 222 of the 243
+    # E validation matches are tier 3, so this slice is those 222 matches.
+    target_P: {tier: 3}
+    target_E:
+      match_list: experiments/stage3a/target_E_validation_matches.json
+      sha256: 626889fa8d70f0fbcfa9b5690aec6cb651fdbb742c2ccf300a9b9af971019b6d
+      membership: >-
+        a validation row is in the slice when the MATCH ID SUFFIX of its
+        innings_id ('<innings number>_<cricsheet match id>') is in the list:
+        243 validation matches, 480 innings, 55,981 of the 124,292 validation
+        rows. This is the VALIDATION-side E list: the E rule (target P union every
+        international in which both teams are ICC full members) applied to the
+        validation split. It is NOT target_E_matches.json — that file is the E
+        TRAINING list, and the freeze manifest asserts no training list shares
+        a match with the validation parquet, so pinning it here would select
+        zero rows (see deviations.target_E_validation_list_repointed).
+    big3:
+      match_list: experiments/stage3a/big3_validation_matches.json
+      sha256: 49e8f62476d9b21352e324da7a660bd1407423fa12a995c166a9a6a545929b77
+      definition_note: >-
+        the manifest's rule text, verbatim: "E-intersected: both full members
+        AND one of India/Australia/England". So it is E intersected with the
+        matches of those three teams — an elite SUBSET, and their matches
+        against associates are not in it.
+      descriptive_only: >-
+        8 validation matches, 16 innings, 1,895 rows — far below the ten-block
+        rule. Fixed contrasts only (the same six configs' deltas),
+        ball-weighted, with row and block counts reported. No family, no
+        screen, and no "tier above E" inference.
+    death@target_P: {}
+    chase@target_P: {}
+    death@target_E: {}
+    chase@target_E: {}
+  slices: [all, death, chase, powerplay, middle, innings_1, innings_2,
+           thin_pair, target_P, target_E, big3, death@target_P,
+           chase@target_P, death@target_E, chase@target_E]
+  slices_note: >-
+    the first eight are the frozen stage 2 names, computed unchanged.
+    `thin_pair` stays UNAVAILABLE: the i7 ball frame carries no exposure
+    column and this config registers no
+    `slice_predicates.thin_pair.{exposure_columns, threshold}`, so it is
+    reported unavailable rather than invented.
+  families:
+    shared_control: mlp_pool
+    definition: >-
+      THREE registered families, one per candidate-role configuration
+      (mlp_pool_tiercond, mlp_P_tiercond, mlp_E_tiercond). Each uses the
+      GENERAL member form: every member names its own contrast
+      {candidate, reference}, slice, kind and threshold, and exactly one member
+      carries `primary: true`. The map below is the registration, not a
+      template.
+    gate_reference_rule: >-
+      every non-inferiority gate is taken against the shared control
+      `mlp_pool`, whatever the family's superiority references are, so the gate
+      always asks "does this arm lose ground against the unconditioned pooled
+      model on death overs / in chases" — one question, comparable across
+      families. For the two target families the gate is restricted to the
+      target's own rows (death@target_T, chase@target_T).
+    multiplicity: holm
+    multiplicity_scope: within a family, across its members
+    multiplicity_not_pooled: >-
+      Holm is never pooled across the three families. family_3a_P and
+      family_3a_E are correlated screens; no "either target passes" claim
+      exists.
+    holm:
+      scope: >-
+        Holm operates WITHIN each family, separately for each estimand /
+        checkpoint readout.
+      adjustment: >-
+        step-down over the family's sorted raw p-values; with m members the
+        adjusted value at rank r is min(1, max over j <= r of (m + 1 - j) *
+        p_(j)), which makes the adjusted values monotone in rank.
+      ties: stable in the registered member order
+      missing_member: >-
+        an unavailable member (a run that did not finish, a slice with no rows,
+        a slice below ten blocks) takes a non-rejecting placeholder (adjusted
+        p = 1), still occupies its slot, and the family CANNOT pass.
+      raw_p: >-
+        the threshold-centred two-sided percentile form
+        p = min(1, 2 * min[P(d* - t <= 0), P(d* - t >= 0)]) over the bootstrap
+        draws d*, with t = 0 for a superiority member and t = +0.002 for a
+        non-inferiority gate.
+    map:
+      - candidate: mlp_pool_tiercond
+        holm_group: family_3a_cond
+        all_row_condition: member
+        direction_required: [primary]
+        members:
+          - name: primary
+            primary: true
+            kind: superiority
+            threshold: 0.0
+            slice: all
+            contrast: {candidate: mlp_pool_tiercond, reference: mlp_pool}
+            label: "mlp_pool_tiercond - mlp_pool on all"
+            tests: >-
+              the conditioning benefit on all rows. This member IS the
+              inherited candidate-minus-shared-control all-row condition, so
+              `all_row_condition: member` discharges it inside the family.
+          - name: death_gate
+            kind: non_inferiority
+            threshold: 0.002
+            slice: death
+            contrast: {candidate: mlp_pool_tiercond, reference: mlp_pool}
+            label: "mlp_pool_tiercond - mlp_pool on death"
+          - name: chase_gate
+            kind: non_inferiority
+            threshold: 0.002
+            slice: chase
+            contrast: {candidate: mlp_pool_tiercond, reference: mlp_pool}
+            label: "mlp_pool_tiercond - mlp_pool on chase"
+        screen:
+          require: [primary, death_gate, chase_gate]
+        note: >-
+          decision-bearing and registered once. SCREEN_PASS requires all three
+          members to reject favourably (primary U95 < 0, each gate strictly
+          U95 < +0.002) under Holm, with at least ten tournament blocks on each
+          member's slice, five complete paired seeds, and at least 4 of 5
+          favourable per-seed directions on `primary`.
+
+      - candidate: mlp_P_tiercond
+        holm_group: family_3a_P
+        all_row_condition: none
+        direction_required: [superiority_1, superiority_2]
+        members:
+          - name: superiority_1
+            primary: true
+            kind: superiority
+            threshold: 0.0
+            slice: target_P
+            contrast: {candidate: mlp_P_tiercond,
+                       reference: mlp_pool_tiercond}
+            label: "mlp_P_tiercond - mlp_pool_tiercond on target_P"
+            tests: >-
+              target-only training against pooled training, conditioning and
+              step budget matched, on target P's own validation rows.
+          - name: superiority_2
+            kind: superiority
+            threshold: 0.0
+            slice: target_P
+            contrast: {candidate: mlp_P_tiercond,
+                       reference: mlp_rowmatch_P_tiercond}
+            label: "mlp_P_tiercond - mlp_rowmatch_P_tiercond on target_P"
+            tests: >-
+              target rows against the same NUMBER of pooled rows, conditioning
+              and step budget matched.
+          - name: death_gate
+            kind: non_inferiority
+            threshold: 0.002
+            slice: death@target_P
+            contrast: {candidate: mlp_P_tiercond, reference: mlp_pool}
+            label: "mlp_P_tiercond - mlp_pool on death within target_P"
+          - name: chase_gate
+            kind: non_inferiority
+            threshold: 0.002
+            slice: chase@target_P
+            contrast: {candidate: mlp_P_tiercond, reference: mlp_pool}
+            label: "mlp_P_tiercond - mlp_pool on chase within target_P"
+        screen:
+          require: [superiority_1, superiority_2, death_gate, chase_gate]
+        note: >-
+          SCREEN_PASS requires BOTH superiority members to reject favourably
+          with U95 < 0 AND both gates to hold with strictly U95 < +0.002, under
+          Holm across the four members, with at least ten tournament blocks on
+          EVERY required slice of this target, five complete paired seeds, and
+          at least 4 of 5 favourable per-seed directions on BOTH superiority
+          members (`direction_required`). The inherited all-row condition is
+          AMENDED AWAY (`all_row_condition: none`): a target-only model is not
+          expected to serve rows outside its intended deployment scope, so
+          `mlp_P_tiercond - mlp_pool on all` is reported as exploratory and is
+          not part of this screen.
+
+      - candidate: mlp_E_tiercond
+        holm_group: family_3a_E
+        all_row_condition: none
+        direction_required: [superiority_1, superiority_2]
+        members:
+          - name: superiority_1
+            primary: true
+            kind: superiority
+            threshold: 0.0
+            slice: target_E
+            contrast: {candidate: mlp_E_tiercond,
+                       reference: mlp_pool_tiercond}
+            label: "mlp_E_tiercond - mlp_pool_tiercond on target_E"
+          - name: superiority_2
+            kind: superiority
+            threshold: 0.0
+            slice: target_E
+            contrast: {candidate: mlp_E_tiercond,
+                       reference: mlp_rowmatch_E_tiercond}
+            label: "mlp_E_tiercond - mlp_rowmatch_E_tiercond on target_E"
+          - name: death_gate
+            kind: non_inferiority
+            threshold: 0.002
+            slice: death@target_E
+            contrast: {candidate: mlp_E_tiercond, reference: mlp_pool}
+            label: "mlp_E_tiercond - mlp_pool on death within target_E"
+          - name: chase_gate
+            kind: non_inferiority
+            threshold: 0.002
+            slice: chase@target_E
+            contrast: {candidate: mlp_E_tiercond, reference: mlp_pool}
+            label: "mlp_E_tiercond - mlp_pool on chase within target_E"
+        screen:
+          require: [superiority_1, superiority_2, death_gate, chase_gate]
+        note: >-
+          identical screen to family_3a_P on target E's slices. Its target
+          slices are read from the E VALIDATION list, never from the E training
+          list the candidate trains on (see
+          deviations.target_E_validation_list_repointed).
+    map_is_complete: >-
+      three families, one per candidate-role configuration. `mlp_pool` is the
+      shared control and a candidate in no family; `mlp_rowmatch_P_tiercond`
+      and `mlp_rowmatch_E_tiercond` declare `role: control` and are candidates
+      in no family, which is what lets a four-member family carry a
+      reference-only arm without inventing a family for it.
+    exploratory: >-
+      every contrast on every slice that is not a registered family member:
+      each arm minus `mlp_pool` on all fifteen slices (including the two
+      target arms on `all`, which the amended all-row condition explicitly
+      excludes from their screens), the per-tier readouts for tiers 1, 2 and 4
+      (tier 4 has 11 validation matches), and every reading on `big3`.
+  bootstrap:
+    contract: tournament_time_block_v1
+    blocks_from: scripts/sim_eval/eval_statistics.load_competition_clusters
+    block_source_dir: data/t20s_json
+    block_key: cricsheet match id
+    resample: tournament blocks, not matches
+    reps: 2000
+    seed: 29
+    weighting: ball_weighted
+    min_blocks: 10
+    below_min_blocks: descriptive
+    ten_block_rule_applies_to: >-
+      every REQUIRED member slice of every family, checked on tournament
+      blocks of that slice's validation rows and never on match counts. A
+      required slice with fewer than ten blocks is descriptive and its family
+      CANNOT pass.
+    invariant: >-
+      CLAUDE.md critical invariant 7 — fewer than 10 blocks is descriptive,
+      never a CI-clean claim.
+  estimands:
+    - {id: i, definition: per checkpoint (one seed), reported: separately}
+    - {id: ii, definition: joint resampling of seeds and tournament blocks,
+       reported: separately}
+  non_inferiority:
+    margin_ll: 0.002
+    sign: >-
+      a candidate is non-inferior on a gate slice when U95, the 97.5th
+      percentile of the paired harm draws of (candidate - mlp_pool), is
+      STRICTLY below +0.002 log loss. U95 = 0.002 exactly does not pass.
+    applies_to: [death, chase, death@target_P, chase@target_P,
+                 death@target_E, chase@target_E]
+    reference: mlp_pool
+    raw_p: >-
+      the same threshold-centred two-sided percentile form as a superiority
+      member, with t = +0.002:
+      p = min(1, 2 * min[P(d* - 0.002 <= 0), P(d* - 0.002 >= 0)]).
+    not_imported_from_stage_1: >-
+      stage 1's +-0.007 parity margin and its parity classification are NOT
+      imported; this block's only margin is +0.002 on log loss.
+  interval_labelling:
+    rank_local: >-
+      every per-arm or per-rank interval is labelled "rank-local percentile
+      interval; not simultaneous; not the rejection rule". The rejection rule
+      is the Holm-adjusted family, never an interval read off a table.
+  labelling:
+    five_seed_night: screen
+    note: >-
+      five seeds make the direction count readable; they do not make a
+      validation-only, selection-on-the-same-split screen confirmatory. No arm
+      is promoted on this block, and no market or betting claim exists.
+
+cohort:
+  frozen: models/embeddings/seq_stage2/cohort/FROZEN.json
+  parquet: models/embeddings/seq_stage2/cohort/cricket_data_i7_cohort.parquet
+  window: 2026-04-17 .. 2026-08-05
+  cohort_status: DEFERRED_UNOPENED
+  cohort_scored: false
+  deferral: >-
+    the cohort remains closed for night 3. It was deferred at stage 2 gate 1
+    (Astra, 2026-09-12) and nothing in Block B changes that: this is a
+    validation-only screen, and the one confirmatory read must not be spent on
+    screening evidence.
+  unlock_requires: >-
+    unchanged from stage 2 — a retained WHOLE family at five seeds (candidate
+    and every matched control) and a frozen family registration, after which
+    it is scored exactly once. No night-3 step loads it.
+  read_by: nothing in night 3
+
+forbidden_data:
+  - data/golden
+  - data/forward_holdout
+
+deviations:
+  - id: outcome_informed_registration
+    statement: >-
+      the two target definitions, the negative-transfer hypothesis and the
+      conditioning arm follow from the stage 2 five-seed readout, which was
+      already read when this config was written.
+    reason: >-
+      it is a NEW screening hypothesis, frozen in this file and in the design
+      draft before any night-3 performance read, so it is pre-registered
+      rather than confirmatory. It is not a confirmation of stage 2 and must
+      never be reported as one.
+  - id: target_E_validation_list_repointed
+    statement: >-
+      the `target_E` VALIDATION slice is a separate frozen list,
+      experiments/stage3a/target_E_validation_matches.json, and NOT the E
+      training list experiments/stage3a/target_E_matches.json that
+      `mlp_E_tiercond` trains on.
+    reason: >-
+      the two lists are disjoint by construction: the freeze manifest asserts
+      that no match id in any frozen TRAINING list appears in the validation
+      parquet (0 leaked for target_E), so reading the E validation slice off
+      the training list would select ZERO rows and silently make every
+      family_3a_E member NOT_EVALUABLE. The E RULE is one rule applied to two
+      splits; the two files are its two halves. Found while writing this
+      config; the freeze script was extended to emit the validation half, and
+      night3_acceptance N3 checks that both halves exist, that the config pins
+      the validation half for the slice and the training half for training,
+      and that their sha256s match the regenerated manifest.
+  - id: big3_thin_8_matches
+    statement: >-
+      the `big3` readout has 8 validation matches, 16 innings and 1,895 rows —
+      far below the ten-block rule.
+    reason: >-
+      it is registered as a descriptive readout only, with fixed contrasts,
+      row and block counts reported, no family and no screen. It is reported
+      because it was designed in, not because it can support an inference.
+  - id: all_row_selection_for_target_arms
+    statement: >-
+      the target-only arms' checkpoints are selected on ALL validation rows,
+      including rows from matches outside their target.
+    reason: >-
+      one shared artifact per (configuration, seed) is what makes the two
+      families share controls and keeps the count at 30 runs. The cost — the
+      selection can work against target-only performance — is disclosed and is
+      part of the shared-artifact contract, not a finding.
+  - id: equal_steps_not_equal_tokens
+    statement: >-
+      all six arms train for exactly 3,840 steps, so the arms trained on
+      fewer rows see MORE epochs, and tokens seen and target-tier tokens seen
+      differ across arms.
+    reason: >-
+      equal steps, equal tokens and equal target-tier exposure cannot all hold
+      at the pool's proportions. Equal steps is the registered control; the
+      residual confounding is stated and every arm reports total tokens seen,
+      target-tier tokens seen and steps-to-best.
+  - id: ref_train_probs_in_sample
+    statement: >-
+      RESERVED for Block E rung 4b, whose frozen reference logits are fitted
+      on the training rows they are later read on.
+    reason: >-
+      registered here so the night's deviation ids are stable across its
+      blocks. It bears on NO Block B arm: no arm of this config reads a frozen
+      reference, and this entry must not be cited in a Block B reading.
+
+known_asymmetries:
+  - id: tiercond_arms_see_the_tier_column
+    text: >-
+      the three conditioned arms see `competition_tier`, which `mlp_pool`
+      never sees. So any contrast whose reference is `mlp_pool` — both gates of
+      every family, and every exploratory arm-minus-control reading — mixes
+      the conditioning with whatever else the arm changed, and only
+      `mlp_pool_tiercond - mlp_pool` isolates the conditioning. The two
+      superiority members avoid this by taking conditioned references.
+  - id: untrained_tier_slots_in_the_target_arms
+    text: >-
+      `mlp_P_tiercond` sees only tier 3, so its tier embedding rows and output
+      bias rows for tiers 0, 1, 2 and 4 stay at initialisation and are recorded
+      as untrained; `mlp_E_tiercond` sees tier 3 plus whatever tiers its elite
+      internationals carry. Those slots are exercised at validation time on
+      every non-target row, which is one mechanism by which a target-only arm
+      can be worse on `all` for reasons unrelated to transfer.
+  - id: rowmatch_controls_are_row_matched_not_innings_matched
+    text: >-
+      the row-matched controls match the target's ROW count (overshoot 240 and
+      81 rows, at most one match) by adding whole matches, so innings counts
+      and per-innings length distributions differ slightly from the target's.
+  - id: target_P_and_target_E_overlap
+    text: >-
+      target E contains all of target P, and the `target_P` and `target_E`
+      validation slices overlap heavily. The two families share `mlp_pool` and
+      `mlp_pool_tiercond` as well, so their screens are correlated, not
+      replications.
+  - id: token_mlp_has_no_attention_layer
+    text: >-
+      every arm here is token_mlp, so none has an attention layer and none of
+      this block's readings bears on any sequence mechanism. Parameter counts
+      differ between the conditioned and unconditioned arms by the tier
+      embedding and bias, reported per run in arm_params.n_parameters.
+
+known_limitations:
+  - >-
+    SEED-MACHINE CONFOUNDING, inherited from night 1 and not modelled: seeds 7,
+    29 and 42 run on the laptop and 13, 101 on the mini, and MPS kernels are
+    not bit-reproducible across machines. The split is BY SEED, so every arm
+    carries the same three-laptop / two-mini mix and no arm is advantaged
+    relative to another; the machine is still a component of each per-seed
+    number and is reported, never adjusted for.
+  - >-
+    family_3a_P and family_3a_E are CORRELATED screens over overlapping rows
+    with two shared controls. Claims are FAMILY-LOCAL only: no aggregate,
+    no "either target passes", no comparison of the two families' outcomes to
+    each other, and no inference from one passing where the other does not.
+  - >-
+    checkpoint selection uses the same validation split the contrasts are
+    computed on, so every number of this block is screening evidence.
+  - >-
+    MPS kernels are not bit-reproducible across runs or machines, so a rerun of
+    any checkpoint may differ in the low decimals; every checkpoint records
+    mps_bit_reproducible false.
+  - >-
+    the global outcome prior in the stats cache is not as-of-date, and venue
+    history in the frame is not recency-weighted. Both are inherited frame
+    limitations shared by all six arms, so they are level effects rather than
+    per-arm advantages.
+  - >-
+    `competition_tier` is a pre-match EVENT-NAME rule, not a market or quality
+    measurement. No market designation attaches to a tier anywhere in this
+    block, and "premium" and "elite" are the rule's labels, not findings.
+
+# --------------------------------------------------------------------------
+# GENERATED BLOCK. Written by `scripts/sequence_track/pin_stage2.py --write`
+# and checked by `--verify`, which recomputes every hash from the files on
+# disk and exits non-zero on any difference. Do not edit by hand.
+# --------------------------------------------------------------------------
+provenance:
+  pins_generated_at: '2026-09-12T19:22:35Z'
+  git_head_short: 62db553
+  not_verified:
+  - provenance.pins_generated_at
+  - provenance.git_head_short
+  not_verified_reason: both change without the config's meaning changing (a re-pin
+    moves the timestamp; the commit that lands this file moves HEAD), so --verify
+    records them and does not compare them
+  pinned_by: scripts/sequence_track/pin_stage2.py
+  config_body_sha256: 98cd7eeeba6ca9ae3879c112e69efdd7dc24c711d773ffe777a744f453b75ba2
+  config_body_sha256_rule: sha256 of yaml.safe_dump(config without 'provenance',
+    sort_keys=True); a config cannot carry its own hash, so what is pinned is every
+    key the pin does not write
+  frame:
+    dir: data/xgb_data_i7
+    version: i7
+    feature_hash:
+      hash: c520a3ba08ae
+      version: i7
+      n_features: 114
+      splits:
+        train_end: '2024-12-31'
+        val_end: '2025-06-30'
+        test_end: '2026-04-16'
+        golden_start: '2026-04-17'
+      gender_filter: male
+      delivery_semantics: inclusive_total_runs_v1
+      venue_alias_version: venue_aliases_v1
+      venue_alias_sha256: 853b32b0ce3098dd8c0f33ba1437846f5505d50d9a425fbd37bff9c9f76745d8
+      venue_alias_active_count: 94
+      k_player: 30.0
+      k_venue: 200.0
+    splits:
+      train:
+        path: data/xgb_data_i7/cricket_data_i7_train.parquet
+        md5: fac0b7bededf0aae1989d654e3eba9e8
+        n_rows: 1876971
+        match_date_min: '2005-02-17'
+        match_date_max: '2024-12-30'
+      validation:
+        path: data/xgb_data_i7/cricket_data_i7_validation.parquet
+        md5: 326436317310adadabe0175825e57d1b
+        n_rows: 124292
+        match_date_min: '2024-12-31'
+        match_date_max: '2025-06-29'
+      test:
+        path: data/xgb_data_i7/cricket_data_i7_test.parquet
+        md5: 64b58fec51509567580c9122f2b5183f
+        read: 'hashed only: a base-logits sidecar records this parquet''s md5, and
+          no stage-2 step opens its rows'
+  stats_cache:
+    role: stats_cache_i7
+    path: models/player_stats_cache_i7.sqlite
+    md5: 671ac8200b275fa3d11d848e609f5132
+    venue_alias_version: venue_aliases_v1
+    same_day_order_version: date_then_match_id_lexicographic_v1
+  features:
+    count: 50
+    names:
+    - batter_p0
+    - batter_p1
+    - batter_p2
+    - batter_p4
+    - batter_p6
+    - batter_pw
+    - batter_p0_vs_pace
+    - batter_p1_vs_pace
+    - batter_p2_vs_pace
+    - batter_p4_vs_pace
+    - batter_p6_vs_pace
+    - batter_pw_vs_pace
+    - batter_p0_vs_spin
+    - batter_p1_vs_spin
+    - batter_p2_vs_spin
+    - batter_p4_vs_spin
+    - batter_p6_vs_spin
+    - batter_pw_vs_spin
+    - bowler_p0
+    - bowler_p1
+    - bowler_p2
+    - bowler_p4
+    - bowler_p6
+    - bowler_pw
+    - bowler_p0_vs_lhb
+    - bowler_p1_vs_lhb
+    - bowler_p2_vs_lhb
+    - bowler_p4_vs_lhb
+    - bowler_p6_vs_lhb
+    - bowler_pw_vs_lhb
+    - bowler_p0_vs_rhb
+    - bowler_p1_vs_rhb
+    - bowler_p2_vs_rhb
+    - bowler_p4_vs_rhb
+    - bowler_p6_vs_rhb
+    - bowler_pw_vs_rhb
+    - venue_p0
+    - venue_p1
+    - venue_p2
+    - venue_p4
+    - venue_p6
+    - venue_pw
+    - is_middle_overs
+    - is_death_overs
+    - wickets_in_hand
+    - chase_target
+    - balls_remaining
+    - score
+    - run_rate
+    - run_rate_required
+    sha256: 14f40e4a7429eac4644226fb02fbc88b01f0fab158709bce2bed2574708db564
+    order: EB_BAT + EB_BOWL + VENUE + CTX + STATE (embeddings_e1, transformer_t1);
+      a permutation is a different model input, not a relabelling
+  base_logits:
+    dir: models/embeddings/seq_stage2/base_logits
+    splits:
+      train:
+        npz: models/embeddings/seq_stage2/base_logits/train.npz
+        npz_md5: 584b2689a0e961d0a2d6a5e4eeec3eef
+        n_rows: 1876971
+        parquet_md5: fac0b7bededf0aae1989d654e3eba9e8
+        sidecar: models/embeddings/seq_stage2/base_logits/train.json
+        sidecar_sha256: 768862df009d1fa5b7e5be0046488743b7234a96a328132e601a777036dc63c4
+        booster_md5: 7ee1e1809917f45be7e726b3ea4a8a6c
+      validation:
+        npz: models/embeddings/seq_stage2/base_logits/validation.npz
+        npz_md5: 000ff0c49a86597a1475d90b98ec162a
+        n_rows: 124292
+        parquet_md5: 326436317310adadabe0175825e57d1b
+        sidecar: models/embeddings/seq_stage2/base_logits/validation.json
+        sidecar_sha256: cdf06e085975a49a224e97ea0230e4e89b3e83a1ad7fc2a4845e0c3e6f530f86
+        booster_md5: 7ee1e1809917f45be7e726b3ea4a8a6c
+      test:
+        npz: models/embeddings/seq_stage2/base_logits/test.npz
+        npz_md5: b39bf980a6a485971ee235d07279866f
+        n_rows: 186667
+        parquet_md5: 64b58fec51509567580c9122f2b5183f
+        sidecar: models/embeddings/seq_stage2/base_logits/test.json
+        sidecar_sha256: 5f52e39b32faad37b1905e36dd42551801e27480187c487e6d5f5aeeea899f9a
+        booster_md5: 7ee1e1809917f45be7e726b3ea4a8a6c
+    train_validation_digest: 20286a8ffe8dc4c4915b20f1b908e141
+    digest_rule: md5 of '<split>=<npz md5>' lines, sorted by split, over the splits
+      a stage-2 run reads; transformer_t1 records the same value in arm_params.base_logits_md5
+  sources:
+    count: 25
+    source_sha256:
+      scripts/transformer_t1.py: e9482ac919c8151105dda45d9240273a163cc4ad7e78812fb4ac2e7786b39f1b
+      scripts/sequence_track/recurrent_arms.py: e5454280f7386650b80b42cd15dc2df1a5dfd3b032d4776387815e062108ce10
+      scripts/sequence_track/build_base_logits.py: 6643370313f8568644b59a0e74a4683980e2351f0eb255e046d1b69ad566e4c9
+      scripts/sequence_track/build_cohort_stage2.py: 8fd7ce63e77aea550c928a40d0bd8458f2b758e0aa922c5f96b5b9695b8eee43
+      scripts/sequence_track/retrain_stage2.py: eb8fd1d316c7d30b3664ab41b7dcea722e7341d6c538d954085faf3e1cd6d367
+      scripts/sequence_track/pin_stage2.py: 61b94dab12323564796e8f3cfaac1422d8db0a817c831fdee6487f7ccb3f9c18
+      scripts/sequence_track/ownership_dependency_test.py: c25dce69a6930e4842c648538c03089e137918f687e894a9011d4f9d40e2285c
+      scripts/sequence_track/stage2_stats.py: 73c4f2396e50817156aed41e56e8da9316c23117cb44595f7f54c8e2bbfdc20f
+      scripts/sequence_track/render_stage2_report.py: 3654d22d1523fd16cfdcfab321d2902b17459c5e37f999f44f418df0fa3b932a
+      scripts/sim_eval/eval_statistics.py: d3fcfe454269d334766a35965dff2e33db9c5e3bbb06ea16a0d7b14bde2ba1ca
+      scripts/embeddings_e1.py: 348dd073d0c859eb42507accc52a6fa5f6534c476a05b6a901671faf588d76ea
+      scripts/artifacts.py: da90ce3b77522310e593955d54406b9323d0af5341f7a7f214ed74abf37dc821
+      scripts/calibration.py: f79e511200422bed25e9db7bc9f2a91a278901664a6c40460527b7b0b22b9445
+      scripts/registered_experiment.py: ae8f027b9b9b100f377be03413973b35edb5f2c62c632cf1daf7590cceb8595f
+      scripts/materialize_features.py: 4bbb9dba8feed43eef00d383155cf9bb4af73c69414aae30ef730c2f71857cdd
+      scripts/build_stats_cache.py: 456c4cfb867295271933f6884260e95f665e32abf3e11ace8d6783cf79cb0113
+      scripts/feature_registry.py: 312fc5e238fedbd861d202781eaa3737b14e3f963578fed03b7c3a1cd9d72897
+      scripts/parsing_v2.py: 8ff14353dad013ba5fa16a72286f939d56dd93723f5e4897d183c6cddcd8c288
+      scripts/tracker_rehydration.py: b4175a747402e80e876380da4a2e1d086b4439ed9c61ff04d4d02a59ea563bbf
+      scripts/stats_provider.py: 7aabbd05b39d1cce6f80e8a51aaa82d6ac6a9c83644ea20402662cfe7eb27125
+      scripts/stats_sqlite_backend.py: e1d7262fe788833483e15ddc9e59d7af779a9b580989e93a575fd3fcddde4526
+      scripts/loaders_common.py: 1c14faa79391bb0b8160bd3c0d78c724d616c2824fc1aa971a889cbe7868f4e7
+      scripts/identity_maps.py: 687b34a0956b36058b5611cbd71efc6f82442f2a34262f04ec0f1b5eef229724
+      scripts/elo_update.py: a77765a6e6bbcbd9b02731953dc2eb894ad016ebafcacb3494640c4185eb05cb
+      scripts/player_metadata.py: ba94410137b1483996a9fed3f20d1cf925072f1a00bb3cda914914d938b24181
+    source_sha256_absent: []
+    source_sha256_absent_note: closure files not present on this checkout (a later
+      deliverable's script); they are dropped from the hash set and named here rather
+      than skipped silently
+    closure_rule: 'every source file on the stage-2 execution path is hashed, not
+      just the trainer: the recurrent arms, the base-logits builder, the cohort
+      builder, the multi-seed driver and this pin all move stage-2 results, so a
+      change to any of them must fail --verify. It also covers the IMPORTED modules
+      those scripts actually depend on — the 50-feature contract (embeddings_e1),
+      the manifest and encoder helpers (artifacts, calibration), the run-provenance
+      helper (registered_experiment), and the feature-construction, materialisation,
+      stats-cache, identity, ELO, chronology and rehydration stack the cohort''s
+      114 columns are built by — because each of them can change stage-2 behaviour
+      without any stage-2 script changing (Astra SHOULD 3)'
+  cohort:
+    frozen: models/embeddings/seq_stage2/cohort/FROZEN.json
+    status: frozen
+    frozen_json_sha256: 32265943c36b6d66e2922f8ad3996e956909991f566b17201cb58dcbdf0607ed
+    eligible_match_count: 210
+    eligible_ids_recorded: 210
+    frozen_at: '2026-09-11T17:23:20Z'
+    scored: once, in D10, after the family freeze
+  runtime:
+    python: 3.9.25
+    packages:
+      torch: 2.5.1
+      numpy: 1.24.3
+      pandas: 2.3.2
+      xgboost: 2.1.4
+      pyarrow: 21.0.0
+    read_via: importlib.metadata.version
+    note: torch and numpy change training output, so a stage-2 result produced under
+      different versions is a different result

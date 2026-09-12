@@ -1,0 +1,136 @@
+{
+  "assertions": [
+    "no match id in any frozen TRAINING list appears in the validation parquet",
+    "competition_tier and is_international are constant within a match"
+  ],
+  "cricsheet_dir": "/Users/aryamangupta/CricML/Match_Prediction/data/t20s_json",
+  "frame": {
+    "dir": "/Users/aryamangupta/CricML/Match_Prediction/data/xgb_data_i7",
+    "train_parquet_md5": "fac0b7bededf0aae1989d654e3eba9e8",
+    "validation_parquet_md5": "326436317310adadabe0175825e57d1b",
+    "version": "i7"
+  },
+  "generator": "scripts/sequence_track/stage3a_freeze_tiers.py",
+  "lists": {
+    "big3_validation": {
+      "file": "big3_validation_matches.json",
+      "n_innings": 16,
+      "n_matches": 8,
+      "n_rows": 1895,
+      "n_validation_matches_without_cricsheet_file": 0,
+      "rule": "E-intersected: both full members AND one of India/Australia/England",
+      "sha256": "49e8f62476d9b21352e324da7a660bd1407423fa12a995c166a9a6a545929b77",
+      "split": "validation"
+    },
+    "rowmatch_E": {
+      "file": "rowmatch_E_matches.json",
+      "n_innings": 7070,
+      "n_matches": 3525,
+      "n_rows": 812250,
+      "overshoot_rows": 81,
+      "sha256": "4237f52132db20f5da465199773a4b9f952b29eb5be8060f0a830ea65ffc8f9e",
+      "target": "target_E_matches.json",
+      "target_rows": 812169
+    },
+    "rowmatch_P": {
+      "file": "rowmatch_P_matches.json",
+      "n_innings": 5152,
+      "n_matches": 2570,
+      "n_rows": 591582,
+      "overshoot_rows": 240,
+      "sha256": "82ab077b71d895a70934c6e796e8cc8854bee378fe7d57c3c658dde6a586a605",
+      "target": "target_P_matches.json",
+      "target_rows": 591342
+    },
+    "target_E": {
+      "file": "target_E_matches.json",
+      "n_from_elite_intl": 959,
+      "n_from_tier3": 2516,
+      "n_innings": 6990,
+      "n_internationals_without_cricsheet_file": 0,
+      "n_matches": 3475,
+      "n_rows": 812169,
+      "sha256": "5ff0ebd088079139a2fcbca62ac3c30b4506164715e6202bae99aaab2ab7385d"
+    },
+    "target_E_validation": {
+      "file": "target_E_validation_matches.json",
+      "n_from_tier3": 222,
+      "n_innings": 480,
+      "n_matches": 243,
+      "n_rows": 55981,
+      "n_validation_matches_without_cricsheet_file": 0,
+      "sha256": "626889fa8d70f0fbcfa9b5690aec6cb651fdbb742c2ccf300a9b9af971019b6d",
+      "split": "validation"
+    },
+    "target_P": {
+      "file": "target_P_matches.json",
+      "n_innings": 5063,
+      "n_matches": 2516,
+      "n_rows": 591342,
+      "sha256": "ad05b7fd1b75feaa15b1b3c2a2013dadfbd04094d72e429a3520c245458a9413"
+    }
+  },
+  "match_id_to_teams": "innings_id is '<innings number>_<cricsheet match id>'; teams are data/t20s_json/<match id>.json -> info.teams",
+  "rowmatch_seed": 42,
+  "steps": {
+    "batch": 128,
+    "epochs": 30,
+    "eval_every": 128,
+    "max_steps": 3840,
+    "n_train_innings": 16319,
+    "rule": "one optimiser step = one batch of --batch innings, final partial batch of an epoch kept; E = ceil(n_train_innings / batch), S = epochs * E"
+  },
+  "team_name_rules": {
+    "aliases_applied": {},
+    "big3": [
+      "Australia",
+      "England",
+      "India"
+    ],
+    "icc_full_members": [
+      "Afghanistan",
+      "Australia",
+      "Bangladesh",
+      "England",
+      "India",
+      "Ireland",
+      "New Zealand",
+      "Pakistan",
+      "South Africa",
+      "Sri Lanka",
+      "West Indies",
+      "Zimbabwe"
+    ],
+    "matching_rule": "cricsheet data/t20s_json/<match id>.json -> info.teams, compared verbatim (exact string equality, no alias table, no normalisation, no case folding) against icc_full_members; a match is elite when it has exactly two teams and both are in that set",
+    "n_icc_full_members": 12,
+    "source": "parsing_v2.ICC_FULL_MEMBERS"
+  },
+  "train": {
+    "n_innings": 16319,
+    "n_matches": 8152,
+    "n_rows": 1876971
+  },
+  "train_validation_disjoint": {
+    "rowmatch_E": {
+      "examples": [],
+      "n_in_validation": 0
+    },
+    "rowmatch_P": {
+      "examples": [],
+      "n_in_validation": 0
+    },
+    "target_E": {
+      "examples": [],
+      "n_in_validation": 0
+    },
+    "target_P": {
+      "examples": [],
+      "n_in_validation": 0
+    }
+  },
+  "validation": {
+    "n_innings": 1088,
+    "n_matches": 545,
+    "n_rows": 124292
+  }
+}

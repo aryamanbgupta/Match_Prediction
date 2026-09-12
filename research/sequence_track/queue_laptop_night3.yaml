@@ -1,0 +1,299 @@
+# Sequence-track job queue — NIGHT 3, LAPTOP HALF. Read by
+# research/sequence_track/run_queue.sh.
+#
+# Jobs run in listed order, one at a time, on the machine whose tag matches
+# --machine. A job is skipped when its output_dir holds a COMPLETE marker whose
+# config_sha256 equals the sha256 of its config file, so a night that was
+# stopped resumes where it left off.
+#
+# Paths are relative to the repository root unless absolute. Commands run
+# through /bin/bash -c with the repository root as the working directory.
+#
+# ---------------------------------------------------------------------------
+# NIGHT 3, BLOCK B (docs/sequence_track/night3_acceptance.md; design
+# docs/sequence_track/night3_design_draft.md v7 § "Block B"). THE NIGHT IS
+# SPLIT BY SEED ACROSS TWO MACHINES, as night 1 was: seeds 7, 29 and 42 on the
+# laptop (this file) and seeds 13 and 101 on the Mac mini
+# (research/sequence_track/queue_mini_night3.yaml). Every configuration runs on
+# both machines. The split is by SEED and never by arm, so every arm carries
+# the same three-laptop / two-mini mix and no arm is advantaged relative to
+# another; the residual seed-machine confounding is reported, not modelled.
+#
+# This half holds EIGHTEEN Block B jobs: 6 configurations x 3 seeds.
+#
+# ORDER IS SEED-MAJOR, registered configuration order within each seed pass
+# (mlp_pool, mlp_pool_tiercond, mlp_P_tiercond, mlp_rowmatch_P_tiercond,
+# mlp_E_tiercond, mlp_rowmatch_E_tiercond). Rationale: a truncated night then
+# leaves WHOLE paired seeds across all six arms rather than three seeds of two
+# arms and none of the rest, which is the only partial state consolidation and
+# the statistics can describe. It does not change the registration: the
+# configuration order inside each pass is the config's `queue_order`.
+#
+# --config IS EXPLICIT ON EVERY COMMAND. retrain_stage2.py defaults --config to
+# experiments/configs/seq_stage2_v1.yaml, so a night-3 job that omitted it would
+# silently train STAGE 2 arms into stage-3 output directories.
+#
+# WHY output_dir IS SEED-SPECIFIC: run_queue.sh decides skip-vs-run from the
+# COMPLETE marker in output_dir and the config sha256 ALONE -- it does not look
+# at the command or at the seed subset. A per-configuration marker directory
+# shared by both halves would let one machine's COMPLETE suppress the other's
+# as soon as the two trees are synced. Each job's output_dir is exactly the
+# directory retrain_stage2.py writes that seed's run into, so one marker means
+# one finished run.
+#
+# THREAD CAPS LIVE IN EACH COMMAND, NOT IN defaults:
+# scripts/sequence_track/queue_lib.py validates `defaults` against
+# {memory_floor_gb, memory_cap_gb, poll_seconds, stop_file} and IGNORES every
+# other field with a warning. So the memory floor and cap are queue-wide
+# defaults and the thread caps are environment prefixes on each command.
+#
+# EXPECTED HOURS: 0.15 h per Block B run on the laptop, from the measured
+# full-run estimate of ~80 s per run (all six arms are the same token-MLP
+# architecture under the same 3,840-step budget, so one budget covers them
+# all): 80 s of training plus frame-load and startup overhead, rounded up to
+# the 0.05 h grid with the same margin the stage 2 queues used. The populated
+# per-configuration, per-machine capacity table -- smoke seconds, budgeted
+# hours, maximum duration, overheads and the queue deadline -- is
+# docs/sequence_track/night3_runbook.md § "Capacity". LAUNCH IS REFUSED IF ANY
+# ROW OF THAT TABLE IS BLANK.
+#
+# RETRY BUDGET: run_queue.sh gives each job a per-attempt alarm of
+# 2 * expected_hours (0.30 h here) AND retries once after a failure or a
+# timeout, so a hung job can consume up to 4 * expected_hours (0.60 h) before
+# the queue moves on. Sum of expected_hours over these eighteen jobs is 2.70 h;
+# sum of 4 * expected_hours is 10.80 h.
+# ---------------------------------------------------------------------------
+
+defaults:
+  # Refuse to launch a job when available memory (vm_stat: free + inactive +
+  # speculative) is below this. Laptop-sized: this machine also runs the
+  # interactive session, so the floor is high and the cap leaves room for it.
+  memory_floor_gb: 12
+  # Kill a job whose process-tree RSS exceeds this.
+  memory_cap_gb: 24
+  # Watchdog poll interval, seconds.
+  poll_seconds: 30
+  # Touch this file to stop THIS queue between jobs; remove it to resume.
+  # Each half has its own stop file so stopping one machine never stops the
+  # other, and night 3's files are distinct from night 1's.
+  stop_file: research/sequence_track/STOP_laptop_night3
+
+jobs:
+  - id: mlp_pool-s7
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_pool --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_pool/seed_7
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Block B job 1 of 18 (laptop): configuration 1 of 6, seed 7.
+      pooled UNCONDITIONED control; the shared control of every family's gates.
+      Budget 0.15 h from the laptop smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_pool_tiercond-s7
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_pool_tiercond --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_pool_tiercond/seed_7
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Block B job 2 of 18 (laptop): configuration 2 of 6, seed 7.
+      pooled, tier-conditioned (dim-8 embedding + per-tier output bias); candidate of family_3a_cond and the conditioning-matched reference of both target families.
+      Budget 0.15 h from the laptop smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_P_tiercond-s7
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_P_tiercond --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_P_tiercond/seed_7
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Block B job 3 of 18 (laptop): configuration 3 of 6, seed 7.
+      target P only (--train-tier 3); candidate of family_3a_P.
+      Budget 0.15 h from the laptop smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_rowmatch_P_tiercond-s7
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_rowmatch_P_tiercond --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_rowmatch_P_tiercond/seed_7
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Block B job 4 of 18 (laptop): configuration 4 of 6, seed 7.
+      row-matched pooled control for target P (rowmatch_P_matches.json); reference only.
+      Budget 0.15 h from the laptop smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_E_tiercond-s7
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_E_tiercond --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_E_tiercond/seed_7
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Block B job 5 of 18 (laptop): configuration 5 of 6, seed 7.
+      target E only (target_E_matches.json); candidate of family_3a_E.
+      Budget 0.15 h from the laptop smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_rowmatch_E_tiercond-s7
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_rowmatch_E_tiercond --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_rowmatch_E_tiercond/seed_7
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Block B job 6 of 18 (laptop): configuration 6 of 6, seed 7.
+      row-matched pooled control for target E (rowmatch_E_matches.json); reference only.
+      Budget 0.15 h from the laptop smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_pool-s29
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_pool --seeds 29 --machine laptop
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_pool/seed_29
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Block B job 7 of 18 (laptop): configuration 1 of 6, seed 29.
+      pooled UNCONDITIONED control; the shared control of every family's gates.
+      Budget 0.15 h from the laptop smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_pool_tiercond-s29
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_pool_tiercond --seeds 29 --machine laptop
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_pool_tiercond/seed_29
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Block B job 8 of 18 (laptop): configuration 2 of 6, seed 29.
+      pooled, tier-conditioned (dim-8 embedding + per-tier output bias); candidate of family_3a_cond and the conditioning-matched reference of both target families.
+      Budget 0.15 h from the laptop smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_P_tiercond-s29
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_P_tiercond --seeds 29 --machine laptop
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_P_tiercond/seed_29
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Block B job 9 of 18 (laptop): configuration 3 of 6, seed 29.
+      target P only (--train-tier 3); candidate of family_3a_P.
+      Budget 0.15 h from the laptop smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_rowmatch_P_tiercond-s29
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_rowmatch_P_tiercond --seeds 29 --machine laptop
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_rowmatch_P_tiercond/seed_29
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Block B job 10 of 18 (laptop): configuration 4 of 6, seed 29.
+      row-matched pooled control for target P (rowmatch_P_matches.json); reference only.
+      Budget 0.15 h from the laptop smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_E_tiercond-s29
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_E_tiercond --seeds 29 --machine laptop
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_E_tiercond/seed_29
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Block B job 11 of 18 (laptop): configuration 5 of 6, seed 29.
+      target E only (target_E_matches.json); candidate of family_3a_E.
+      Budget 0.15 h from the laptop smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_rowmatch_E_tiercond-s29
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_rowmatch_E_tiercond --seeds 29 --machine laptop
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_rowmatch_E_tiercond/seed_29
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Block B job 12 of 18 (laptop): configuration 6 of 6, seed 29.
+      row-matched pooled control for target E (rowmatch_E_matches.json); reference only.
+      Budget 0.15 h from the laptop smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_pool-s42
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_pool --seeds 42 --machine laptop
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_pool/seed_42
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Block B job 13 of 18 (laptop): configuration 1 of 6, seed 42.
+      pooled UNCONDITIONED control; the shared control of every family's gates.
+      Budget 0.15 h from the laptop smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_pool_tiercond-s42
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_pool_tiercond --seeds 42 --machine laptop
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_pool_tiercond/seed_42
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Block B job 14 of 18 (laptop): configuration 2 of 6, seed 42.
+      pooled, tier-conditioned (dim-8 embedding + per-tier output bias); candidate of family_3a_cond and the conditioning-matched reference of both target families.
+      Budget 0.15 h from the laptop smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_P_tiercond-s42
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_P_tiercond --seeds 42 --machine laptop
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_P_tiercond/seed_42
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Block B job 15 of 18 (laptop): configuration 3 of 6, seed 42.
+      target P only (--train-tier 3); candidate of family_3a_P.
+      Budget 0.15 h from the laptop smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_rowmatch_P_tiercond-s42
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_rowmatch_P_tiercond --seeds 42 --machine laptop
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_rowmatch_P_tiercond/seed_42
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Block B job 16 of 18 (laptop): configuration 4 of 6, seed 42.
+      row-matched pooled control for target P (rowmatch_P_matches.json); reference only.
+      Budget 0.15 h from the laptop smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_E_tiercond-s42
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_E_tiercond --seeds 42 --machine laptop
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_E_tiercond/seed_42
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Block B job 17 of 18 (laptop): configuration 5 of 6, seed 42.
+      target E only (target_E_matches.json); candidate of family_3a_E.
+      Budget 0.15 h from the laptop smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+
+  - id: mlp_rowmatch_E_tiercond-s42
+    config: experiments/configs/seq_stage3_night3_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_night3_v1.yaml --config-ids mlp_rowmatch_E_tiercond --seeds 42 --machine laptop
+    output_dir: models/embeddings/seq_stage3/night3/runs/mlp_rowmatch_E_tiercond/seed_42
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Block B job 18 of 18 (laptop): configuration 6 of 6, seed 42.
+      row-matched pooled control for target E (rowmatch_E_matches.json); reference only.
+      Budget 0.15 h from the laptop smoke; see the capacity table in
+      docs/sequence_track/night3_runbook.md.
+  # Deferred at the 2026-09-13 00:30 IST freeze: 4d, 4b and C114 run as a
+  # separately frozen batch after their own code gate; nothing is appended to
+  # this queue once launched.

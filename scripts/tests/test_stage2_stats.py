@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import ast
 import builtins
+import hashlib
 import io
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Mapping
@@ -225,11 +227,12 @@ def _config_payload(config_ids=CONFIG_IDS, frame_dir: Path | None = None,
 
 
 def _pinned_source_sha256() -> dict:
-    """Fake but well-formed hashes for the four implementation sources."""
+    """Fake but well-formed hashes for the five implementation sources."""
     driver = st.training_driver()
     return {name: st.sha256_text(name)
             for name in (driver.TRAINER_SOURCE, driver.FEATURE_CONTRACT_SOURCE,
                          driver.ARTIFACT_RESOLVER_SOURCE,
+                         driver.FEATURE_REGISTRY_SOURCE,
                          driver.RECURRENT_SOURCE)}
 
 
@@ -2139,12 +2142,24 @@ def test_the_pin_translation_matches_the_drivers_own_construction(frame_dir):
         name: st.sha256_text((REPO / name).read_text())
         for name in (driver.TRAINER_SOURCE, driver.FEATURE_CONTRACT_SOURCE,
                      driver.ARTIFACT_RESOLVER_SOURCE,
+                     driver.FEATURE_REGISTRY_SOURCE,
                      driver.RECURRENT_SOURCE)}
     real_anchored = st.pinned_component_digests(real, st.load_pin(real))
+    # The pin anchors the three COMMON sources; the driver's set may be wider
+    # (night 3 added feature_registry.py) and each run is anchored to the
+    # hashes of its own recorded source list instead.
+    common_identity = {name: digest for name, digest
+                       in driver.implementation_identity("mlp").items()
+                       if name in (driver.TRAINER_SOURCE,
+                                   driver.FEATURE_CONTRACT_SOURCE,
+                                   driver.ARTIFACT_RESOLVER_SOURCE)}
     assert real_anchored["implementation_by_recurrent"][False] == (
-        st.component_digest(driver.implementation_identity("mlp")))
+        st.component_digest(common_identity))
+    recurrent_identity = dict(common_identity)
+    recurrent_identity[driver.RECURRENT_SOURCE] = (
+        driver.implementation_identity("lstm")[driver.RECURRENT_SOURCE])
     assert real_anchored["implementation_by_recurrent"][True] == (
-        st.component_digest(driver.implementation_identity("lstm")))
+        st.component_digest(recurrent_identity))
 
 
 def test_a_manifest_missing_one_artefact_entry_refuses(tmp_path, frame_dir):
@@ -2607,3 +2622,986 @@ def test_the_completed_five_seed_k_selection_awaits_disposition_not_another_exte
     assert two["provisional_note"] == (
         "the two-seed selection remains explicitly provisional pending any "
         "registered whole-family seed extension")
+
+
+# ---------------------------------------------------------------------------
+# night 3 — the generalised family / role / slice machinery
+#
+# Every test below asserts BOTH halves of the contract: the new key does what
+# it registers, and a config carrying none of the new keys behaves exactly as
+# it did before.
+# ---------------------------------------------------------------------------
+
+def _general_family(candidate: str, members: list[dict], **extra) -> dict:
+    entry = {"candidate": candidate, "members": members,
+             "holm_group": f"family_{candidate}"}
+    entry.update(extra)
+    return entry
+
+
+def _member(name: str, candidate: str, reference: str, slice_name: str,
+            kind: str = "superiority", **extra) -> dict:
+    member = {"name": name,
+              "contrast": {"candidate": candidate, "reference": reference},
+              "slice": slice_name, "kind": kind}
+    member.update(extra)
+    return member
+
+
+def _gates(candidate: str, reference: str = "mlp") -> list[dict]:
+    return [_member("death_gate", candidate, reference, "death",
+                    "non_inferiority"),
+            _member("chase_gate", candidate, reference, "chase",
+                    "non_inferiority")]
+
+
+def test_the_legacy_family_form_is_translated_into_the_general_form(
+        config_path, runs_root, frame_dir, block_source, tmp_path):
+    """The fixed {primary, death_gate, chase_gate} form is the general one."""
+    config = _config_payload(frame_dir=frame_dir)
+    families = st.registered_families(config)
+    full = next(f for f in families if f["candidate"] == "full")
+    assert [m["member"] for m in full["members"]] == list(
+        st.FAMILY_MEMBER_ORDER)
+    assert [m["kind"] for m in full["members"]] == [
+        "superiority", "non_inferiority", "non_inferiority"]
+    assert [m["threshold"] for m in full["members"]] == [
+        0.0, st.MARGIN_LL, st.MARGIN_LL]
+    assert [m["primary"] for m in full["members"]] == [True, False, False]
+    assert [m["slice"] for m in full["members"]] == ["all", "death", "chase"]
+    # A translated legacy family carries none of the generalised keys, so its
+    # emitted payload is byte-for-byte what it always was.
+    assert "screen_spec" not in full
+    # Carried internally so the screen reads the registered control, and NOT
+    # emitted for a legacy family (asserted on the payload below).
+    assert full["shared_control"] == "mlp"
+
+    # The same family written in the general form is the same family.
+    general = dict(config)
+    general["statistics"] = dict(config["statistics"])
+    general["statistics"]["families"] = dict(config["statistics"]["families"])
+    general["statistics"]["families"]["map"] = [
+        _general_family("full", [
+            _member("primary", "full", "mlp", "all", primary=True),
+            *_gates("full")]),
+        _family("fixed_decay", "mlp"), _family("fox", "fixed_decay")]
+    payload = _run_stats(config_path, runs_root, frame_dir, block_source,
+                         tmp_path)
+    emitted = next(f for f in payload["families"] if f["candidate"] == "full")
+    assert "shared_control" not in emitted
+    assert "screen_spec" not in emitted
+    assert all("primary" not in member for member in emitted["members"])
+    screen = emitted["screen"][st.JOINT_READOUT]
+    assert screen["death_gate_status"] in st.ALLOWED_STATUSES
+    assert "screen_required_members" not in screen
+
+    translated = next(f for f in st.registered_families(general)
+                      if f["candidate"] == "full")
+    for left, right in zip(full["members"], translated["members"]):
+        assert {k: left[k] for k in ("member", "candidate", "reference",
+                                     "slice", "kind", "threshold", "primary")
+                } == {k: right[k] for k in ("member", "candidate", "reference",
+                                            "slice", "kind", "threshold",
+                                            "primary")}
+
+
+def _four_member_config(frame_dir: Path, **family_extra) -> dict:
+    config = _config_payload(frame_dir=frame_dir)
+    config["statistics"]["families"]["map"] = [
+        _general_family(
+            "full",
+            [_member("beats_fixed_decay", "full", "fixed_decay", "all",
+                     primary=True),
+             _member("beats_fox", "full", "fox", "all"),
+             *_gates("full")],
+            **family_extra),
+        _family("fixed_decay", "mlp"),
+        _family("fox", "fixed_decay")]
+    return config
+
+
+def _write_config(tmp_path: Path, config: dict, name: str = "general.yaml"):
+    path = tmp_path / name
+    path.write_text(yaml.safe_dump(config, sort_keys=False))
+    return path
+
+
+def test_a_four_member_family_with_two_superiority_members_and_its_own_screen(
+        tmp_path, frame_dir, runs_root, block_source):
+    config = _four_member_config(
+        frame_dir,
+        screen={"require": ["beats_fixed_decay", "beats_fox", "death_gate",
+                            "chase_gate"]})
+    path = _write_config(tmp_path, config)
+    payload = _run_stats(path, runs_root, frame_dir, block_source, tmp_path)
+
+    family = next(f for f in payload["families"] if f["candidate"] == "full")
+    assert len(family["members"]) == 4
+    assert family["shared_control"] == "mlp"
+    assert family["screen_spec"]["screen_is_registered_per_family"] is True
+
+    # Holm's multiplier is the family's own size, not the legacy constant.
+    for table in family["holm"].values():
+        assert table["m"] == 4
+        assert [row["member"] for row in table["members"]] == [
+            "beats_fixed_decay", "beats_fox", "death_gate", "chase_gate"]
+        # Tie order is the registered member order.
+        assert [row["kind"] for row in table["members"]] == [
+            "superiority", "superiority", "non_inferiority",
+            "non_inferiority"]
+        # A superiority member is strict against zero whatever its position.
+        for row in table["members"][:2]:
+            assert row["threshold"] == 0.0
+            if row["u95"] is not None:
+                assert row["strict_upper_bound_ok"] == (row["u95"] < 0.0)
+
+    screen = family["screen"][st.JOINT_READOUT]
+    assert screen["primary_member"] == "beats_fixed_decay"
+    assert screen["screen_required_members"] == [
+        "beats_fixed_decay", "beats_fox", "death_gate", "chase_gate"]
+    assert set(screen["screen_required_member_statuses"]) == set(
+        screen["screen_required_members"])
+    assert screen["all_row_condition"] == "inherited"
+    assert screen["status"] in st.ALLOWED_STATUSES
+    # Both non-inferiority members, and only those, become gate rows.
+    gate_keys = {row["contrast_key"] for row in payload["gates"]
+                 if row["candidate"] == "full"}
+    assert gate_keys == {"full-mlp@death", "full-mlp@chase"}
+    # The untouched legacy families are still exactly three members.
+    for candidate in ("fixed_decay", "fox"):
+        other = next(f for f in payload["families"]
+                     if f["candidate"] == candidate)
+        assert len(other["members"]) == 3
+        assert all(table["m"] == 3 for table in other["holm"].values())
+
+
+def test_a_per_family_screen_requires_exactly_the_members_it_names(
+        tmp_path, frame_dir, runs_root, block_source):
+    """A narrower screen ignores the members it does not require."""
+    config = _four_member_config(
+        frame_dir, screen={"require": ["beats_fixed_decay"]},
+        all_row_condition="none")
+    path = _write_config(tmp_path, config)
+    payload = _run_stats(path, runs_root, frame_dir, block_source, tmp_path)
+    screen = next(f for f in payload["families"]
+                  if f["candidate"] == "full")["screen"][st.JOINT_READOUT]
+    assert screen["screen_required_members"] == ["beats_fixed_decay"]
+    assert screen["gate_statuses"] == {}
+    # `all_row_condition: none` retires the inherited extra condition, and the
+    # report records that it did.
+    assert screen["all_row_condition"] == "none"
+    assert screen["all_row_condition_is_registered"] is True
+    assert screen["all_row_candidate_minus_mlp_ci_clean_favourable"] is None
+    # The screen is then exactly the required member's own status.
+    if screen["status"] != st.STATUS_NOT_EVALUABLE:
+        expected = (st.STATUS_PASS
+                    if (screen["screen_required_member_statuses"][
+                        "beats_fixed_decay"] == st.STATUS_PASS
+                        and screen[
+                            "favourable_direction_requirement_met"] is not
+                        False)
+                    else st.STATUS_NOT_PASS)
+        assert screen["status"] == expected
+
+
+def test_a_family_registers_two_to_six_members(frame_dir):
+    config = _config_payload(frame_dir=frame_dir)
+    base = [_member("primary", "full", "mlp", "all", primary=True),
+            *_gates("full")]
+
+    def with_members(members):
+        payload = _config_payload(frame_dir=frame_dir)
+        payload["statistics"]["families"]["map"] = [
+            _general_family("full", members),
+            _family("fixed_decay", "mlp"), _family("fox", "fixed_decay")]
+        return payload
+
+    two = st.registered_families(with_members(base[:2]))
+    assert len(next(f for f in two if f["candidate"] == "full")["members"]) == 2
+
+    # Six members: the 4b identity-residual shape.
+    six = base + [
+        _member("vs_fox", "full", "fox", "all"),
+        _member("vs_fixed_decay", "full", "fixed_decay", "all"),
+        _member("powerplay_gate", "full", "mlp", "powerplay",
+                "non_inferiority")]
+    assert len(six) == 6
+    families = st.registered_families(with_members(six))
+    full = next(f for f in families if f["candidate"] == "full")
+    assert len(full["members"]) == 6
+    assert st.FAMILY_MAX_MEMBERS == 6
+
+    seven = six + [_member("middle_gate", "full", "mlp", "middle",
+                           "non_inferiority")]
+    with pytest.raises(st.RefusalError, match="2-6"):
+        st.registered_families(with_members(seven))
+    with pytest.raises(st.RefusalError, match="2-6"):
+        st.registered_families(with_members(base[:1]))
+    del config
+
+
+def test_a_general_family_needs_exactly_one_primary_member(frame_dir):
+    def with_members(members):
+        payload = _config_payload(frame_dir=frame_dir)
+        payload["statistics"]["families"]["map"] = [
+            _general_family("full", members),
+            _family("fixed_decay", "mlp"), _family("fox", "fixed_decay")]
+        return payload
+
+    none_flagged = [_member("a", "full", "mlp", "all"),
+                    _member("b", "full", "fox", "all")]
+    with pytest.raises(st.RefusalError, match="exactly one"):
+        st.registered_families(with_members(none_flagged))
+    two_flagged = [_member("a", "full", "mlp", "all", primary=True),
+                   _member("b", "full", "fox", "all", primary=True)]
+    with pytest.raises(st.RefusalError, match="exactly one"):
+        st.registered_families(with_members(two_flagged))
+
+
+def test_a_superiority_member_may_not_register_a_non_zero_threshold(frame_dir):
+    payload = _config_payload(frame_dir=frame_dir)
+    payload["statistics"]["families"]["map"] = [
+        _general_family("full", [
+            _member("primary", "full", "mlp", "all", primary=True,
+                    threshold=0.002),
+            *_gates("full")]),
+        _family("fixed_decay", "mlp"), _family("fox", "fixed_decay")]
+    with pytest.raises(st.RefusalError, match="threshold is 0"):
+        st.registered_families(payload)
+
+
+def test_a_control_role_configuration_is_a_candidate_in_no_family(
+        tmp_path, frame_dir, runs_root, block_source):
+    config = _config_payload(frame_dir=frame_dir)
+    fox = next(entry for entry in config["configurations"]
+               if entry["id"] == "fox")
+    fox["role"] = "control"
+    config["statistics"]["families"]["map"] = [
+        _family("full", "mlp"), _family("fixed_decay", "mlp")]
+
+    # Default is `candidate`, so the count is derived, not declared.
+    assert st.config_roles(config)["full"] == "candidate"
+    assert st.config_roles(config)["fox"] == "control"
+    assert st.config_roles(config)["mlp"] == "control"
+    assert st.candidate_ids(config) == {"full", "fixed_decay"}
+    assert st.expected_family_count(config) == 2
+    families = st.registered_families(config)
+    assert {f["candidate"] for f in families} == {"full", "fixed_decay"}
+
+    # A control that IS given a family is refused, and says why.
+    with_family = _config_payload(frame_dir=frame_dir)
+    next(entry for entry in with_family["configurations"]
+         if entry["id"] == "fox")["role"] = "control"
+    with pytest.raises(st.RefusalError, match="role: control"):
+        st.registered_families(with_family, expected=3)
+
+    # A candidate left out of the map is still refused, by name.
+    missing = _config_payload(frame_dir=frame_dir)
+    missing["statistics"]["families"]["map"] = [_family("full", "mlp"),
+                                               _family("fox", "fixed_decay")]
+    with pytest.raises(st.RefusalError, match="fixed_decay"):
+        st.registered_families(missing, expected=2)
+
+    # And an unknown role is refused rather than silently treated as one.
+    bad = _config_payload(frame_dir=frame_dir)
+    next(entry for entry in bad["configurations"]
+         if entry["id"] == "fox")["role"] = "reference"
+    with pytest.raises(st.RefusalError, match="role"):
+        st.config_roles(bad)
+
+    path = _write_config(tmp_path, config, "control_role.yaml")
+    payload = _run_stats(path, runs_root, frame_dir, block_source, tmp_path,
+                         expected_families=2)
+    assert len(payload["families"]) == 2
+
+
+def test_the_shared_control_key_replaces_the_mlp_literal(
+        tmp_path, frame_dir, runs_root, block_source):
+    config = _config_payload(frame_dir=frame_dir)
+    assert st.shared_control(config) == "mlp"        # absent key -> mlp
+
+    config["statistics"]["families"]["shared_control"] = "full"
+    config["statistics"]["families"]["map"] = [
+        _family("mlp", "full"), _family("fixed_decay", "full"),
+        _family("fox", "full")]
+    assert st.shared_control(config) == "full"
+    assert st.candidate_ids(config) == {"mlp", "fixed_decay", "fox"}
+    assert st.expected_family_count(config) == 3
+    st.registered_families(config)
+
+    # The shared control may not be a family candidate, whichever id it is.
+    clash = yaml.safe_load(yaml.safe_dump(config))
+    clash["statistics"]["families"]["map"].append(_family("full", "mlp"))
+    with pytest.raises(st.RefusalError, match="full is the shared control"):
+        st.registered_families(clash, expected=4)
+
+    # The exploratory pair generator and the screen's all-row condition follow
+    # the key, not the literal.
+    path = _write_config(tmp_path, config, "shared_control.yaml")
+    payload = _run_stats(path, runs_root, frame_dir, block_source, tmp_path)
+    assert "mlp-full@all" in payload["contrasts"]
+    assert "fox-full@death" in payload["contrasts"]
+    assert payload["contrasts"]["fox-full@death"]["threshold"] == st.MARGIN_LL
+    for family in payload["families"]:
+        for screen in family["screen"].values():
+            assert screen["all_row_candidate_minus_mlp_key"] == (
+                f"{family['candidate']}-full@all")
+
+
+# --- slices ----------------------------------------------------------------
+
+def _runs_for(root: Path, directory: Path) -> Path:
+    """The `runs_root` fixture's runs, written against another frame dir."""
+    global _FRAME_DIR
+    previous, _FRAME_DIR = _FRAME_DIR, directory
+    try:
+        frame = pd.read_parquet(
+            directory / "cricket_data_i7_validation.parquet")
+        for config_id, bias in {"mlp": 0.0, "full": 0.9, "fixed_decay": 0.5,
+                                "fox": 0.7}.items():
+            for seed in SEEDS:
+                _write_run(root, config_id, seed, frame, bias=bias)
+            _write_summary(root, config_id, {7: 1.5 - bias / 10,
+                                             13: 1.51 - bias / 10})
+    finally:
+        _FRAME_DIR = previous
+    return root
+
+
+def _tier_frame(frame_dir: Path, tmp_path: Path, name: str = "tier_frame"):
+    """The test frame plus a `competition_tier` column, tier by match index."""
+    directory = tmp_path / name
+    directory.mkdir()
+    df = _frame_rows()
+    match_index = df["innings_id"].str.split("_").str[-1].str[-1].astype(int)
+    df["competition_tier"] = (match_index % 4) + 1
+    df.to_parquet(directory / "cricket_data_i7_validation.parquet",
+                  index=False)
+    return directory
+
+
+def test_tier_slices_turn_on_only_from_a_registered_spec(tmp_path, frame_dir):
+    directory = _tier_frame(frame_dir, tmp_path)
+    config = _config_payload(frame_dir=directory)
+
+    # Absent key: the computed slice list is exactly the frozen one, even
+    # though the frame carries the column.
+    frame = st.load_frame(directory, config)
+    assert {p["slice"] for p in frame.predicates} == {
+        "all", "death", "chase", "powerplay", "middle", "innings_1",
+        "innings_2", "thin_pair"}
+    assert st.optional_slice_specs(config) == []
+
+    config["statistics"]["slice_predicates"] = {
+        "tier3": {"tier": 3}, "target_P": {"tier": 3}, "tier1": {"tier": 1},
+        "death@target_P": {}, "chase@target_P": {"base": "chase",
+                                                 "restrict": "target_P"}}
+    frame = st.load_frame(directory, config)
+    by_name = {p["slice"]: p for p in frame.predicates}
+    assert by_name["tier3"]["predicate"] == "competition_tier == 3"
+    # `target_P` is `tier3` under a second registered name: same rows.
+    assert frame.masks["target_P"].tolist() == frame.masks["tier3"].tolist()
+    assert frame.masks["tier3"].sum() == 2 * 2 * BALLS_PER_INNINGS
+    assert frame.masks["tier1"].sum() == 2 * 2 * BALLS_PER_INNINGS
+    assert not (frame.masks["tier1"] & frame.masks["tier3"]).any()
+
+    # The composed gate slice is the base AND the restriction, and keeps the
+    # base's gate role so it is still compared against the margin.
+    composed = by_name["death@target_P"]
+    assert composed["role"] == "gate"
+    assert composed["restricts_slice"] == "death"
+    assert composed["restricted_to"] == "target_P"
+    assert composed["predicate"] == (
+        "is_death_overs == 1 and competition_tier == 3")
+    assert frame.masks["death@target_P"].tolist() == (
+        frame.masks["death"] & frame.masks["target_P"]).tolist()
+    assert frame.masks["chase@target_P"].tolist() == (
+        frame.masks["chase"] & frame.masks["target_P"]).tolist()
+
+    # An unregistered tier, an unknown base and a double composition refuse.
+    for spec, match in (({"tier9": {"tier": 9}}, "tier 9"),
+                        ({"nope@tier3": {}}, "restricts"),
+                        ({"tier3": {"tier": 3}, "death@tier3": {},
+                          "twice": {"base": "chase",
+                                    "restrict": "death@tier3"}},
+                         "compose once")):
+        bad = _config_payload(frame_dir=directory)
+        bad["statistics"]["slice_predicates"] = spec
+        with pytest.raises(st.RefusalError, match=match):
+            st.load_frame(directory, bad)
+
+
+def test_a_tier_slice_is_reported_unavailable_when_the_column_is_absent(
+        frame_dir):
+    """Exactly the thin_pair discipline: unavailable with a reason, never
+    invented and never breaking the read of the other slices."""
+    config = _config_payload(frame_dir=frame_dir)
+    config["statistics"]["slice_predicates"] = {
+        "target_P": {"tier": 3}, "death@target_P": {}}
+    frame = st.load_frame(frame_dir, config)          # no competition_tier
+    by_name = {p["slice"]: p for p in frame.predicates}
+    assert by_name["target_P"]["available"] is False
+    assert "competition_tier" in by_name["target_P"]["unavailable_reason"]
+    assert "target_P" not in frame.masks
+    # The composition of an unavailable slice is itself unavailable, and says
+    # which slice it was waiting on.
+    assert by_name["death@target_P"]["available"] is False
+    assert "target_P" in by_name["death@target_P"]["unavailable_reason"]
+    assert "death@target_P" not in frame.masks
+    # Every other slice is unaffected.
+    assert by_name["death"]["available"] is True
+    assert frame.masks["chase"].sum() == N_MATCHES * BALLS_PER_INNINGS
+
+
+def test_match_list_slices_read_the_registered_file_and_check_its_sha256(
+        tmp_path, frame_dir):
+    listed = [f"90000{index}" for index in range(3)]
+    target_e = tmp_path / "target_E_matches.json"
+    target_e.write_text(json.dumps(listed))
+    big3 = tmp_path / "big3_validation_matches.json"
+    big3.write_text(json.dumps({"match_ids": listed[:1]}))
+
+    config = _config_payload(frame_dir=frame_dir)
+    config["statistics"]["slice_predicates"] = {
+        "target_E": {"match_list": str(target_e),
+                     "sha256": st.sha256_file(target_e)},
+        "big3": {"match_list": str(big3),
+                 "sha256": st.sha256_file(big3)},
+        "death@target_E": {}}
+    frame = st.load_frame(frame_dir, config)
+    by_name = {p["slice"]: p for p in frame.predicates}
+    assert by_name["target_E"]["available"] is True
+    assert by_name["target_E"]["n_matches"] == 3
+    assert by_name["target_E"]["match_list_sha256"] == st.sha256_file(target_e)
+    # Membership is the innings_id SUFFIX, so both innings of a listed match
+    # are in and nothing else is.
+    assert frame.masks["target_E"].sum() == 3 * 2 * BALLS_PER_INNINGS
+    assert frame.masks["big3"].sum() == 1 * 2 * BALLS_PER_INNINGS
+    assert frame.masks["death@target_E"].tolist() == (
+        frame.masks["death"] & frame.masks["target_E"]).tolist()
+
+    # A drifted list computes no number.
+    target_e.write_text(json.dumps(listed[:2]))
+    frame = st.load_frame(frame_dir, config)
+    drifted = next(p for p in frame.predicates if p["slice"] == "target_E")
+    assert drifted["available"] is False
+    assert "drifted" in drifted["unavailable_reason"]
+    assert "target_E" not in frame.masks
+
+    # An absent list is unavailable, not invented. (Its sha256 is still
+    # required: the pin is what a later capture is checked against.)
+    absent = tmp_path / "not_here.json"
+    config["statistics"]["slice_predicates"] = {
+        "target_E": {"match_list": str(absent), "sha256": "0" * 64}}
+    frame = st.load_frame(frame_dir, config)
+    missing = next(p for p in frame.predicates if p["slice"] == "target_E")
+    assert missing["available"] is False
+    assert "does not exist" in missing["unavailable_reason"]
+
+
+def test_a_match_list_slice_without_a_sha256_is_refused(tmp_path, frame_dir):
+    """No unpinned slices: the rows a match list selects must not be able to
+    change under the analysis, so the digest is required at config load."""
+    listed = tmp_path / "unpinned_matches.json"
+    listed.write_text(json.dumps(["900000"]))
+    config = _config_payload(frame_dir=frame_dir)
+    config["statistics"]["slice_predicates"] = {
+        "target_E": {"match_list": str(listed)}}
+    with pytest.raises(st.RefusalError, match="no `sha256`"):
+        st.optional_slice_specs(config)
+    with pytest.raises(st.RefusalError, match="unpinned match list"):
+        st.load_frame(frame_dir, config)
+    # With the digest it loads.
+    config["statistics"]["slice_predicates"]["target_E"]["sha256"] = (
+        st.sha256_file(listed))
+    frame = st.load_frame(frame_dir, config)
+    assert frame.masks["target_E"].sum() == 2 * BALLS_PER_INNINGS
+
+
+def test_guard_path_resolves_before_testing_the_forbidden_fragments(tmp_path):
+    """A symlink must not carry a read into a sealed holdout (or the cohort).
+
+    The guard tests the path as written AND its resolved form, and still returns
+    the path as written so no reported path becomes absolute.
+    """
+    sealed = tmp_path / "data" / "golden"
+    sealed.mkdir(parents=True)
+    target = sealed / "polymarket_test_v2.json"
+    target.write_text("{}")
+    innocent = tmp_path / "innocuous_link.json"
+    innocent.symlink_to(target)
+    # Nothing in the name as written names a sealed holdout; the resolved form
+    # does, and that is what the refusal reports.
+    assert "data/golden" not in innocent.as_posix()
+    with pytest.raises(st.RefusalError, match="resolves to"):
+        st.guard_path(innocent)
+    # The direct spelling is refused as before, naming the fragment.
+    with pytest.raises(st.RefusalError, match="data/golden"):
+        st.guard_path(target)
+    # A `..` hop into the same tree is refused too, and it need not exist.
+    hop = tmp_path / "data" / "sub" / ".." / "golden" / "x.json"
+    assert "data/golden" not in hop.as_posix()
+    with pytest.raises(st.RefusalError):
+        st.guard_path(hop)
+    # An ordinary path passes through UNCHANGED, not resolved.
+    plain = Path("eval_out/seq_stage2_5seed/stats.json")
+    assert st.guard_path(plain) == plain
+
+
+def test_an_optional_slice_registers_a_predicate_or_is_refused(frame_dir):
+    config = _config_payload(frame_dir=frame_dir)
+    config["statistics"]["slice_predicates"] = {"mystery": {}}
+    with pytest.raises(st.RefusalError, match="never invented"):
+        st.optional_slice_specs(config)
+
+
+def test_a_family_member_may_be_registered_on_an_optional_slice(
+        tmp_path, frame_dir, block_source):
+    """Block B's shape: a tier-restricted primary and tier-restricted gates."""
+    directory = _tier_frame(frame_dir, tmp_path, "tier_frame_family")
+    # The runs' signature is anchored to the pin of the frame they were trained
+    # against, so this frame needs its own runs.
+    runs_root = _runs_for(tmp_path / "tier_runs", directory)
+    config = _config_payload(frame_dir=directory)
+    config["statistics"]["slice_predicates"] = {
+        "target_P": {"tier": 3}, "death@target_P": {},
+        "chase@target_P": {}}
+    config["statistics"]["slices"] = [
+        "all", "death", "chase", "powerplay", "middle", "innings_1",
+        "innings_2", "thin_pair", "target_P", "death@target_P",
+        "chase@target_P"]
+    config["statistics"]["families"]["map"] = [
+        _general_family(
+            "full",
+            [_member("tier_primary", "full", "fixed_decay", "target_P",
+                     primary=True),
+             _member("tier_rowmatch", "full", "fox", "target_P"),
+             _member("death_gate", "full", "mlp", "death@target_P",
+                     "non_inferiority"),
+             _member("chase_gate", "full", "mlp", "chase@target_P",
+                     "non_inferiority")],
+            screen={"require": ["tier_primary", "tier_rowmatch",
+                                "death_gate", "chase_gate"]},
+            all_row_condition="inherited"),
+        _family("fixed_decay", "mlp"), _family("fox", "fixed_decay")]
+    path = _write_config(tmp_path, config, "tier_family.yaml")
+    payload = _run_stats(path, runs_root, frame_dir=directory,
+                         block_source=block_source, tmp_path=tmp_path)
+    assert "full-fixed_decay@target_P" in payload["contrasts"]
+    assert "full-mlp@death@target_P" in payload["contrasts"]
+    # A tier-restricted gate is still measured against the margin.
+    assert payload["contrasts"]["full-mlp@death@target_P"]["threshold"] == (
+        st.MARGIN_LL)
+    gate_slices = {row["slice"] for row in payload["gates"]
+                   if row["candidate"] == "full"}
+    assert gate_slices == {"death@target_P", "chase@target_P"}
+    assert payload["slices"]["stats"]["target_P"]["n_rows"] > 0
+
+
+# --- mechanism contrasts ---------------------------------------------------
+
+def test_mechanism_contrasts_fall_back_to_the_frozen_tuple(frame_dir):
+    """The Stage 2 config describes its mechanism contrasts in prose and names
+    pairs for only one of them, so it is NOT a complete registration and the
+    frozen tuple is used — which is why Stage 2 reproduces."""
+    config = _config_payload(frame_dir=frame_dir)
+    config["statistics"]["contrasts"] = [
+        {"name": "fox_minus_fixed_decay", "role": "mechanism",
+         "tests": "learned forgetting beyond fixed decay"},
+        {"name": "same_entity_minus_recency", "role": "mechanism",
+         "tests": "ownership plus alignment beyond recency",
+         "registered_pairs": [["same_entity_k30", "recency_k30"]]}]
+    pairs, source = st.mechanism_contrasts(config)
+    assert pairs == st.MECHANISM_CONTRASTS
+    assert source == st.MECHANISM_SOURCE_BUILTIN
+
+    # No mechanism entry at all also falls back.
+    assert st.mechanism_contrasts(_config_payload(frame_dir=frame_dir)) == (
+        st.MECHANISM_CONTRASTS, st.MECHANISM_SOURCE_BUILTIN)
+
+
+def test_mechanism_contrasts_are_read_from_a_complete_registration(
+        tmp_path, frame_dir, runs_root, block_source):
+    config = _config_payload(frame_dir=frame_dir)
+    config["statistics"]["contrasts"] = [
+        {"name": "fox_minus_fixed_decay", "role": "mechanism",
+         "tests": "learned forgetting beyond fixed decay",
+         "registered_pairs": [["fox", "fixed_decay"]]},
+        {"name": "full_minus_mlp", "role": "mechanism",
+         "registered_pairs": [{"candidate": "full", "reference": "mlp",
+                               "label": "the whole sequence model"}]},
+        {"name": "arm_minus_mlp", "role": "primary_screen"}]
+    pairs, source = st.mechanism_contrasts(config)
+    assert pairs == (("fox", "fixed_decay",
+                      "learned forgetting beyond fixed decay"),
+                     ("full", "mlp", "the whole sequence model"))
+    assert source == st.MECHANISM_SOURCE_CONFIG
+
+    path = _write_config(tmp_path, config, "mechanism.yaml")
+    payload = _run_stats(path, runs_root, frame_dir, block_source, tmp_path)
+    assert [row["contrast_key"] for row in payload["mechanism_contrasts"]] == [
+        "fox-fixed_decay@all", "full-mlp@all"]
+    assert all(row["registered_in"] == st.MECHANISM_SOURCE_CONFIG
+               for row in payload["mechanism_contrasts"])
+    # `fox - fixed_decay` is also this config's `fox` family primary, and a
+    # family role still wins over the mechanism role, exactly as before.
+    assert payload["contrasts"]["fox-fixed_decay@all"]["role"] == (
+        "family_primary")
+    assert all(row["record"]["available"] is True
+               for row in payload["mechanism_contrasts"])
+
+
+# --- the reproduction gate -------------------------------------------------
+
+REPRO_DIGESTS = Path(
+    "research/reports/embeddings/stage2_five_seed_repro_digests.json")
+LIVE_FIVE_SEED_DIR = Path("eval_out/seq_stage2_5seed")
+
+
+def _canonical_digest(path: Path) -> str:
+    """The document's sha256 with only the timestamp-derived fields removed.
+
+    This is the recipe the committed digest file records, reimplemented here so
+    the test does not depend on the tool it is checking.
+    """
+    payload = json.loads(path.read_text())
+    payload.pop("generated_at_utc", None)
+    # `selection_record_sha256` is the hash of the record INCLUDING its
+    # timestamp, so it is timestamp-derived and removed with it.
+    payload.pop("selection_record_sha256", None)
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def test_the_committed_repro_digests_record_their_recipe_and_argv():
+    committed = json.loads(REPRO_DIGESTS.read_text())
+    assert set(committed["digests"]) == {"stats.json", "k_selection.json"}
+    assert set(committed["removed_fields"]) == {"generated_at_utc",
+                                               "selection_record_sha256"}
+    assert all(len(value) == 64 for value in committed["digests"].values())
+    # The argv is the pinned one, so the digest cannot silently describe some
+    # other run.
+    pin = json.loads(Path(
+        "docs/sequence_track/stage2_five_seed_analysis_pin.json").read_text())
+    for key in ("statistics", "ksweep"):
+        assert committed["invocations"][key] == pin["invocations"][key]
+
+
+@pytest.mark.parametrize("name", ["stats.json", "k_selection.json"])
+def test_the_five_seed_analysis_reproduces_byte_identically(name):
+    """The generalisation must not move one number of the landed analysis.
+
+    The committed digest in `REPRO_DIGESTS` is the gate. It is checked against
+    the LIVE files of record — the shipped
+    `eval_out/seq_stage2_5seed/{stats,k_selection}.json` — and additionally
+    against a fresh capture whenever `STAGE2_STATS_REPRO_DIR` points at one
+    (a directory holding `stats_after/<name>`, optionally `stats_before/<name>`
+    too). It never skips: an absent file of record is a failure, because then
+    nothing is checking the reproduction.
+    """
+    committed = json.loads(REPRO_DIGESTS.read_text())
+    expected = committed["digests"][name]
+
+    live = Path(committed["files_of_record"][name])
+    assert live == LIVE_FIVE_SEED_DIR / name
+    assert live.exists(), (
+        f"the five-seed file of record {live} is absent, so the reproduction "
+        f"gate is unchecked. Reproduce it with the argv recorded in "
+        f"{REPRO_DIGESTS} and re-run.")
+    assert _canonical_digest(live) == expected, (
+        f"{live} no longer reproduces the committed canonical digest "
+        f"{expected}: a number of the landed five-seed analysis moved.")
+
+    capture_dir = os.environ.get("STAGE2_STATS_REPRO_DIR")
+    if capture_dir:
+        checked = 0
+        for sub in ("stats_before", "stats_after"):
+            path = Path(capture_dir) / sub / name
+            if not path.exists():
+                continue
+            checked += 1
+            assert _canonical_digest(path) == expected, (
+                f"the {sub} capture {path} does not reproduce the committed "
+                f"canonical digest {expected}")
+        assert checked, (
+            f"STAGE2_STATS_REPRO_DIR={capture_dir} holds no "
+            f"stats_before/{name} or stats_after/{name} to check")
+
+
+def test_the_live_five_seed_stats_differs_from_a_capture_only_in_the_timestamp():
+    """Whole-document equality, not just the digest, where a capture exists."""
+    capture_dir = os.environ.get("STAGE2_STATS_REPRO_DIR")
+    if not capture_dir:
+        pytest.skip("no STAGE2_STATS_REPRO_DIR capture to compare against")
+    capture = Path(capture_dir) / "stats_after" / "stats.json"
+    if not capture.exists():
+        pytest.skip(f"no capture at {capture}")
+    left = json.loads((LIVE_FIVE_SEED_DIR / "stats.json").read_text())
+    right = json.loads(capture.read_text())
+    assert left.pop("generated_at_utc") != right.pop("generated_at_utc")
+    assert left == right
+
+
+# --- the direction rule on more than one member ----------------------------
+
+def _two_superiority_screen_inputs(primary_count: int, second_count: int,
+                                   direction_required=None,
+                                   n_seeds: int = 5):
+    """A 3a-shaped four-member family whose members all otherwise pass.
+
+    The two superiority members differ ONLY in their favourable-direction
+    counts, so the screen's verdict isolates the direction rule.
+    """
+    members = [
+        _member("superiority_1", "full", "fixed_decay", "target_P",
+                primary=True),
+        _member("superiority_2", "full", "fox", "target_P"),
+        _member("death_gate", "full", "mlp", "death@target_P",
+                "non_inferiority"),
+        _member("chase_gate", "full", "mlp", "chase@target_P",
+                "non_inferiority")]
+    entry = _general_family("full", members)
+    if direction_required is not None:
+        entry["direction_required"] = direction_required
+    internal = [{"member": m["name"], "candidate": "full",
+                 "reference": m["contrast"]["reference"],
+                 "slice": m["slice"], "kind": m["kind"],
+                 "contrast": m["name"],
+                 "threshold": 0.0 if m["kind"] == "superiority" else 0.002,
+                 "primary": bool(m.get("primary"))}
+                for m in members]
+    family = {"candidate": "full", "members": internal,
+              "shared_control": "mlp",
+              "screen_spec": st._family_screen_spec(entry, "full", internal,
+                                                    legacy=False)}
+    keys = {"superiority_1": "full-fixed_decay@target_P",
+            "superiority_2": "full-fox@target_P",
+            "death_gate": "full-mlp@death@target_P",
+            "chase_gate": "full-mlp@chase@target_P"}
+    readout = st.JOINT_READOUT
+    tables = {readout: {"readout": readout, "members": [
+        {"member": name, "status": "SCREEN_PASS", "rejected": True,
+         "u95": (-0.01 if name.startswith("superiority") else 0.0005),
+         "contrast_key": keys[name]} for name in keys]}}
+    counts = {"superiority_1": primary_count, "superiority_2": second_count,
+              "death_gate": 5, "chase_gate": 5}
+    contrasts = {
+        keys[name]: {"available": True, "n_seeds": n_seeds,
+                     "favourable_direction_count": counts[name],
+                     "estimand_ii": _gate_readout(-0.01, point=-0.02)}
+        for name in keys}
+    # The inherited extra all-row read.
+    contrasts["full-mlp@all"] = {
+        "available": True, "n_seeds": n_seeds,
+        "favourable_direction_count": 5,
+        "estimand_ii": _gate_readout(-0.01, point=-0.02)}
+    return family, tables, contrasts
+
+
+def test_the_direction_rule_covers_every_member_it_registers():
+    """The 3a families enforce >=4/5 on BOTH superiority members."""
+    required = ["superiority_1", "superiority_2"]
+
+    # Both clear: the screen passes and reports both counts.
+    family, tables, contrasts = _two_superiority_screen_inputs(
+        5, 4, required)
+    screen = st.family_screen(family, tables, contrasts, st.JOINT_READOUT)
+    assert screen["status"] == st.STATUS_PASS
+    assert screen["direction_required_members"] == required
+    assert screen["direction_required_is_registered"] is True
+    assert screen["all_direction_requirements_met"] is True
+    counts = {name: row["favourable_direction_count"]
+              for name, row in
+              screen["direction_requirement_by_member"].items()}
+    assert counts == {"superiority_1": 5, "superiority_2": 4}
+
+    # The SECOND superiority member fails 4/5 while everything else passes:
+    # the screen is NOT_PASS, and the per-member record says which member.
+    family, tables, contrasts = _two_superiority_screen_inputs(
+        5, 3, required)
+    screen = st.family_screen(family, tables, contrasts, st.JOINT_READOUT)
+    assert screen["status"] == st.STATUS_NOT_PASS
+    assert screen["all_direction_requirements_met"] is False
+    by_member = screen["direction_requirement_by_member"]
+    assert by_member["superiority_1"][
+        "favourable_direction_requirement_met"] is True
+    assert by_member["superiority_2"][
+        "favourable_direction_requirement_met"] is False
+    assert by_member["superiority_2"]["favourable_direction_count"] == 3
+    assert by_member["superiority_2"]["contrast_key"] == "full-fox@target_P"
+    assert screen["five_seed_extension_qualified"] is False
+    # Every required member still rejected; only the direction rule failed.
+    assert set(screen["screen_required_member_statuses"].values()) == {
+        st.STATUS_PASS}
+    # And the headline keys still describe the primary, unchanged.
+    assert screen["favourable_direction_count"] == 5
+    assert screen["primary_status"] == st.STATUS_PASS
+
+
+def test_the_direction_rule_defaults_to_the_primary_member_alone():
+    """Default coverage keeps Stage 2 and the legacy form exactly as they were.
+
+    The second superiority member fails 4/5 and the screen still passes,
+    because the family did not register it as covered.
+    """
+    family, tables, contrasts = _two_superiority_screen_inputs(5, 0)
+    screen = st.family_screen(family, tables, contrasts, st.JOINT_READOUT)
+    assert screen["status"] == st.STATUS_PASS
+    assert screen["direction_required_members"] == ["superiority_1"]
+    assert screen["direction_required_is_registered"] is False
+    assert list(screen["direction_requirement_by_member"]) == ["superiority_1"]
+    # A legacy family carries none of these keys at all.
+    legacy, legacy_tables, legacy_contrasts = _screen_inputs(4, 5)
+    legacy_screen = st.family_screen(legacy, legacy_tables, legacy_contrasts,
+                                     st.JOINT_READOUT)
+    assert "direction_required_members" not in legacy_screen
+    assert "direction_requirement_by_member" not in legacy_screen
+    assert legacy_screen["status"] == st.STATUS_PASS
+
+
+def test_direction_required_refuses_a_name_outside_the_family(frame_dir):
+    members = [_member("primary", "full", "mlp", "all", primary=True),
+               *_gates("full")]
+    payload = _config_payload(frame_dir=frame_dir)
+    payload["statistics"]["families"]["map"] = [
+        _general_family("full", members,
+                        direction_required=["primary", "no_such_member"]),
+        _family("fixed_decay", "mlp"), _family("fox", "fixed_decay")]
+    with pytest.raises(st.RefusalError, match="no_such_member"):
+        st.registered_families(payload)
+
+    # An empty list, and one that drops the primary, are refused too.
+    payload["statistics"]["families"]["map"][0]["direction_required"] = []
+    with pytest.raises(st.RefusalError, match="at least the primary"):
+        st.registered_families(payload)
+    payload["statistics"]["families"]["map"][0]["direction_required"] = [
+        "death_gate"]
+    with pytest.raises(st.RefusalError, match="omits its primary member"):
+        st.registered_families(payload)
+
+
+# --- night 3 Block B: the expectation is DERIVED from the driver -----------
+
+NIGHT3_CONFIG_PATH = REPO / "experiments/configs/seq_stage3_night3_v1.yaml"
+
+
+def test_the_night3_expected_digests_are_the_drivers_own(frame_dir):
+    """MUST-FIX 1: statistics must expect what the driver actually produces.
+
+    The stats-side expectation used to rebuild `training_block` in a fixed
+    shape that had no `schedule` sub-block, so every night-3 run — whose
+    configurations all set a step budget — carried a signature component no
+    expectation could ever equal and was refused as incomparable. The expected
+    `training_block` and `arm_params` digests are now read off the driver's
+    own `effective_settings` / `signature_components` for the entry, which is
+    what this locks, for all six registered configurations.
+    """
+    driver = st.training_driver()
+    night3 = yaml.safe_load(NIGHT3_CONFIG_PATH.read_text())
+    # The night-3 config is not pinned in this synthetic tree, so it borrows
+    # the fixture's provenance block: the pin anchors the frame and the cache,
+    # neither of which this test is about.
+    fixture = _config_payload(frame_dir=frame_dir, same_entity=True)
+    config = dict(night3, provenance=fixture["provenance"])
+    pin = st.load_pin(config)
+    assert pin.available
+    anchored = st.pinned_component_digests(config, pin)
+    resolved = {
+        "frame_dir_configured": config["provenance"]["frame"]["dir"],
+        "frame_version": config["provenance"]["frame"]["version"],
+        "feature_hash": config["provenance"]["frame"]["feature_hash"],
+        "split_files": {
+            split: config["provenance"]["frame"]["splits"][split]
+            for split in driver.CONTRACT_SPLITS},
+        "stats_cache": {"role": CACHE_ROLE, "md5": CACHE_MD5},
+    }
+    entries = driver.configurations(config)
+    assert len(entries) == 6
+    for config_id, entry in entries.items():
+        entry = dict(entry)
+        entry["_params"] = driver._check_params(NIGHT3_CONFIG_PATH, entry)
+        effective = driver.effective_settings(config, entry)
+        # Every night-3 Block B arm runs the STEP schedule, which is exactly
+        # the sub-block the old reconstruction dropped.
+        assert effective["schedule"] == {"max_steps": 3840, "eval_every": 128}
+        produced = driver.signature_components(effective, resolved)
+        assert anchored["training_block_by_config"][config_id] == (
+            produced["training_block"]), config_id
+        assert anchored["arm_params_by_config"][config_id] == (
+            produced["arm_params"]), config_id
+    # One step budget across the block, so the shared digest is still one.
+    assert len(set(anchored["training_block_by_config"].values())) == 1
+    assert anchored["training_block"] == (
+        anchored["training_block_by_config"]["mlp_pool"])
+
+
+def test_a_stage2_configurations_expected_digests_are_the_drivers_own(
+        frame_dir):
+    """And the stage 2 shape is byte-identical to what it always produced."""
+    config, pin, anchored = _anchor(frame_dir)
+    driver = st.training_driver()
+    for config_id, entry in driver.configurations(config).items():
+        effective = st.driver_effective_settings(config, entry, pin)
+        assert "schedule" not in effective, config_id
+        block = {"arch": effective["arch"], "optimiser": effective["optimiser"]}
+        assert anchored["training_block_by_config"][config_id] == (
+            st.component_digest(block))
+        assert anchored["training_block_by_config"][config_id] == (
+            anchored["training_block"])
+
+
+# --- MUST-FIX 2: a general family is a five-seed screen --------------------
+
+def test_a_general_family_cannot_pass_below_five_complete_seeds():
+    """A reduced-seed screen made the direction rule "not applicable" and a
+    GENERAL-form family still reported SCREEN_PASS. Five complete paired
+    seeds on every required member are now a precondition of a pass."""
+    required = ["superiority_1", "superiority_2"]
+    family, tables, contrasts = _two_superiority_screen_inputs(
+        5, 4, required, n_seeds=3)
+    screen = st.family_screen(family, tables, contrasts, st.JOINT_READOUT)
+    assert screen["status"] == st.STATUS_NOT_PASS
+    assert screen["status_reason"] == "fewer_than_five_seeds"
+    assert screen["five_complete_seeds_required"] is True
+    assert screen["required_members_below_five_seeds"] == sorted(
+        screen["screen_required_members"])
+    # The direction rule is still merely "not applicable" at three seeds; it
+    # is the seed count itself that fails the family.
+    assert screen["five_seed_direction_requirement_applies"] is False
+    assert screen["favourable_direction_requirement_met"] is None
+    assert screen["five_seed_extension_qualified"] is False
+
+    # One short member is enough, and the payload names it.
+    family, tables, contrasts = _two_superiority_screen_inputs(
+        5, 4, required, n_seeds=5)
+    contrasts["full-mlp@death@target_P"] = dict(
+        contrasts["full-mlp@death@target_P"], n_seeds=4)
+    screen = st.family_screen(family, tables, contrasts, st.JOINT_READOUT)
+    assert screen["status"] == st.STATUS_NOT_PASS
+    assert screen["status_reason"] == "fewer_than_five_seeds"
+    assert screen["required_members_below_five_seeds"] == ["death_gate"]
+    assert screen["required_member_n_seeds"]["superiority_1"] == 5
+
+    # Five complete seeds everywhere: the screen passes exactly as before.
+    family, tables, contrasts = _two_superiority_screen_inputs(
+        5, 4, required, n_seeds=5)
+    screen = st.family_screen(family, tables, contrasts, st.JOINT_READOUT)
+    assert screen["status"] == st.STATUS_PASS
+    assert screen["status_reason"] is None
+    assert screen["required_members_below_five_seeds"] == []
+
+
+def test_a_legacy_family_keeps_the_two_seed_screen():
+    """Stage 2's two-seed screen must reproduce: the seed requirement is for
+    the GENERAL form only."""
+    family, tables, contrasts = _screen_inputs(None, 2)
+    screen = st.family_screen(family, tables, contrasts, st.JOINT_READOUT)
+    assert screen["status"] == st.STATUS_PASS
+    # A legacy family's payload carries none of the five-complete-seeds keys
+    # (byte-identity with the sealed stage 2 outputs).
+    assert "status_reason" not in screen
+    assert "five_complete_seeds_required" not in screen
+    assert screen["five_seed_direction_requirement_applies"] is False
+    # The legacy gates carry no contrast record at all, which would have been
+    # "zero seeds" under the general rule and must not fail this family.
+    assert "required_member_n_seeds" not in screen

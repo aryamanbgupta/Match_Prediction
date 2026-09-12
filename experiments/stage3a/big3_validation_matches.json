@@ -1,0 +1,17 @@
+{
+  "definition": "VALIDATION matches inside target E (BOTH cricsheet info.teams in parsing_v2.ICC_FULL_MEMBERS) with at least one of India, Australia, England; descriptive readout slice, no family",
+  "match_ids": [
+    "1439899",
+    "1439900",
+    "1439901",
+    "1439902",
+    "1439903",
+    "1448346",
+    "1448347",
+    "1448348"
+  ],
+  "n_matches": 8,
+  "n_validation_matches_without_cricsheet_file": 0,
+  "rule": "E-intersected: both full members AND one of India/Australia/England",
+  "split": "validation"
+}

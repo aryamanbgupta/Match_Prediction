@@ -286,7 +286,9 @@ def test_relay_free_arms_refuse_to_run_without_own_outcomes(arm):
 def test_the_key_construction_table_matches_the_wiring():
     for arm in t1.ALL_ARMS:
         expected = {"relay_free": "own_outcome", "standard": "shifted_history",
-                    "token_mlp": None, "recurrent": None}[t1.ARM_WIRING[arm]]
+                    "token_mlp": None, "recurrent": None,
+                    # Rung 4b owns its whole token pathway and has no keys.
+                    "identity_residual": None}[t1.ARM_WIRING[arm]]
         assert t1.ARM_KEY_CONSTRUCTION[arm] == expected, arm
     # Only the relay-free arms own the extra embedding table, and it has no
     # BOS row: a row's own outcome always exists.
@@ -348,7 +350,8 @@ def test_aligned_arms_refuse_to_run_without_aligned_inputs():
 
 
 @pytest.mark.parametrize("arm", [a for a in t1.ALL_ARMS
-                                 if t1.ARM_WIRING[a] != "recurrent"])
+                                 if t1.ARM_WIRING[a] != "recurrent"
+                                 and a not in t1.ARMS_NEEDING_BASE_PROBS])
 def test_every_arm_is_finite_with_padding(arm):
     k = 6 if arm in t1.ARMS_NEEDING_K else None
     model = build(arm, k)
@@ -437,7 +440,7 @@ def test_arm_params_block_is_complete_for_every_arm(arm):
                                          None}
     assert block["arm"] == arm and block["k"] == k
     assert block["wiring"] in {"token_mlp", "standard", "relay_free",
-                              "recurrent"}
+                              "recurrent", "identity_residual"}
     assert block["history_input"] in {"none", "innings_previous",
                                       "participant_aligned"}
     assert block["bias"] in {"none", "alibi", "fox"}
@@ -672,3 +675,77 @@ def test_a_residual_run_refuses_base_logits_from_another_frame(tmp_path,
                     "--kit-dir", str(tmp_path / "absent"), "--arm",
                     "residual_mlp", "--base-logits-dir", str(base_dir),
                     *CACHE_ARGS, str(cache))
+
+
+# ------------------------------------------ stage 3 Block A: aligned_hist_decay
+#
+# The arm is registered but NOT run on night 3 (the user removed Block A from
+# the queue on 2026-09-12). These tests keep the table entry honest so it can
+# be picked up later without re-deriving what it was supposed to be.
+
+def test_aligned_hist_decay_is_registered_in_every_table():
+    arm = "aligned_hist_decay"
+    assert arm in t1.STAGE3_ARMS and arm in t1.ALL_ARMS
+    # Stage 1 and stage 2 membership is untouched by the addition.
+    assert t1.STAGE1_ARMS == ("full", "mlp", "no_attention", "no_history")
+    assert arm not in t1.STAGE1_ARMS and arm not in t1.STAGE2_ARMS
+    for table in (t1.ARM_WIRING, t1.ARM_HISTORY, t1.ARM_BIAS, t1.ARM_POS_EMB,
+                  t1.ARM_KEY_CONSTRUCTION, t1.ARM_MASK_OWNERSHIP):
+        assert set(table) == set(t1.ALL_ARMS)
+
+
+def test_aligned_hist_decay_is_aligned_hist_history_with_fixed_decay_bias():
+    """`aligned_hist`'s input, `fixed_decay`'s bias, and no positional
+    embedding — which the DERIVED `ARM_POS_EMB` rule already gives, because
+    the rule is "attention wiring and no bias"."""
+    arm = "aligned_hist_decay"
+    assert t1.ARM_WIRING[arm] == t1.ARM_WIRING["fixed_decay"] == "standard"
+    assert t1.ARM_HISTORY[arm] == t1.ARM_HISTORY["aligned_hist"] == (
+        "participant_aligned")
+    assert t1.ARM_BIAS[arm] == t1.ARM_BIAS["fixed_decay"] == "alibi"
+    assert t1.ARM_POS_EMB[arm] is False
+    assert t1.ARM_POS_EMB["fixed_decay"] is False
+    assert t1.ARM_POS_EMB["aligned_hist"] is True
+    assert t1.ARM_KEY_CONSTRUCTION[arm] == "shifted_history"
+    assert arm not in t1.ARMS_NEEDING_K
+    assert arm not in t1.ARMS_NEEDING_BASE_LOGITS
+
+
+def test_aligned_hist_decay_uses_the_fixed_decay_slopes():
+    """Same ALiBi slopes, not merely the same bias NAME."""
+    model = t1.T1Model(t1.N_FEATS, DMODEL, LAYERS, HEADS,
+                       arm="aligned_hist_decay")
+    control = t1.T1Model(t1.N_FEATS, DMODEL, LAYERS, HEADS, arm="fixed_decay")
+    model.eval()
+    control.eval()
+    tokens = torch.zeros(1, 7, DMODEL)
+    assert torch.equal(model._bias(0, tokens, 7), control._bias(0, tokens, 7))
+    heads = torch.arange(1, HEADS + 1)
+    assert torch.equal(t1.alibi_slopes(HEADS),
+                       torch.pow(2.0, -8.0 * heads / HEADS))
+    # It owns the aligned-history embeddings and no positional table.
+    assert hasattr(model, "bat_emb") and hasattr(model, "bowl_emb")
+    assert not hasattr(model, "pos_emb")
+    assert not hasattr(model, "out_emb")
+
+
+def test_aligned_hist_decay_arm_params_block_records_its_derived_fields():
+    block = t1.arm_params_block("aligned_hist_decay", None, None, None, 11)
+    assert block == {
+        "arm": "aligned_hist_decay", "k": None, "wiring": "standard",
+        "history_input": "participant_aligned",
+        "key_construction": "shifted_history",
+        "positional_embedding": False, "bias": "alibi",
+        "residual_l2": None, "base_logits_md5": None, "n_parameters": 11}
+
+
+def test_aligned_hist_decay_needs_the_aligned_history_inputs():
+    model = t1.T1Model(t1.N_FEATS, DMODEL, LAYERS, HEADS,
+                       arm="aligned_hist_decay").eval()
+    feats = torch.zeros(1, 5, t1.N_FEATS)
+    zeros = torch.zeros(1, 5, dtype=torch.long)
+    pad = torch.zeros(1, 5, dtype=torch.bool)
+    with pytest.raises(ValueError, match="prev_bat/prev_bowl"):
+        model(feats, zeros, pad)
+    logits, _ = model(feats, zeros, pad, prev_bat=zeros, prev_bowl=zeros)
+    assert logits.shape == (1, 5, 6)

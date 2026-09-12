@@ -66,6 +66,7 @@ from __future__ import annotations
 
 import copy
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -630,8 +631,10 @@ def test_signature_covers_key_construction(config):
 def test_recurrent_arms_hash_their_own_implementation_file():
     # Astra round-1 MUST-FIX 2: the imported feature contract and the manifest
     # resolver are in every arm's set; the recurrent module is in theirs.
+    # C114 added `feature_registry.py`: it resolves the alternative contract's
+    # ordered 114 columns, so it changes a training input with no trainer edit.
     common = [driver.TRAINER_SOURCE, driver.FEATURE_CONTRACT_SOURCE,
-              driver.ARTIFACT_RESOLVER_SOURCE]
+              driver.ARTIFACT_RESOLVER_SOURCE, driver.FEATURE_REGISTRY_SOURCE]
     assert driver.implementation_sources("lstm") == common + [
         driver.RECURRENT_SOURCE]
     assert driver.implementation_sources("xlstm") == common + [
@@ -1774,3 +1777,487 @@ def test_the_summary_carries_the_consolidating_machine_and_the_paths(
     per_seed = summary["splits"]["validation"]["per_seed"][0]
     assert per_seed["machine_provenance"]["machine"] == "laptop"
     driver.print_table("mlp", summary)
+
+
+# ---------------------------------------------------------------------------
+# stage 3: replay compatibility of the training signature
+# ---------------------------------------------------------------------------
+#
+# Stage 3 adds five default-off params (`tier_embed`, `train_tier`,
+# `train_match_list`, `max_steps`, `eval_every`) and an optional `role` key.
+# None of them may move an EXISTING stage 2 configuration's signature, or
+# every stage 2 checkpoint on both machines becomes unverifiable and the
+# five-seed tables stop consolidating.
+#
+# The `implementation` component hashes `scripts/transformer_t1.py` itself, so
+# the whole-signature hash necessarily moves when the trainer is edited — that
+# is the component doing its job. What CAN be pinned, and is pinned here, is
+# every component the new params could touch: `arm_params` and
+# `training_block`. The digests below were captured from this config file
+# BEFORE the stage 3 edits.
+STAGE2_SIGNATURE_PIN = {
+    "mlp": ("8246d96dbb617e41b49cda423d11ac5b213a07a84d97b2f8bee503753c373517",
+            "3c17a16c7ba69b401a218b1f08ae2b6a9c17b4d82c62ab1939cfdacca8327002"),
+    "full": (
+        "9c58a995d3f528e3f8b4f233ad0122d57e4d5b2ab7d54cddc14e111b88be55a1",
+        "3c17a16c7ba69b401a218b1f08ae2b6a9c17b4d82c62ab1939cfdacca8327002"),
+    "fixed_decay": (
+        "10ceed67d81171f8a99e665f7b4d2d8af80068aeca8f7ae172fbc87d75fd9a5e",
+        "3c17a16c7ba69b401a218b1f08ae2b6a9c17b4d82c62ab1939cfdacca8327002"),
+    "fox": ("9829c841a93a3cbbdff426d93ded00a035dfb55432c728726cec8b139b22e930",
+            "3c17a16c7ba69b401a218b1f08ae2b6a9c17b4d82c62ab1939cfdacca8327002"),
+    "aligned_hist": (
+        "59892037b49fba55b22f98522ca9df0acad8c4804aaf0978340b624c84250dc8",
+        "3c17a16c7ba69b401a218b1f08ae2b6a9c17b4d82c62ab1939cfdacca8327002"),
+    "recency_k30": (
+        "6914a8223b1ad1f6d4239467a6d3d01af1ea41ff3f2face8d9148f8b26a2ccca",
+        "3c17a16c7ba69b401a218b1f08ae2b6a9c17b4d82c62ab1939cfdacca8327002"),
+    "same_entity_k30": (
+        "7005eb60bf2c1cce6deab75a6852d01e4c731015e3cf16957015669ff8865129",
+        "3c17a16c7ba69b401a218b1f08ae2b6a9c17b4d82c62ab1939cfdacca8327002"),
+    "aligned_hist_rf": (
+        "8cae81ac9959e1832e3cc310dc874a24f51e98b35cae1ad72025bd2d6cfe83bb",
+        "3c17a16c7ba69b401a218b1f08ae2b6a9c17b4d82c62ab1939cfdacca8327002"),
+    "same_entity_k0": (
+        "a122ed92bee322ef51137293027037dcb2a0871692d00241bfaa9c7ae77d6bdd",
+        "3c17a16c7ba69b401a218b1f08ae2b6a9c17b4d82c62ab1939cfdacca8327002"),
+    "same_entity_k6": (
+        "90e334b43d9930a8ae817c40f5a77633e1e6893f592dab95c6fc898144126ade",
+        "3c17a16c7ba69b401a218b1f08ae2b6a9c17b4d82c62ab1939cfdacca8327002"),
+    "same_entity_k12": (
+        "3bc33eeea5955f4c52c1d9435466a44090f96ea02ba87a3b654921fc726ee7d3",
+        "3c17a16c7ba69b401a218b1f08ae2b6a9c17b4d82c62ab1939cfdacca8327002"),
+    "same_entity_unr": (
+        "31d2c375e32af691c29e427b7d7aab5828f009fc952c908842ac68cb84854391",
+        "3c17a16c7ba69b401a218b1f08ae2b6a9c17b4d82c62ab1939cfdacca8327002"),
+    "lstm": (
+        "b6791758ebf6921bf09ed38e941f911a87055279679da2e9b181082b0597b65b",
+        "3c17a16c7ba69b401a218b1f08ae2b6a9c17b4d82c62ab1939cfdacca8327002"),
+    "xlstm": (
+        "1f77aa9d9ed6b88681b0c55460735973c32e6186a384098ecf08a609db1ff616",
+        "3c17a16c7ba69b401a218b1f08ae2b6a9c17b4d82c62ab1939cfdacca8327002"),
+    "residual_mlp": (
+        "f5a8bc3c06e72c76245e4e3141063144a80199d8855baa3ec85cb05acaf374f0",
+        "3c17a16c7ba69b401a218b1f08ae2b6a9c17b4d82c62ab1939cfdacca8327002"),
+    "residual_t1": (
+        "8d9a5e94c4ceb3877daff4043290d58e6091d22b52309b3986f3cf4ff48ec14a",
+        "3c17a16c7ba69b401a218b1f08ae2b6a9c17b4d82c62ab1939cfdacca8327002"),
+}
+# The base-logits digest the pin was captured with. It is an input to the
+# residual arms' `arm_params`, so the pin fixes it rather than reading a
+# directory that may not exist on this machine.
+PIN_BASE_LOGITS_DIGEST = "DUMMY"
+
+
+def _pinned_components(config: dict, config_id: str) -> tuple[str, str]:
+    entry = configurations(config)[config_id]
+    digest = (PIN_BASE_LOGITS_DIGEST
+              if entry["arm"] in driver.t1.ARMS_NEEDING_BASE_LOGITS else None)
+    effective = effective_settings(config, entry, base_logits_digest=digest)
+    training_block = {"arch": effective["arch"],
+                      "optimiser": effective["optimiser"]}
+    if effective.get("schedule"):
+        training_block["schedule"] = effective["schedule"]
+    return (driver._digest(effective["arm_params"]),
+            driver._digest(training_block))
+
+
+def test_the_pin_covers_every_registered_configuration(config):
+    assert sorted(STAGE2_SIGNATURE_PIN) == sorted(configurations(config))
+
+
+@pytest.mark.parametrize("config_id", REGISTERED_ORDER)
+def test_stage2_signature_components_are_unchanged(config, config_id):
+    """The replay contract: stage 3's default-off params must serialise to
+    exactly the canonical JSON stage 2 serialised to."""
+    assert _pinned_components(config, config_id) == (
+        STAGE2_SIGNATURE_PIN[config_id])
+
+
+def test_no_stage2_configuration_sets_a_stage3_param(config):
+    """The pin above only means something while this holds."""
+    for config_id, entry in configurations(config).items():
+        for name in driver.STAGE3_PARAMS:
+            assert entry["_params"].get(name) is None, (config_id, name)
+        assert "schedule" not in effective_settings(
+            config, entry,
+            base_logits_digest=PIN_BASE_LOGITS_DIGEST)
+
+
+def test_report_match_lists_is_reporting_only(config, tmp_path):
+    """Reviewer MUST-FIX 2: the exposure flag is rendered for EVERY
+    configuration and enters NO identity block, so a pooled checkpoint stays
+    shareable across both target families."""
+    lists = ["experiments/stage3a/target_P_matches.json",
+             "experiments/stage3a/target_E_matches.json"]
+    for value in lists:
+        if not (driver.REPO / value).is_file():
+            pytest.skip("the frozen stage 3a match lists are not committed")
+    raw = yaml.safe_load(CONFIG_PATH.read_text())
+    raw["training"][driver.REPORT_MATCH_LISTS_KEY] = lists
+    path = tmp_path / "report_lists.yaml"
+    path.write_text(yaml.safe_dump(raw, sort_keys=False))
+    loaded = load_config(path)
+    assert loaded["training"][driver.REPORT_MATCH_LISTS_KEY] == lists
+
+    for config_id in configurations(loaded):
+        # ...the pinned identity components are bit-for-bit what they were.
+        assert _pinned_components(loaded, config_id) == (
+            STAGE2_SIGNATURE_PIN[config_id]), config_id
+        entry = configurations(loaded)[config_id]
+        digest = (PIN_BASE_LOGITS_DIGEST
+                  if entry["arm"] in driver.t1.ARMS_NEEDING_BASE_LOGITS
+                  else None)
+        effective = effective_settings(loaded, entry,
+                                       base_logits_digest=digest)
+        # It is in no param table, no arm_params block and no schedule.
+        assert driver.REPORT_MATCH_LISTS_KEY not in driver.STAGE3_PARAMS
+        assert driver.REPORT_MATCH_LISTS_KEY not in effective["arm_params"]
+        assert driver.REPORT_MATCH_LISTS_KEY not in effective
+        assert "schedule" not in effective
+        # ...but it IS rendered, for every configuration, or nothing measures.
+        args = driver._trainer_args(loaded, entry, 7, Path("out"), effective)
+        assert driver.REPORT_MATCH_LISTS_FLAG in args
+        assert ",".join(lists) in args
+        # ...and the signature is the one the config without it produces.
+        assert driver.signature_for(
+            effective, _resolved())["training_signature"] == (
+            driver.signature_for(
+                effective_settings(config, configurations(config)[config_id],
+                                   base_logits_digest=digest),
+                _resolved())["training_signature"]), config_id
+
+
+def test_report_match_lists_is_validated(tmp_path):
+    raw = yaml.safe_load(CONFIG_PATH.read_text())
+    for bad in ([], "one.json", [""], ["no/such/list.json"],
+                ["experiments/stage3a/target_P_matches.json",
+                 "experiments/stage3a/target_P_matches.json"]):
+        raw["training"][driver.REPORT_MATCH_LISTS_KEY] = bad
+        path = tmp_path / "bad.yaml"
+        path.write_text(yaml.safe_dump(raw, sort_keys=False))
+        with pytest.raises(driver.RetrainError,
+                           match=driver.REPORT_MATCH_LISTS_KEY):
+            load_config(path)
+
+
+def test_stage2_configurations_render_an_unchanged_argv(config):
+    """No stage 3 flag appears in an existing configuration's command."""
+    stage3_flags = {flag for _, flag, _ in driver.STAGE3_PARAMS.values()}
+    for config_id, entry in configurations(config).items():
+        args = driver._trainer_args(
+            config, entry, 7, Path("out"),
+            effective_settings(config, entry,
+                               base_logits_digest=PIN_BASE_LOGITS_DIGEST))
+        assert not stage3_flags & set(args), config_id
+
+
+# ------------------------------------------- stage 3 Block B driver params
+
+def _stage3_entry(config: dict, **params) -> dict:
+    """A copy of the `mlp` entry with stage 3 params, run through the checks."""
+    entry = dict(configurations(config)["mlp"])
+    entry["params"] = dict(params)
+    entry["_params"] = driver._check_params(CONFIG_PATH, entry)
+    return entry
+
+
+def test_stage3_params_are_admitted_and_typed(config):
+    entry = _stage3_entry(config, tier_embed=8, train_tier=3,
+                          max_steps=3840, eval_every=128)
+    assert entry["_params"]["tier_embed"] == 8
+    assert entry["_params"]["max_steps"] == 3840
+    for bad in ({"tier_embed": "8"}, {"train_tier": 3.0},
+                {"max_steps": True}, {"train_match_list": 5}):
+        with pytest.raises(driver.RetrainError, match="params."):
+            _stage3_entry(config, **bad)
+
+
+def test_step_budget_must_be_a_pair(config):
+    with pytest.raises(driver.RetrainError, match="must be set together"):
+        _stage3_entry(config, max_steps=3840)
+    with pytest.raises(driver.RetrainError, match="must be set together"):
+        _stage3_entry(config, eval_every=128)
+
+
+def test_tier_embed_is_refused_for_a_non_token_mlp_arm(config):
+    entry = dict(configurations(config)["full"])
+    entry["params"] = {"tier_embed": 8}
+    with pytest.raises(driver.RetrainError, match="token_mlp"):
+        driver._check_params(CONFIG_PATH, entry)
+
+
+def test_train_tier_range_is_checked(config):
+    with pytest.raises(driver.RetrainError, match="train_tier"):
+        _stage3_entry(config, train_tier=0)
+    with pytest.raises(driver.RetrainError, match="train_tier"):
+        _stage3_entry(config, train_tier=9)
+
+
+def test_missing_match_list_is_refused_before_the_run(config):
+    with pytest.raises(driver.RetrainError, match="does not exist"):
+        _stage3_entry(config, train_match_list="experiments/stage3a/nope.json")
+
+
+def test_match_list_sha256_enters_the_arm_params_component(config, tmp_path):
+    path = tmp_path / "list.json"
+    path.write_text('{"match_ids": ["1", "2"]}')
+    relative = path.relative_to(driver.REPO) if str(path).startswith(
+        str(driver.REPO)) else None
+    if relative is None:  # tmp_path is outside the repo on this machine
+        relative = Path("experiments/stage3a/target_P_matches.json")
+        if not (driver.REPO / relative).is_file():
+            pytest.skip("no frozen match list available to hash")
+    entry = _stage3_entry(config, tier_embed=8,
+                          train_match_list=relative.as_posix())
+    params = entry["_params"]
+    assert len(params["train_match_list_sha256"]) == 64
+    block = driver.expected_arm_params(entry, None)
+    assert block["train_match_list_sha256"] == (
+        params["train_match_list_sha256"])
+    assert block["tier_embed"] == 8
+    # ...and a different list is a different identity.
+    assert driver._digest(block) != driver._digest(
+        driver.expected_arm_params(configurations(config)["mlp"], None))
+
+
+def test_step_budget_joins_training_block_not_the_optimiser(config):
+    entry = _stage3_entry(config, max_steps=3840, eval_every=128)
+    effective = effective_settings(config, entry)
+    # The optimiser block is compared field-by-field against the checkpoint's
+    # training_contract, which the trainer does not grow, so the budget must
+    # NOT be in it.
+    assert "max_steps" not in effective["optimiser"]
+    assert effective["schedule"] == {"max_steps": 3840, "eval_every": 128}
+    args = driver._trainer_args(config, entry, 7, Path("out"), effective)
+    assert "--max-steps" in args and "3840" in args
+    assert "--eval-every" in args and "128" in args
+
+
+def test_role_is_optional_and_validated(tmp_path):
+    raw = yaml.safe_load(CONFIG_PATH.read_text())
+    raw["configurations"][0]["role"] = "control"
+    raw["configurations"][1]["role"] = "candidate"
+    path = tmp_path / "roles.yaml"
+    path.write_text(yaml.safe_dump(raw, sort_keys=False))
+    loaded = load_config(path)
+    assert configurations(loaded)["mlp"]["role"] == "control"
+    # ...and it changes nothing about what the configuration trains.
+    assert _pinned_components(loaded, "mlp") == STAGE2_SIGNATURE_PIN["mlp"]
+
+    raw["configurations"][0]["role"] = "shared_control"
+    path.write_text(yaml.safe_dump(raw, sort_keys=False))
+    with pytest.raises(driver.RetrainError, match="role"):
+        load_config(path)
+
+
+# ------------------------------- stage 4 rung 4b / 4d driver params
+
+def test_target_tier_is_not_part_of_the_signature(config):
+    """Code gate finding 4: reporting-only, so a pooled checkpoint is shared
+    across both target families instead of forking per measurement."""
+    assert driver.STAGE3_PARAMS["target_tier"][2] == "reporting"
+    plain = _stage3_entry(config, tier_embed=8)
+    measured = _stage3_entry(config, tier_embed=8, target_tier=3)
+    assert driver._digest(driver.expected_arm_params(plain, None)) == (
+        driver._digest(driver.expected_arm_params(measured, None)))
+    assert "target_tier" not in driver.expected_arm_params(measured, None)
+    assert "schedule" not in effective_settings(config, measured)
+    # ...but it IS rendered, or the trainer would never measure anything.
+    args = driver._trainer_args(config, measured, 7, Path("out"),
+                                effective_settings(config, measured))
+    assert "--target-tier" in args and "3" in args
+
+
+def test_target_tier_may_not_contradict_train_tier(config):
+    with pytest.raises(driver.RetrainError, match="contradicts"):
+        _stage3_entry(config, train_tier=3, target_tier=2)
+    entry = _stage3_entry(config, train_tier=3, target_tier=3)
+    assert entry["_params"]["target_tier"] == 3
+
+
+def test_extra_features_param_resolves_a_registered_set(config):
+    entry = _stage3_entry(config, extra_features={
+        "dir": "models/embeddings/stage4/exposure", "cols": "counts"})
+    resolved = entry["_params"]["extra_features"]
+    assert resolved["cols"] == ["batter_N_asof", "bowler_N_asof"]
+    assert resolved["col_set"] == "counts"
+    assert set(resolved["sha256"]) == set(driver.CONTRACT_SPLITS)
+    block = driver.expected_arm_params(entry, None)
+    assert block["extra_features"]["cols"] == resolved["cols"]
+    # The ordered column list is identity: spread_recency is a different model.
+    other = _stage3_entry(config, extra_features={
+        "dir": "models/embeddings/stage4/exposure",
+        "cols": "spread_recency"})
+    assert driver._digest(block) != driver._digest(
+        driver.expected_arm_params(other, None))
+    args = driver._trainer_args(config, entry, 7, Path("out"),
+                                effective_settings(config, entry))
+    assert "--extra-features" in args
+    assert "batter_N_asof,bowler_N_asof" in args
+
+
+def test_spread_recency_set_is_counts_plus_sd_and_recency(config):
+    counts = driver.EXTRA_FEATURE_SETS["counts"]
+    spread = driver.EXTRA_FEATURE_SETS["spread_recency"]
+    assert spread[:2] == counts
+    assert len([c for c in spread if "_var_p" in c]) == 12
+    assert spread[-2:] == ["batter_recent_N", "bowler_recent_N"]
+    assert len(spread) == 16
+
+
+def test_extra_features_param_is_validated(config):
+    for bad in ({"dir": "models/embeddings/stage4/exposure"},
+                {"dir": "", "cols": "counts"},
+                {"dir": "models/embeddings/stage4/exposure", "cols": "nope"},
+                {"dir": "models/embeddings/stage4/exposure", "cols": []},
+                {"dir": "x", "cols": "counts", "extra": 1}):
+        with pytest.raises(driver.RetrainError):
+            _stage3_entry(config, extra_features=bad)
+    with pytest.raises(driver.RetrainError, match="is missing"):
+        _stage3_entry(config, extra_features={"dir": "no/such/dir",
+                                              "cols": "counts"})
+
+
+def test_extra_features_refused_for_a_sequence_arm(config):
+    entry = dict(configurations(config)["full"])
+    entry["params"] = {"extra_features": {
+        "dir": "models/embeddings/stage4/exposure", "cols": "counts"}}
+    with pytest.raises(driver.RetrainError, match="token_mlp"):
+        driver._check_params(CONFIG_PATH, entry)
+
+
+def _identity_entry(config, **params):
+    entry = dict(configurations(config)["mlp"])
+    entry["arm"] = "identity_residual"
+    entry["params"] = dict(params)
+    entry["_params"] = driver._check_params(CONFIG_PATH, entry)
+    return entry
+
+
+def test_identity_residual_requires_its_frozen_reference(config):
+    with pytest.raises(driver.RetrainError, match="base_probs_dir"):
+        _identity_entry(config)
+    refs = "models/embeddings/stage4/refs"
+    if not (driver.REPO / refs / "eb_ctx_train_probs.npz").is_file():
+        pytest.skip("the frozen reference's train probabilities are not built")
+    entry = _identity_entry(config, base_probs_dir=refs,
+                            residual_lambda=0.001)
+    block = driver.expected_arm_params(entry, None)
+    assert set(block["base_probs_sha256"]) == set(driver.CONTRACT_SPLITS)
+    assert block["residual_lambda"] == 0.001
+    # Two lambdas are two different models.
+    other = _identity_entry(config, base_probs_dir=refs,
+                            residual_lambda=0.01)
+    assert driver._digest(block) != driver._digest(
+        driver.expected_arm_params(other, None))
+    args = driver._trainer_args(config, entry, 7, Path("out"),
+                                effective_settings(config, entry))
+    assert "--base-probs-dir" in args and "--residual-lambda" in args
+
+
+def test_base_probs_params_are_refused_for_other_arms(config):
+    with pytest.raises(driver.RetrainError, match="not accepted by arm"):
+        _stage3_entry(config, base_probs_dir="models/embeddings/stage4/refs")
+    with pytest.raises(driver.RetrainError, match="meaningless"):
+        _stage3_entry(config, residual_lambda=0.001)
+
+
+# ------------------------- reviewer MUST-FIX 1: frozen-input drift
+
+NIGHT3_CONFIG = driver.REPO / "experiments/configs/seq_stage3_night3_v1.yaml"
+
+
+def _night3_raw():
+    if not NIGHT3_CONFIG.is_file():
+        pytest.skip("the night 3 config is not registered in this checkout")
+    if not (driver.REPO / "experiments/stage3a/manifest.json").is_file():
+        pytest.skip("the stage 3a freeze manifest is not committed")
+    return yaml.safe_load(NIGHT3_CONFIG.read_text())
+
+
+def _write(tmp_path: Path, raw: dict, name="night3.yaml") -> Path:
+    path = tmp_path / name
+    path.write_text(yaml.safe_dump(raw, sort_keys=False))
+    return path
+
+
+def test_stage2_config_reads_no_freeze_manifest(config):
+    """A config that pins no frozen input is untouched: nothing is read and
+    no freeze record is produced."""
+    assert config.get("_freeze") is None
+
+
+def test_night3_config_verifies_every_frozen_list(tmp_path):
+    loaded = load_config(NIGHT3_CONFIG) if NIGHT3_CONFIG.is_file() else None
+    if loaded is None:
+        pytest.skip("the night 3 config is not registered in this checkout")
+    freeze = loaded["_freeze"]
+    assert freeze["manifest"] == "experiments/stage3a/manifest.json"
+    assert len(freeze["manifest_sha256"]) == 64
+    # Every list the config names was compared, not merely hashed.
+    named = {Path(entry["_params"]["train_match_list"]).name
+             for entry in loaded["configurations"]
+             if entry["_params"].get("train_match_list")}
+    assert named and named <= set(freeze["lists_verified"])
+    assert freeze["steps"]["max_steps"] == 3840
+    assert freeze["steps"]["eval_every"] == 128
+
+
+def test_a_drifted_training_list_is_refused(tmp_path):
+    """The MUST-FIX itself: an edited list must be REJECTED, not re-hashed."""
+    raw = _night3_raw()
+    stage3a = tmp_path / "stage3a"
+    stage3a.mkdir()
+    source = driver.REPO / "experiments/stage3a"
+    for item in source.glob("*.json"):
+        shutil.copy2(item, stage3a / item.name)
+    # ...drift one list by one match id.
+    victim = stage3a / "target_E_matches.json"
+    payload = json.loads(victim.read_text())
+    payload["match_ids"] = payload["match_ids"][:-1]
+    victim.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    relative = stage3a.relative_to(driver.REPO) if str(stage3a).startswith(
+        str(driver.REPO)) else None
+    if relative is None:
+        pytest.skip("tmp_path is outside the repository on this machine")
+    raw["experiment"]["freeze_manifest"] = (
+        relative / "manifest.json").as_posix()
+    raw.pop("freeze", None)
+    for entry in raw["configurations"]:
+        listed = (entry.get("params") or {}).get("train_match_list")
+        if listed:
+            entry["params"]["train_match_list"] = (
+                relative / Path(listed).name).as_posix()
+    with pytest.raises(driver.RetrainError, match="has drifted"):
+        load_config(_write(tmp_path, raw))
+
+
+def test_a_step_budget_that_is_not_the_frozen_one_is_refused(tmp_path):
+    raw = _night3_raw()
+    raw["configurations"][0].setdefault("params", {})["max_steps"] = 1920
+    with pytest.raises(driver.RetrainError, match="frozen budget"):
+        load_config(_write(tmp_path, raw))
+
+
+def test_a_list_the_manifest_does_not_record_is_refused(tmp_path):
+    raw = _night3_raw()
+    stray = driver.REPO / "experiments/stage3a/_stray_list.json"
+    stray.write_text('{"match_ids": ["1"]}')
+    try:
+        for entry in raw["configurations"]:
+            if (entry.get("params") or {}).get("train_match_list"):
+                entry["params"]["train_match_list"] = (
+                    "experiments/stage3a/_stray_list.json")
+                break
+        with pytest.raises(driver.RetrainError, match="records no list file"):
+            load_config(_write(tmp_path, raw))
+    finally:
+        stray.unlink()
+
+
+def test_a_moved_manifest_is_refused(tmp_path):
+    raw = _night3_raw()
+    raw["experiment"]["freeze_manifest"] = "experiments/stage3a/nope.json"
+    with pytest.raises(driver.RetrainError, match="does not exist"):
+        load_config(_write(tmp_path, raw))

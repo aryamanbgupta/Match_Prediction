@@ -198,6 +198,11 @@ ARM_PARAM_FIELDS = ("arm", "k", "wiring", "history_input", "key_construction",
                     "bias", "residual_l2", "base_logits_md5")
 CONFIG_REQUIRED_FIELDS = ("id", "arm", "access", "history_input", "wiring",
                           "reference", "tests", "queue_order", "command")
+# The optional `role` a stage 3 configuration may declare (night 3 draft
+# § "Family machinery"). It is a STATISTICS-layer label: this driver validates
+# the spelling and does nothing else with it, so a role cannot change what a
+# configuration trains or which signature it carries.
+CONFIG_ROLES = ("candidate", "control")
 # The four artefacts a finished run leaves behind (Astra MUST-FIX 3). All four
 # must exist and be readable before a run counts as complete; anything less is
 # retried, never reused and never reported.
@@ -231,6 +236,15 @@ SIGNATURE_COMPONENTS = ("config_id", "arm", "arm_params", "training_block",
 TRAINER_SOURCE = "scripts/transformer_t1.py"
 RECURRENT_SOURCE = "scripts/sequence_track/recurrent_arms.py"
 FEATURE_CONTRACT_SOURCE = "scripts/embeddings_e1.py"
+# C114: `feature_registry.py` defines the ordered 114-column list the
+# alternative contract resolves, so it changes a training INPUT with no trainer
+# edit — exactly the reason `embeddings_e1.py` is in the set. It is added
+# UNCONDITIONALLY rather than only for the contract arms, because the AST
+# closure invariant is what stops a new import from quietly leaving the
+# signature behind, and a conditional set would have to be excluded from that
+# check. Consequence, recorded: every arm's `implementation` component now
+# also hashes this file.
+FEATURE_REGISTRY_SOURCE = "scripts/feature_registry.py"
 ARTIFACT_RESOLVER_SOURCE = "scripts/artifacts.py"
 # The closure roots, for the test that re-derives the set by AST.
 IMPLEMENTATION_CLOSURE_ROOTS = (TRAINER_SOURCE, RECURRENT_SOURCE)
@@ -284,14 +298,26 @@ def rel(path) -> str:
         return path.resolve().as_posix()
 
 
+SEQ_STAGE3_ROOT = REPO / "models" / "embeddings" / "seq_stage3"
+ALLOWED_OUTPUT_ROOTS = (SEQ_STAGE2_ROOT, SEQ_STAGE3_ROOT)
+
+
 def assert_writable(out_root: Path) -> Path:
-    """Stage-2 output is confined to the stage-2 embeddings namespace."""
-    allowed = SEQ_STAGE2_ROOT.resolve()
+    """Output is confined to the stage-2 or stage-3 embeddings namespace.
+
+    Night 3 (2026-09-12) registers its runs under ``seq_stage3`` so nothing
+    it writes can touch the sealed stage-2 tree; both roots are allowed,
+    nothing else is.
+    """
     resolved = Path(out_root).resolve()
-    if resolved != allowed and allowed not in resolved.parents:
-        raise RetrainError(
-            f"refusing to write outside {rel(allowed)}: {rel(resolved)}")
-    return resolved
+    for root in (SEQ_STAGE2_ROOT, SEQ_STAGE3_ROOT):  # read at call time
+        allowed = root.resolve()
+        if resolved == allowed or allowed in resolved.parents:
+            return resolved
+    raise RetrainError(
+        "refusing to write outside "
+        f"{' or '.join(rel(r) for r in (SEQ_STAGE2_ROOT, SEQ_STAGE3_ROOT))}: "
+        f"{rel(resolved)}")
 
 
 def parse_id_list(raw: str | None) -> list[str] | None:
@@ -358,7 +384,8 @@ def _check_params(config_path: Path, entry: dict) -> dict:
     if not isinstance(params, dict):
         raise RetrainError(
             f"{rel(config_path)}: {entry['id']}: 'params' must be a mapping")
-    unknown = sorted(set(params) - {"k", "base_logits_dir", "residual_l2"})
+    unknown = sorted(set(params) - {"k", "base_logits_dir", "residual_l2"}
+                     - set(STAGE3_PARAMS) - {EXTRA_FEATURES_PARAM})
     if unknown:
         raise RetrainError(
             f"{rel(config_path)}: {entry['id']}: unknown param(s) {unknown}")
@@ -397,8 +424,437 @@ def _check_params(config_path: Path, entry: dict) -> dict:
     if needs_base:
         residual_l2 = float(t1.RESIDUAL_L2_DEFAULT if residual_l2 is None
                             else residual_l2)
-    return {"k": k_value, "base_logits_dir": base_dir,
-            "residual_l2": residual_l2}
+    checked = {"k": k_value, "base_logits_dir": base_dir,
+               "residual_l2": residual_l2}
+    checked.update(_check_stage3_params(config_path, entry, params))
+    return checked
+
+
+# ------------------------------------------- stage 3 Block B parameters
+# Night 3 draft § "Block B". Each of these renders one default-off trainer
+# flag. REPLAY COMPATIBILITY RULE: a param that is not set contributes
+# NOTHING — no argv flag, and no key in `arm_params` or `training_block` — so
+# a stage 2 configuration that names none of them serialises to byte-identical
+# canonical JSON and keeps the training signature it already has.
+STAGE3_PARAMS = {
+    # name: (python type, trainer flag, which signature component it joins)
+    "tier_embed": (int, "--tier-embed", "arm_params"),
+    "train_tier": (int, "--train-tier", "arm_params"),
+    # Reporting only: it changes no tensor and no weight, so it is validated
+    # and rendered but joins NO signature component. Two runs that differ only
+    # in what they measured are the same trained model, and a pooled
+    # checkpoint must stay shareable across both target families (code gate
+    # finding 4).
+    "target_tier": (int, "--target-tier", "reporting"),
+    "train_match_list": (str, "--train-match-list", "arm_params"),
+    # Stage 4 rung 4b: the frozen reference the identity residual sits on.
+    "base_probs_dir": (str, "--base-probs-dir", "arm_params"),
+    "base_probs_name": (str, "--base-probs-name", "arm_params"),
+    "residual_lambda": (float, "--residual-lambda", "arm_params"),
+    # C114: the alternative feature contract. It changes the model INPUT, so
+    # it is identity and joins `arm_params` together with the ordered column
+    # list and its sha256 (resolved below from the trainer, not retyped).
+    "feature_contract": (str, "--feature-contract", "arm_params"),
+    "max_steps": (int, "--max-steps", "training_block"),
+    "eval_every": (int, "--eval-every", "training_block"),
+}
+# Stage 4 rung 4d: a nested param, so it is checked and rendered separately
+# from the flat table above. `{dir: <sidecar directory>, cols: [...]}` renders
+# `--extra-features <dir> --extra-cols <comma list>`.
+# C114 is registered for the two arms the plan names (night 3 draft § C114):
+# the token control and the standard-wiring candidate.
+C114_ARMS = ("mlp", "full")
+EXTRA_FEATURES_PARAM = "extra_features"
+# Reviewer MUST-FIX 1 (night 3). A `train_match_list` used to be accepted with
+# whatever digest the file happened to have, so an edited or regenerated list
+# would simply hash to something new and run. The frozen lists ARE the
+# registered input of Block B, so every one a config names must equal the list
+# the freeze manifest recorded, and a configured step budget must equal the
+# S/E the same freeze wrote. The manifest path may be overridden by the
+# optional config key `experiment.freeze_manifest`.
+FREEZE_MANIFEST_KEY = "freeze_manifest"
+DEFAULT_FREEZE_MANIFEST = "experiments/stage3a/manifest.json"
+FREEZE_STEPS_FILE = "steps.json"
+# Reviewer MUST-FIX 2: reporting-only target exposure. A `training` key, NOT a
+# param: it renders one trainer flag for every configuration of the night and
+# enters neither `arm_params` nor the training signature, because two runs
+# that differ only in what they measured are the same trained model.
+REPORT_MATCH_LISTS_KEY = "report_match_lists"
+REPORT_MATCH_LISTS_FLAG = "--report-match-lists"
+EXTRA_FEATURES_KEYS = ("dir", "cols")
+# The two registered rung 4d column sets, named here so a config cannot
+# invent a third one silently and so the driver can check the spelling of the
+# columns it renders (night 3 draft § "Block E", 4d).
+EXTRA_FEATURE_SETS = {
+    "counts": ["batter_N_asof", "bowler_N_asof"],
+    "spread_recency": ["batter_N_asof", "bowler_N_asof"] + [
+        f"{side}_var_p{cls}" for side in ("batter", "bowler")
+        for cls in ("0", "1", "2", "4", "6", "w")
+    ] + ["batter_recent_N", "bowler_recent_N"],
+}
+
+
+def _check_stage3_params(config_path: Path, entry: dict,
+                         params: dict) -> dict:
+    """Type- and contract-check the stage 3 Block B params of one entry.
+
+    Returns only the params the entry actually SET, so an entry that sets none
+    adds nothing anywhere downstream (the replay compatibility rule above).
+    """
+    arm = entry["arm"]
+    out: dict = {}
+    for name, (kind, flag, _) in STAGE3_PARAMS.items():
+        if params.get(name) is None:
+            continue
+        value = params[name]
+        if kind is int:
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise RetrainError(
+                    f"{rel(config_path)}: {entry['id']}: params.{name} must "
+                    f"be an int, got {value!r}")
+            if value < 1:
+                raise RetrainError(
+                    f"{rel(config_path)}: {entry['id']}: params.{name} must "
+                    f"be >= 1, got {value!r} ({flag} is off when the param "
+                    "is absent, never when it is zero)")
+        elif kind is float:
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise RetrainError(
+                    f"{rel(config_path)}: {entry['id']}: params.{name} must "
+                    f"be a number, got {value!r}")
+            if value < 0:
+                raise RetrainError(
+                    f"{rel(config_path)}: {entry['id']}: params.{name} must "
+                    f"be >= 0, got {value!r}")
+            value = float(value)
+        elif not isinstance(value, str) or not value:
+            raise RetrainError(
+                f"{rel(config_path)}: {entry['id']}: params.{name} must be a "
+                f"non-empty string path, got {value!r}")
+        out[name] = value
+
+    if "tier_embed" in out and t1.ARM_WIRING[arm] != "token_mlp":
+        raise RetrainError(
+            f"{rel(config_path)}: {entry['id']}: params.tier_embed is "
+            f"implemented for the token_mlp wiring only; arm {arm!r} is "
+            f"{t1.ARM_WIRING[arm]!r} and the trainer would refuse it")
+    if "train_tier" in out and not 1 <= out["train_tier"] < t1.N_TIER_SLOTS:
+        raise RetrainError(
+            f"{rel(config_path)}: {entry['id']}: params.train_tier must be "
+            f"in 1..{t1.N_TIER_SLOTS - 1}, got {out['train_tier']!r}")
+    # The step budget is a pair: half of it would silently leave the arm on
+    # the epoch schedule while its family ran the step schedule.
+    if ("max_steps" in out) != ("eval_every" in out):
+        raise RetrainError(
+            f"{rel(config_path)}: {entry['id']}: params.max_steps and "
+            "params.eval_every must be set together; the trainer refuses one "
+            "without the other")
+    if ("target_tier" in out and "train_tier" in out
+            and out["target_tier"] != out["train_tier"]):
+        raise RetrainError(
+            f"{rel(config_path)}: {entry['id']}: params.target_tier "
+            f"{out['target_tier']} contradicts params.train_tier "
+            f"{out['train_tier']}; the trainer refuses the pair")
+    if "train_match_list" in out:
+        path = REPO / out["train_match_list"]
+        if not path.is_file():
+            raise RetrainError(
+                f"{rel(config_path)}: {entry['id']}: "
+                f"params.train_match_list {out['train_match_list']!r} does "
+                "not exist; the frozen list must be committed before the "
+                "run, because its sha256 is part of the training signature")
+        out["train_match_list_sha256"] = hashlib.sha256(
+            path.read_bytes()).hexdigest()
+
+    # --- stage 4 rung 4b: the frozen reference ---------------------------
+    needs_probs = arm in t1.ARMS_NEEDING_BASE_PROBS
+    if needs_probs and "base_probs_dir" not in out:
+        raise RetrainError(
+            f"{rel(config_path)}: {entry['id']}: arm {arm!r} requires "
+            "params.base_probs_dir")
+    if not needs_probs and "base_probs_dir" in out:
+        raise RetrainError(
+            f"{rel(config_path)}: {entry['id']}: params.base_probs_dir is "
+            f"not accepted by arm {arm!r}; the trainer refuses it")
+    if not needs_probs and ("base_probs_name" in out
+                            or "residual_lambda" in out):
+        raise RetrainError(
+            f"{rel(config_path)}: {entry['id']}: params.base_probs_name / "
+            f"params.residual_lambda are meaningless for arm {arm!r}")
+    if needs_probs:
+        name = out.get("base_probs_name", "eb_ctx")
+        digests = {}
+        for split in CONTRACT_SPLITS:
+            path = REPO / out["base_probs_dir"] / f"{name}_{split}_probs.npz"
+            if not path.is_file():
+                raise RetrainError(
+                    f"{rel(config_path)}: {entry['id']}: the frozen "
+                    f"reference's {split} probabilities are missing ({path}). "
+                    "Build them with stage4_references.py "
+                    f"--emit-train-probs {name}")
+            digests[split] = hashlib.sha256(path.read_bytes()).hexdigest()
+        out["base_probs_sha256"] = digests
+
+    # --- C114: the alternative feature contract --------------------------
+    if "feature_contract" in out:
+        name = out["feature_contract"]
+        if name not in t1.FEATURE_CONTRACTS:
+            raise RetrainError(
+                f"{rel(config_path)}: {entry['id']}: "
+                f"params.feature_contract {name!r} is not registered; the "
+                f"trainer accepts {list(t1.FEATURE_CONTRACTS)}")
+        if arm not in C114_ARMS:
+            raise RetrainError(
+                f"{rel(config_path)}: {entry['id']}: "
+                f"params.feature_contract is registered for arms "
+                f"{list(C114_ARMS)} only, not {arm!r}")
+        cols = t1.v7_114_columns()
+        out["feature_contract_columns"] = cols
+        out["feature_contract_sha256"] = hashlib.sha256(
+            "\n".join(cols).encode("utf-8")).hexdigest()
+        out["feature_contract_n"] = len(cols)
+
+    # --- stage 4 rung 4d: the extra-feature sidecar ----------------------
+    extra = params.get(EXTRA_FEATURES_PARAM)
+    if extra is not None:
+        if not isinstance(extra, dict):
+            raise RetrainError(
+                f"{rel(config_path)}: {entry['id']}: "
+                f"params.{EXTRA_FEATURES_PARAM} must be a mapping "
+                f"{{{', '.join(EXTRA_FEATURES_KEYS)}}}")
+        unknown = sorted(set(extra) - set(EXTRA_FEATURES_KEYS))
+        if unknown:
+            raise RetrainError(
+                f"{rel(config_path)}: {entry['id']}: "
+                f"params.{EXTRA_FEATURES_PARAM} has unknown key(s) {unknown}")
+        directory = extra.get("dir")
+        cols = extra.get("cols")
+        if not isinstance(directory, str) or not directory:
+            raise RetrainError(
+                f"{rel(config_path)}: {entry['id']}: "
+                f"params.{EXTRA_FEATURES_PARAM}.dir must be a non-empty path")
+        # `cols` is either one registered set name or an explicit ordered list.
+        if isinstance(cols, str):
+            if cols not in EXTRA_FEATURE_SETS:
+                raise RetrainError(
+                    f"{rel(config_path)}: {entry['id']}: "
+                    f"params.{EXTRA_FEATURES_PARAM}.cols {cols!r} is not a "
+                    f"registered set; known: {sorted(EXTRA_FEATURE_SETS)}")
+            resolved_cols = list(EXTRA_FEATURE_SETS[cols])
+            col_set_name = cols
+        elif isinstance(cols, list) and cols and all(
+                isinstance(value, str) and value for value in cols):
+            resolved_cols = list(cols)
+            col_set_name = next(
+                (name for name, listing in EXTRA_FEATURE_SETS.items()
+                 if listing == resolved_cols), None)
+        else:
+            raise RetrainError(
+                f"{rel(config_path)}: {entry['id']}: "
+                f"params.{EXTRA_FEATURES_PARAM}.cols must be a registered set "
+                f"name {sorted(EXTRA_FEATURE_SETS)} or a non-empty list of "
+                "column names")
+        if len(set(resolved_cols)) != len(resolved_cols):
+            raise RetrainError(
+                f"{rel(config_path)}: {entry['id']}: "
+                f"params.{EXTRA_FEATURES_PARAM}.cols repeats a column")
+        if t1.ARM_WIRING[arm] != "token_mlp":
+            raise RetrainError(
+                f"{rel(config_path)}: {entry['id']}: "
+                f"params.{EXTRA_FEATURES_PARAM} is implemented for the "
+                f"token_mlp wiring only; arm {arm!r} is "
+                f"{t1.ARM_WIRING[arm]!r}")
+        digests = {}
+        for split in CONTRACT_SPLITS:
+            path = REPO / directory / f"{split}.parquet"
+            if not path.is_file():
+                raise RetrainError(
+                    f"{rel(config_path)}: {entry['id']}: the rung 4d sidecar "
+                    f"for split {split!r} is missing ({path})")
+            digests[split] = hashlib.sha256(path.read_bytes()).hexdigest()
+        out[EXTRA_FEATURES_PARAM] = {
+            "dir": directory, "cols": resolved_cols,
+            "col_set": col_set_name, "sha256": digests}
+    return out
+
+
+def _freeze_manifest_path(config: dict) -> tuple[Path, bool]:
+    """`(manifest path, was it named explicitly)` for this config."""
+    experiment = config.get("experiment")
+    raw = (experiment.get(FREEZE_MANIFEST_KEY)
+           if isinstance(experiment, dict) else None)
+    if raw:
+        return REPO / str(raw), True
+    return REPO / DEFAULT_FREEZE_MANIFEST, False
+
+
+def _check_freeze_manifest(config_path: Path, config: dict,
+                           entries: list[dict]) -> dict | None:
+    """Every frozen input this config pins must BE the frozen input.
+
+    Reviewer MUST-FIX 1. Hashing a `train_match_list` into the training
+    signature records drift; it does not reject it. This rejects it: each
+    configured list must sit beside the freeze manifest, must be recorded in
+    it, and must hash to the sha256 the freeze wrote; a configured step budget
+    must equal the S/E of the same freeze's `steps.json`. Returns the record
+    the driver puts in its rendered provenance, or None when this config pins
+    no frozen input at all (every stage 2 configuration), in which case
+    nothing is read and nothing changes.
+    """
+    listed = {str(entry["id"]): entry["_params"]["train_match_list"]
+              for entry in entries
+              if entry["_params"].get("train_match_list")}
+    budgeted = {str(entry["id"]): (entry["_params"]["max_steps"],
+                                   entry["_params"]["eval_every"])
+                for entry in entries
+                if entry["_params"].get("max_steps") is not None}
+    manifest_path, explicit = _freeze_manifest_path(config)
+    if not listed and not budgeted and not explicit:
+        return None
+
+    if not manifest_path.is_file():
+        raise RetrainError(
+            f"{rel(config_path)}: the freeze manifest {rel(manifest_path)} "
+            "does not exist, so the frozen match lists and step budget this "
+            "config pins cannot be verified. Write it with "
+            "scripts/sequence_track/stage3a_freeze_tiers.py, or name another "
+            f"one with experiment.{FREEZE_MANIFEST_KEY}")
+    raw = manifest_path.read_bytes()
+    manifest_sha256 = hashlib.sha256(raw).hexdigest()
+    try:
+        manifest = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RetrainError(
+            f"{rel(config_path)}: the freeze manifest {rel(manifest_path)} "
+            f"is unreadable ({exc})") from exc
+    if not isinstance(manifest, dict) or not isinstance(
+            manifest.get("lists"), dict):
+        raise RetrainError(
+            f"{rel(config_path)}: the freeze manifest {rel(manifest_path)} "
+            "carries no 'lists' mapping; it is not a "
+            "stage3a_freeze_tiers.py manifest")
+
+    problems: list[str] = []
+    # The manifest records each list by file NAME beside itself, which is the
+    # only spelling that survives a checkout at a different path.
+    by_file: dict[str, tuple[str, str]] = {}
+    for name, row in (manifest["lists"]).items():
+        if isinstance(row, dict) and row.get("file"):
+            by_file[str(row["file"])] = (str(name), str(row.get("sha256")))
+
+    # The config may also pin the manifest itself; when it does, the manifest
+    # on disk must be that manifest.
+    pinned_manifest = (config.get("freeze") or {}).get("manifest_sha256")
+    if pinned_manifest and str(pinned_manifest) != manifest_sha256:
+        problems.append(
+            f"freeze.manifest_sha256 {pinned_manifest!r} != the sha256 of "
+            f"{rel(manifest_path)} on disk {manifest_sha256!r}")
+
+    verified: dict[str, str] = {}
+    for config_id, relative in sorted(listed.items()):
+        live = REPO / relative
+        if live.parent.resolve() != manifest_path.parent.resolve():
+            problems.append(
+                f"{config_id}: params.train_match_list {relative!r} is not in "
+                f"the freeze manifest's directory {rel(manifest_path.parent)}"
+                "; a frozen list is only frozen where the manifest that "
+                "records it lives")
+            continue
+        if live.name not in by_file:
+            problems.append(
+                f"{config_id}: the freeze manifest records no list file "
+                f"named {live.name!r} (it records {sorted(by_file)})")
+            continue
+        list_name, want = by_file[live.name]
+        got = hashlib.sha256(live.read_bytes()).hexdigest()
+        if got != want:
+            problems.append(
+                f"{config_id}: {relative} sha256 {got!r} != the freeze "
+                f"manifest's {want!r} for list {list_name!r}; the frozen "
+                "training list has drifted since it was frozen. Re-freeze "
+                "and re-register, or restore the list — it is a registered "
+                "input, not something a run may pick up as it finds it")
+            continue
+        verified[live.name] = got
+
+    steps_record = None
+    if budgeted:
+        steps_path = manifest_path.parent / FREEZE_STEPS_FILE
+        if not steps_path.is_file():
+            problems.append(
+                f"the step budget file {rel(steps_path)} does not exist, so "
+                "params.max_steps / eval_every cannot be verified")
+        else:
+            try:
+                steps = json.loads(steps_path.read_text())
+            except (OSError, json.JSONDecodeError) as exc:
+                steps = None
+                problems.append(f"{rel(steps_path)} is unreadable ({exc})")
+            if isinstance(steps, dict):
+                want_s, want_e = steps.get("max_steps"), steps.get("eval_every")
+                steps_record = {
+                    "file": rel(steps_path),
+                    "sha256": hashlib.sha256(
+                        steps_path.read_bytes()).hexdigest(),
+                    "max_steps": want_s, "eval_every": want_e}
+                for config_id, (got_s, got_e) in sorted(budgeted.items()):
+                    if got_s != want_s or got_e != want_e:
+                        problems.append(
+                            f"{config_id}: params.max_steps/eval_every "
+                            f"{got_s}/{got_e} != the frozen budget "
+                            f"{want_s}/{want_e} in {rel(steps_path)}")
+            elif steps is not None:
+                problems.append(f"{rel(steps_path)} is not a JSON object")
+
+    if problems:
+        raise RetrainError(
+            f"{rel(config_path)}: the frozen Block B inputs on disk are not "
+            "the inputs this config pins; refusing to train:\n  "
+            + "\n  ".join(problems))
+    return {"manifest": rel(manifest_path),
+            "manifest_sha256": manifest_sha256,
+            "lists_verified": verified,
+            "steps": steps_record}
+
+
+def _check_report_match_lists(config_path: Path, training: dict) -> list[str]:
+    """The reporting-only exposure lists, checked but never hashed anywhere.
+
+    Reviewer MUST-FIX 2. These are rendered for EVERY configuration of the
+    night, so they must exist before the first launch and their basenames —
+    the keys `metrics.json` reports under — must be distinct.
+    """
+    raw = training.get(REPORT_MATCH_LISTS_KEY)
+    if raw is None:
+        return []
+    if not isinstance(raw, list) or not raw:
+        raise RetrainError(
+            f"{rel(config_path)}: 'training.{REPORT_MATCH_LISTS_KEY}' must be "
+            f"a non-empty list of repository-relative paths, got {raw!r}")
+    resolved: list[str] = []
+    for value in raw:
+        if not isinstance(value, str) or not value:
+            raise RetrainError(
+                f"{rel(config_path)}: 'training.{REPORT_MATCH_LISTS_KEY}' "
+                f"entry {value!r} is not a non-empty path")
+        path = REPO / value
+        if not path.is_file():
+            raise RetrainError(
+                f"{rel(config_path)}: 'training.{REPORT_MATCH_LISTS_KEY}' "
+                f"names {value!r}, which does not exist; the exposure a run "
+                "reports must be measured against a committed list")
+        resolved.append(Path(value).as_posix())
+    if len(set(resolved)) != len(resolved):
+        raise RetrainError(
+            f"{rel(config_path)}: 'training.{REPORT_MATCH_LISTS_KEY}' repeats "
+            f"a path: {resolved}")
+    names = [Path(value).name for value in resolved]
+    if len(set(names)) != len(names):
+        raise RetrainError(
+            f"{rel(config_path)}: 'training.{REPORT_MATCH_LISTS_KEY}' names "
+            f"two files with the same basename {names}; metrics.json keys "
+            "tokens_seen_by_list by basename")
+    return resolved
 
 
 def load_config(path: Path) -> dict:
@@ -445,6 +901,16 @@ def load_config(path: Path) -> dict:
                 f"{rel(path)}: {config_id}: history_input "
                 f"{entry['history_input']!r} is not the trainer's "
                 f"{t1.ARM_HISTORY[arm]!r} for arm {arm!r}")
+        # Stage 3: an OPTIONAL declared role. It is validated here and carried
+        # nowhere else — `stage2_stats.py` reads it to replace the hard-coded
+        # `"mlp"` shared control, and this driver's behaviour (argv, reuse,
+        # signature) is entirely unaffected, so adding it to an existing
+        # configuration cannot change what that configuration trains.
+        role = entry.get("role")
+        if role is not None and str(role) not in CONFIG_ROLES:
+            raise RetrainError(
+                f"{rel(path)}: {config_id}: role {role!r} is not one of "
+                f"{list(CONFIG_ROLES)}")
         entry["_params"] = _check_params(path, entry)
         orders.append(int(entry["queue_order"]))
 
@@ -490,6 +956,12 @@ def load_config(path: Path) -> dict:
             raise RetrainError(f"{rel(path)}: 'data.{field}' is required")
     if not ((config.get("outputs") or {}).get("directory")):
         raise RetrainError(f"{rel(path)}: 'outputs.directory' is required")
+    # Reviewer MUST-FIX 2: validated here, carried on `training`, rendered by
+    # `_trainer_args`, and deliberately absent from `effective_settings`.
+    training[REPORT_MATCH_LISTS_KEY] = _check_report_match_lists(
+        path, training)
+    # Reviewer MUST-FIX 1: reject frozen-input drift instead of hashing it.
+    config["_freeze"] = _check_freeze_manifest(path, config, entries)
     return config
 
 
@@ -519,7 +991,7 @@ def expected_arm_params(entry: dict, base_logits_digest: str | None) -> dict:
     """
     arm = str(entry["arm"])
     params = entry["_params"]
-    return {
+    block = {
         "arm": arm,
         "k": params["k"],
         "wiring": t1.ARM_WIRING[arm],
@@ -531,6 +1003,33 @@ def expected_arm_params(entry: dict, base_logits_digest: str | None) -> dict:
         "base_logits_md5": (base_logits_digest
                             if arm in t1.ARMS_NEEDING_BASE_LOGITS else None),
     }
+    # Stage 3 Block B, replay compatibility rule: an unset param adds NO key,
+    # so the canonical JSON of every stage 2 configuration is unchanged and so
+    # is its `arm_params` component digest. A set one is identity — a
+    # tier-conditioned arm and an unconditioned one are different models, and
+    # a run filtered to a frozen match list is a different run, which is why
+    # the list's sha256 rather than its path is what enters here.
+    for name, (_, _, component) in STAGE3_PARAMS.items():
+        if component == "arm_params" and params.get(name) is not None:
+            block[name] = params[name]
+    if params.get("train_match_list_sha256"):
+        block["train_match_list_sha256"] = params["train_match_list_sha256"]
+    # Stage 4: the content digests of the artifacts the rung reads. The
+    # ORDERED column list is identity too — the same sidecar read in a
+    # different column order is a different model input.
+    if params.get("base_probs_sha256"):
+        block["base_probs_sha256"] = params["base_probs_sha256"]
+    if params.get("feature_contract_sha256"):
+        # The ORDERED list and its digest, not just the contract's name: a
+        # renamed or reordered contract is a different model input.
+        block["feature_contract_n"] = params["feature_contract_n"]
+        block["feature_contract_sha256"] = params["feature_contract_sha256"]
+    extra = params.get(EXTRA_FEATURES_PARAM)
+    if extra:
+        block[EXTRA_FEATURES_PARAM] = {
+            "dir": extra["dir"], "cols": list(extra["cols"]),
+            "col_set": extra["col_set"], "sha256": extra["sha256"]}
+    return block
 
 
 def effective_settings(config: dict, entry: dict, epochs: int | None = None,
@@ -544,7 +1043,7 @@ def effective_settings(config: dict, entry: dict, epochs: int | None = None,
     different run even though the config file is byte-identical.
     """
     training = config["training"]
-    return {
+    settings = {
         "config_id": str(entry["id"]),
         "arch": {"dmodel": int(training["dmodel"]),
                  "layers": int(training["layers"]),
@@ -561,6 +1060,19 @@ def effective_settings(config: dict, entry: dict, epochs: int | None = None,
         "arm_params": expected_arm_params(entry, base_logits_digest),
         "overrides": dict(overrides or {}),
     }
+    # Stage 3 Block B: the step budget is a SCHEDULE, not an optimiser field.
+    # It is kept out of `effective["optimiser"]` deliberately — that block is
+    # compared field-by-field against the checkpoint's `training_contract`,
+    # whose optimiser block is pinned by the stage 1 contract tests and must
+    # not grow. The key is absent entirely when no step budget is configured,
+    # so a stage 2 configuration's `training_block` component is unchanged.
+    schedule = {name: entry["_params"][name]
+                for name, (_, _, component) in STAGE3_PARAMS.items()
+                if component == "training_block"
+                and entry["_params"].get(name) is not None}
+    if schedule:
+        settings["schedule"] = schedule
+    return settings
 
 
 # -------------------------------------- seed-independent training signature
@@ -591,7 +1103,7 @@ def implementation_sources(arm: str) -> list[str]:
     trainer (and, for a recurrent arm, of `recurrent_arms.py`) over `scripts/`.
     """
     sources = [TRAINER_SOURCE, FEATURE_CONTRACT_SOURCE,
-               ARTIFACT_RESOLVER_SOURCE]
+               ARTIFACT_RESOLVER_SOURCE, FEATURE_REGISTRY_SOURCE]
     if t1.ARM_WIRING[arm] == "recurrent":
         sources.append(RECURRENT_SOURCE)
     return sources
@@ -671,9 +1183,15 @@ def signature_components(effective: dict, resolved: dict) -> dict:
         "arm": arm,
         "arm_params": effective["arm_params"],
         # The effective training block: the architecture and the optimiser as
-        # this invocation would run them, `--epochs` override included.
-        "training_block": {"arch": effective["arch"],
-                           "optimiser": effective["optimiser"]},
+        # this invocation would run them, `--epochs` override included. The
+        # stage 3 step budget joins it only when configured, so a stage 2
+        # configuration's component digest is byte-identical to before.
+        "training_block": ({"arch": effective["arch"],
+                            "optimiser": effective["optimiser"]}
+                           if not effective.get("schedule") else
+                           {"arch": effective["arch"],
+                            "optimiser": effective["optimiser"],
+                            "schedule": effective["schedule"]}),
         "frame": frame,
         "stats_cache": logical_stats_cache(resolved),
         "base_logits": base,
@@ -1101,10 +1619,24 @@ def provenance_check(config: dict, config_path: Path, frame_version: str,
             "config pins; refusing to train (re-pin with pin_stage2.py "
             "--write only when the move is intended):\n  "
             + "\n  ".join(problems))
+    # Reviewer MUST-FIX 1: the freeze manifest the frozen Block B inputs were
+    # verified against, recorded beside everything else this invocation
+    # compared. Absent entirely when the config pins no frozen input.
+    freeze = config.get("_freeze")
+    if freeze:
+        compared.append("freeze.lists.sha256 (against "
+                        f"{freeze['manifest']})")
+        if freeze.get("steps"):
+            compared.append("freeze.steps.max_steps/eval_every")
+
     return {
         "pinned_by": pinned.get("pinned_by"),
         "pins_generated_at": pinned.get("pins_generated_at"),
         "config_body_sha256": pinned.get("config_body_sha256"),
+        "freeze_manifest": (freeze or {}).get("manifest"),
+        "freeze_manifest_sha256": (freeze or {}).get("manifest_sha256"),
+        "freeze_lists_verified": (freeze or {}).get("lists_verified"),
+        "freeze_steps": (freeze or {}).get("steps"),
         "compared": compared,
         "skipped": skipped,
         "training_sources_compared": sources["compared"],
@@ -1209,6 +1741,23 @@ def _trainer_args(config: dict, entry: dict, seed, out_dir: Path,
     if params["base_logits_dir"]:
         args += ["--base-logits-dir", str(params["base_logits_dir"]),
                  "--residual-l2", repr(float(params["residual_l2"]))]
+    # Stage 3 Block B: emitted in the registered order and ONLY when set, so a
+    # configuration that names none of them renders the identical argv it
+    # rendered before (and its recorded `command` lines still match).
+    for name, (_, flag, _) in STAGE3_PARAMS.items():
+        if params.get(name) is not None:
+            args += [flag, str(params[name])]
+    extra = params.get(EXTRA_FEATURES_PARAM)
+    if extra:
+        args += ["--extra-features", str(extra["dir"]),
+                 "--extra-cols", ",".join(extra["cols"])]
+    # Reviewer MUST-FIX 2: rendered for EVERY configuration of a night that
+    # registers the key, and for none that does not. It is measurement, so it
+    # is read straight off `training` and never from `effective`, which is
+    # what the reuse check and the training signature compare.
+    report_lists = training.get(REPORT_MATCH_LISTS_KEY)
+    if report_lists:
+        args += [REPORT_MATCH_LISTS_FLAG, ",".join(report_lists)]
     args += [
         "--dmodel", str(arch["dmodel"]),
         "--layers", str(arch["layers"]),
