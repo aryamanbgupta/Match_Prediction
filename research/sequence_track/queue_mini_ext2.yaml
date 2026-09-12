@@ -1,0 +1,57 @@
+# Stage 2 SEED EXTENSION 2: ownership and window families. See
+# experiments/configs/seq_stage2_ext2_v1.yaml for why this set completes the
+# five-seed window requirement. One retry can consume 4x expected_hours.
+defaults:
+  memory_floor_gb: 3
+  memory_cap_gb: 12
+  poll_seconds: 30
+  stop_file: research/sequence_track/STOP_mini_ext2
+jobs:
+- id: same_entity_k0-s101
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml --config-ids same_entity_k0 --seeds 101 --machine mini
+  output_dir: models/embeddings/seq_stage2/runs/same_entity_k0/seed_101
+  expected_hours: 0.35
+  machine: mini
+- id: same_entity_k6-s101
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml --config-ids same_entity_k6 --seeds 101 --machine mini
+  output_dir: models/embeddings/seq_stage2/runs/same_entity_k6/seed_101
+  expected_hours: 0.4
+  machine: mini
+- id: same_entity_k12-s101
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml --config-ids same_entity_k12 --seeds 101 --machine mini
+  output_dir: models/embeddings/seq_stage2/runs/same_entity_k12/seed_101
+  expected_hours: 0.4
+  machine: mini
+- id: same_entity_k30-s101
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml --config-ids same_entity_k30 --seeds 101 --machine mini
+  output_dir: models/embeddings/seq_stage2/runs/same_entity_k30/seed_101
+  expected_hours: 0.35
+  machine: mini
+- id: same_entity_unr-s101
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml --config-ids same_entity_unr --seeds 101 --machine mini
+  output_dir: models/embeddings/seq_stage2/runs/same_entity_unr/seed_101
+  expected_hours: 0.35
+  machine: mini
+- id: recency_k30-s101
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml --config-ids recency_k30 --seeds 101 --machine mini
+  output_dir: models/embeddings/seq_stage2/runs/recency_k30/seed_101
+  expected_hours: 0.35
+  machine: mini
+- id: aligned_hist_rf-s101
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml --config-ids aligned_hist_rf --seeds 101 --machine mini
+  output_dir: models/embeddings/seq_stage2/runs/aligned_hist_rf/seed_101
+  expected_hours: 0.4
+  machine: mini
+- id: lstm-s101
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml --config-ids lstm --seeds 101 --machine mini
+  output_dir: models/embeddings/seq_stage2/runs/lstm/seed_101
+  expected_hours: 0.25
+  machine: mini

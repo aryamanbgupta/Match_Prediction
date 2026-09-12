@@ -1,0 +1,121 @@
+# Stage 2 SEED EXTENSION 2: ownership and window families. See
+# experiments/configs/seq_stage2_ext2_v1.yaml for why this set completes the
+# five-seed window requirement. One retry can consume 4x expected_hours.
+defaults:
+  memory_floor_gb: 12
+  memory_cap_gb: 24
+  poll_seconds: 30
+  stop_file: research/sequence_track/STOP_laptop_ext2
+jobs:
+- id: same_entity_k0-s29
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml
+    --config-ids same_entity_k0 --seeds 29 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/same_entity_k0/seed_29
+  expected_hours: 0.2
+  machine: laptop
+- id: same_entity_k6-s29
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml
+    --config-ids same_entity_k6 --seeds 29 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/same_entity_k6/seed_29
+  expected_hours: 0.25
+  machine: laptop
+- id: same_entity_k12-s29
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml
+    --config-ids same_entity_k12 --seeds 29 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/same_entity_k12/seed_29
+  expected_hours: 0.25
+  machine: laptop
+- id: same_entity_k30-s29
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml
+    --config-ids same_entity_k30 --seeds 29 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/same_entity_k30/seed_29
+  expected_hours: 0.2
+  machine: laptop
+- id: same_entity_unr-s29
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml
+    --config-ids same_entity_unr --seeds 29 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/same_entity_unr/seed_29
+  expected_hours: 0.2
+  machine: laptop
+- id: recency_k30-s29
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml
+    --config-ids recency_k30 --seeds 29 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/recency_k30/seed_29
+  expected_hours: 0.2
+  machine: laptop
+- id: aligned_hist_rf-s29
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml
+    --config-ids aligned_hist_rf --seeds 29 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/aligned_hist_rf/seed_29
+  expected_hours: 0.25
+  machine: laptop
+- id: lstm-s29
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml
+    --config-ids lstm --seeds 29 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/lstm/seed_29
+  expected_hours: 0.15
+  machine: laptop
+- id: same_entity_k0-s42
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml
+    --config-ids same_entity_k0 --seeds 42 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/same_entity_k0/seed_42
+  expected_hours: 0.2
+  machine: laptop
+- id: same_entity_k6-s42
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml
+    --config-ids same_entity_k6 --seeds 42 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/same_entity_k6/seed_42
+  expected_hours: 0.25
+  machine: laptop
+- id: same_entity_k12-s42
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml
+    --config-ids same_entity_k12 --seeds 42 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/same_entity_k12/seed_42
+  expected_hours: 0.25
+  machine: laptop
+- id: same_entity_k30-s42
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml
+    --config-ids same_entity_k30 --seeds 42 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/same_entity_k30/seed_42
+  expected_hours: 0.2
+  machine: laptop
+- id: same_entity_unr-s42
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml
+    --config-ids same_entity_unr --seeds 42 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/same_entity_unr/seed_42
+  expected_hours: 0.2
+  machine: laptop
+- id: recency_k30-s42
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml
+    --config-ids recency_k30 --seeds 42 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/recency_k30/seed_42
+  expected_hours: 0.2
+  machine: laptop
+- id: aligned_hist_rf-s42
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml
+    --config-ids aligned_hist_rf --seeds 42 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/aligned_hist_rf/seed_42
+  expected_hours: 0.25
+  machine: laptop
+- id: lstm-s42
+  config: experiments/configs/seq_stage2_ext2_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage2_ext2_v1.yaml
+    --config-ids lstm --seeds 42 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/lstm/seed_42
+  expected_hours: 0.15
+  machine: laptop
