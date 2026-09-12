@@ -1,0 +1,744 @@
+# Sequence track — stage 4, BATCH 2, rung 4b (identity residual over a frozen
+# reference). THE FAMILY OF THIS RUNG IS **DEFERRED**; the two configurations
+# below are registered and RUN so their artifacts exist, and their readouts
+# are DESCRIPTIVE ONLY until stage2_stats can difference a family member
+# against a fixed reference. See `family_deferral` below and
+# docs/sequence_track/batch2_acceptance.md § "The 4b decision".
+#
+# Registered BEFORE any batch-2 run, from
+# docs/sequence_track/night3_design_draft.md (v7, 2026-09-12) § "Block E",
+# rung 4b. Launch procedure: docs/sequence_track/night3_runbook.md § "Batch 2
+# (4d, 4b, C114)".
+#
+# WHY BATCH 2 IS THREE CONFIGS AND NOT ONE: see the header of
+# experiments/configs/seq_stage3_batch2_4d_v1.yaml. One file carries exactly
+# one `statistics.families.shared_control`. 4b's designed control is not a
+# configuration at all — it is the deterministic `ref_eb_ctx` npz — which is
+# the whole of the deferral below.
+#
+# SCHEMA: identical to experiments/configs/seq_stage3_night3_v1.yaml, which
+# scripts/sequence_track/retrain_stage2.py `load_config` validates and
+# scripts/sequence_track/stage2_stats.py reads.
+#
+# SCHEDULE: the STAGE 2 EPOCH LOOP with live early stopping, not night 3's
+# step budget. No configuration sets `params.max_steps` / `params.eval_every`,
+# no configuration names a `params.train_match_list`, and this file sets no
+# `experiment.freeze_manifest`, so `_check_freeze_manifest` opens nothing and
+# there is no `freeze:` block.
+
+experiment:
+  name: seq_stage3_batch2_4b
+  registered: 2026-09-13
+  block: E
+  rung: 4b
+  purpose: >-
+    Does a small learned player-identity residual improve on a frozen,
+    deterministic linear reference it cannot move? Two arms, identical in
+    every respect but the residual penalty: output = frozen `ref_eb_ctx`
+    logits + W.[e_bat; e_bowl] + b, with batter and bowler embeddings of
+    dimension 16 over the train vocabulary, an UNK row trained through id
+    dropout 0.05, and penalty lambda * mean over batch rows of ||r||^2 where
+    r is the six-entry residual logit vector. lambda is 0.001 in one arm and
+    0.01 in the other; the family never selects between them.
+  status: RUNS_REGISTERED_FAMILY_DEFERRED
+  predecessor: experiments/configs/seq_stage3_night3_v1.yaml
+  predecessor_note: >-
+    the night-3 Block B registration, whose general family schema, role key
+    and shared-control key this file reuses. Nothing here reuses a stage 2 or
+    night-3 checkpoint; the `identity_residual` arm did not exist before
+    stage 4.
+  decision_record: docs/sequence_track/batch2_acceptance.md
+  design: docs/sequence_track/night3_design_draft.md
+  runbook: docs/sequence_track/night3_runbook.md
+  runner: scripts/sequence_track/retrain_stage2.py
+  pin: scripts/sequence_track/pin_stage2.py
+  queue:
+    - research/sequence_track/queue_laptop_batch2.yaml
+    - research/sequence_track/queue_mini_batch2.yaml
+  queue_note: >-
+    batch 2 is split BY SEED across two machines exactly as night 3 was:
+    laptop seeds 7, 29, 42 and mini seeds 13, 101, both configurations on
+    both. Each job's output_dir is
+    models/embeddings/seq_stage3/batch2/runs/<config_id>/seed_<seed>.
+  sign_convention: >-
+    candidate minus reference, in validation log loss, negative favourable.
+  evidence_status: >-
+    VALIDATION-ONLY, DESCRIPTIVE. Weaker than the other two batch-2 configs:
+    there is no registered family here at all, so this rung produces no
+    interval-backed claim of any kind, only per-seed validation log losses
+    beside the frozen reference's 1.4500. The untouched cohort is NOT opened;
+    no test split, market price or betting layer is touched anywhere; nothing
+    can be LANDED (CLAUDE.md invariant 9).
+  forbidden_data:
+    - data/golden
+    - data/forward_holdout
+  forbidden_data_note: >-
+    no step of this rung reads either tree. The frozen references were fitted
+    by scripts/sequence_track/stage4_references.py over the i7 train rows
+    only, with the test split, data/golden and data/forward_holdout
+    fail-closed in `check_split` / `split_path` (references.json `sealed`).
+
+# ---------------------------------------------------------------------------
+# THE DEFERRAL. This is the substance of the file; read it before reading the
+# configurations.
+# ---------------------------------------------------------------------------
+family_deferral:
+  decision: DEFERRED
+  what_the_design_asked_for: >-
+    one six-member Holm family — `4b_1e-3 - ref_eb_ctx` on `all` and
+    `4b_1e-2 - ref_eb_ctx` on `all` (both superiority, t = 0), plus each
+    setting's `death` and `chase` gates against `ref_eb_ctx` at margin
+    +0.002 — with per-setting PASS = its primary and its two gates reject, and
+    no selection between the settings.
+  why_it_cannot_be_registered_yet: >-
+    every member of a family in `scripts/sequence_track/stage2_stats.py`
+    names a `contrast: {candidate, reference}` whose BOTH ids must be
+    registered CONFIGURATIONS (`_general_members` refuses any other id), and
+    each is then loaded by `load_run` from
+    `<runs_root>/<config_id>/seed_<seed>/predictions_validation.npz`. The
+    reference of every 4b member is `ref_eb_ctx`, which is a deterministic
+    fitted artifact: one joblib and two row-aligned npz files, no run
+    directory, no seeds, no metrics.json, no COMPLETE marker. The tool has
+    exactly one code path that reads a non-run reference —
+    `base_only_readout` — and it is hard-wired to stage 2's production base
+    logits (`<base_logits_dir>/validation.npz` plus a sidecar carrying
+    `npz_md5`, `parquet_md5` and `booster_md5`), is labelled
+    `role: exploratory`, and is not a family member type. So a 4b family
+    cannot be written today without inventing a member type, and this
+    registration invents nothing.
+  what_was_explicitly_NOT_done: >-
+    no substitute reference was registered. `mlp_counts` (rung 4d's control)
+    and `mlp_114` (C114's control) were both considered and REJECTED: they
+    answer a different question, on a different input set, and differencing
+    against one would silently redefine the rung. No
+    "`identity_residual` with a huge lambda as a stand-in for the frozen
+    reference" arm was registered either: a heavily penalised residual is not
+    the reference, it is an arm that approximates it, and its checkpoint is
+    still seed-dependent and early-stopped. Registering either would have
+    produced a family that passes or fails on a question nobody asked.
+  what_is_reported_instead: >-
+    each configuration's per-seed validation log loss over ALL validation
+    rows, tabled beside the frozen reference's own validation log loss
+    (`ref_eb_ctx` 1.4500, with `ref_lin_50` 1.4433 and `ref_raw_ctx` 1.4534
+    for context), plus the per-seed `death` and `chase` log losses, plus the
+    two settings' per-seed difference from each other. All of it DESCRIPTIVE:
+    no bootstrap interval against the reference, no Holm, no PASS, no
+    SCREEN_PASS, no direction count, and no statement of the form "the
+    identity residual beats the reference".
+  one_line_change_that_would_lift_the_deferral: >-
+    add a fixed-reference MEMBER TYPE to `stage2_stats.py` — a member whose
+    `contrast.reference` may name an entry of a new
+    `statistics.fixed_references` block (`{npz, sha256, n_rows, label}`)
+    instead of a configuration id, loaded row-aligned like a run's
+    `predictions_validation.npz` and paired on the CANDIDATE side only, so
+    estimand (i) resamples blocks alone and estimand (ii) resamples
+    seed x block on the candidate. Everything else — Holm, the gate margin,
+    the ten-block rule, the missing-member placeholder — is already
+    reference-agnostic. Until that exists, 4b has runs and no family.
+  runs_are_still_worth_making: >-
+    the arm, the trainer path and the reference plumbing are exercised end to
+    end; the two lambdas' artifacts exist at all five seeds, so the family can
+    be registered and computed LATER from the same checkpoints without
+    retraining, provided the family is frozen before those numbers are read as
+    a screen. Reading the descriptive table first and registering the family
+    afterwards would make the registration outcome-informed, and
+    batch2_acceptance.md records that.
+
+data:
+  directory: data/xgb_data_i7
+  frame_version: i7
+  frame_role: ball_frame_i7
+  stats_cache_role: stats_cache_i7
+  splits_read: [train, validation]
+  eval_kit: none
+  feature_contract: >-
+    NONE. The `identity_residual` arm reads no frame features at all: its
+    inputs are the batter id, the bowler id and the frozen reference's
+    per-row probabilities. It builds no `feat_proj` and no `token_mlp`
+    (transformer_t1 ARM_WIRING `identity_residual`).
+  n_features: 0
+
+# ---------------------------------------------------------------------------
+# The frozen reference. Fitted once by
+# scripts/sequence_track/stage4_references.py and then frozen; the driver
+# hashes both npz files into `arm_params.base_probs_sha256`, so a reference
+# that drifts changes every affected run's identity.
+# ---------------------------------------------------------------------------
+base_probs_source:
+  dir: models/embeddings/stage4/refs
+  name: eb_ctx
+  references_json: models/embeddings/stage4/refs/references.json
+  references_json_sha256: cb8688335193bd3d679b1bcb18e31578a39fff7c792156c78692eef68e80fa82
+  built_at: '2026-09-12 20:03:54'
+  model:
+    kind: StandardScaler (train rows only) + multinomial logistic regression
+    C: 1.0
+    solver: lbfgs
+    max_iter: 2000
+    n_iter: 59
+    converged: true
+    n_features: 46
+    feature_set: >-
+      the 42 EB player and venue columns plus the four match-state columns of
+      the E15/E2 fair control (is_middle_overs, is_death_overs,
+      wickets_in_hand, chase_target). It deliberately OMITS the four
+      continuous state features the 50-feature arms see.
+    artifact: models/embeddings/stage4/refs/eb_ctx.joblib
+    artifact_sha256: c676435fa4407fa44be1762b7c9c4068db9dfb3e42d1d4bff4fa0bb97b104218
+  probs:
+    - split: train
+      file: models/embeddings/stage4/refs/eb_ctx_train_probs.npz
+      sha256: 35f28faf6ea3d874f25f5cac31d57d9e003518e1dd145d15853d5f57ac7da0d3
+      shape: [1876971, 6]
+      in_sample: true
+      log_loss_in_sample: 1.4189
+      note: >-
+        IN-SAMPLE predictions of the frozen reference on its own fit rows,
+        emitted only so the identity residual has a base to train on. NEVER a
+        performance read (deviations.ref_train_probs_in_sample).
+    - split: validation
+      file: models/embeddings/stage4/refs/eb_ctx_validation_probs.npz
+      sha256: 86c5a531dcbdcf18067a0aa749cadc356db373d7834aa66970a31d04a2437d62
+      shape: [124292, 6]
+      in_sample: false
+      log_loss: 1.4500
+  sibling_references_for_context:
+    ref_lin_50: {validation_log_loss: 1.4433, probs_only: validation}
+    ref_raw_ctx: {validation_log_loss: 1.4534, probs_only: validation}
+  sibling_note: >-
+    neither sibling has train probabilities, so neither can be a 4b base. They
+    are context for the descriptive table only.
+  file_naming: >-
+    the trainer resolves `<base_probs_dir>/<base_probs_name>_<split>_probs.npz`
+    with `base_probs_name` defaulting to `eb_ctx`, for the splits
+    (train, validation). Both configurations below rely on that default and
+    set no `params.base_probs_name`.
+
+training:
+  device: mps
+  seeds: [7, 13, 29, 42, 101]
+  dmodel: 128
+  layers: 2
+  heads: 4
+  batch: 128
+  epochs: 30
+  learning_rate: 0.0003
+  patience: 3
+  aux: false
+  no_kit: true
+  score_test: false
+  save_predictions: true
+  architecture_note: >-
+    `dmodel`, `layers` and `heads` are carried for the schema and are INERT
+    for this arm: the identity residual's only learned tensors are the two
+    dim-16 embedding tables (transformer_t1 IDENTITY_EMBED_DIM, frozen in the
+    trainer rather than exposed as a flag, precisely so the two registered
+    lambda configurations differ ONLY in lambda), W and b.
+  early_stopping: >-
+    LIVE, the stage 2 rule: training stops when the validation log loss has
+    not improved for `patience: 3` consecutive epochs, or at `epochs: 30`,
+    whichever comes first; the selected checkpoint is the best validation log
+    loss over ALL validation rows, ties to the earliest epoch.
+  selection_rule: >-
+    validation log loss = ball-weighted mean negative log-likelihood over ALL
+    validation rows, for both arms.
+  seed_policy: >-
+    all five registered seeds run for both configurations. Seeds are split
+    laptop 7/29/42 and mini 13/101.
+
+outputs:
+  directory: models/embeddings/seq_stage3/batch2/runs
+  summary: summary.yaml
+  per_run: [metrics.json, model.pt, run_record.json, predictions_validation.npz]
+  save_row_aligned_probabilities: true
+
+configurations:
+  - id: identity_residual_l3
+    arm: identity_residual
+    role: control
+    role_note: >-
+      `role: control` is NOT a claim that this arm is a control. It is what
+      `stage2_stats.registered_families` requires of a configuration that is a
+      candidate in NO family, and no family is registered here
+      (`family_deferral`). When the deferral is lifted this becomes
+      `role: candidate`, which changes nothing about what the arm trains: the
+      driver validates the spelling of `role` and carries it nowhere near the
+      training signature.
+    params:
+      base_probs_dir: models/embeddings/stage4/refs
+      # PyYAML parses `1e-3` as a STRING, and the driver requires a number, so
+      # every lambda in this file is written in plain decimal.
+      residual_lambda: 0.001
+    access: {features: false, history: false, identity: true, prod_logits: false}
+    access_note: >-
+      `prod_logits: false` because the base here is the stage 4 frozen
+      REFERENCE (`ref_eb_ctx`, a 46-feature logistic model), not the
+      production ball booster's logits that the stage 2 residual arms read.
+      The two are different artifacts on different flags
+      (`--base-probs-dir` against `--base-logits-dir`) and are never mixed.
+    history_input: none
+    wiring: identity_residual
+    reference: []
+    reference_note: >-
+      its DESIGNED reference is the frozen `ref_eb_ctx` npz, which is not a
+      configuration, so this list is empty and the reference is named in
+      `base_probs_source` instead.
+    tests: >-
+      the design draft's lambda = 1e-3 setting, which is also the trainer's
+      `IDENTITY_LAMBDA_DEFAULT`; it is written out explicitly so the
+      registration does not depend on a default that could move.
+    queue_order: 1
+    command:
+      - uv run --no-sync python scripts/transformer_t1.py --arm identity_residual --seed 7 --data-dir data/xgb_data_i7 --base-probs-dir models/embeddings/stage4/refs --residual-lambda 0.001 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/batch2/runs/identity_residual_l3/seed_7
+      - uv run --no-sync python scripts/transformer_t1.py --arm identity_residual --seed 13 --data-dir data/xgb_data_i7 --base-probs-dir models/embeddings/stage4/refs --residual-lambda 0.001 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/batch2/runs/identity_residual_l3/seed_13
+      - uv run --no-sync python scripts/transformer_t1.py --arm identity_residual --seed 29 --data-dir data/xgb_data_i7 --base-probs-dir models/embeddings/stage4/refs --residual-lambda 0.001 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/batch2/runs/identity_residual_l3/seed_29
+      - uv run --no-sync python scripts/transformer_t1.py --arm identity_residual --seed 42 --data-dir data/xgb_data_i7 --base-probs-dir models/embeddings/stage4/refs --residual-lambda 0.001 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/batch2/runs/identity_residual_l3/seed_42
+      - uv run --no-sync python scripts/transformer_t1.py --arm identity_residual --seed 101 --data-dir data/xgb_data_i7 --base-probs-dir models/embeddings/stage4/refs --residual-lambda 0.001 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/batch2/runs/identity_residual_l3/seed_101
+
+  - id: identity_residual_l2
+    arm: identity_residual
+    role: control
+    role_note: >-
+      as for identity_residual_l3: a schema requirement of a configuration
+      that is a candidate in no family, not a claim about the arm.
+    params:
+      base_probs_dir: models/embeddings/stage4/refs
+      residual_lambda: 0.01
+    access: {features: false, history: false, identity: true, prod_logits: false}
+    history_input: none
+    wiring: identity_residual
+    reference: [identity_residual_l3]
+    reference_note: >-
+      the only run-shaped comparison this rung can make today is the two
+      settings against each other, and even that is descriptive: the rung
+      never selects between the lambdas.
+    tests: >-
+      the design draft's lambda = 1e-2 setting. Everything else — embedding
+      dimension 16, train vocabulary, UNK through id dropout 0.05, the frozen
+      base, the schedule, the seeds — is identical to identity_residual_l3.
+    queue_order: 2
+    command:
+      - uv run --no-sync python scripts/transformer_t1.py --arm identity_residual --seed 7 --data-dir data/xgb_data_i7 --base-probs-dir models/embeddings/stage4/refs --residual-lambda 0.01 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/batch2/runs/identity_residual_l2/seed_7
+      - uv run --no-sync python scripts/transformer_t1.py --arm identity_residual --seed 13 --data-dir data/xgb_data_i7 --base-probs-dir models/embeddings/stage4/refs --residual-lambda 0.01 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/batch2/runs/identity_residual_l2/seed_13
+      - uv run --no-sync python scripts/transformer_t1.py --arm identity_residual --seed 29 --data-dir data/xgb_data_i7 --base-probs-dir models/embeddings/stage4/refs --residual-lambda 0.01 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/batch2/runs/identity_residual_l2/seed_29
+      - uv run --no-sync python scripts/transformer_t1.py --arm identity_residual --seed 42 --data-dir data/xgb_data_i7 --base-probs-dir models/embeddings/stage4/refs --residual-lambda 0.01 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/batch2/runs/identity_residual_l2/seed_42
+      - uv run --no-sync python scripts/transformer_t1.py --arm identity_residual --seed 101 --data-dir data/xgb_data_i7 --base-probs-dir models/embeddings/stage4/refs --residual-lambda 0.01 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage3/batch2/runs/identity_residual_l2/seed_101
+
+queue_order_note: >-
+  registered rung 4b order: identity_residual_l3, identity_residual_l2. Five
+  seeds each: 10 runs, three on the laptop (7, 29, 42) and two on the mini
+  (13, 101) per configuration. 4b is LAST in the batch-2 queue order
+  (4d, C114, 4b), so a truncated batch loses the rung that carries no family.
+
+statistics:
+  registered_for: docs/sequence_track/batch2_acceptance.md
+  per_row_log_loss: >-
+    computed from the row-aligned validation probabilities each run saves
+    (predictions_validation.npz), never from a scalar.
+  contrasts:
+    - name: lambda_setting
+      definition: "identity_residual_l2 - identity_residual_l3"
+      role: descriptive
+      tests: >-
+        the two registered penalties against each other. DESCRIPTIVE: the rung
+        reports both settings and never selects between them, so this entry
+        carries no `registered_pairs` and is not a mechanism contrast.
+  mechanism_note: >-
+    this config registers NO mechanism contrast. `statistics.contrasts` holds
+    one descriptive entry and no entry carries `registered_pairs`.
+  slice_predicates: {}
+  slices: [all, death, chase, powerplay, middle, innings_1, innings_2,
+           thin_pair]
+  slices_note: >-
+    the eight frozen stage 2 names. They are computed for the DESCRIPTIVE
+    table only; `thin_pair` stays UNAVAILABLE for the same reason as
+    everywhere else in this track (no exposure column in the i7 ball frame and
+    no registered predicate).
+  families:
+    shared_control: identity_residual_l3
+    shared_control_note: >-
+      a SCHEMA PLACEHOLDER, not a control. `stage2_stats.shared_control`
+      defaults to the literal `"mlp"` when the key is absent, and `"mlp"` is
+      not a configuration of this file, so the key is set to a real id to keep
+      the role derivation coherent. With an empty family map it selects
+      nothing and differences nothing. The rung's designed control is the
+      frozen `ref_eb_ctx` npz — see `family_deferral`.
+    definition: >-
+      NO family is registered. `map: []` is deliberate and is what makes
+      `registered_families` return an empty list with an expected count of
+      zero: both configurations declare `role: control`, so there is no
+      candidate-role configuration to require a family for.
+    map: []
+    map_is_complete: >-
+      yes, and deliberately empty. A non-empty map here would have to name a
+      reference this tool cannot load.
+    deferred_family: >-
+      the six-member family the design draft specifies is written out in
+      `family_deferral.what_the_design_asked_for` and is NOT registered. It
+      must be frozen in a new config BEFORE the descriptive table below is
+      read as evidence for it.
+    exploratory: >-
+      everything this rung produces. Both arms' per-seed validation log loss
+      on each of the computable slices, beside the frozen references' own
+      validation log losses; and
+      `identity_residual_l2 - identity_residual_l3`. No Holm, no PASS, no
+      interval against the reference.
+  bootstrap:
+    contract: tournament_time_block_v1
+    blocks_from: scripts/sim_eval/eval_statistics.load_competition_clusters
+    block_source_dir: data/t20s_json
+    block_key: cricsheet match id
+    resample: tournament blocks, not matches
+    reps: 2000
+    seed: 29
+    weighting: ball_weighted
+    min_blocks: 10
+    below_min_blocks: descriptive
+    applies_to: >-
+      the run-to-run contrast `identity_residual_l2 - identity_residual_l3`
+      only, and even there the readout is labelled descriptive because the
+      rung registers no family and makes no selection. NO bootstrap is
+      computed against the frozen reference, because pairing a run against a
+      deterministic artifact is exactly the member type this tool does not
+      have.
+    invariant: >-
+      CLAUDE.md critical invariant 7 — fewer than 10 blocks is descriptive,
+      never a CI-clean claim.
+  estimands:
+    - {id: i, definition: per checkpoint (one seed), reported: separately}
+    - {id: ii, definition: joint resampling of seeds and tournament blocks,
+       reported: separately}
+  estimands_note: >-
+    both are defined for the run-to-run contrast only. The design draft's
+    note that "the reference is deterministic, so estimand (i) pairs over
+    blocks only and (ii) over seed x block on the candidate side" describes
+    the member type that does not yet exist; it is recorded in
+    `family_deferral.one_line_change_that_would_lift_the_deferral` and is not
+    implemented here.
+  non_inferiority:
+    margin_ll: 0.002
+    applies_to: []
+    applies_to_note: >-
+      no gate is registered, because every gate the design draft specifies
+      takes the frozen reference as its reference.
+  labelling:
+    five_seed_night: descriptive
+    note: >-
+      five seeds are run so the family can be computed later from the same
+      checkpoints without retraining. They do not make this rung a screen: it
+      has no family, no registered rejection rule and no PASS.
+
+cohort:
+  frozen: models/embeddings/seq_stage2/cohort/FROZEN.json
+  parquet: models/embeddings/seq_stage2/cohort/cricket_data_i7_cohort.parquet
+  window: 2026-04-17 .. 2026-08-05
+  cohort_status: DEFERRED_UNOPENED
+  cohort_scored: false
+  deferral: >-
+    the cohort remains closed for batch 2, and a rung with no family could not
+    unlock it in any case: the unlock requires a retained WHOLE family at five
+    seeds and a frozen family registration.
+  read_by: nothing in batch 2
+
+forbidden_data:
+  - data/golden
+  - data/forward_holdout
+
+deviations:
+  - id: family_deferred_no_fixed_reference_member_type
+    statement: >-
+      the rung's single registered family is NOT registered. Its two
+      configurations run and are reported descriptively.
+    reason: >-
+      `stage2_stats` cannot difference a family member against a fixed npz
+      reference; the full argument, what was rejected, and the one-line change
+      that would lift the deferral are in `family_deferral` above and in
+      docs/sequence_track/batch2_acceptance.md § "The 4b decision". Found
+      while writing this config.
+  - id: ref_train_probs_in_sample
+    statement: >-
+      the frozen reference's TRAIN probabilities are in-sample: `ref_eb_ctx`
+      was fitted on exactly the rows it predicts there (in-sample log loss
+      1.4189 against 1.4500 on validation).
+    reason: >-
+      the identity residual must sit on a base at training time, and the base
+      must be the same function it will sit on at validation time. The
+      in-sample train probabilities are therefore emitted deliberately and are
+      NEVER a performance read. This deviation id was reserved in
+      experiments/configs/seq_stage3_night3_v1.yaml precisely for this rung,
+      so the id is stable across the two files; it bears on NO Block B arm.
+  - id: epoch_schedule_not_step_budget
+    statement: >-
+      batch 2 runs the stage 2 epoch loop with live early stopping, while
+      night 3's Block B ran a fixed 3,840-step budget.
+    reason: >-
+      the two are different schedules and their numbers are not comparable.
+  - id: lambda_written_in_decimal
+    statement: >-
+      the penalties are written `0.001` and `0.01`, not `1e-3` and `1e-2`.
+    reason: >-
+      PyYAML's resolver does not treat `1e-3` as a float (there is no decimal
+      point and no sign in the exponent), so it loads as the STRING "1e-3" and
+      the driver's float check refuses the entry. The values are the design
+      draft's lambdas exactly.
+
+known_asymmetries:
+  - id: the_base_cannot_move
+    text: >-
+      the reference logits are frozen: gradient reaches W, b and the two
+      embedding tables and never the base. This is the stated difference from
+      E4, where the base was trainable. A null here is evidence about a
+      residual on a fixed base and not about identity embeddings in general.
+  - id: unk_row_is_trained_the_vocabulary_is_not_complete
+    text: >-
+      the vocabulary is the players seen in TRAIN; a validation row whose
+      batter or bowler is unseen falls to the UNK row, which is trained only
+      through id dropout at 0.05. The share of validation rows hitting UNK is
+      reported per run; it differs between batter and bowler and is not
+      controlled for.
+  - id: penalty_is_on_the_residual_function
+    text: >-
+      the penalty is lambda * mean ||W.[e_bat; e_bowl] + b||^2 over batch
+      rows — on the residual logit vector itself, so no rescaling of the
+      embeddings against W escapes it. It is NOT weight decay on the
+      embeddings, and the two lambdas are therefore comparable to each other
+      in a way that two weight decays would not be.
+  - id: dmodel_layers_heads_are_inert
+    text: >-
+      the architecture fields in `training` are carried for schema
+      comparability and change nothing for this arm. A reader comparing this
+      config's `training` block to another's must not infer a shared
+      architecture.
+
+known_limitations:
+  - >-
+    THE RUNG HAS NO REGISTERED FAMILY, so it establishes nothing. Its numbers
+    may not be described as the identity residual beating, matching or losing
+    to the reference; they are a table.
+  - >-
+    SEED-MACHINE CONFOUNDING, inherited from nights 1 and 3 and not modelled:
+    seeds 7, 29 and 42 on the laptop, 13 and 101 on the mini; MPS kernels are
+    not bit-reproducible across machines.
+  - >-
+    checkpoint selection uses the same validation split any later contrast
+    would be computed on, so these checkpoints are screening artifacts. A
+    family registered later from them inherits that, and the registration must
+    be frozen before the descriptive table is read as evidence for it.
+  - >-
+    MPS kernels are not bit-reproducible across runs or machines, so a rerun
+    of any checkpoint may differ in the low decimals; every checkpoint records
+    mps_bit_reproducible false.
+  - >-
+    the frozen reference itself was fitted once, deterministically, and is
+    never presented as five seeds. Any later family must pair on the candidate
+    side only.
+
+# --------------------------------------------------------------------------
+# GENERATED BLOCK. Written by `scripts/sequence_track/pin_stage2.py --write`
+# and checked by `--verify`, which recomputes every hash from the files on
+# disk and exits non-zero on any difference. Do not edit by hand.
+# --------------------------------------------------------------------------
+provenance:
+  pins_generated_at: '2026-09-12T20:40:13Z'
+  git_head_short: 84dd02a
+  not_verified:
+  - provenance.pins_generated_at
+  - provenance.git_head_short
+  not_verified_reason: both change without the config's meaning changing (a re-pin
+    moves the timestamp; the commit that lands this file moves HEAD), so --verify
+    records them and does not compare them
+  pinned_by: scripts/sequence_track/pin_stage2.py
+  config_body_sha256: e0213bf3df1be25c057c438e75139e9dac1682fab5d3eddb74359583833b4fde
+  config_body_sha256_rule: sha256 of yaml.safe_dump(config without 'provenance',
+    sort_keys=True); a config cannot carry its own hash, so what is pinned is every
+    key the pin does not write
+  frame:
+    dir: data/xgb_data_i7
+    version: i7
+    feature_hash:
+      hash: c520a3ba08ae
+      version: i7
+      n_features: 114
+      splits:
+        train_end: '2024-12-31'
+        val_end: '2025-06-30'
+        test_end: '2026-04-16'
+        golden_start: '2026-04-17'
+      gender_filter: male
+      delivery_semantics: inclusive_total_runs_v1
+      venue_alias_version: venue_aliases_v1
+      venue_alias_sha256: 853b32b0ce3098dd8c0f33ba1437846f5505d50d9a425fbd37bff9c9f76745d8
+      venue_alias_active_count: 94
+      k_player: 30.0
+      k_venue: 200.0
+    splits:
+      train:
+        path: data/xgb_data_i7/cricket_data_i7_train.parquet
+        md5: fac0b7bededf0aae1989d654e3eba9e8
+        n_rows: 1876971
+        match_date_min: '2005-02-17'
+        match_date_max: '2024-12-30'
+      validation:
+        path: data/xgb_data_i7/cricket_data_i7_validation.parquet
+        md5: 326436317310adadabe0175825e57d1b
+        n_rows: 124292
+        match_date_min: '2024-12-31'
+        match_date_max: '2025-06-29'
+      test:
+        path: data/xgb_data_i7/cricket_data_i7_test.parquet
+        md5: 64b58fec51509567580c9122f2b5183f
+        read: 'hashed only: a base-logits sidecar records this parquet''s md5, and
+          no stage-2 step opens its rows'
+  stats_cache:
+    role: stats_cache_i7
+    path: models/player_stats_cache_i7.sqlite
+    md5: 671ac8200b275fa3d11d848e609f5132
+    venue_alias_version: venue_aliases_v1
+    same_day_order_version: date_then_match_id_lexicographic_v1
+  features:
+    count: 50
+    names:
+    - batter_p0
+    - batter_p1
+    - batter_p2
+    - batter_p4
+    - batter_p6
+    - batter_pw
+    - batter_p0_vs_pace
+    - batter_p1_vs_pace
+    - batter_p2_vs_pace
+    - batter_p4_vs_pace
+    - batter_p6_vs_pace
+    - batter_pw_vs_pace
+    - batter_p0_vs_spin
+    - batter_p1_vs_spin
+    - batter_p2_vs_spin
+    - batter_p4_vs_spin
+    - batter_p6_vs_spin
+    - batter_pw_vs_spin
+    - bowler_p0
+    - bowler_p1
+    - bowler_p2
+    - bowler_p4
+    - bowler_p6
+    - bowler_pw
+    - bowler_p0_vs_lhb
+    - bowler_p1_vs_lhb
+    - bowler_p2_vs_lhb
+    - bowler_p4_vs_lhb
+    - bowler_p6_vs_lhb
+    - bowler_pw_vs_lhb
+    - bowler_p0_vs_rhb
+    - bowler_p1_vs_rhb
+    - bowler_p2_vs_rhb
+    - bowler_p4_vs_rhb
+    - bowler_p6_vs_rhb
+    - bowler_pw_vs_rhb
+    - venue_p0
+    - venue_p1
+    - venue_p2
+    - venue_p4
+    - venue_p6
+    - venue_pw
+    - is_middle_overs
+    - is_death_overs
+    - wickets_in_hand
+    - chase_target
+    - balls_remaining
+    - score
+    - run_rate
+    - run_rate_required
+    sha256: 14f40e4a7429eac4644226fb02fbc88b01f0fab158709bce2bed2574708db564
+    order: EB_BAT + EB_BOWL + VENUE + CTX + STATE (embeddings_e1, transformer_t1);
+      a permutation is a different model input, not a relabelling
+  base_logits:
+    dir: models/embeddings/seq_stage2/base_logits
+    splits:
+      train:
+        npz: models/embeddings/seq_stage2/base_logits/train.npz
+        npz_md5: 584b2689a0e961d0a2d6a5e4eeec3eef
+        n_rows: 1876971
+        parquet_md5: fac0b7bededf0aae1989d654e3eba9e8
+        sidecar: models/embeddings/seq_stage2/base_logits/train.json
+        sidecar_sha256: 768862df009d1fa5b7e5be0046488743b7234a96a328132e601a777036dc63c4
+        booster_md5: 7ee1e1809917f45be7e726b3ea4a8a6c
+      validation:
+        npz: models/embeddings/seq_stage2/base_logits/validation.npz
+        npz_md5: 000ff0c49a86597a1475d90b98ec162a
+        n_rows: 124292
+        parquet_md5: 326436317310adadabe0175825e57d1b
+        sidecar: models/embeddings/seq_stage2/base_logits/validation.json
+        sidecar_sha256: cdf06e085975a49a224e97ea0230e4e89b3e83a1ad7fc2a4845e0c3e6f530f86
+        booster_md5: 7ee1e1809917f45be7e726b3ea4a8a6c
+      test:
+        npz: models/embeddings/seq_stage2/base_logits/test.npz
+        npz_md5: b39bf980a6a485971ee235d07279866f
+        n_rows: 186667
+        parquet_md5: 64b58fec51509567580c9122f2b5183f
+        sidecar: models/embeddings/seq_stage2/base_logits/test.json
+        sidecar_sha256: 5f52e39b32faad37b1905e36dd42551801e27480187c487e6d5f5aeeea899f9a
+        booster_md5: 7ee1e1809917f45be7e726b3ea4a8a6c
+    train_validation_digest: 20286a8ffe8dc4c4915b20f1b908e141
+    digest_rule: md5 of '<split>=<npz md5>' lines, sorted by split, over the splits
+      a stage-2 run reads; transformer_t1 records the same value in arm_params.base_logits_md5
+  sources:
+    count: 25
+    source_sha256:
+      scripts/transformer_t1.py: e9482ac919c8151105dda45d9240273a163cc4ad7e78812fb4ac2e7786b39f1b
+      scripts/sequence_track/recurrent_arms.py: e5454280f7386650b80b42cd15dc2df1a5dfd3b032d4776387815e062108ce10
+      scripts/sequence_track/build_base_logits.py: 6643370313f8568644b59a0e74a4683980e2351f0eb255e046d1b69ad566e4c9
+      scripts/sequence_track/build_cohort_stage2.py: 8fd7ce63e77aea550c928a40d0bd8458f2b758e0aa922c5f96b5b9695b8eee43
+      scripts/sequence_track/retrain_stage2.py: b0befcc263f26b9428057990ecfd52503e2564202775fe5820fc247f3a20ac3c
+      scripts/sequence_track/pin_stage2.py: 61b94dab12323564796e8f3cfaac1422d8db0a817c831fdee6487f7ccb3f9c18
+      scripts/sequence_track/ownership_dependency_test.py: c25dce69a6930e4842c648538c03089e137918f687e894a9011d4f9d40e2285c
+      scripts/sequence_track/stage2_stats.py: 73c4f2396e50817156aed41e56e8da9316c23117cb44595f7f54c8e2bbfdc20f
+      scripts/sequence_track/render_stage2_report.py: 3654d22d1523fd16cfdcfab321d2902b17459c5e37f999f44f418df0fa3b932a
+      scripts/sim_eval/eval_statistics.py: d3fcfe454269d334766a35965dff2e33db9c5e3bbb06ea16a0d7b14bde2ba1ca
+      scripts/embeddings_e1.py: 348dd073d0c859eb42507accc52a6fa5f6534c476a05b6a901671faf588d76ea
+      scripts/artifacts.py: da90ce3b77522310e593955d54406b9323d0af5341f7a7f214ed74abf37dc821
+      scripts/calibration.py: f79e511200422bed25e9db7bc9f2a91a278901664a6c40460527b7b0b22b9445
+      scripts/registered_experiment.py: ae8f027b9b9b100f377be03413973b35edb5f2c62c632cf1daf7590cceb8595f
+      scripts/materialize_features.py: 4bbb9dba8feed43eef00d383155cf9bb4af73c69414aae30ef730c2f71857cdd
+      scripts/build_stats_cache.py: 456c4cfb867295271933f6884260e95f665e32abf3e11ace8d6783cf79cb0113
+      scripts/feature_registry.py: 312fc5e238fedbd861d202781eaa3737b14e3f963578fed03b7c3a1cd9d72897
+      scripts/parsing_v2.py: 8ff14353dad013ba5fa16a72286f939d56dd93723f5e4897d183c6cddcd8c288
+      scripts/tracker_rehydration.py: b4175a747402e80e876380da4a2e1d086b4439ed9c61ff04d4d02a59ea563bbf
+      scripts/stats_provider.py: 7aabbd05b39d1cce6f80e8a51aaa82d6ac6a9c83644ea20402662cfe7eb27125
+      scripts/stats_sqlite_backend.py: e1d7262fe788833483e15ddc9e59d7af779a9b580989e93a575fd3fcddde4526
+      scripts/loaders_common.py: 1c14faa79391bb0b8160bd3c0d78c724d616c2824fc1aa971a889cbe7868f4e7
+      scripts/identity_maps.py: 687b34a0956b36058b5611cbd71efc6f82442f2a34262f04ec0f1b5eef229724
+      scripts/elo_update.py: a77765a6e6bbcbd9b02731953dc2eb894ad016ebafcacb3494640c4185eb05cb
+      scripts/player_metadata.py: ba94410137b1483996a9fed3f20d1cf925072f1a00bb3cda914914d938b24181
+    source_sha256_absent: []
+    source_sha256_absent_note: closure files not present on this checkout (a later
+      deliverable's script); they are dropped from the hash set and named here rather
+      than skipped silently
+    closure_rule: 'every source file on the stage-2 execution path is hashed, not
+      just the trainer: the recurrent arms, the base-logits builder, the cohort
+      builder, the multi-seed driver and this pin all move stage-2 results, so a
+      change to any of them must fail --verify. It also covers the IMPORTED modules
+      those scripts actually depend on — the 50-feature contract (embeddings_e1),
+      the manifest and encoder helpers (artifacts, calibration), the run-provenance
+      helper (registered_experiment), and the feature-construction, materialisation,
+      stats-cache, identity, ELO, chronology and rehydration stack the cohort''s
+      114 columns are built by — because each of them can change stage-2 behaviour
+      without any stage-2 script changing (Astra SHOULD 3)'
+  cohort:
+    frozen: models/embeddings/seq_stage2/cohort/FROZEN.json
+    status: frozen
+    frozen_json_sha256: 32265943c36b6d66e2922f8ad3996e956909991f566b17201cb58dcbdf0607ed
+    eligible_match_count: 210
+    eligible_ids_recorded: 210
+    frozen_at: '2026-09-11T17:23:20Z'
+    scored: once, in D10, after the family freeze
+  runtime:
+    python: 3.9.25
+    packages:
+      torch: 2.5.1
+      numpy: 1.24.3
+      pandas: 2.3.2
+      xgboost: 2.1.4
+      pyarrow: 21.0.0
+    read_via: importlib.metadata.version
+    note: torch and numpy change training output, so a stage-2 result produced under
+      different versions is a different result

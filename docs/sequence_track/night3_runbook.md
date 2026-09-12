@@ -294,3 +294,299 @@ is not run and its absence is not a gap.
 - Claims are FAMILY-LOCAL: `family_3a_P` and `family_3a_E` are correlated
   screens, never independent replications, and there is no "either target
   passes" reading.
+
+---
+
+## Batch 2 (4d, 4b, C114)
+
+Appended 2026-09-13, **before any batch-2 run**. Acceptance contract:
+`docs/sequence_track/batch2_acceptance.md` (checks B1..B10). Design:
+`docs/sequence_track/night3_design_draft.md` v7 § "Block E" (4d, 4b) and
+§ "C114". Block B above is a **separate, closed freeze**; nothing in this
+section changes it, and no batch-2 arm may be tabled against a Block B arm —
+Block B ran a fixed 3,840-step budget and batch 2 runs the stage 2 epoch loop
+with live early stopping (`epochs: 30`, `patience: 3`).
+
+### B2.0 What batch 2 is
+
+Three config files, three job groups, 35 runs.
+
+| rung | config | configurations | runs |
+|---|---|---|---|
+| 4d | `experiments/configs/seq_stage3_batch2_4d_v1.yaml` | `mlp_counts` (control), `mlp_spread_recency` | 10 |
+| C114 | `experiments/configs/seq_stage3_batch2_c114_v1.yaml` | `full_114`, `mlp_114` (control), `full_50` | 15 |
+| 4b | `experiments/configs/seq_stage3_batch2_4b_v1.yaml` | `identity_residual_l3` (λ 0.001), `identity_residual_l2` (λ 0.01) | 10 |
+
+Queues: `research/sequence_track/queue_laptop_batch2.yaml` (21 jobs, seeds 7,
+29, 42) and `research/sequence_track/queue_mini_batch2.yaml` (14 jobs, seeds
+13, 101). Output tree `models/embeddings/seq_stage3/batch2/runs/<config_id>/seed_<seed>`.
+Stop files `research/sequence_track/STOP_laptop_batch2` and
+`.../STOP_mini_batch2` — distinct from night 3's, so stopping one batch never
+stops the other.
+
+**Three files and not one** because `statistics.families.shared_control` is
+file-wide and the three rungs have three different controls (`mlp_counts`,
+`mlp_114`, and — for 4b — a frozen npz that is not a configuration at all).
+Every queue job therefore names its own `--config` explicitly.
+
+**4b's family is DEFERRED.** Its runs happen; its readouts are descriptive
+only. The full argument, the rejected alternatives and the one-line change to
+`stage2_stats.py` that would lift the deferral are in
+`docs/sequence_track/batch2_acceptance.md` § "The 4b decision". Do not compute
+or quote any interval of a 4b arm against `ref_eb_ctx`.
+
+### B2.1 Capacity table
+
+Budget rule, per run: `max duration = 2 x expected_hours` is `run_queue.sh`'s
+per-attempt alarm, and the runner **retries once**, so the worst case a single
+job can consume is `4 x expected_hours`.
+
+Budgets are per ARM CLASS, not per rung: the cost driver is the architecture
+and the input width. From the code-gate smokes at 200 steps —
+`identity_residual` 6 s, `mlp` with 66 inputs 7 s, `full` with 114 inputs
+16 s — a full 30-epoch run is about 45 s (identity_residual), 60 s (any token
+arm) and 240 s (any `full` arm) on the laptop, and roughly 3x that on the mini.
+
+| configuration | arm class | machine | smoke s (200-step gate smoke) | estimated full run s | expected_hours (budget) | max duration (2x) | worst case (4x, one retry) |
+|---|---|---|---|---|---|---|---|
+| `mlp_counts` | token | laptop | 7 | 60 | 0.15 | 0.30 h (1,080 s) | 0.60 h |
+| `mlp_spread_recency` | token | laptop | 7 | 60 | 0.15 | 0.30 h (1,080 s) | 0.60 h |
+| `mlp_114` | token | laptop | 7 | 60 | 0.15 | 0.30 h (1,080 s) | 0.60 h |
+| `full_114` | full | laptop | 16 | 240 | 0.40 | 0.80 h (2,880 s) | 1.60 h |
+| `full_50` | full | laptop | 16 | 240 | 0.40 | 0.80 h (2,880 s) | 1.60 h |
+| `identity_residual_l3` | identity_residual | laptop | 6 | 45 | 0.15 | 0.30 h (1,080 s) | 0.60 h |
+| `identity_residual_l2` | identity_residual | laptop | 6 | 45 | 0.15 | 0.30 h (1,080 s) | 0.60 h |
+| `mlp_counts` | token | mini | `SMOKE` | ~180 | 0.30 | 0.60 h (2,160 s) | 1.20 h |
+| `mlp_spread_recency` | token | mini | `SMOKE` | ~180 | 0.30 | 0.60 h (2,160 s) | 1.20 h |
+| `mlp_114` | token | mini | `SMOKE` | ~180 | 0.30 | 0.60 h (2,160 s) | 1.20 h |
+| `full_114` | full | mini | `SMOKE` | ~720 | 0.90 | 1.80 h (6,480 s) | 3.60 h |
+| `full_50` | full | mini | `SMOKE` | ~720 | 0.90 | 1.80 h (6,480 s) | 3.60 h |
+| `identity_residual_l3` | identity_residual | mini | `SMOKE` | ~135 | 0.30 | 0.60 h (2,160 s) | 1.20 h |
+| `identity_residual_l2` | identity_residual | mini | `SMOKE` | ~135 | 0.30 | 0.60 h (2,160 s) | 1.20 h |
+
+`full_50` is budgeted at the `full` rate although it reads only 50 columns: it
+is the same architecture, and the 240 s smoke was the wider of the two, so the
+budget is deliberately generous rather than measured separately.
+
+`SMOKE` = to be filled from the pre-launch smoke on that machine, **before the
+batch-2 freeze commit**.
+
+#### Queue totals
+
+| machine | jobs | sum expected_hours | worst case (4x each) |
+|---|---|---|---|
+| laptop (seeds 7, 29, 42) | 21 | 4.65 h | 18.60 h |
+| mini (seeds 13, 101) | 14 | 6.60 h | 26.40 h |
+| **batch 2 total** | **35** | **11.25 h** (in parallel across two machines: 6.60 h critical path) | 26.40 h critical path |
+
+#### Refusal rule
+
+> **Launch is REFUSED if any row of the batch-2 capacity table above is blank**
+> (any cell still reading `SMOKE`). The populated table is part of the frozen
+> commit; an unfilled table means the commit is not the frozen commit.
+
+#### Queue deadline
+
+Same rule as Block B: any batch-2 job not started by the operator's declared
+deadline is not started at all — touch the machine's STOP file and report the
+batch at the run count it reached. A partially complete rung is reported as
+`NOT_EVALUABLE` per affected family (fewer than five complete paired seeds),
+**never at a reduced seed count**.
+
+### B2.2 Frozen inputs and their pins
+
+Neither the frozen match lists nor `experiments/stage3a/steps.json` are read by
+batch 2: no batch-2 configuration names a `params.train_match_list`, none
+carries a step budget, and none sets `experiment.freeze_manifest`, so
+`retrain_stage2._check_freeze_manifest` returns `None` for all three and
+`experiments/stage3a/manifest.json` is never opened. Batch 2's frozen inputs
+are the stage 4 sidecar and the stage 4 reference instead.
+
+| file | sha256 | recorded in | read by |
+|---|---|---|---|
+| `models/embeddings/stage4/exposure/manifest.json` | `a1072431d5042a7f726789de96666035e89e8f778933451797ed793860e1e60d` | (pinned in the 4d config) | — |
+| `models/embeddings/stage4/exposure/train.parquet` | `167730fb55c958c68606aea9cf68dbb29bc2690c01a36a0cdfc8b758f42c0ccc` | exposure manifest | 4d, both arms |
+| `models/embeddings/stage4/exposure/validation.parquet` | `aaeab6ba07c225f53d0ba3ac9c6d7efe6770e8bc767d2d14af011da00e6c0316` | exposure manifest | 4d, both arms |
+| `models/embeddings/stage4/refs/references.json` | `cb8688335193bd3d679b1bcb18e31578a39fff7c792156c78692eef68e80fa82` | (pinned in the 4b config) | — |
+| `models/embeddings/stage4/refs/eb_ctx.joblib` | `c676435fa4407fa44be1762b7c9c4068db9dfb3e42d1d4bff4fa0bb97b104218` | references.json | — (the npz files are what the trainer reads) |
+| `models/embeddings/stage4/refs/eb_ctx_train_probs.npz` | `35f28faf6ea3d874f25f5cac31d57d9e003518e1dd145d15853d5f57ac7da0d3` | references.json | 4b, both arms (IN-SAMPLE by construction; never a performance read) |
+| `models/embeddings/stage4/refs/eb_ctx_validation_probs.npz` | `86c5a531dcbdcf18067a0aa749cadc356db373d7834aa66970a31d04a2437d62` | references.json | 4b, both arms |
+
+The C114 feature contract is not a file: `transformer_t1.v7_114_columns()`
+resolves it from `feature_registry.V6_GROUPS` at load time, and the driver
+hashes the ordered list into `arm_params.feature_contract_sha256`. The expected
+value is `d968f9f93c539c00491fb6b866ba764e9ae365266e5813b12401f9336fefe988`
+over 114 columns. A different digest means `feature_registry` moved and the
+batch is not the frozen batch.
+
+Frame and cache are unchanged from Block B: train md5
+`fac0b7bededf0aae1989d654e3eba9e8`, validation md5
+`326436317310adadabe0175825e57d1b`, cache md5
+`671ac8200b275fa3d11d848e609f5132`.
+
+### B2.3 Syncing the stage 4 artifacts to the mini
+
+Block B needed no sidecar. **Batch 2 does**: the mini runs 4d and 4b, so it
+needs the exposure sidecar and the `eb_ctx` reference before its queue starts.
+Seven files, enumerated — no `*` anywhere, so nothing else under
+`models/embeddings/stage4/` can be pulled in by accident. About 96 MB in total,
+dominated by `train.parquet` (51 MB) and `eb_ctx_train_probs.npz` (39 MB).
+
+```bash
+MAIN=/Users/aryamangupta/CricML/Match_Prediction
+MINI=mac-mini:CricML/Match_Prediction
+
+ssh mac-mini 'mkdir -p ~/CricML/Match_Prediction/models/embeddings/stage4/exposure ~/CricML/Match_Prediction/models/embeddings/stage4/refs'
+
+rsync -a --checksum \
+  "$MAIN"/models/embeddings/stage4/exposure/manifest.json \
+  "$MAIN"/models/embeddings/stage4/exposure/train.parquet \
+  "$MAIN"/models/embeddings/stage4/exposure/validation.parquet \
+  "$MINI"/models/embeddings/stage4/exposure/
+
+rsync -a --checksum \
+  "$MAIN"/models/embeddings/stage4/refs/references.json \
+  "$MAIN"/models/embeddings/stage4/refs/eb_ctx.joblib \
+  "$MAIN"/models/embeddings/stage4/refs/eb_ctx_train_probs.npz \
+  "$MAIN"/models/embeddings/stage4/refs/eb_ctx_validation_probs.npz \
+  "$MINI"/models/embeddings/stage4/refs/
+
+# Verify on the MINI against the table in B2.2 -- the transfer is not evidence,
+# the recomputed digest is. Expect exactly the seven sha256s above.
+ssh mac-mini 'cd ~/CricML/Match_Prediction && shasum -a 256 \
+  models/embeddings/stage4/exposure/manifest.json \
+  models/embeddings/stage4/exposure/train.parquet \
+  models/embeddings/stage4/exposure/validation.parquet \
+  models/embeddings/stage4/refs/references.json \
+  models/embeddings/stage4/refs/eb_ctx.joblib \
+  models/embeddings/stage4/refs/eb_ctx_train_probs.npz \
+  models/embeddings/stage4/refs/eb_ctx_validation_probs.npz'
+```
+
+The three sibling references (`raw_rate_ctx*`, `ref_lin_50*`) are deliberately
+NOT synced: no run reads them, and the descriptive level table that quotes
+their validation log losses is computed on the laptop at report time.
+
+### B2.4 Launching batch 2 (copy-paste)
+
+Same shape as § 4, with the batch-2 queues and stop files. The commit must
+exist first: each queue job keys off the config sha256.
+
+```bash
+MAIN=/Users/aryamangupta/CricML/Match_Prediction
+WT=/Users/aryamangupta/CricML/MP_train_s7   # the laptop training worktree
+
+# --- 0. dry runs. NOTE --queue on BOTH. laptop must list 21 jobs, mini 14,
+#        all decision=run, no warnings. ---
+cd "$WT" && ./research/sequence_track/run_queue.sh \
+  --queue research/sequence_track/queue_laptop_batch2.yaml --machine laptop --dry-run
+ssh mac-mini 'cd ~/CricML/Match_Prediction && export PATH="$HOME/.local/bin:$PATH" && ./research/sequence_track/run_queue.sh --queue research/sequence_track/queue_mini_batch2.yaml --machine mini --dry-run'
+
+# --- 1. launch. run_queue.sh invokes caffeinate itself. ---
+cd "$WT" && rm -f research/sequence_track/STOP_laptop_batch2 && \
+  nohup ./research/sequence_track/run_queue.sh \
+    --queue research/sequence_track/queue_laptop_batch2.yaml --machine laptop \
+    > /tmp/batch2_laptop_$(date +%Y%m%d_%H%M).log 2>&1 & echo "laptop pid $!"
+
+cat > /tmp/launch_mini_batch2.sh <<'EOS'
+cd ~/CricML/Match_Prediction
+export PATH="$HOME/.local/bin:$PATH"
+rm -f research/sequence_track/STOP_mini_batch2
+LOG=/tmp/batch2_mini_$(date +%Y%m%d_%H%M).log
+nohup ./research/sequence_track/run_queue.sh --queue research/sequence_track/queue_mini_batch2.yaml --machine mini > "$LOG" 2>&1 < /dev/null &
+echo "launched pid $! log $LOG"
+EOS
+scp -q /tmp/launch_mini_batch2.sh mac-mini:/tmp/launch_mini_batch2.sh && ssh mac-mini 'bash /tmp/launch_mini_batch2.sh'
+```
+
+**Stopping.** `touch "$WT"/research/sequence_track/STOP_laptop_batch2` and
+`ssh mac-mini 'touch ~/CricML/Match_Prediction/research/sequence_track/STOP_mini_batch2'`.
+Checked between jobs, never mid-job. Remove the file and re-run the same
+command to resume; finished jobs are skipped by config sha.
+
+**The runner's exit status is not evidence.** Count `COMPLETE.json` markers.
+
+### B2.5 Morning sequence
+
+```bash
+MAIN=/Users/aryamangupta/CricML/Match_Prediction
+RUNS=models/embeddings/seq_stage3/batch2/runs
+C4D=experiments/configs/seq_stage3_batch2_4d_v1.yaml
+C114=experiments/configs/seq_stage3_batch2_c114_v1.yaml
+C4B=experiments/configs/seq_stage3_batch2_4b_v1.yaml
+
+# --- 1. confirm nothing is writing on either machine. ---
+pgrep -fl "run_queue.sh|retrain_stage2.py|transformer_t1.py" || echo "laptop quiet"
+ssh mac-mini 'pgrep -fl "run_queue.sh|retrain_stage2.py|transformer_t1.py" || echo "mini quiet"'
+
+# --- 2. count completions, per seed. 35 expected: 21 laptop + 14 mini,
+#        7 configurations per seed. ---
+for s in 7 29 42; do echo "laptop seed $s: $(ls -d $MAIN/$RUNS/*/seed_$s/COMPLETE.json 2>/dev/null | wc -l) / 7"; done
+ssh mac-mini "for s in 13 101; do echo \"mini seed \$s: \$(ls -d ~/CricML/Match_Prediction/$RUNS/*/seed_\$s/COMPLETE.json 2>/dev/null | wc -l) / 7\"; done"
+
+# --- 3. bring ONLY the mini's seeds home, one seed at a time. ---
+for s in 13 101; do
+  rsync -a --stats --include='*/' --include="seed_$s/***" --exclude='*' \
+      mac-mini:CricML/Match_Prediction/$RUNS/ "$MAIN"/$RUNS/
+done
+
+# --- 4. consolidate: VERIFY-ONLY, once PER CONFIG (three configs share one
+#        runs root, and --consolidate verifies the configurations its own
+#        config registers). It refuses and NAMES any incomplete or
+#        unverifiable run rather than clearing and retraining it. Never run a
+#        plain seed recovery on the laptop for a mini-owned seed. ---
+cd "$MAIN"
+for CFG in $C4D $C114 $C4B; do
+  uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config $CFG --consolidate
+done
+
+# --- 5. statistics, once per config. --config and --runs-root are BOTH
+#        explicit, and each writes its own output file: a batch-2 table written
+#        into a stage-2 or night-3 path would overwrite earlier evidence. ---
+mkdir -p models/embeddings/seq_stage3/batch2/stats
+uv run --no-sync python scripts/sequence_track/stage2_stats.py stats \
+    --config $C4D --runs-root $RUNS --seeds 7,13,29,42,101 \
+    --out models/embeddings/seq_stage3/batch2/stats/batch2_4d_stats.json
+uv run --no-sync python scripts/sequence_track/stage2_stats.py stats \
+    --config $C114 --runs-root $RUNS --seeds 7,13,29,42,101 \
+    --out models/embeddings/seq_stage3/batch2/stats/batch2_c114_stats.json
+# 4b registers NO family. Its stats run produces the descriptive table only;
+# if the tool refuses an empty family map, that refusal is the finding and the
+# 4b table is read from summary.yaml and metrics.json instead. Either way, no
+# PASS/SCREEN status exists for 4b and none may be quoted.
+uv run --no-sync python scripts/sequence_track/stage2_stats.py stats \
+    --config $C4B --runs-root $RUNS --seeds 7,13,29,42,101 \
+    --out models/embeddings/seq_stage3/batch2/stats/batch2_4b_stats.json
+
+# --- 6. pin each config, then report. The pin recomputes every hash from the
+#        files on disk and exits non-zero on any difference. ---
+for CFG in $C4D $C114 $C4B; do
+  uv run --no-sync python scripts/sequence_track/pin_stage2.py --config $CFG --write
+  uv run --no-sync python scripts/sequence_track/pin_stage2.py --config $CFG --verify
+done
+
+# --- 7. fill docs/sequence_track/batch2_acceptance.md B1..B10 Results from
+#        files, verbatim. A run that did not finish has no number. ---
+```
+
+There is **no k sweep** in batch 2: `stage2_stats.py ksweep` requires five
+`same_entity` configurations and none of the three configs registers any.
+
+### B2.6 Invariants specific to batch 2
+
+All of § 6 applies unchanged, plus:
+
+- Writes under `models/` only inside `models/embeddings/seq_stage3/batch2/`.
+  The stage 4 sidecar and references under `models/embeddings/stage4/` are
+  READ-ONLY inputs; a batch-2 step that rebuilds either invalidates every run
+  whose `arm_params` hashed the old bytes.
+- **No 4b number is ever presented as a comparison against `ref_eb_ctx`.** 4b
+  has no registered family; its table is levels beside levels.
+- Block B's arms, ids and numbers are a different schedule. No batch-2 arm is
+  tabled against `mlp_pool`, `mlp_pool_tiercond`, either target arm or either
+  row-matched control.
+- `full_50` is a fresh run and is NOT stage 1's or stage 2's `full`; never
+  substitute an older checkpoint for it.
+- The two C114 families share a member and a gate reference and are correlated
+  screens. Claims are FAMILY-LOCAL: no aggregate, and no "either question
+  passes" reading.

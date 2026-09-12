@@ -1,0 +1,347 @@
+# Sequence-track job queue — BATCH 2 (4d, C114, 4b), LAPTOP HALF. Read by
+# research/sequence_track/run_queue.sh.
+#
+# Jobs run in listed order, one at a time, on the machine whose tag matches
+# --machine. A job is skipped when its output_dir holds a COMPLETE marker whose
+# config_sha256 equals the sha256 of its config file, so a batch that was
+# stopped resumes where it left off.
+#
+# Paths are relative to the repository root unless absolute. Commands run
+# through /bin/bash -c with the repository root as the working directory.
+#
+# ---------------------------------------------------------------------------
+# BATCH 2 (docs/sequence_track/batch2_acceptance.md; design
+# docs/sequence_track/night3_design_draft.md v7 § "Block E" and § "C114").
+# THE BATCH IS SPLIT BY SEED ACROSS TWO MACHINES, as nights 1 and 3 were:
+# seeds 7, 29 and 42 on the laptop and seeds 13 and 101 on the Mac mini. Every
+# configuration runs on both machines. The split is by SEED and never by arm,
+# so every arm carries the same three-laptop / two-mini mix and no arm is
+# advantaged relative to another; the residual seed-machine confounding is
+# reported, not modelled.
+#
+# THREE CONFIG FILES, not one. `statistics.families.shared_control` is
+# file-wide, and the three rungs have three different controls (mlp_counts,
+# mlp_114, and — for 4b — a frozen npz that is not a configuration at all), so
+# the batch is registered as three files and this queue carries three job
+# groups. Every job names its own --config explicitly.
+#
+# This half holds 21 jobs.
+#
+# ORDER IS RUNG-MAJOR, THEN SEED-MAJOR, then registered configuration order:
+# all of 4d, then all of C114, then all of 4b; and inside each rung, one whole
+# seed pass across that rung's configurations before the next seed. Rationale:
+# a truncated batch then leaves WHOLE paired seeds of the rungs that ran and
+# loses the tail rungs entirely, rather than leaving every rung half-seeded and
+# every family NOT_EVALUABLE. 4d is first because the design draft registers it
+# first ("4d first"); 4b is last because it is the rung with no family, so it
+# is the cheapest thing to lose.
+#
+# --config IS EXPLICIT ON EVERY COMMAND. retrain_stage2.py defaults --config to
+# experiments/configs/seq_stage2_v1.yaml, so a batch-2 job that omitted it
+# would silently train STAGE 2 arms into batch-2 output directories.
+#
+# WHY output_dir IS SEED-SPECIFIC: run_queue.sh decides skip-vs-run from the
+# COMPLETE marker in output_dir and the config sha256 ALONE -- it does not look
+# at the command or at the seed subset. A per-configuration marker directory
+# shared by both halves would let one machine's COMPLETE suppress the other's
+# as soon as the two trees are synced. Each job's output_dir is exactly the
+# directory retrain_stage2.py writes that seed's run into, so one marker means
+# one finished run.
+#
+# THREAD CAPS LIVE IN EACH COMMAND, NOT IN defaults:
+# scripts/sequence_track/queue_lib.py validates `defaults` against
+# {memory_floor_gb, memory_cap_gb, poll_seconds, stop_file} and IGNORES every
+# other field with a warning. So the memory floor and cap are queue-wide
+# defaults and the thread caps are environment prefixes on each command.
+#
+# EXPECTED HOURS ARE PER ARM CLASS, NOT PER RUNG, because the cost driver is
+# the architecture and the input width, not which rung a config belongs to.
+# From the code-gate smokes at 200 steps -- identity_residual 6 s, mlp with 66
+# inputs 7 s, full with 114 inputs 16 s -- a full 30-epoch run is about 45 s
+# (identity_residual), 60 s (any token arm) and 240 s (any `full` arm) on the
+# laptop, and roughly three times that on the mini. Rounded up to the 0.05 h
+# grid with the same margin the night-3 queues used:
+#   token arms (mlp_counts, mlp_spread_recency, mlp_114) and the two
+#   identity_residual arms  ->  0.15 h
+#   `full` arms (full_114, full_50)                      ->  0.40 h
+# `full_50` is budgeted at the `full` rate although it reads only 50 columns:
+# it is the same architecture and the smoke that produced 240 s was the wider
+# of the two, so the budget is deliberately generous rather than measured
+# separately. The populated per-configuration, per-machine capacity table --
+# smoke seconds, budgeted hours, maximum duration, overheads and the queue
+# deadline -- is docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b,
+# C114)". LAUNCH IS REFUSED IF ANY ROW OF THAT TABLE IS BLANK.
+#
+# RETRY BUDGET: run_queue.sh gives each job a per-attempt alarm of
+# 2 * expected_hours AND retries once after a failure or a timeout, so a hung
+# job can consume up to 4 * expected_hours before the queue moves on. Sum of
+# expected_hours over these 21 jobs is 4.65 h; sum of 4 * expected_hours is
+# 18.60 h.
+# ---------------------------------------------------------------------------
+
+defaults:
+  # Refuse to launch a job when available memory (vm_stat: free + inactive +
+  # speculative) is below this. Laptop-sized: this machine also runs the
+  # interactive session, so the floor is high and the cap leaves room for it.
+  memory_floor_gb: 12
+  # Kill a job whose process-tree RSS exceeds this.
+  memory_cap_gb: 24
+  # Watchdog poll interval, seconds.
+  poll_seconds: 30
+  # Touch this file to stop THIS queue between jobs; remove it to resume.
+  # Each half has its own stop file so stopping one machine never stops the
+  # other, and batch 2's files are distinct from night 3's.
+  stop_file: research/sequence_track/STOP_laptop_batch2
+
+jobs:
+  - id: mlp_counts-s7
+    config: experiments/configs/seq_stage3_batch2_4d_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_batch2_4d_v1.yaml --config-ids mlp_counts --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage3/batch2/runs/mlp_counts/seed_7
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Batch 2 job 1 of 21 (laptop): rung 4d, configuration mlp_counts, seed 7.
+      rung 4d control: 50-feature contract + the two as-of ball counts; the shared control of family_4d.
+      Budget 0.15 h; see the capacity table in
+      docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b, C114)".
+
+  - id: mlp_spread_recency-s7
+    config: experiments/configs/seq_stage3_batch2_4d_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_batch2_4d_v1.yaml --config-ids mlp_spread_recency --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage3/batch2/runs/mlp_spread_recency/seed_7
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Batch 2 job 2 of 21 (laptop): rung 4d, configuration mlp_spread_recency, seed 7.
+      rung 4d candidate: the same plus twelve Dirichlet spread columns and two recency counts; candidate of family_4d.
+      Budget 0.15 h; see the capacity table in
+      docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b, C114)".
+
+  - id: mlp_counts-s29
+    config: experiments/configs/seq_stage3_batch2_4d_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_batch2_4d_v1.yaml --config-ids mlp_counts --seeds 29 --machine laptop
+    output_dir: models/embeddings/seq_stage3/batch2/runs/mlp_counts/seed_29
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Batch 2 job 3 of 21 (laptop): rung 4d, configuration mlp_counts, seed 29.
+      rung 4d control: 50-feature contract + the two as-of ball counts; the shared control of family_4d.
+      Budget 0.15 h; see the capacity table in
+      docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b, C114)".
+
+  - id: mlp_spread_recency-s29
+    config: experiments/configs/seq_stage3_batch2_4d_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_batch2_4d_v1.yaml --config-ids mlp_spread_recency --seeds 29 --machine laptop
+    output_dir: models/embeddings/seq_stage3/batch2/runs/mlp_spread_recency/seed_29
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Batch 2 job 4 of 21 (laptop): rung 4d, configuration mlp_spread_recency, seed 29.
+      rung 4d candidate: the same plus twelve Dirichlet spread columns and two recency counts; candidate of family_4d.
+      Budget 0.15 h; see the capacity table in
+      docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b, C114)".
+
+  - id: mlp_counts-s42
+    config: experiments/configs/seq_stage3_batch2_4d_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_batch2_4d_v1.yaml --config-ids mlp_counts --seeds 42 --machine laptop
+    output_dir: models/embeddings/seq_stage3/batch2/runs/mlp_counts/seed_42
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Batch 2 job 5 of 21 (laptop): rung 4d, configuration mlp_counts, seed 42.
+      rung 4d control: 50-feature contract + the two as-of ball counts; the shared control of family_4d.
+      Budget 0.15 h; see the capacity table in
+      docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b, C114)".
+
+  - id: mlp_spread_recency-s42
+    config: experiments/configs/seq_stage3_batch2_4d_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_batch2_4d_v1.yaml --config-ids mlp_spread_recency --seeds 42 --machine laptop
+    output_dir: models/embeddings/seq_stage3/batch2/runs/mlp_spread_recency/seed_42
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Batch 2 job 6 of 21 (laptop): rung 4d, configuration mlp_spread_recency, seed 42.
+      rung 4d candidate: the same plus twelve Dirichlet spread columns and two recency counts; candidate of family_4d.
+      Budget 0.15 h; see the capacity table in
+      docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b, C114)".
+
+  - id: full_114-s7
+    config: experiments/configs/seq_stage3_batch2_c114_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_batch2_c114_v1.yaml --config-ids full_114 --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage3/batch2/runs/full_114/seed_7
+    expected_hours: 0.4
+    machine: laptop
+    notes: >
+      Batch 2 job 7 of 21 (laptop): rung C114, configuration full_114, seed 7.
+      C114 candidate: standard wiring on the production 114-column contract; candidate of every member of both C114 families.
+      Budget 0.4 h; see the capacity table in
+      docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b, C114)".
+
+  - id: mlp_114-s7
+    config: experiments/configs/seq_stage3_batch2_c114_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_batch2_c114_v1.yaml --config-ids mlp_114 --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage3/batch2/runs/mlp_114/seed_7
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Batch 2 job 8 of 21 (laptop): rung C114, configuration mlp_114, seed 7.
+      C114 control: the same 114 columns with no sequence access; the shared control and every gate's reference.
+      Budget 0.15 h; see the capacity table in
+      docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b, C114)".
+
+  - id: full_50-s7
+    config: experiments/configs/seq_stage3_batch2_c114_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_batch2_c114_v1.yaml --config-ids full_50 --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage3/batch2/runs/full_50/seed_7
+    expected_hours: 0.4
+    machine: laptop
+    notes: >
+      Batch 2 job 9 of 21 (laptop): rung C114, configuration full_50, seed 7.
+      C114 reference arm: standard wiring on the 50-feature contract; family key of family_c114_feats and the reference of its primary.
+      Budget 0.4 h; see the capacity table in
+      docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b, C114)".
+
+  - id: full_114-s29
+    config: experiments/configs/seq_stage3_batch2_c114_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_batch2_c114_v1.yaml --config-ids full_114 --seeds 29 --machine laptop
+    output_dir: models/embeddings/seq_stage3/batch2/runs/full_114/seed_29
+    expected_hours: 0.4
+    machine: laptop
+    notes: >
+      Batch 2 job 10 of 21 (laptop): rung C114, configuration full_114, seed 29.
+      C114 candidate: standard wiring on the production 114-column contract; candidate of every member of both C114 families.
+      Budget 0.4 h; see the capacity table in
+      docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b, C114)".
+
+  - id: mlp_114-s29
+    config: experiments/configs/seq_stage3_batch2_c114_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_batch2_c114_v1.yaml --config-ids mlp_114 --seeds 29 --machine laptop
+    output_dir: models/embeddings/seq_stage3/batch2/runs/mlp_114/seed_29
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Batch 2 job 11 of 21 (laptop): rung C114, configuration mlp_114, seed 29.
+      C114 control: the same 114 columns with no sequence access; the shared control and every gate's reference.
+      Budget 0.15 h; see the capacity table in
+      docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b, C114)".
+
+  - id: full_50-s29
+    config: experiments/configs/seq_stage3_batch2_c114_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_batch2_c114_v1.yaml --config-ids full_50 --seeds 29 --machine laptop
+    output_dir: models/embeddings/seq_stage3/batch2/runs/full_50/seed_29
+    expected_hours: 0.4
+    machine: laptop
+    notes: >
+      Batch 2 job 12 of 21 (laptop): rung C114, configuration full_50, seed 29.
+      C114 reference arm: standard wiring on the 50-feature contract; family key of family_c114_feats and the reference of its primary.
+      Budget 0.4 h; see the capacity table in
+      docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b, C114)".
+
+  - id: full_114-s42
+    config: experiments/configs/seq_stage3_batch2_c114_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_batch2_c114_v1.yaml --config-ids full_114 --seeds 42 --machine laptop
+    output_dir: models/embeddings/seq_stage3/batch2/runs/full_114/seed_42
+    expected_hours: 0.4
+    machine: laptop
+    notes: >
+      Batch 2 job 13 of 21 (laptop): rung C114, configuration full_114, seed 42.
+      C114 candidate: standard wiring on the production 114-column contract; candidate of every member of both C114 families.
+      Budget 0.4 h; see the capacity table in
+      docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b, C114)".
+
+  - id: mlp_114-s42
+    config: experiments/configs/seq_stage3_batch2_c114_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_batch2_c114_v1.yaml --config-ids mlp_114 --seeds 42 --machine laptop
+    output_dir: models/embeddings/seq_stage3/batch2/runs/mlp_114/seed_42
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Batch 2 job 14 of 21 (laptop): rung C114, configuration mlp_114, seed 42.
+      C114 control: the same 114 columns with no sequence access; the shared control and every gate's reference.
+      Budget 0.15 h; see the capacity table in
+      docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b, C114)".
+
+  - id: full_50-s42
+    config: experiments/configs/seq_stage3_batch2_c114_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_batch2_c114_v1.yaml --config-ids full_50 --seeds 42 --machine laptop
+    output_dir: models/embeddings/seq_stage3/batch2/runs/full_50/seed_42
+    expected_hours: 0.4
+    machine: laptop
+    notes: >
+      Batch 2 job 15 of 21 (laptop): rung C114, configuration full_50, seed 42.
+      C114 reference arm: standard wiring on the 50-feature contract; family key of family_c114_feats and the reference of its primary.
+      Budget 0.4 h; see the capacity table in
+      docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b, C114)".
+
+  - id: identity_residual_l3-s7
+    config: experiments/configs/seq_stage3_batch2_4b_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_batch2_4b_v1.yaml --config-ids identity_residual_l3 --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage3/batch2/runs/identity_residual_l3/seed_7
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Batch 2 job 16 of 21 (laptop): rung 4b, configuration identity_residual_l3, seed 7.
+      rung 4b, lambda 0.001: identity residual over the frozen ref_eb_ctx probabilities. FAMILY DEFERRED; descriptive only.
+      Budget 0.15 h; see the capacity table in
+      docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b, C114)".
+
+  - id: identity_residual_l2-s7
+    config: experiments/configs/seq_stage3_batch2_4b_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_batch2_4b_v1.yaml --config-ids identity_residual_l2 --seeds 7 --machine laptop
+    output_dir: models/embeddings/seq_stage3/batch2/runs/identity_residual_l2/seed_7
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Batch 2 job 17 of 21 (laptop): rung 4b, configuration identity_residual_l2, seed 7.
+      rung 4b, lambda 0.01: the same arm, the other registered penalty. FAMILY DEFERRED; descriptive only.
+      Budget 0.15 h; see the capacity table in
+      docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b, C114)".
+
+  - id: identity_residual_l3-s29
+    config: experiments/configs/seq_stage3_batch2_4b_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_batch2_4b_v1.yaml --config-ids identity_residual_l3 --seeds 29 --machine laptop
+    output_dir: models/embeddings/seq_stage3/batch2/runs/identity_residual_l3/seed_29
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Batch 2 job 18 of 21 (laptop): rung 4b, configuration identity_residual_l3, seed 29.
+      rung 4b, lambda 0.001: identity residual over the frozen ref_eb_ctx probabilities. FAMILY DEFERRED; descriptive only.
+      Budget 0.15 h; see the capacity table in
+      docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b, C114)".
+
+  - id: identity_residual_l2-s29
+    config: experiments/configs/seq_stage3_batch2_4b_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_batch2_4b_v1.yaml --config-ids identity_residual_l2 --seeds 29 --machine laptop
+    output_dir: models/embeddings/seq_stage3/batch2/runs/identity_residual_l2/seed_29
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Batch 2 job 19 of 21 (laptop): rung 4b, configuration identity_residual_l2, seed 29.
+      rung 4b, lambda 0.01: the same arm, the other registered penalty. FAMILY DEFERRED; descriptive only.
+      Budget 0.15 h; see the capacity table in
+      docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b, C114)".
+
+  - id: identity_residual_l3-s42
+    config: experiments/configs/seq_stage3_batch2_4b_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_batch2_4b_v1.yaml --config-ids identity_residual_l3 --seeds 42 --machine laptop
+    output_dir: models/embeddings/seq_stage3/batch2/runs/identity_residual_l3/seed_42
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Batch 2 job 20 of 21 (laptop): rung 4b, configuration identity_residual_l3, seed 42.
+      rung 4b, lambda 0.001: identity residual over the frozen ref_eb_ctx probabilities. FAMILY DEFERRED; descriptive only.
+      Budget 0.15 h; see the capacity table in
+      docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b, C114)".
+
+  - id: identity_residual_l2-s42
+    config: experiments/configs/seq_stage3_batch2_4b_v1.yaml
+    command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config experiments/configs/seq_stage3_batch2_4b_v1.yaml --config-ids identity_residual_l2 --seeds 42 --machine laptop
+    output_dir: models/embeddings/seq_stage3/batch2/runs/identity_residual_l2/seed_42
+    expected_hours: 0.15
+    machine: laptop
+    notes: >
+      Batch 2 job 21 of 21 (laptop): rung 4b, configuration identity_residual_l2, seed 42.
+      rung 4b, lambda 0.01: the same arm, the other registered penalty. FAMILY DEFERRED; descriptive only.
+      Budget 0.15 h; see the capacity table in
+      docs/sequence_track/night3_runbook.md § "Batch 2 (4d, 4b, C114)".
