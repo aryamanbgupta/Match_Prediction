@@ -10,31 +10,45 @@ roles are still `docs/sequence_track/stage2_handoff_opus.md`.
 
 ## 0. NEXT ACTION (read this first)
 
-> **State at 2026-09-12 ~09:30 IST.** Night 1 is COMPLETE: 32/32 runs,
-> consolidated, statistics run, k selected (`same_entity_k30`), eight ownership
-> certificates passing on trained checkpoints, report rendered at 987 lines,
-> analysis pin verifying. Astra's results gate round 1 returned NO SIGN-OFF
-> with six MUST-FIX; **all are closed** and round 2 is running.
+> **State at 2026-09-12 ~10:05 IST. A /loop is now driving this to completion.**
 >
-> **A seed extension is TRAINING NOW** (D12): eight whole families at seeds 29,
-> 42 and 101, seeds 29/42 on the laptop and 101 on the mini, from commit
-> `92cc3c5` via `queue_laptop_ext.yaml` / `queue_mini_ext.yaml`. Stop files are
-> `STOP_laptop_ext` / `STOP_mini_ext`. Seed 29 is complete for all eight.
+> Night 1: complete, consolidated, statistics run, k = `same_entity_k30`, eight
+> ownership certificates passing on trained checkpoints, report at 987 lines.
+> **Astra results gate round 2 = NO SIGN-OFF with exactly two MUST-FIX left**:
+> (1) a masked arm with ZERO trained certificates is still eligible on its
+> one-epoch smoke record — block it and propagate through results, gates,
+> mechanism and falsification; (2) the analysis pin's compared set omits
+> `evidence.config` and `dependency_coverage`, so failed checkpoint
+> authentication and a changed config produce no drift. Both are being fixed.
 >
-> **Next, in order:** (1) results gate round 2 to SIGN-OFF, then **commit the
-> two-seed screen result** (report + acceptance + analysis pin). (2) When both
-> extension queues finish, rsync the mini's seed 101 home with
-> `--exclude='summary.yaml'` (NOT an `include=***` pattern, which macOS
-> openrsync ignores), then
-> `retrain_stage2.py --consolidate --config experiments/configs/seq_stage2_5seed_v1.yaml`.
-> (3) Rerun the statistics at `--seeds 7,13,29,42,101` and re-render, as a
-> **separate five-seed addendum** to the two-seed report. (4) Results gate on
-> the addendum. (5) The verdict is still NOT run; it is the user's decision.
+> **Astra also audited the extension setup and found two more, which block the
+> five-seed addendum, not the commit**: (3) `READOUTS` in `stage2_stats.py` is
+> hard-coded to `seed_7, seed_13, seed_mean_joint`, so a five-seed run would
+> silently omit seeds 29/42/101 from the Holm tables, gates and screens, and
+> `family_screen` does not enforce the registered 4/5 favourable-direction
+> count; (4) `seq_stage2_5seed_v1.yaml` must be rebuilt as **all sixteen
+> configurations, orders 1..16, all fifteen families**, because with only eight
+> it cannot run `ksweep` at all. Astra: "No fourth config is necessary."
+> Five-seed outputs must use **distinct `--out` paths** so night-1 evidence is
+> not overwritten.
 >
-> **Still not unlocked by five seeds** (D12.8): the cohort. The
-> historical-consumption question (D10.16 condition 0) is open, the extension
-> procedure must be frozen before the new results are inspected, cohort
-> provenance re-verified, and the partial-exposure rule honoured.
+> **Training: extension 1** (eight families, seeds 29/42/101) is 8/8 on the
+> mini and 13/16 on the laptop. **Extension 2** (the five window arms,
+> `recency_k30`, `aligned_hist_rf`, `lstm`) is running on the mini at seed 101
+> and still needs its laptop half at seeds 29 and 42 — launch
+> `queue_laptop_ext2.yaml` only after `queue_laptop_ext.yaml` finishes, one
+> trainer per machine.
+>
+> **Ordered remainder:** close (1) and (2) → commit the two-seed result →
+> launch extension 2 on the laptop → both queues finish → rsync seed_101 with
+> `--exclude='summary.yaml'` → consolidate under the rebuilt five-seed config →
+> five-seed statistics and report to distinct paths → Astra gate → commit.
+> `log_verdict.py` is NOT run and the cohort is NOT opened; both are the user's.
+>
+> **Three launch mistakes already made, do not repeat**: an rsync `***` include
+> pattern macOS openrsync ignores; queue commands that omit `--config` so the
+> driver reads the night-1 registration; and filtered configs keeping
+> non-contiguous `queue_order`, which the driver validates as 1..N.
 
 ### Autonomy grant (user, 2026-09-12 ~01:15 IST)
 
