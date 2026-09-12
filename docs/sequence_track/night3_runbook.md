@@ -356,13 +356,13 @@ arm) and 240 s (any `full` arm) on the laptop, and roughly 3x that on the mini.
 | `full_50` | full | laptop | 16 | 240 | 0.40 | 0.80 h (2,880 s) | 1.60 h |
 | `identity_residual_l3` | identity_residual | laptop | 6 | 45 | 0.15 | 0.30 h (1,080 s) | 0.60 h |
 | `identity_residual_l2` | identity_residual | laptop | 6 | 45 | 0.15 | 0.30 h (1,080 s) | 0.60 h |
-| `mlp_counts` | token | mini | `SMOKE` | ~180 | 0.30 | 0.60 h (2,160 s) | 1.20 h |
-| `mlp_spread_recency` | token | mini | `SMOKE` | ~180 | 0.30 | 0.60 h (2,160 s) | 1.20 h |
-| `mlp_114` | token | mini | `SMOKE` | ~180 | 0.30 | 0.60 h (2,160 s) | 1.20 h |
-| `full_114` | full | mini | `SMOKE` | ~720 | 0.90 | 1.80 h (6,480 s) | 3.60 h |
-| `full_50` | full | mini | `SMOKE` | ~720 | 0.90 | 1.80 h (6,480 s) | 3.60 h |
-| `identity_residual_l3` | identity_residual | mini | `SMOKE` | ~135 | 0.30 | 0.60 h (2,160 s) | 1.20 h |
-| `identity_residual_l2` | identity_residual | mini | `SMOKE` | ~135 | 0.30 | 0.60 h (2,160 s) | 1.20 h |
+| `mlp_counts` | token | mini | 7 (laptop, 200 steps, gate-2 smoke at 65f2f63 with 66 token inputs); mini: NOT smoked — deviation, see B6 | ~180 | 0.30 | 0.60 h (2,160 s) | 1.20 h |
+| `mlp_spread_recency` | token | mini | 7 (laptop, 200 steps, gate-2 smoke); mini: NOT smoked — deviation, see B6 | ~180 | 0.30 | 0.60 h (2,160 s) | 1.20 h |
+| `mlp_114` | token | mini | laptop not smoked separately (token arm under the 114 contract); mini: NOT smoked — deviation, see B6 | ~180 | 0.30 | 0.60 h (2,160 s) | 1.20 h |
+| `full_114` | full | mini | 16 (laptop, 200 steps, gate-2 smoke); mini: NOT smoked — deviation, see B6 | ~720 | 0.90 | 1.80 h (6,480 s) | 3.60 h |
+| `full_50` | full | mini | laptop 135 s full run (stage 2 measurement of the same arm); mini: NOT smoked — deviation, see B6 | ~720 | 0.90 | 1.80 h (6,480 s) | 3.60 h |
+| `identity_residual_l3` | identity_residual | mini | 7 (mini, 1 epoch, 02:14 IST at 86e049e); laptop 6 (200 steps, gate-2 smoke) | ~135 | 0.30 | 0.60 h (2,160 s) | 1.20 h |
+| `identity_residual_l2` | identity_residual | mini | same arm as l3: mini 7 (1 epoch); laptop 6 (200 steps) | ~135 | 0.30 | 0.60 h (2,160 s) | 1.20 h |
 
 `full_50` is budgeted at the `full` rate although it reads only 50 columns: it
 is the same architecture, and the 240 s smoke was the wider of the two, so the
