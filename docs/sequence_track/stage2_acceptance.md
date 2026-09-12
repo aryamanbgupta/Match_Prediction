@@ -1207,20 +1207,79 @@ orchestrator's own record: it counts **seven** differing rows in § 5 where the
 orchestrator had written fifteen; the fifteen is the all-slice count of gate
 rows where the two counts disagree, and the record now distinguishes them.
 
-### Gate 3 round 3 — NOT OBTAINED: the reviewer model is at capacity
+### Gate 3 round 3 — **`VERDICT: SIGN-OFF`**
 
-The round-3 prompt is written and committed at
-`docs/sequence_track/astra/gate3r3_prompt.md`. Two consecutive invocations of
-`gpt-6-astra` failed with `ERROR: Selected model is at capacity. Please try a
-different model.` **No substitute reviewer was used**: the review chain for this
-stage is Astra's throughout, and swapping models for the closing stamp would
-weaken it. The correct action is to re-run the identical prompt when capacity
-returns.
+Prompt `docs/sequence_track/astra/gate3r3_prompt.md`, output
+`<scratchpad>/astra/gate3r3.md`. **MUST-FIX: none.** (Two earlier invocations of
+this identical prompt failed with `ERROR: Selected model is at capacity`; no
+substitute reviewer was used, and the third attempt of the same prompt
+succeeded. The review chain for this stage is Astra's throughout.)
 
-**What this means for the stage's status.** Every MUST-FIX Astra has raised
-across all gates is closed, and round 2 confirmed the six substantive closures
-itself. What is missing is only the closing sign-off on the single provenance
-commit `8754e31` that round 2 named as its own "single next action". So the
-stage is **substantively complete and formally unsigned**. It must not be
-described as gate-signed until that round returns `SIGN-OFF`.
+Astra confirmed: the recorded invocation includes the prior input with its path,
+hash, presence and comparison recorded; **both pins independently verify without
+drift and both tracked snapshots match their live pins exactly**; renders
+reproduce the 1,001-line screen and the 1,560-line addendum; **the replay
+mechanism is correct** — "execute the recorded argv, replacing only `--out`,
+rather than reconstructing arguments from evidence fields" — and the subprocess
+and equality assertion are real with both skip conditions false. Both wording
+fixes and the row-count correction are confirmed. Handover constraints are
+"sufficiently explicit": the unresolved historical consumption, all nine unlock
+conditions, the outstanding user verdict, the fact that `log_verdict.py` was not
+called, and the ruling to keep the sequence cohort unopened are all preserved.
 
+It could not attest to a pytest pass this round (the read-only sandbox blocked
+temporary-file creation), and said so rather than implying one; its in-memory
+reproduction is recorded as separate evidence. The orchestrator re-ran the
+suites: **1799 passed, 1 skipped, 58 deselected**, and the artifact-gated replay
+guard passes against both real pins.
+
+Its one SHOULD — compare **bytes** rather than decoded text in the replay
+assertion, so a line-ending normalisation cannot hide a difference — is
+**applied**; the guard still passes.
+
+**Astra's closing statement, verbatim, which is the stage's status:**
+
+> Stage 2 can close as a reviewed, reproducible five-seed validation study. It
+> reproduces full attention's death-over harm and withdraws the earlier resolved
+> alignment-benefit claim. Only the production-prior residual MLP control
+> qualifies; no sequence candidate passes the complete registered screen, and
+> the mechanism questions remain unresolved. This establishes neither absence of
+> sequence benefit nor out-of-sample confirmation: the cohort remains unopened,
+> no model advances, and the user's verdict remains outstanding.
+
+---
+
+## Stage 2: CLOSED, reviewed and reproducible — 2026-09-12
+
+| | |
+|---|---|
+| runs | **80** — 16 configurations × 5 seeds (7, 13, 29, 42, 101), 0 failures, 0 timeouts, 0 memory refusals, across four queues on two machines |
+| ownership certification | **20 certificates** — 4 masked arms × 5 seeds, every one max \|Δ\| **exactly 0** over 2,000 perturbed positions, checkpoint md5s authenticated |
+| reports | `SEQ_STAGE2_REPORT.md` (1,001 lines, two-seed screen) and `SEQ_STAGE2_FIVE_SEED_ADDENDUM.md` (1,560 lines) |
+| provenance | two analysis pins, both verifying **and replaying byte-identically** to the reports they hash |
+| suite | 1799 passed, 1 skipped, 58 deselected |
+| Astra rounds | plan; machine split; D9/D10 design + cohort ruling; code gate rounds 1–4; results gate rounds 1–2; addendum gate rounds 1–3. **All MUST-FIX closed.** |
+| advancement | **none** |
+| cohort | **`DEFERRED_UNOPENED`** — and Astra ruled it should stay shut regardless, since confirming a production-prior control would not confirm the sequence hypothesis |
+| verdict | **NOT RUN.** `research/log_verdict.py` was never called. The user's decision |
+
+**What the stage establishes.** The death-over harm reproduces: `full − mlp` on
+`death` is **+0.00463 [+0.00177, +0.00733], 0 of 5 seeds favourable**, against
+the 2026-08 ablation's +0.0053 on 0 of 5 — a reproduction, not an independent
+replication. **Neither proposed mechanism is supported at this resolution**, and
+that is not the same as neither mattering: learned forgetting shows no detected
+benefit over fixed decay (−0.00011, 4/5, crossing zero), and both ownership
+contrasts stay unresolved (`same_entity_k30 − recency_k30` −0.00084 at 4/5;
+`same_entity_unr − aligned_hist_rf` +0.00004 at 1/5). **The screen's one clean
+mechanism finding was withdrawn**: `aligned_hist − full` went from −0.00154
+CI-clean at two seeds to −0.00074 crossing zero at 3/5. Held at 5/5 CI-clean:
+`fixed_decay − mlp` −0.00405, `xlstm − mlp` −0.00400, `residual_mlp − mlp`
+−0.00553. **Only `residual_mlp` clears the full screen, and it carries no
+history at all**, while `residual_t1 − residual_mlp` stays unresolved at
+−0.00013. `same_entity_k0 − mlp` is CI-clean adverse but its Holm-adjusted p is
+0.0880, so it is not a multiplicity-adjusted finding and isolates nothing. The
+window sweep keeps k = 30 at both seed counts.
+
+**The methodological finding worth carrying forward** is that five seeds
+withdrew a two-seed CI-clean result. Nothing in this repository should read a
+two-seed clean interval as a finding again.

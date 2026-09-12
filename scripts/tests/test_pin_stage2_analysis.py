@@ -519,7 +519,9 @@ def test_replaying_the_recorded_invocation_reproduces_the_report(pin_path):
         run = subprocess.run(out, cwd=str(REPO), capture_output=True,
                              text=True, timeout=900)
         assert run.returncode == 0, run.stdout + run.stderr
-        assert replayed.read_text() == report.read_text(), (
+        # Astra gate 3 round 3 SHOULD 1: compare BYTES, not decoded text, so a
+        # line-ending normalisation cannot hide a difference.
+        assert replayed.read_bytes() == report.read_bytes(), (
             f"replaying the invocation recorded in {pin_path} does NOT "
             f"reproduce {report.name}; the pin records a command that did not "
             "produce the report it hashes"

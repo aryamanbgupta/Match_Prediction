@@ -10,26 +10,15 @@ roles are still `docs/sequence_track/stage2_handoff_opus.md`.
 
 ## 0. NEXT ACTION (read this first)
 
-> **State at 2026-09-12 ~13:15 IST. SUBSTANTIVELY COMPLETE, FORMALLY UNSIGNED.**
+> **STAGE 2 IS CLOSED — 2026-09-12, `VERDICT: SIGN-OFF`.** Nothing remains in
+> this runbook. 80 runs, 20 ownership certificates all exactly 0, two reports,
+> two pins that verify and replay byte-identically, suite 1799 passed. No arm
+> advances; the cohort stays `DEFERRED_UNOPENED`; `log_verdict.py` was never
+> called and the verdict is the user's.
 >
-> 80 runs (16 configurations × 5 seeds), 0 failures. Committed: the two-seed
-> screen result, the five-seed addendum (`d188b8b`), and the analysis-provenance
-> correction (`8754e31`). Suite 1799 passed, 1 skipped. Both analysis pins verify
-> **and replay byte-identically** to the reports they hash. 20 ownership
-> certificates, 4 masked arms × 5 seeds, all exactly 0.
->
-> **THE ONLY REMAINING STEP: Astra gate 3 round 3.** Every MUST-FIX from every
-> gate is closed; round 2 confirmed the six substantive closures itself and named
-> `8754e31` as its own single next action. The round-3 prompt is written at
-> `docs/sequence_track/astra/gate3r3_prompt.md`. **Two invocations failed with
-> "Selected model is at capacity"** — re-run that exact prompt when capacity
-> returns. **Do not substitute another reviewer model**; the chain is Astra's
-> throughout. Until it returns SIGN-OFF, do not call this stage gate-signed.
->
-> **Then:** nothing. `research/log_verdict.py` is NOT run and the cohort stays
-> `DEFERRED_UNOPENED` — both are the user's decision, and Astra ruled the
-> sequence cohort should stay shut regardless, because confirming a
-> production-prior control would not confirm the sequence hypothesis.
+> The stage's own record is `docs/sequence_track/stage2_acceptance.md` — see its
+> closing "Stage 2: CLOSED" table. The next stage's work is stage 3 or 4 in
+> `docs/SEQUENCE_TRACK_PLAN.md`, neither of which has been started.
 
 ### Autonomy grant (user, 2026-09-12 ~01:15 IST)
 
