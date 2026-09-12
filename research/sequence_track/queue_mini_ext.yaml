@@ -1,0 +1,65 @@
+# Stage 2 SEED EXTENSION (night 2). Seeds 29 and 42 on the laptop, 101 on
+# the mini, so every contrast stays within-machine at each seed exactly as
+# D8 requires. Families extended as WHOLE families per D2.1, and chosen per
+# Astra gate 2: xlstm + mlp is the minimum, full is the reference for the
+# reproduced death-over harm, fixed_decay/fox and aligned_hist complete the
+# forgetting and aligned-input families, and the residual pair is retained
+# because residual_mlp is the only screen pass. The ownership and k families
+# are NOT extended here: D10.16 requires all five k configurations whenever a
+# k claim is retained, which is a separate and larger night.
+# expected_hours = ceil_to_0.05((30*smoke*F + 120)/3600), F=1.5 laptop / 3 mini.
+# One retry means a hung job can consume 4x expected_hours.
+defaults:
+  memory_floor_gb: 3
+  memory_cap_gb: 12
+  poll_seconds: 30
+  stop_file: research/sequence_track/STOP_mini_ext
+jobs:
+- id: mlp-s101
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids mlp --seeds 101 --machine mini
+  output_dir: models/embeddings/seq_stage2/runs/mlp/seed_101
+  expected_hours: 0.2
+  machine: mini
+- id: full-s101
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids full --seeds 101 --machine mini
+  output_dir: models/embeddings/seq_stage2/runs/full/seed_101
+  expected_hours: 0.25
+  machine: mini
+- id: fixed_decay-s101
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids fixed_decay --seeds 101 --machine mini
+  output_dir: models/embeddings/seq_stage2/runs/fixed_decay/seed_101
+  expected_hours: 0.3
+  machine: mini
+- id: fox-s101
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids fox --seeds 101 --machine mini
+  output_dir: models/embeddings/seq_stage2/runs/fox/seed_101
+  expected_hours: 0.35
+  machine: mini
+- id: aligned_hist-s101
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids aligned_hist --seeds 101 --machine mini
+  output_dir: models/embeddings/seq_stage2/runs/aligned_hist/seed_101
+  expected_hours: 0.3
+  machine: mini
+- id: xlstm-s101
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids xlstm --seeds 101 --machine mini
+  output_dir: models/embeddings/seq_stage2/runs/xlstm/seed_101
+  expected_hours: 1.9
+  machine: mini
+- id: residual_mlp-s101
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids residual_mlp --seeds 101 --machine mini
+  output_dir: models/embeddings/seq_stage2/runs/residual_mlp/seed_101
+  expected_hours: 0.25
+  machine: mini
+- id: residual_t1-s101
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=4 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids residual_t1 --seeds 101 --machine mini
+  output_dir: models/embeddings/seq_stage2/runs/residual_t1/seed_101
+  expected_hours: 0.35
+  machine: mini

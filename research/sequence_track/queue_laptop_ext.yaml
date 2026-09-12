@@ -1,0 +1,121 @@
+# Stage 2 SEED EXTENSION (night 2). Seeds 29 and 42 on the laptop, 101 on
+# the mini, so every contrast stays within-machine at each seed exactly as
+# D8 requires. Families extended as WHOLE families per D2.1, and chosen per
+# Astra gate 2: xlstm + mlp is the minimum, full is the reference for the
+# reproduced death-over harm, fixed_decay/fox and aligned_hist complete the
+# forgetting and aligned-input families, and the residual pair is retained
+# because residual_mlp is the only screen pass. The ownership and k families
+# are NOT extended here: D10.16 requires all five k configurations whenever a
+# k claim is retained, which is a separate and larger night.
+# expected_hours = ceil_to_0.05((30*smoke*F + 120)/3600), F=1.5 laptop / 3 mini.
+# One retry means a hung job can consume 4x expected_hours.
+defaults:
+  memory_floor_gb: 12
+  memory_cap_gb: 24
+  poll_seconds: 30
+  stop_file: research/sequence_track/STOP_laptop_ext
+jobs:
+- id: mlp-s29
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids mlp --seeds 29 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/mlp/seed_29
+  expected_hours: 0.15
+  machine: laptop
+- id: full-s29
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids full --seeds 29 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/full/seed_29
+  expected_hours: 0.15
+  machine: laptop
+- id: fixed_decay-s29
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids fixed_decay --seeds 29 --machine
+    laptop
+  output_dir: models/embeddings/seq_stage2/runs/fixed_decay/seed_29
+  expected_hours: 0.2
+  machine: laptop
+- id: fox-s29
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids fox --seeds 29 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/fox/seed_29
+  expected_hours: 0.2
+  machine: laptop
+- id: aligned_hist-s29
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids aligned_hist --seeds 29 --machine
+    laptop
+  output_dir: models/embeddings/seq_stage2/runs/aligned_hist/seed_29
+  expected_hours: 0.15
+  machine: laptop
+- id: xlstm-s29
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids xlstm --seeds 29 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/xlstm/seed_29
+  expected_hours: 0.95
+  machine: laptop
+- id: residual_mlp-s29
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids residual_mlp --seeds 29 --machine
+    laptop
+  output_dir: models/embeddings/seq_stage2/runs/residual_mlp/seed_29
+  expected_hours: 0.15
+  machine: laptop
+- id: residual_t1-s29
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids residual_t1 --seeds 29 --machine
+    laptop
+  output_dir: models/embeddings/seq_stage2/runs/residual_t1/seed_29
+  expected_hours: 0.2
+  machine: laptop
+- id: mlp-s42
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids mlp --seeds 42 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/mlp/seed_42
+  expected_hours: 0.15
+  machine: laptop
+- id: full-s42
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids full --seeds 42 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/full/seed_42
+  expected_hours: 0.15
+  machine: laptop
+- id: fixed_decay-s42
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids fixed_decay --seeds 42 --machine
+    laptop
+  output_dir: models/embeddings/seq_stage2/runs/fixed_decay/seed_42
+  expected_hours: 0.2
+  machine: laptop
+- id: fox-s42
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids fox --seeds 42 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/fox/seed_42
+  expected_hours: 0.2
+  machine: laptop
+- id: aligned_hist-s42
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids aligned_hist --seeds 42 --machine
+    laptop
+  output_dir: models/embeddings/seq_stage2/runs/aligned_hist/seed_42
+  expected_hours: 0.15
+  machine: laptop
+- id: xlstm-s42
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids xlstm --seeds 42 --machine laptop
+  output_dir: models/embeddings/seq_stage2/runs/xlstm/seed_42
+  expected_hours: 0.95
+  machine: laptop
+- id: residual_mlp-s42
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids residual_mlp --seeds 42 --machine
+    laptop
+  output_dir: models/embeddings/seq_stage2/runs/residual_mlp/seed_42
+  expected_hours: 0.15
+  machine: laptop
+- id: residual_t1-s42
+  config: experiments/configs/seq_stage2_ext_v1.yaml
+  command: OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 VECLIB_MAXIMUM_THREADS=2 uv run --no-sync python scripts/sequence_track/retrain_stage2.py --config-ids residual_t1 --seeds 42 --machine
+    laptop
+  output_dir: models/embeddings/seq_stage2/runs/residual_t1/seed_42
+  expected_hours: 0.2
+  machine: laptop

@@ -626,7 +626,18 @@ def test_shipped_queues_dry_run(tmp_path: Path) -> None:
         assert "jobs listed: %d" % len(job_ids) in own.stdout
         for job_id in job_ids:
             assert job_id in own.stdout
-        assert own.stdout.count("decision=run") == len(job_ids)
+        # Every listed job is SELECTED for this machine. It shows
+        # decision=run on a fresh tree and decision=skip once its output dir
+        # holds a COMPLETE marker whose config_sha256 matches -- which is the
+        # whole point of skip-if-complete resumability, and is the state after
+        # a night has run. Asserting "all sixteen run" would encode a
+        # fresh-tree assumption and fail precisely because the night
+        # succeeded, so assert selection instead: no job is skipped for the
+        # machine-tag reason.
+        selected = own.stdout.count("decision=run") + own.stdout.count(
+            "decision=skip")
+        assert selected == len(job_ids), own.stdout
+        assert "does not match" not in own.stdout, own.stdout
 
         crossed = subprocess.run(
             [str(RUNNER), "--queue", str(queue_path), "--machine", other,
@@ -642,7 +653,13 @@ def test_shipped_queues_dry_run(tmp_path: Path) -> None:
 
 
 def test_the_default_queue_is_the_laptop_half() -> None:
-    """No --queue: the runner reads queue_laptop.yaml and runs all sixteen."""
+    """No --queue: the runner reads queue_laptop.yaml and selects all sixteen.
+
+    "Selects", not "runs": a job already COMPLETE with a matching config
+    sha256 is correctly skipped, so this asserts the default queue and its
+    membership rather than a fresh tree (see the note in
+    test_shipped_queues_dry_run).
+    """
     result = subprocess.run(
         [str(RUNNER), "--dry-run"],
         capture_output=True,
@@ -653,7 +670,10 @@ def test_the_default_queue_is_the_laptop_half() -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     assert "queue_laptop.yaml" in result.stdout
     shipped = yaml.safe_load(LAPTOP_QUEUE.read_text(encoding="utf-8"))
-    assert result.stdout.count("decision=run") == len(shipped["jobs"])
+    selected = (result.stdout.count("decision=run")
+                + result.stdout.count("decision=skip"))
+    assert selected == len(shipped["jobs"]), result.stdout
+    assert "does not match" not in result.stdout, result.stdout
 
 
 # ---------------------------------------------------------------------------

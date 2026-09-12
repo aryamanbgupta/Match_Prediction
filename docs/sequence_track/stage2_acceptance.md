@@ -454,6 +454,30 @@ asks Astra. The k rule is deterministic, so it is applied without asking.
 | 9.7 | Selection record and pin | writes a machine-readable selection record containing all ten source LLs, computed means and paired spreads, tolerance, tie rule, selected config id/k, seed list, source hashes and UTC timestamp; records the chosen k and selection-record hash in the config and analysis pin; verification refuses drift; the two-seed selection remains explicitly provisional pending any registered whole-family seed extension |
 | 9.8 | Other k arms and controls | retains all five k arms in the validation report, naming the other four "not selected"; does not suppress adverse or inconclusive results or substitute another k after gates are read; only k=30 has the registered `recency_k30` comparison, while `same_entity_unr − aligned_hist_rf` is the registered unrestricted-mask comparison; k=0/6/12 retain their registered MLP primary references; no k borrows a different window's recency control; any new matched control requires an explicit registration amendment and complete paired seeds before its analysis |
 
+### Result (D9) — 2026-09-12
+
+`eval_out/seq_stage2/k_selection.json`. **SELECTED: `same_entity_k30`** — the
+registered default is kept.
+
+| k | seed 7 | seed 13 | two-seed mean | mean − mean(k=30) |
+|---|---|---|---|---|
+| 0 | 1.4393325357699134 | 1.4388773519251707 | 1.439104943847542 | +0.002470 |
+| 6 | 1.4379940134012863 | 1.4382478202152857 | 1.438120916808286 | +0.001486 |
+| 12 | 1.4373027603447828 | 1.4369954492624528 | 1.4371491048036178 | +0.000514 |
+| **30** | 1.4368647387756528 | 1.4364060394544331 | **1.436635389115043** | — |
+| unr | 1.4361948795949677 | 1.4362215189167853 | 1.4362081992558764 | **−0.000427** |
+
+| # | Result |
+|---|---|
+| 9.1 | PASS — all five k configurations complete at both seeds; not `BLOCKED_INCOMPLETE` |
+| 9.2 | PASS — full-precision per-seed LL read from each `runs/<id>/summary.yaml` after D8.7 consolidation; exactly the two registered seeds, finite |
+| 9.3 | PASS — `unr` has the best mean but beats k = 30 by only **0.000427**, inside the registered 0.002 tolerance, so **the rule keeps 30**. Any k including `unr` was eligible to win; none qualified |
+| 9.4 | PASS — validation summaries only; no test, cohort or base-logit-cohort read |
+| 9.5 | PASS — per-seed values, means and the paired differences are in the selection record |
+| 9.6 | Recorded: the sweep is a **two-seed directional screen**. The selection is the registered default, so no non-default flag arises. **Note worth carrying**: log loss improves **monotonically as the window widens** (0 → 6 → 12 → 30 → unr), i.e. restricting attention to recent deliveries hurts, which sits against a "stale history is noise" reading |
+| 9.7 | PASS — selection record written with all ten source LLs, means, paired spreads, tolerance, tie rule and hashes |
+| 9.8 | PASS — all five k arms are retained in the report; the other four are named "not selected". k = 30 keeps its registered `recency_k30` control |
+
 ---
 
 ## D10. Statistics, gates, mechanism contrasts, report (2f)
@@ -509,6 +533,148 @@ simultaneous; not the rejection rule"**; classification is never made from
 those intervals alone. With 2,000 draws an empty tail is reported as a
 resolution flag and `p < 0.001`, never as exact zero evidence. Stage 1's
 ±0.007 margin and parity classification are **not** imported.
+
+### Result (D10) — 2026-09-12
+
+`eval_out/seq_stage2/stats.json`; report
+`research/reports/embeddings/SEQ_STAGE2_REPORT.md` (958 lines).
+**32 of 32 seed runs admitted**, 15 of 15 families evaluable, 147 contrasts
+computed, **0 `NOT_EVALUABLE`**, 47 tournament blocks / 545 matches / 124,292
+rows with 0 unmapped, 2,000 reps at rng seed 29, contract
+`tournament_time_block_v1` with the 120-day gap. No slice fell under 10 blocks.
+`cohort_status: DEFERRED_UNOPENED`, `cohort_scored: false`, `advances: []`.
+
+**Registered primaries**, candidate − reference, seed-mean joint estimand,
+slice `all`; negative favours the candidate; "clean" means the interval
+excludes zero favourably:
+
+| candidate | reference | point | ci95 | dir | clean |
+|---|---|---|---|---|---|
+| full | mlp | −0.00042 | [−0.00195, +0.00100] | 1/2 | no |
+| fixed_decay | mlp | **−0.00349** | [−0.00576, −0.00136] | 2/2 | **yes** |
+| fox | fixed_decay | −0.00005 | [−0.00022, +0.00011] | 1/2 | no |
+| aligned_hist | full | **−0.00154** | [−0.00263, −0.00051] | 2/2 | **yes** |
+| aligned_hist_rf | aligned_hist | +0.00059 | [−0.00064, +0.00184] | 1/2 | no |
+| recency_k30 | mlp | −0.00027 | [−0.00157, +0.00077] | 1/2 | no |
+| same_entity_k30 | recency_k30 | −0.00117 | [−0.00226, +0.00021] | 2/2 | no |
+| same_entity_unr | aligned_hist_rf | −0.00051 | [−0.00181, +0.00080] | 1/2 | no |
+| same_entity_k0 | mlp | +0.00102 | [−0.00011, +0.00225] | 0/2 | no |
+| same_entity_k6 | mlp | +0.00004 | [−0.00123, +0.00138] | 1/2 | no |
+| same_entity_k12 | mlp | −0.00093 | [−0.00236, +0.00052] | 2/2 | no |
+| lstm | mlp | +0.00269 | [−0.00153, +0.00934] | 0/2 | no |
+| xlstm | mlp | **−0.00468** | [−0.00636, −0.00316] | 2/2 | **yes** |
+| residual_mlp | mlp | **−0.00552** | [−0.00671, −0.00435] | 2/2 | **yes** |
+| residual_t1 | residual_mlp | −0.00003 | [−0.00060, +0.00044] | 1/2 | no |
+
+**Screen statuses** (primary CI-clean **and** both non-inferiority gates):
+`residual_mlp` **SCREEN_PASS** on both seeds and on the joint estimand; the
+other fourteen `SCREEN_NOT_PASS`. `fixed_decay` and `xlstm` pass on seed 7
+only, which is exactly the seed-robustness weakness two seeds cannot resolve.
+
+**The death-over harm is reproduced.** `full − mlp` on `death` is
+**+0.00548 [+0.00168, +0.00900], 0 of 2 seeds favourable** — the interval
+excludes zero *adversely*. The 2026-08 ablation reported **+0.0053 on 0 of 5
+seeds** on a different frame, and its all-slice gap was −0.0004 against this
+stage's −0.00042. By phase `full − mlp` is favourable early and adverse late:
+powerplay −0.00193 [−0.00357, −0.00033], middle −0.00134, innings_1 −0.00150,
+chase +0.00085, **death +0.00548**.
+
+**Death-slice gates** (`candidate − mlp`; pass needs U95 strictly < +0.002):
+pass — `residual_mlp` −0.00357 (U95 −0.00072), `residual_t1` −0.00339
+(U95 −0.00042); fail — `xlstm` −0.00090 (U95 +0.00246, narrowly),
+`fixed_decay` +0.00172 (U95 +0.00563), `same_entity_unr` +0.00320,
+`aligned_hist` +0.00399, `same_entity_k30` +0.00440, `lstm` +0.00514,
+`recency_k30` +0.00562. On the **chase** gate the numerical `U95 < 0.002` additionally fails for
+`full`, `same_entity_k0` and `same_entity_k6` beyond `lstm` and `recency_k30`,
+and with Holm included `aligned_hist_rf` and `same_entity_k12` fail too
+(Astra gate 2 MUST-FIX 3 corrected an earlier, wrong summary here; the
+generated report's gate table had it right all along).
+
+| # | Result |
+|---|---|
+| 10.1 | PASS — alignment asserted elementwise against the parquet row order before any differencing |
+| 10.2 | PASS — 47 blocks asserted, block ids passed to the estimators, per-slice block counts reported, no slice descriptive |
+| 10.3 | PASS — estimand (i) per seed and (ii) joint seed-and-block, reported separately, (ii) labelled a descriptive two-seed robustness screen |
+| 10.4 | PASS — 15 families × 3 members, Holm within family per readout |
+| 10.5 | PASS — five mechanism contrasts with their registered labels; the guard against inferring a difference from differing significance is in the tool |
+| 10.6 | PASS — strict `U95 < 0.002`; only `SCREEN_PASS` / `SCREEN_NOT_PASS` / `NOT_EVALUABLE` exist |
+| 10.7 | PASS — exploratory slices reported; `thin_pair` unavailable with its exposure-column reason; `innings_2` and `chase` disclosed as identical row sets |
+| 10.8 | PASS — every cell rendered from a file; § 9 coverage check passes |
+| 10.9 | Screen freeze recorded; **not** an authorisation to score |
+| 10.10 | PASS — `DEFERRED_UNOPENED`, no cohort read of any kind, `log_verdict.py` not called |
+| 10.11 | PASS — `residual_t1 − residual_mlp` is the qualifying primary at −0.00003 [−0.00060, +0.00044], so **no incremental benefit of residual T1 over residual MLP was established at this resolution** (Astra gate 2 MUST-FIX 4: an unresolved interval is not an absence); `residual_mlp` is labelled a production-prior control, not a sequence gain |
+| 10.12 | PASS — **8 of 8 certificates on trained checkpoints at exactly 0**: `same_entity_k0`, `same_entity_k30`, `same_entity_unr`, `recency_k30`, each at both seeds, 2,000 targets, seed 29. A trained-checkpoint positive control moved 1.839, larger than the 0.752 of the one-epoch smoke |
+| 10.13 | PASS — § 9 restates every deviation, asymmetry and limitation |
+| 10.14, 10.15 | PASS — § 10 and § 11 as registered |
+| 10.16 | Unchanged; the unlock preconditions stand |
+
+### Gate 2 round 1 — `VERDICT: NO SIGN-OFF`
+
+Prompt `docs/sequence_track/astra/gate2_prompt.md`, output
+`<scratchpad>/astra/gate2_round1.md`. Astra independently verified a great deal
+and then refused. What it **confirmed**: the three deferred admission items are
+closed in the production analysis path (32 manifests with every artefact size
+and md5 matching, all 16 summary hashes matching the statistics, **every
+summary seed LL exactly matching its metrics**, the five-configuration k
+comparability check, and all four cross-arm requirements), with "no new
+fail-open route introduced in those production paths"; it recomputed **all 135
+family-member Holm adjustments, step-down flags and interval levels with no
+discrepancies**; it verified the threshold centring, empty-tail handling,
+rank-local labels, strict upper bounds, the joint-resampling estimator and the
+≥10-block rule against the contract; and it independently verified the eight
+masked certificates' checkpoint md5s and that they pass at zero.
+
+**Six MUST-FIX, and two of them are errors the orchestrator introduced:**
+
+| item | disposition |
+|---|---|
+| **3 — arithmetic errors in this file.** The k = 0 and k = 6 differences from k = 30 were recorded as +0.000470 and +0.000486; they are **+0.002470** and **+0.001486**. The selection and keeping k = 30 were correct. The chase-gate summary was also wrong: numerical `U95 < 0.002` additionally fails for `full`, `same_entity_k0` and `same_entity_k6`, and with Holm for `aligned_hist_rf` and `same_entity_k12`. The generated report's gate table was right throughout | **CORRECTED 2026-09-12** in D9's table and D10's gate paragraph. A recomputation is recorded in the session log. The lesson: hand-computed deltas in a summary table are exactly the "hand-entered cell" D10.8 forbids in the report, and they should not appear here either |
+| **4 — unsupported conclusions.** "Sequence adds nothing over the production prior" presents an unresolved interval as an absence; the generated report additionally claims a venue effect is "a level effect rather than a per-arm advantage", says "ownership is not isolated from alignment anywhere tonight" (contradicting the registered `same_entity_unr − aligned_hist_rf`, which does hold alignment fixed), and says the arms "differ only in what they are allowed to remember" when capacity, architecture, position scheme, key construction and production-logit access also differ | D10.11 **CORRECTED** to "no incremental benefit … was established at this resolution". The three report sentences are for the renderer fix |
+| **1 — dependency certification still admits incomplete evidence.** The renderer matches controls by `arm`/`k` rather than through `dependency_set_arm`/`k`, so the real `full` and `aligned_hist` controls are skipped rather than matched; missing controls do not block; coverage counts configurations rather than both seeds and does not authenticate checkpoint hashes. Astra reproduced `trained_checkpoint_coverage_complete=True` from four seed-7 certificates and **no controls**. Blocking is passed to some sections but not to the mechanism or falsification sections | renderer fix required before the results commit |
+| **2 — the report abbreviates the cohort-unlock conditions**, omitting D10.16(0) (historical consumption unresolved), the freeze-before-inspection rule, cohort-provenance verification and the partial-exposure recovery rule. "Five seeds alone cannot unlock this cohort" | renderer fix |
+| **5 — the § 9 coverage test only matches short prefixes anywhere in the document.** Astra removed the two-seed limitation's confirmation/LANDED qualification while keeping its prefix and coverage still passed. The numerical-cell test likewise proves a decimal occurs somewhere among the source numbers, not that the right field filled the right cell | renderer and test fix |
+| **6 — the analysis freeze is not concrete.** No separate verifiable analysis manifest exists; the config still holds launch-era analysis-source hashes, which differ from the current code. Also: the report was rendered from `dependency/recert/` while the renderer defaults to the parent directory and loads only immediate `*.json`, so a default regeneration would change the certification evidence | a separate analysis/decision pin, recording and verifying the actual invocation |
+| 7, 8 (SHOULD) | slice identity is inferred from equal row/match/block counts rather than row membership; the report simultaneously says recertification is pending and trained coverage complete |
+
+**Astra's corrections to the orchestrator's reading of the science**, adopted
+verbatim into how this stage is described:
+
+- Failed same-entity death gates do **not** establish that ownership cannot
+  explain the harm; the direct ownership contrasts remain unresolved.
+- FoX establishes **no detected benefit over fixed decay**, not that learned
+  forgetting adds nothing.
+- Fixed decay's death point estimate being about a third of full T1's harm is
+  **descriptive only**; it is not evidence that decay removes two thirds of the
+  harm, it needs a direct paired comparison, and the positional encoding also
+  differs between those arms.
+- Participant alignment improves overall log loss in its registered primary,
+  but its **direct death comparison is unresolved at −0.00149 [−0.00462,
+  +0.00168]**, so it does not yet explain the death harm.
+- The monotone k means suggest wider history helps **within the aligned,
+  ownership-masked construction**; they do not isolate history age across
+  architectures.
+- `residual_mlp` is the only joint screen pass; the residual T1 increment is
+  **unresolved, not proven absent**.
+
+**On the apparent stage 1 disagreement, Astra's correction is important.**
+Stage 1's −0.0257 is **winner log loss**, from selected seed-101 checkpoints on
+a later fixture set and its ≥$50k slice; stage 2's −0.00042 is **ball-outcome
+log loss**, from fresh seeds 7 and 13 on validation. "They are different
+estimands, populations, and checkpoints — not conflicting measurements of one
+architectural property." The orchestrator's framing of a contradiction was
+wrong. The minimal bridge Astra names: teacher-forced scoring of the **exact
+stage 1 B and C checkpoints on observed deliveries from the same replay
+fixtures**, preserving the primary fixture slice and reporting paired block
+uncertainty. That removes the checkpoint and population confounding without
+making the two loss scales interchangeable.
+
+**On extending seeds**, Astra's first choice is `xlstm`, with the caveat that
+"does not hurt death overs" is premature because its `U95 = +0.00246` fails the
+registered gate. Minimum registered extension: `xlstm` plus `mlp` at seeds 29,
+42 and 101; `full` as a useful additional reference for the reproduced harm;
+`lstm` only for a comparative recurrent claim; `residual_mlp` retained as the
+only screen-passing production-prior control, and `residual_t1` too if the
+residual-sequence question is pursued. **Nothing changes D10.16.**
 
 ---
 

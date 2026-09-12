@@ -521,3 +521,115 @@ def test_render_refuses_a_forbidden_output_or_dependency_path(built):
     with pytest.raises(st.RefusalError, match="refusing to open"):
         _render(built, stats_path=REPO / "models" / "embeddings"
                 / "seq_stage2" / "smoke" / "x.json")
+
+
+# ---------------------------------------------------------------------------
+# Astra gate 1 round 3 report rulings: the dependency section is PENDING, a
+# failed or missing certificate BLOCKS, and the innings_2 / chase equivalence
+# is disclosed
+# ---------------------------------------------------------------------------
+
+def test_the_dependency_heading_says_pending_not_recertified(built):
+    markdown = _render(built)
+    assert "recertification **pending**" in markdown
+    assert "recertified in D10.12" not in markdown
+    assert "This section is **pending**, not recertified" in markdown
+
+
+def test_a_failed_masked_arm_certificate_forces_not_evaluable(built, tmp_path):
+    """Astra: a failed certificate must BLOCK the affected interpretation and
+    eligibility, not merely appear in a table."""
+    path = built["dependency"] / "same_entity_k30.json"
+    record = json.loads(path.read_text())
+    record["pass"] = False
+    record["max_abs_delta"] = 0.42
+    path.write_text(json.dumps(record))
+    markdown = _render(built)
+    assert rr.blocking_note("same_entity_k30", {
+        "same_entity_k30": "its dependency certificate failed for "
+                           "`models/embeddings/seq_stage2/runs/"
+                           "same_entity_k30/seed_7`"}) in markdown
+    # Its family screen status reads NOT_EVALUABLE on every readout.
+    block = markdown.split("**same_entity_k30** —")[1:]
+    assert block, "the family is not rendered at all"
+    for chunk in block[:3]:
+        assert "screen status `NOT_EVALUABLE`" in chunk.splitlines()[0]
+    assert "family forced to `NOT_EVALUABLE`; arm not eligible" in markdown
+    assert "not eligible, because a masked-arm dependency certificate is "\
+           "failed or missing" in markdown
+
+
+def test_a_missing_masked_arm_certificate_also_blocks(built):
+    """The fixture holds a certificate for k30 only, so k0 and unr are MISSING."""
+    markdown = _render(built)
+    certificates = rr.dependency_certificates(
+        rr.load_dependency(built["dependency"]))
+    assert certificates["blocked"].keys() >= {"same_entity_k0",
+                                             "same_entity_unr",
+                                             "recency_k30"}
+    assert "same_entity_k30" not in certificates["blocked"]
+    assert certificates["trained_checkpoint_coverage_complete"] is False
+    for config_id in ("same_entity_k0", "same_entity_unr"):
+        assert f"**Dependency certificate blocks `{config_id}`**" in markdown
+
+
+def test_a_smoke_only_certificate_is_present_but_not_trained_coverage(built):
+    path = built["dependency"] / "same_entity_k30.json"
+    record = json.loads(path.read_text())
+    record["checkpoint"] = ("models/embeddings/seq_stage2/smoke/"
+                            "same_entity_k30/seed_7")
+    path.write_text(json.dumps(record))
+    certificates = rr.dependency_certificates(
+        rr.load_dependency(built["dependency"]))
+    assert "same_entity_k30" not in certificates["blocked"]
+    assert certificates["by_config"]["same_entity_k30"]["smoke_only"] is True
+    assert "same_entity_k30" not in certificates["trained_checkpoint_coverage"]
+    markdown = _render(built)
+    assert "smoke checkpoint only (structural)" in markdown
+
+
+def test_a_positive_control_that_did_not_fire_blocks(built):
+    (built["dependency"] / "control.json").write_text(json.dumps({
+        "arm": "same_entity", "k": 30,
+        "checkpoint": "models/embeddings/seq_stage2/runs/same_entity_k30/"
+                      "seed_13",
+        "n_targets": 2000, "max_abs_delta": 0.0, "p99_abs_delta": 0.0,
+        "n_nonzero_gt_1e-6": 0,
+        "positive_control_expected": True,
+        "positive_control_observed": False}))
+    certificates = rr.dependency_certificates(
+        rr.load_dependency(built["dependency"]))
+    assert certificates["by_config"]["same_entity_k30"]["status"] == (
+        "CONTROL_DID_NOT_FIRE")
+    assert "same_entity_k30" in certificates["blocked"]
+
+
+def test_a_blocked_arm_cannot_be_reported_as_ci_clean(built):
+    stats = built["stats"]
+    gain_open = rr._sequence_gain(stats, {})
+    gain_blocked = rr._sequence_gain(stats, {name: "blocked" for name
+                                            in gain_open["evaluable"]})
+    assert gain_open["evaluable"]
+    assert gain_blocked["evaluable"] == []
+    assert gain_blocked["ci_clean_favourable"] == []
+    assert gain_blocked["blocked_by_dependency_certificate"] == sorted(
+        gain_open["evaluable"])
+
+
+def test_the_report_discloses_the_innings_2_and_chase_equivalence(built):
+    """Astra: keep both registered predicates, disclose the equivalence, and
+    never present them as independent corroboration."""
+    equivalent = rr._equivalent_slices(built["stats"])
+    assert equivalent, "the fixture frame should make the two coincide"
+    assert equivalent[0][0] == "innings_2" and equivalent[0][1] == "chase"
+    markdown = _render(built)
+    assert ("**Disclosure — `innings_2` and `chase` are the same rows on this "
+            "frame.**") in markdown
+    assert "never** independent corroboration" in markdown
+    assert "only `chase` is a three-member family member" in markdown
+
+
+def test_diverging_slices_are_not_reported_as_equivalent(built):
+    stats = json.loads(json.dumps(built["stats"], default=str))
+    stats["slices"]["stats"]["chase"]["n_rows"] = 1
+    assert rr._equivalent_slices(stats) == []

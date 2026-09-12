@@ -41,6 +41,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -192,6 +193,61 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# ---------------------------------------------------------------------------
+# The training driver, imported for its own signature construction
+# ---------------------------------------------------------------------------
+#
+# Astra gate 1 round 3 MUST-FIX 2: a recorded `training_signature` string is
+# not evidence on its own, because nothing recomputed it. The signature is
+# built by `scripts/sequence_track/retrain_stage2.py`, and this module imports
+# that construction rather than re-implementing it, so the two can never drift
+# apart. The import is lazy: `retrain_stage2` imports `transformer_t1`, which
+# imports torch, and neither the k sweep's caller nor a plain `--help` should
+# pay for that. A failed import is a REFUSAL, never a fall back to a local
+# copy of the rule.
+
+_DRIVER: Any = None
+
+# The components of the driver's seed-independent signature, in its registered
+# order. Held here so a drift in the driver is named rather than absorbed.
+EXPECTED_SIGNATURE_COMPONENTS = ("config_id", "arm", "arm_params",
+                                 "training_block", "frame", "stats_cache",
+                                 "base_logits", "implementation")
+
+
+def training_driver() -> Any:
+    """`scripts/sequence_track/retrain_stage2` — imported, never mirrored."""
+    global _DRIVER
+    if _DRIVER is None:
+        try:
+            from sequence_track import retrain_stage2 as module
+        except Exception as error:  # noqa: BLE001 - import failure is a refusal
+            raise RefusalError(
+                "scripts/sequence_track/retrain_stage2.py could not be "
+                "imported, so a recorded training signature cannot be "
+                "recomputed from its components and no run may be admitted: "
+                f"{error}") from error
+        order = tuple(getattr(module, "SIGNATURE_COMPONENTS", ()))
+        if order != EXPECTED_SIGNATURE_COMPONENTS:
+            raise RefusalError(
+                f"the driver registers signature components {list(order)}, "
+                f"this tool expects {list(EXPECTED_SIGNATURE_COMPONENTS)}; "
+                "the signature construction moved and the analysis must be "
+                "updated deliberately, not silently")
+        _DRIVER = module
+    return _DRIVER
+
+
+def recompute_training_signature(components: Mapping[str, str]) -> str:
+    """The driver's signature, recomputed from the recorded components."""
+    return training_driver().training_signature(dict(components))
+
+
+def component_digest(value: Any) -> str:
+    """The driver's own component digest, for anchoring to the pin."""
+    return training_driver()._digest(value)  # noqa: SLF001 - the registered rule
+
+
 def rel(path: Path | str) -> str:
     path = Path(path)
     try:
@@ -220,32 +276,72 @@ class Pin:
     validation_rows: int | None = None
     feature_hash: dict = field(default_factory=dict)
     stats_cache_md5: str | None = None
+    stats_cache_role: str | None = None
     base_logits: dict = field(default_factory=dict)
     config_body_sha256: str | None = None
     reason: str | None = None
+    # Raw pinned blocks, kept so a run's signature components can be
+    # recomputed FROM the pin (Astra round 3, cross-arm requirement 4).
+    frame_block: dict = field(default_factory=dict)
+    stats_cache_block: dict = field(default_factory=dict)
+    base_logits_block: dict = field(default_factory=dict)
+    base_logits_digest: str | None = None
+    source_sha256: dict = field(default_factory=dict)
+
+
+# What a `provenance` block must actually carry before it counts as a pin.
+# Astra round 3 MUST-FIX 2, last clause: a non-empty block WITHOUT a validation
+# hash used to qualify, so a pin could be "available" while anchoring nothing.
+PIN_REQUIRED = ("frame.dir", "frame.version", f"frame.splits.{SPLIT}.md5",
+                f"frame.splits.{SPLIT}.n_rows", "frame.feature_hash",
+                "stats_cache.md5", "config_body_sha256")
 
 
 def load_pin(config: Mapping[str, Any]) -> Pin:
     provenance = config.get("provenance")
-    if not isinstance(provenance, Mapping):
+    if not isinstance(provenance, Mapping) or not provenance:
         return Pin(available=False,
                    reason="the config carries no generated `provenance` "
                           "block, so there is no pin to verify against; run "
                           "`pin_stage2.py --write`")
     frame = provenance.get("frame") or {}
     validation = ((frame.get("splits") or {}).get(SPLIT) or {})
+    cache = provenance.get("stats_cache") or {}
+    base = provenance.get("base_logits") or {}
+    present = {
+        "frame.dir": frame.get("dir"),
+        "frame.version": frame.get("version"),
+        f"frame.splits.{SPLIT}.md5": validation.get("md5"),
+        f"frame.splits.{SPLIT}.n_rows": validation.get("n_rows"),
+        "frame.feature_hash": frame.get("feature_hash") or None,
+        "stats_cache.md5": cache.get("md5"),
+        "config_body_sha256": provenance.get("config_body_sha256"),
+    }
+    missing = [name for name in PIN_REQUIRED if not present.get(name)]
+    if missing:
+        return Pin(available=False,
+                   reason=("the config's `provenance` block is not a usable "
+                           f"pin: it carries no {missing}. A non-empty "
+                           "provenance block without a validation hash "
+                           "anchors nothing (Astra gate 1 round 3 MUST-FIX "
+                           "2); run `pin_stage2.py --write`"))
     return Pin(
         available=True,
         frame_dir=frame.get("dir"),
         frame_version=frame.get("version"),
         validation_md5=validation.get("md5"),
-        validation_rows=(None if validation.get("n_rows") is None
-                         else int(validation["n_rows"])),
+        validation_rows=int(validation["n_rows"]),
         feature_hash=dict(frame.get("feature_hash") or {}),
-        stats_cache_md5=(provenance.get("stats_cache") or {}).get("md5"),
-        base_logits=dict((provenance.get("base_logits") or {}).get("splits")
-                         or {}),
-        config_body_sha256=provenance.get("config_body_sha256"))
+        stats_cache_md5=cache.get("md5"),
+        stats_cache_role=cache.get("role"),
+        base_logits=dict(base.get("splits") or {}),
+        config_body_sha256=provenance.get("config_body_sha256"),
+        frame_block=dict(frame),
+        stats_cache_block=dict(cache),
+        base_logits_block=dict(base),
+        base_logits_digest=base.get("train_validation_digest"),
+        source_sha256=dict((provenance.get("sources") or {})
+                           .get("source_sha256") or {}))
 
 
 # ---------------------------------------------------------------------------
@@ -823,6 +919,22 @@ class Run:
 SIGNATURE_SHARED_COMPONENTS = ("training_block", "frame", "stats_cache")
 SIGNATURE_ARM_SPECIFIC_COMPONENTS = ("config_id", "arm", "arm_params",
                                      "implementation")
+# `implementation` and `base_logits` are neither freely arm-specific nor
+# blindly shared, so each has its own rule (Astra round 3, cross-arm
+# requirements 1 and 2): the implementation sources common to every arm must
+# agree, with only the recurrent-only entry allowed to differ, and the two
+# residual arms must carry ONE base-logits identity.
+SIGNATURE_GROUPED_COMPONENTS = ("implementation", "base_logits")
+# The arm_params fields a configuration's registered entry fixes directly.
+REGISTERED_ARM_PARAM_FIELDS = ("arm", "k", "wiring", "history_input",
+                               "residual_l2")
+# A summary log loss and its metrics.json authenticator are the same float
+# written twice; yaml round-trips a float exactly, so anything above this is an
+# edit, not a rounding artefact (Astra round 3 MUST-FIX 3).
+SUMMARY_LL_TOLERANCE = 1e-12
+
+_HEX64 = re.compile(r"\A[0-9a-f]{64}\Z")
+_HEX32 = re.compile(r"\A[0-9a-f]{32}\Z")
 
 
 @dataclass
@@ -834,6 +946,12 @@ class Admission:
     training_signature: str | None = None
     components: dict = field(default_factory=dict)
     checkpoint_md5: str | None = None
+    # Read once, here, so the comparability and summary-authentication checks
+    # never re-open a run's records with a different set of assumptions.
+    metrics_validation_ll: float | None = None
+    metrics_arm_params: dict = field(default_factory=dict)
+    arm_params_expected: dict = field(default_factory=dict)
+    artefact_manifest: dict = field(default_factory=dict)
 
 
 def _int_or_none(value):
@@ -841,6 +959,14 @@ def _int_or_none(value):
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _float_or_none(value):
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    return out if np.isfinite(out) else None
 
 
 def verify_run_admission(directory: Path, config_id: str, seed: int,
@@ -851,9 +977,19 @@ def verify_run_admission(directory: Path, config_id: str, seed: int,
     Checks, in order: the four artefacts plus `COMPLETE.json` exist and parse;
     `metrics.json`, `run_record.json` and `COMPLETE.json` all name this
     configuration id and this seed; the arm and `k` match registration; a
-    `training_signature` is present and identical in `run_record.json` and
-    `COMPLETE.json`; and the completion record's per-artefact size and md5
-    manifest still matches the files on disk.
+    `training_signature` is present, identical in `run_record.json` and
+    `COMPLETE.json`, and equal to the signature RECOMPUTED from its own
+    recorded components by the driver's rule; every component is present and
+    of the right type; and the completion record manifests every expected
+    artefact with a size and an md5 that still match the file on disk.
+
+    Astra gate 1 round 3 MUST-FIX 2 — this verifier fails CLOSED. An absent
+    manifest, an empty manifest, a manifest missing one expected artefact, a
+    missing size or md5 declaration, an absent component block and a signature
+    string that its own components do not reproduce are each a refusal, not a
+    pass. The driver writes the full manifest and the full component block for
+    every real run (`retrain_stage2.write_completion_record`), so there is no
+    legacy shape to accommodate.
     """
     directory = guard_path(directory)
     if not directory.is_dir():
@@ -902,6 +1038,13 @@ def verify_run_admission(directory: Path, config_id: str, seed: int,
             False, f"metrics.json arm_params.k {arm_params.get('k')!r} != the "
                    f"registered {expected_k!r}")
 
+    validation_ll = _float_or_none((metrics or {}).get(f"{SPLIT}_ll"))
+    if validation_ll is None:
+        return Admission(
+            False, f"metrics.json carries no finite {SPLIT}_ll, so no summary "
+                   "log loss attributed to this run can be authenticated "
+                   "(D3.11)")
+
     signature = record.get("training_signature")
     if not signature:
         return Admission(
@@ -912,92 +1055,473 @@ def verify_run_admission(directory: Path, config_id: str, seed: int,
             False, f"{COMPLETION_RECORD} training_signature "
                    f"{completion.get('training_signature')!r} != "
                    f"run_record.json's {signature!r}")
-    components = dict(record.get("training_signature_components") or {})
-    completion_components = dict(
-        completion.get("training_signature_components") or {})
-    if completion_components and completion_components != components:
+    raw_components = record.get("training_signature_components")
+    raw_completion = completion.get("training_signature_components")
+    for name, payload in (("run_record.json", raw_components),
+                          (COMPLETION_RECORD, raw_completion)):
+        if not isinstance(payload, Mapping) or not payload:
+            return Admission(
+                False, f"{name} carries no training_signature_components "
+                       "block, so the recorded signature cannot be "
+                       "recomputed and this run is not admissible")
+    components = dict(raw_components)
+    completion_components = dict(raw_completion)
+    if completion_components != components:
         return Admission(
             False, "run_record.json and "
                    f"{COMPLETION_RECORD} disagree about the training "
                    "signature components")
+    missing_components = [name for name in EXPECTED_SIGNATURE_COMPONENTS
+                          if name not in components]
+    if missing_components:
+        return Admission(
+            False, "training_signature_components is missing "
+                   f"{missing_components}; every registered component must be "
+                   "present, never skipped")
+    unknown_components = sorted(set(components)
+                                - set(EXPECTED_SIGNATURE_COMPONENTS))
+    if unknown_components:
+        return Admission(
+            False, "training_signature_components carries unregistered "
+                   f"entries {unknown_components}")
+    mistyped = sorted(name for name, value in components.items()
+                      if not (isinstance(value, str) and _HEX64.match(value)))
+    if mistyped:
+        return Admission(
+            False, f"training_signature_components entries {mistyped} are not "
+                   "sha256 hex digests")
+    try:
+        recomputed = recompute_training_signature(components)
+    except RefusalError:
+        raise
+    if recomputed != str(signature):
+        return Admission(
+            False, f"the recorded training_signature {str(signature)[:16]}… is "
+                   "not the signature its own components produce "
+                   f"({recomputed[:16]}…); the string was edited or the "
+                   "components were, and neither run may be differenced")
 
-    manifest = completion.get("artifacts") or {}
-    if manifest:
-        for name, facts in manifest.items():
-            path = directory / name
-            if not path.exists():
-                return Admission(False, f"{COMPLETION_RECORD} manifests "
-                                        f"{name}, which is absent")
-            declared_bytes = _int_or_none((facts or {}).get("bytes"))
-            if (declared_bytes is not None
-                    and path.stat().st_size != declared_bytes):
-                return Admission(
-                    False, f"{name} is {path.stat().st_size} bytes, the "
-                           f"completion manifest recorded {declared_bytes}")
-            declared_md5 = (facts or {}).get("md5")
-            if declared_md5 and md5_file(path) != declared_md5:
-                return Admission(
-                    False, f"{name} md5 has changed since the run completed "
-                           f"(manifest {declared_md5})")
+    manifest = completion.get("artifacts")
+    if not isinstance(manifest, Mapping) or not manifest:
+        return Admission(
+            False, f"{COMPLETION_RECORD} carries no artefact manifest "
+                   f"({manifest!r}); a run with no declared sizes and hashes "
+                   "is not admissible")
+    for name in RUN_ARTEFACTS:
+        facts = manifest.get(name)
+        if not isinstance(facts, Mapping):
+            return Admission(
+                False, f"{COMPLETION_RECORD} manifests no entry for {name}, "
+                       "which every completed run must declare")
+        declared_bytes = _int_or_none(facts.get("bytes"))
+        declared_md5 = facts.get("md5")
+        if declared_bytes is None:
+            return Admission(
+                False, f"{COMPLETION_RECORD} artifacts.{name} declares no "
+                       f"integer size ({facts.get('bytes')!r})")
+        if not (isinstance(declared_md5, str) and _HEX32.match(declared_md5)):
+            return Admission(
+                False, f"{COMPLETION_RECORD} artifacts.{name} declares no md5 "
+                       f"({declared_md5!r})")
+    for name, facts in sorted(manifest.items()):
+        if not isinstance(facts, Mapping):
+            return Admission(
+                False, f"{COMPLETION_RECORD} artifacts.{name} {facts!r} is "
+                       "not a size-and-md5 declaration")
+        path = directory / name
+        if not path.is_file():
+            return Admission(False, f"{COMPLETION_RECORD} manifests "
+                                    f"{name}, which is absent")
+        declared_bytes = _int_or_none(facts.get("bytes"))
+        if declared_bytes is None or path.stat().st_size != declared_bytes:
+            return Admission(
+                False, f"{name} is {path.stat().st_size} bytes, the "
+                       f"completion manifest recorded {facts.get('bytes')!r}")
+        declared_md5 = facts.get("md5")
+        if not isinstance(declared_md5, str) or md5_file(path) != declared_md5:
+            return Admission(
+                False, f"{name} md5 has changed since the run completed "
+                       f"(manifest {declared_md5!r})")
     checkpoint = manifest.get("model.pt") or {}
-    return Admission(True, None, str(signature), components,
-                     checkpoint.get("md5") or record.get("checkpoint_md5"))
+    return Admission(
+        True, None, str(signature), components,
+        checkpoint.get("md5") or record.get("checkpoint_md5"),
+        metrics_validation_ll=validation_ll,
+        metrics_arm_params=dict(arm_params),
+        arm_params_expected=dict(record.get("arm_params_expected") or {}),
+        artefact_manifest={name: dict(facts)
+                           for name, facts in manifest.items()})
 
 
-def assert_comparable(admissions: Mapping[str, Mapping[int, Admission]]
-                      ) -> dict:
-    """Refuse to difference runs whose data or training block moved.
+def _is_recurrent(entry: Mapping[str, Any] | None) -> bool:
+    return str((entry or {}).get("wiring")) == "recurrent"
+
+
+def _reads_base_logits(entry: Mapping[str, Any] | None) -> bool:
+    """Whether a registered configuration is one of the residual arms."""
+    access = (entry or {}).get("access") or {}
+    return bool(access.get("prod_logits")) or bool(
+        ((entry or {}).get("params") or {}).get("base_logits_dir"))
+
+
+def pinned_component_digests(config: Mapping[str, Any], pin: Pin) -> dict:
+    """The signature components every admitted run must carry, FROM the pin.
+
+    Astra round 3, cross-arm requirement 4: the shared frame, cache and
+    training identity must be anchored to the pin, not merely to agreement
+    among the runs — two runs can agree with each other and with nothing
+    registered. Requirement 1 is the `implementation` entry: the common
+    sources must agree across arms, and only the recurrent-only source may
+    differ, so one expected digest is built per arm group from the pinned
+    source hashes.
+
+    Every raw block below is assembled in the driver's own shape and digested
+    with the driver's own `_digest`, and a dedicated test locks this
+    translation against `retrain_stage2.signature_components` directly.
+    """
+    driver = training_driver()
+    if not pin.available:
+        raise RefusalError(
+            f"no run may be admitted: {pin.reason}. Every shared signature "
+            "component is anchored to the pin, so without a pin there is "
+            "nothing to anchor to")
+    training = config.get("training") or {}
+    missing = [name for name in ("dmodel", "layers", "heads", "batch",
+                                 "epochs", "learning_rate", "patience", "aux")
+               if training.get(name) is None]
+    if missing:
+        raise RefusalError(
+            f"the config's `training` block carries no {missing}, so the "
+            "registered training identity cannot be recomputed")
+    training_block = {
+        "arch": {"dmodel": int(training["dmodel"]),
+                 "layers": int(training["layers"]),
+                 "heads": int(training["heads"])},
+        "optimiser": {
+            "lr": float(training["learning_rate"]),
+            "batch": int(training["batch"]),
+            "epochs": int(training["epochs"]),
+            "patience": int(training["patience"]),
+            "aux": bool(training["aux"]),
+            "aux_weight": float(training.get(
+                "aux_weight", driver.t1.AUX_WEIGHT_DEFAULT)),
+        },
+    }
+    pinned_splits = (pin.frame_block.get("splits") or {})
+    split_files = {}
+    for split in driver.CONTRACT_SPLITS:
+        facts = pinned_splits.get(split)
+        if not isinstance(facts, Mapping):
+            raise RefusalError(
+                f"the pin records no `{split}` split, so the registered frame "
+                "identity cannot be recomputed")
+        row = {}
+        for field_name in driver.SPLIT_IDENTITY_FIELDS:
+            if facts.get(field_name) is None:
+                raise RefusalError(
+                    f"the pin's {split} split carries no {field_name!r}")
+            row[field_name] = (driver.as_n_rows(facts[field_name])
+                               if field_name == "n_rows"
+                               else facts[field_name])
+        split_files[split] = row
+    frame_raw = {
+        "dir_configured": Path(str(pin.frame_dir)).as_posix(),
+        "version": pin.frame_version,
+        "feature_hash": pin.feature_hash,
+        "split_files": {split: split_files[split]
+                        for split in sorted(split_files)},
+    }
+    if not pin.stats_cache_role:
+        raise RefusalError(
+            "the pin's `stats_cache` block carries no manifest role, so the "
+            "registered cache identity cannot be recomputed")
+    cache_raw = {"role": str(pin.stats_cache_role), "md5": pin.stats_cache_md5}
+    sources = dict(pin.source_sha256)
+    common = (driver.TRAINER_SOURCE, driver.FEATURE_CONTRACT_SOURCE,
+              driver.ARTIFACT_RESOLVER_SOURCE)
+    absent = [name for name in common + (driver.RECURRENT_SOURCE,)
+              if not sources.get(name)]
+    if absent:
+        raise RefusalError(
+            f"the pin records no source hash for {absent}, so the "
+            "implementation identity cannot be anchored to it")
+    implementation = {
+        False: {name: sources[name] for name in common},
+        True: {name: sources[name]
+               for name in common + (driver.RECURRENT_SOURCE,)},
+    }
+    return {
+        "training_block": component_digest(training_block),
+        "frame": component_digest(frame_raw),
+        "stats_cache": component_digest(cache_raw),
+        "implementation_by_recurrent": {
+            recurrent: component_digest(identity)
+            for recurrent, identity in implementation.items()},
+        "implementation_sources_by_recurrent": {
+            str(recurrent): sorted(identity)
+            for recurrent, identity in implementation.items()},
+        "base_logits_by_reads_base": {
+            False: component_digest(None),
+            True: component_digest(pin.base_logits_digest),
+        },
+        "base_logits_pinned_digest": pin.base_logits_digest,
+    }
+
+
+def expected_arm_identity(config_id: str, entry: Mapping[str, Any],
+                          pin: Pin) -> dict:
+    """One configuration's registered arm-specific identity (requirement 3)."""
+    params = dict(entry.get("params") or {})
+    reads_base = _reads_base_logits(entry)
+    arm = str(entry.get("arm"))
+    # `key_construction` is what makes a relay-free arm relay-free, and the
+    # trainer's own registered table is its authority — the config carries the
+    # wiring and history input, which the driver already validates against the
+    # same tables. It is legitimately `None` for an arm with no attention.
+    table = training_driver().t1.ARM_KEY_CONSTRUCTION
+    return {
+        "config_id": component_digest(str(config_id)),
+        "arm": component_digest(arm),
+        "key_construction": table.get(arm, "__unregistered__"),
+        "arm_params_fields": {
+            "arm": arm,
+            "k": params.get("k"),
+            "wiring": str(entry.get("wiring")),
+            "history_input": str(entry.get("history_input")),
+            "residual_l2": params.get("residual_l2"),
+            "base_logits_md5": (pin.base_logits_digest if reads_base
+                                else None),
+        },
+        "reads_base_logits": reads_base,
+        "recurrent": _is_recurrent(entry),
+    }
+
+
+def _arm_param_mismatches(recorded: Mapping[str, Any],
+                          expected: Mapping[str, Any],
+                          where: str) -> list[str]:
+    problems = []
+    for field_name in REGISTERED_ARM_PARAM_FIELDS + ("base_logits_md5",):
+        want = expected.get(field_name)
+        got = recorded.get(field_name, "__absent__")
+        if isinstance(want, float) and isinstance(got, (int, float)) and not (
+                isinstance(got, bool)):
+            same = float(got) == want
+        elif want is None and field_name == "residual_l2":
+            # A non-residual arm records `residual_l2: None`; the registered
+            # entry simply omits it. Both spellings mean "not in the loss".
+            same = got in (None, "__absent__")
+        else:
+            same = str(got) == str(want)
+        if not same:
+            problems.append(f"{where}.{field_name} {got!r} != the registered "
+                            f"{want!r}")
+    return problems
+
+
+def assert_comparable(admissions: Mapping[str, Mapping[int, Admission]],
+                      entries: Mapping[str, Mapping[str, Any]] | None = None,
+                      config: Mapping[str, Any] | None = None,
+                      pin: Pin | None = None) -> dict:
+    """Refuse to difference runs whose data, code or registered identity moved.
 
     Within one configuration every admitted seed must carry ONE training
-    signature (the signature is seed-independent). Across configurations the
-    shared components — the training block, the frame identity and the stats
-    cache — must agree; an arm-specific component legitimately differs.
+    signature (the signature is seed-independent). Every expected component
+    must be PRESENT and of the right type — an absent component is never
+    skipped (Astra round 3 MUST-FIX 2). The shared components are anchored to
+    the pin rather than to agreement among the runs; the implementation
+    sources common to every arm must agree with only the recurrent-only entry
+    differing; the two residual arms must carry one base-logits identity; and
+    each configuration's arm-specific components are verified against its
+    registered expected identity (Astra round 3, the four cross-arm
+    requirements it added when it ruled on the signature deviation).
+
+    Every violation is collected and reported together (Astra round 3, minor
+    item): several inadmissible or incomparable runs are all named, never just
+    the first one found.
     """
+    problems: list[str] = []
+    inadmissible: list[dict] = []
     per_config: dict[str, str] = {}
     shared: dict[str, tuple[str, str]] = {}
-    for config_id, seeds in admissions.items():
+    anchored: dict[str, Any] | None = None
+    if entries is not None and config is not None and pin is not None:
+        anchored = pinned_component_digests(config, pin)
+    base_logits_seen: dict[str, list[str]] = {}
+
+    for config_id, seeds in sorted(admissions.items()):
+        for seed, value in sorted(seeds.items()):
+            if not value.ok:
+                inadmissible.append({"config_id": config_id, "seed": seed,
+                                     "reason": value.reason})
         signatures = {seed: value.training_signature
                       for seed, value in seeds.items() if value.ok}
         if not signatures:
             continue
         distinct = sorted(set(signatures.values()))
         if len(distinct) != 1:
-            raise RefusalError(
+            problems.append(
                 f"{config_id}: its admitted seeds carry {len(distinct)} "
                 f"different training signatures {distinct}; the signature is "
                 "seed-independent, so this means the code or the data moved "
                 "mid-experiment and these runs cannot be differenced")
-        per_config[config_id] = distinct[0]
-        for seed, value in seeds.items():
-            if not value.ok or not value.components:
+        else:
+            per_config[config_id] = distinct[0]
+        entry = (entries or {}).get(config_id)
+        identity = (expected_arm_identity(config_id, entry, pin)
+                    if (entry is not None and anchored is not None
+                        and pin is not None) else None)
+        for seed, value in sorted(seeds.items()):
+            if not value.ok:
+                continue
+            where = f"{config_id} seed {seed}"
+            components = value.components or {}
+            absent = [name for name in EXPECTED_SIGNATURE_COMPONENTS
+                      if not isinstance(components.get(name), str)]
+            if absent:
+                problems.append(
+                    f"{where}: training signature components {absent} are "
+                    "absent or not strings; an expected component is never "
+                    "skipped")
                 continue
             for name in SIGNATURE_SHARED_COMPONENTS:
-                digest = value.components.get(name)
-                if digest is None:
-                    continue
+                digest = components[name]
                 previous = shared.get(name)
                 if previous is None:
-                    shared[name] = (digest, f"{config_id} seed {seed}")
+                    shared[name] = (digest, where)
                 elif previous[0] != digest:
-                    raise RefusalError(
+                    problems.append(
                         f"training signature component {name!r} differs "
-                        f"between {previous[1]} and {config_id} seed {seed}; "
-                        "the two runs did not see the same data or the same "
-                        "training block, so no contrast between them is "
-                        "admissible")
+                        f"between {previous[1]} and {where}; the two runs did "
+                        "not see the same data or the same training block, so "
+                        "no contrast between them is admissible")
+            if anchored is not None:
+                for name in SIGNATURE_SHARED_COMPONENTS:
+                    if components[name] != anchored[name]:
+                        problems.append(
+                            f"{where}: training signature component {name!r} "
+                            f"{components[name][:12]}… is not the pinned "
+                            f"{anchored[name][:12]}…; the shared identity is "
+                            "anchored to the pin, not to agreement among runs")
+                if identity is not None:
+                    want_impl = anchored["implementation_by_recurrent"][
+                        identity["recurrent"]]
+                    if components["implementation"] != want_impl:
+                        problems.append(
+                            f"{where}: the `implementation` component "
+                            f"{components['implementation'][:12]}… is not the "
+                            f"identity of the pinned sources "
+                            f"{anchored['implementation_sources_by_recurrent'][str(identity['recurrent'])]}"
+                            " — the common implementation sources must agree "
+                            "across arms, with only the recurrent-only entry "
+                            "allowed to differ")
+                    want_base = anchored["base_logits_by_reads_base"][
+                        identity["reads_base_logits"]]
+                    if components["base_logits"] != want_base:
+                        problems.append(
+                            f"{where}: the `base_logits` component is not the "
+                            "pinned base-logits identity for a "
+                            f"{'residual' if identity['reads_base_logits'] else 'non-residual'}"
+                            " arm")
+                    if identity["reads_base_logits"]:
+                        base_logits_seen.setdefault(
+                            components["base_logits"], []).append(where)
+                    for name in ("config_id", "arm"):
+                        if components[name] != identity[name]:
+                            problems.append(
+                                f"{where}: the {name!r} component is not the "
+                                "digest of its registered value")
+                    expected_params = identity["arm_params_fields"]
+                    recorded_expected = value.arm_params_expected
+                    if not recorded_expected:
+                        problems.append(
+                            f"{where}: run_record.json carries no "
+                            "`arm_params_expected` block, so the arm-specific "
+                            "components cannot be verified against the "
+                            "registered identity")
+                    else:
+                        problems.extend(_arm_param_mismatches(
+                            recorded_expected, expected_params,
+                            f"{where} arm_params_expected"))
+                        if components["arm_params"] != component_digest(
+                                dict(recorded_expected)):
+                            problems.append(
+                                f"{where}: the `arm_params` component is not "
+                                "the digest of the recorded "
+                                "arm_params_expected block")
+                    problems.extend(_arm_param_mismatches(
+                        value.metrics_arm_params, expected_params,
+                        f"{where} metrics.json arm_params"))
+                    want_key = identity["key_construction"]
+                    for name, recorded in (
+                            ("metrics.json", value.metrics_arm_params),
+                            ("run_record.json arm_params_expected",
+                             recorded_expected)):
+                        if not recorded:
+                            continue
+                        if "key_construction" not in recorded:
+                            problems.append(
+                                f"{where}: {name} declares no "
+                                "`key_construction`, which is what makes a "
+                                "relay-free arm relay-free and is part of the "
+                                "registered identity")
+                        elif recorded["key_construction"] != want_key:
+                            problems.append(
+                                f"{where}: {name} key_construction "
+                                f"{recorded['key_construction']!r} != the "
+                                f"trainer's registered {want_key!r} for this "
+                                "arm")
+
+    if len(base_logits_seen) > 1:
+        problems.append(
+            "the residual arms carry different `base_logits` identities "
+            + "; ".join(f"{digest[:12]}… for {sorted(where)}"
+                        for digest, where in sorted(base_logits_seen.items()))
+            + "; `residual_t1 - residual_mlp` is only a residual contrast if "
+            "both arms sat on ONE set of base logits")
+
+    if problems:
+        raise RefusalError(
+            f"{len(problems)} comparability violation(s); no contrast is "
+            "admissible until every one is resolved:\n  - "
+            + "\n  - ".join(problems))
     return {
         "rule": ("one seed-independent training signature per configuration; "
                  f"the shared components {list(SIGNATURE_SHARED_COMPONENTS)} "
-                 "identical across every admitted configuration"),
+                 "identical across every admitted configuration AND equal to "
+                 "the digests recomputed from the pin; the common "
+                 "implementation sources identical across arms with only the "
+                 "recurrent-only entry differing; one base-logits identity "
+                 "across the two residual arms; every arm-specific component "
+                 "equal to its registered expected identity"),
+        "fails_closed": ("every expected component must be present and of the "
+                         "right type; an absent component is a refusal, not a "
+                         "skip"),
+        "anchored_to_the_pin": anchored is not None,
+        "pinned_components": (None if anchored is None else {
+            name: anchored[name] for name in SIGNATURE_SHARED_COMPONENTS}),
+        "pinned_implementation_sources": (
+            None if anchored is None
+            else anchored["implementation_sources_by_recurrent"]),
         "arm_specific_components": list(SIGNATURE_ARM_SPECIFIC_COMPONENTS),
+        "grouped_components": list(SIGNATURE_GROUPED_COMPONENTS),
         "arm_specific_note": (
             "the driver's signature includes config_id, arm, arm_params and "
             "implementation, so it is arm-dependent by construction and is "
             "NOT required to match across arms; what must match is the data "
-            "and training-block part, checked component by component"),
+            "and training-block part, checked component by component, plus "
+            "each arm's own components against its registered identity"),
         "training_signature_by_config": per_config,
+        "signature_recomputed_from_components": True,
         "shared_components": {name: digest
                               for name, (digest, _) in shared.items()},
+        "residual_base_logits_identities": {
+            digest: sorted(where)
+            for digest, where in sorted(base_logits_seen.items())},
+        "inadmissible_runs": inadmissible,
+        "n_inadmissible_runs": len(inadmissible),
+        "inadmissible_note": ("every inadmissible run is listed, not only the "
+                              "first one found"),
     }
 
 
@@ -1054,6 +1578,31 @@ def machine_provenance(run_record: Mapping[str, Any] | None,
         "machine_term_fitted": False,
         "recorded": bool(host),
     }
+
+
+def summary_ll_problem(config_id: str, seed: int, summary_ll: float | None,
+                       metrics_ll: float | None) -> str | None:
+    """Why this summary log loss is not the run's own validation log loss.
+
+    Astra round 3 MUST-FIX 3, verbatim in substance: compare each summary LL
+    with the manifest-verified ``metrics.json`` validation LL. That preserves
+    the designated summary number rather than substituting the LL
+    reconstructed from the saved probabilities, which D10.1 forbids as a
+    replacement. ``metrics.json`` is inside the completion manifest, so it
+    cannot be edited without the admission check failing first.
+    """
+    if summary_ll is None:
+        return None
+    if metrics_ll is None:
+        return (f"{config_id} seed {seed}: summary.yaml records a validation "
+                f"log loss of {summary_ll!r} but the run's metrics.json "
+                f"carries no finite {SPLIT}_ll to authenticate it against")
+    if abs(float(summary_ll) - float(metrics_ll)) > SUMMARY_LL_TOLERANCE:
+        return (f"{config_id} seed {seed}: summary.yaml records validation log "
+                f"loss {summary_ll!r}, the run's own manifest-verified "
+                f"metrics.json records {metrics_ll!r}; the summary was edited "
+                "and no number from it may be read")
+    return None
 
 
 def summary_lls(runs_root: Path, config_id: str) -> tuple[dict, dict]:
@@ -1134,7 +1683,16 @@ def load_run(runs_root: Path, config_id: str, seed: int, frame: Frame,
     run.admitted = True
     run.row_ll = row_ll
     run.reconstructed_ll = float(row_ll.mean())
+    # Astra round 3 MUST-FIX 3: the summary log loss stays the number of
+    # record (D9.2), and the manifest-verified metrics.json validation LL
+    # authenticates it. Editing only an `ll` in summary.yaml left every
+    # checkpoint and signature check satisfied and could change a winner.
     run.summary_ll = (float(summary[seed]) if seed in summary else None)
+    if run.summary_ll is not None:
+        problem = summary_ll_problem(config_id, seed, run.summary_ll,
+                                     admission.metrics_validation_ll)
+        if problem:
+            raise RefusalError(problem)
     run.arm_params = dict(metrics.get("arm_params") or {})
     record = read_json(directory / "run_record.json")
     run.checkpoint_md5 = admission.checkpoint_md5
@@ -1144,13 +1702,29 @@ def load_run(runs_root: Path, config_id: str, seed: int, frame: Frame,
 
 def load_runs(runs_root: Path, config_ids: Sequence[str], frame: Frame,
               seeds: Sequence[int] = REGISTERED_SEEDS,
-              entries: Mapping[str, Mapping[str, Any]] | None = None
+              entries: Mapping[str, Mapping[str, Any]] | None = None,
+              config: Mapping[str, Any] | None = None,
+              pin: Pin | None = None
               ) -> tuple[dict[str, dict[int, Run]], dict, dict]:
     runs: dict[str, dict[int, Run]] = {}
     report: dict[str, Any] = {}
     admissions: dict[str, dict[int, Admission]] = {}
+    tampered: list[str] = []
     for config_id in config_ids:
         summary, meta = summary_lls(runs_root, config_id)
+        # Astra round 3 MUST-FIX 3: `load_runs` used to read summaries without
+        # ever calling the summary verifier, so only the k sweep saw its
+        # findings. A summary that does not verify contributes no number: its
+        # values are dropped here and the reasons are reported.
+        authentication: list[str] = []
+        summary_problems: list[str] = []
+        if meta.get("available"):
+            summary_problems = verify_summary_provenance(
+                runs_root, config_id, (entries or {}).get(config_id), meta,
+                seeds, out_authentication=authentication)
+            if summary_problems:
+                summary = {}
+        tampered.extend(authentication)
         runs[config_id] = {}
         admissions[config_id] = {}
         rows = []
@@ -1184,8 +1758,17 @@ def load_runs(runs_root: Path, config_ids: Sequence[str], frame: Frame,
                                      if runs[config_id][s].admitted),
             "complete_paired_seeds": all(runs[config_id][s].admitted
                                          for s in seeds),
-            "summary": meta}
-    return runs, report, assert_comparable(admissions)
+            "summary": meta,
+            "summary_verification_problems": summary_problems,
+            "summary_log_losses_dropped": bool(summary_problems)}
+    if tampered:
+        # Every tampered summary is named, not only the first one found.
+        raise RefusalError(
+            f"{len(tampered)} summary log loss(es) do not match the "
+            "manifest-verified metrics.json validation log loss of the run "
+            "they are attributed to; no number may be read:\n  - "
+            + "\n  - ".join(tampered))
+    return runs, report, assert_comparable(admissions, entries, config, pin)
 
 
 # ---------------------------------------------------------------------------
@@ -1777,13 +2360,19 @@ def residual_vs_base(arm: str, runs: Mapping[str, Mapping[int, Run]],
 def verify_summary_provenance(runs_root: Path, config_id: str,
                               entry: Mapping[str, Any] | None,
                               meta: Mapping[str, Any],
-                              seeds: Sequence[int]) -> list[str]:
+                              seeds: Sequence[int],
+                              out_authentication: list[str] | None = None
+                              ) -> list[str]:
     """Every reason this summary's log losses may not be read (D9.2).
 
     Called BEFORE the log losses are used. Each recorded seed row must name a
     checkpoint directory that itself passes `verify_run_admission`, must carry
-    the same training signature as the summary's own header, and the
-    checkpoint md5 it claims must still be the md5 of the file on disk.
+    the same training signature as the summary's own header, the checkpoint
+    md5 it claims must still be the md5 of the file on disk, and — Astra round
+    3 MUST-FIX 3 — its log loss must equal the manifest-verified
+    ``metrics.json`` validation log loss of that run. `out_authentication`
+    collects that last class of problem separately, because a summary whose
+    numbers were edited is tampering rather than an incomplete night.
     """
     problems: list[str] = []
     if not meta.get("available"):
@@ -1843,6 +2432,15 @@ def verify_summary_provenance(runs_root: Path, config_id: str,
             problems.append(
                 f"{config_id} seed {seed}: summary.yaml points at "
                 f"{declared_dir!r}, not this configuration's seed directory")
+        # The designated summary number, authenticated against the run's own
+        # manifest-verified metrics.json (never replaced by it).
+        authentication = summary_ll_problem(
+            config_id, seed, _float_or_none(value),
+            admission.metrics_validation_ll)
+        if authentication:
+            problems.append(authentication)
+            if out_authentication is not None:
+                out_authentication.append(authentication)
     return problems
 
 
@@ -1877,6 +2475,22 @@ def k_sweep(runs_root: Path, config: Mapping[str, Any],
     mapping = k_configurations(config)
     entries = {str(entry["id"]): entry
                for entry in (config.get("configurations") or [])}
+
+    # Astra round 3 MUST-FIX 3: `k_sweep` never applied comparability, so five
+    # individually consistent summaries from incompatible training runs could
+    # enter one selection. The five k configurations are checked against each
+    # other and against the pin BEFORE any mean is computed.
+    pin = load_pin(config)
+    admissions: dict[str, dict[int, Admission]] = {}
+    for _, config_id in mapping:
+        admissions[config_id] = {
+            one: verify_run_admission(
+                Path(runs_root) / config_id / f"seed_{one}", config_id, one,
+                expected_arm=(entries.get(config_id) or {}).get("arm"),
+                expected_k=((entries.get(config_id) or {}).get("params")
+                            or {}).get("k", "__unset__"))
+            for one in seeds}
+    comparability = assert_comparable(admissions, entries, config, pin)
 
     rows = []
     sources = []
@@ -1960,6 +2574,12 @@ def k_sweep(runs_root: Path, config: Mapping[str, Any],
                                   "`configurations` entries by arm and "
                                   "`params.k`, never by string template"),
         "admission_rejections": rejected,
+        "comparability": comparability,
+        "comparability_note": ("the five k configurations are checked against "
+                               "each other and against the pin before any "
+                               "mean is computed, so individually consistent "
+                               "summaries from incompatible training runs "
+                               "cannot enter one selection"),
         "rows": rows,
         "sources": sources,
         "other_k_arms": ("all five k arms are retained in the validation "
@@ -2077,7 +2697,7 @@ def compute_statistics(config_path: Path, runs_root: Path, frame_dir: Path,
         expect_blocks=int(expect.get("blocks", EXPECTED_BLOCKS)),
         expect_unmapped=int(expect.get("unmapped", EXPECTED_UNMAPPED)))
     runs, runs_report, comparability = load_runs(runs_root, config_ids, frame,
-                                                 seeds, entries)
+                                                 seeds, entries, config, pin)
 
     slice_names = [p.name for p in SLICE_PREDICATES] + [THIN_PAIR_NAME]
     declared = (config.get("statistics") or {}).get("slices")

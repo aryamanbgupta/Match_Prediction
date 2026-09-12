@@ -12,6 +12,7 @@ import io
 import json
 import sys
 from pathlib import Path
+from typing import Any, Mapping
 
 import numpy as np
 import pandas as pd
@@ -61,13 +62,29 @@ def _frame_rows(n_matches: int = N_MATCHES) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+# The frame directory of the test currently running. A fixture run's signature
+# components are anchored to that frame's pin exactly as a real run's are, and
+# every `_write_run` call in this module belongs to one frame, so recording it
+# here keeps the helper signatures short.
+_FRAME_DIR: Path | None = None
+
+
 @pytest.fixture
 def frame_dir(tmp_path: Path) -> Path:
+    global _FRAME_DIR
     directory = tmp_path / "frame"
     directory.mkdir()
     df = _frame_rows()
     df.to_parquet(directory / "cricket_data_i7_validation.parquet",
                   index=False)
+    _FRAME_DIR = directory
+    return directory
+
+
+def _current_frame_dir(frame_dir: Path | None = None) -> Path:
+    directory = frame_dir or _FRAME_DIR
+    if directory is None:
+        raise AssertionError("this helper needs the frame_dir fixture")
     return directory
 
 
@@ -95,6 +112,15 @@ K_IDS = {"0": "same_entity_k0", "6": "same_entity_k6",
          "12": "same_entity_k12", "30": "same_entity_k30",
          "unr": "same_entity_unr"}
 SIGNATURE = "a" * 64
+# The pin's own facts, so a synthetic run's signature components can be built
+# the way the driver builds them and checked the way the analysis checks them.
+CACHE_MD5 = "cafe" * 8
+CACHE_ROLE = "stats_cache_i7"
+BASE_LOGITS_DIGEST = "b" * 32
+TRAIN_SPLIT = {"path": "frame/cricket_data_i7_train.parquet",
+               "md5": "dd" * 16, "n_rows": 1000,
+               "match_date_min": "2005-02-17",
+               "match_date_max": "2024-12-30"}
 
 
 def _family(candidate: str, reference: str) -> dict:
@@ -183,13 +209,53 @@ def _config_payload(config_ids=CONFIG_IDS, frame_dir: Path | None = None,
             "config_body_sha256": "0" * 64,
             "frame": {"dir": frame_dir.name, "version": "i7",
                       "feature_hash": {"hash": "c520a3ba08ae"},
-                      "splits": {"validation": {
-                          "path": str(parquet),
-                          "md5": st.md5_file(parquet),
-                          "n_rows": N_MATCHES * 2 * BALLS_PER_INNINGS}}},
-            "stats_cache": {"md5": "cafe" * 8},
+                      "splits": {
+                          "train": dict(TRAIN_SPLIT),
+                          "validation": {
+                              "path": str(parquet),
+                              "md5": st.md5_file(parquet),
+                              "n_rows": N_MATCHES * 2 * BALLS_PER_INNINGS,
+                              "match_date_min": "2024-12-31",
+                              "match_date_max": "2025-06-29"}}},
+            "stats_cache": {"role": CACHE_ROLE, "md5": CACHE_MD5},
+            "base_logits": {"train_validation_digest": BASE_LOGITS_DIGEST},
+            "sources": {"source_sha256": _pinned_source_sha256()},
         }
     return payload
+
+
+def _pinned_source_sha256() -> dict:
+    """Fake but well-formed hashes for the four implementation sources."""
+    driver = st.training_driver()
+    return {name: st.sha256_text(name)
+            for name in (driver.TRAINER_SOURCE, driver.FEATURE_CONTRACT_SOURCE,
+                         driver.ARTIFACT_RESOLVER_SOURCE,
+                         driver.RECURRENT_SOURCE)}
+
+
+def _entries(same_entity: bool = True) -> dict[str, dict]:
+    """Every registered configuration entry, by id."""
+    return {str(entry["id"]): entry for entry
+            in _config_payload(same_entity=same_entity)["configurations"]}
+
+
+def _anchor(frame_dir: Path) -> tuple[dict, st.Pin, dict]:
+    config = _config_payload(frame_dir=frame_dir, same_entity=True)
+    pin = st.load_pin(config)
+    return config, pin, st.pinned_component_digests(config, pin)
+
+
+def _registered_arm_params(config_id: str, entry: Mapping[str, Any],
+                           pin: st.Pin) -> dict:
+    """`arm_params_expected` in the driver's shape, for one configuration."""
+    identity = st.expected_arm_identity(config_id, entry, pin)
+    fields = identity["arm_params_fields"]
+    return {"arm": fields["arm"], "k": fields["k"],
+            "wiring": fields["wiring"],
+            "history_input": fields["history_input"],
+            "key_construction": identity["key_construction"],
+            "bias": None, "residual_l2": fields["residual_l2"],
+            "base_logits_md5": fields["base_logits_md5"]}
 
 
 @pytest.fixture
@@ -205,15 +271,35 @@ def k_config(frame_dir: Path) -> dict:
     return _config_payload(frame_dir=frame_dir, same_entity=True)
 
 
-def _components(config_id: str, frame: str = "fr", cache: str = "sc") -> dict:
-    """Signature components in the driver's shape: arm-specific parts differ,
-    the data and training-block parts are shared."""
-    return {"config_id": st.sha256_text(config_id), "arm":
-            st.sha256_text(config_id), "arm_params": st.sha256_text(config_id),
-            "implementation": st.sha256_text("impl"),
-            "training_block": st.sha256_text("tb"),
-            "frame": st.sha256_text(frame), "stats_cache":
-            st.sha256_text(cache), "base_logits": st.sha256_text("none")}
+def _components(config_id: str, frame_dir: Path | None = None,
+                arm_params_expected: Mapping[str, Any] | None = None,
+                **override) -> dict:
+    """The signature components a real run of this configuration would carry.
+
+    Every shared component is the digest the analysis recomputes FROM the pin,
+    so a fixture run is admissible for the same reason a real one is. Keyword
+    overrides simulate drift (a moved frame, a foreign cache, an arm's
+    implementation set).
+    """
+    config, pin, anchored = _anchor(_current_frame_dir(frame_dir))
+    entry = {str(e["id"]): e for e in config["configurations"]}[config_id]
+    identity = st.expected_arm_identity(config_id, entry, pin)
+    if arm_params_expected is None:
+        arm_params_expected = _registered_arm_params(config_id, entry, pin)
+    components = {
+        "config_id": identity["config_id"],
+        "arm": identity["arm"],
+        "arm_params": st.component_digest(dict(arm_params_expected)),
+        "training_block": anchored["training_block"],
+        "frame": anchored["frame"],
+        "stats_cache": anchored["stats_cache"],
+        "base_logits": anchored["base_logits_by_reads_base"][
+            identity["reads_base_logits"]],
+        "implementation": anchored["implementation_by_recurrent"][
+            identity["recurrent"]],
+    }
+    components.update(override)
+    return components
 
 
 def _write_run(runs_root: Path, config_id: str, seed: int, frame: pd.DataFrame,
@@ -225,7 +311,11 @@ def _write_run(runs_root: Path, config_id: str, seed: int, frame: pd.DataFrame,
                components: dict | None = None,
                record_seed: int | None = None,
                record_config_id: str | None = None,
-               break_manifest: bool = False) -> Path:
+               break_manifest: bool = False,
+               frame_dir: Path | None = None,
+               arm_params_expected: dict | None = None,
+               validation_ll: float = 1.5,
+               drop_arm_params_expected: bool = False) -> Path:
     directory = runs_root / config_id / f"seed_{seed}"
     directory.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(abs(hash((config_id, seed))) % (2 ** 31))
@@ -242,21 +332,43 @@ def _write_run(runs_root: Path, config_id: str, seed: int, frame: pd.DataFrame,
                         probs=probs,
                         y=(y if y_override is None else y_override),
                         innings_id=np.asarray(innings, dtype=str))
-    arm_params = {"arm": arm or config_id, "k": k, "wiring": "standard",
-                  "history_input": "prev", "key_construction": "shifted",
-                  "positional_embedding": True, "bias": None,
-                  "residual_l2": None, "base_logits_md5": None,
-                  "n_parameters": n_params}
+    directory_frame = _current_frame_dir(frame_dir)
+    config, pin, _ = _anchor(directory_frame)
+    entry = {str(e["id"]): e
+             for e in config["configurations"]}.get(config_id)
+    if arm_params_expected is None and entry is not None:
+        arm_params_expected = _registered_arm_params(config_id, entry, pin)
+    arm_params_expected = dict(arm_params_expected or {})
+    # The trainer's own block: the registered identity plus derived fields.
+    arm_params = dict(arm_params_expected)
+    arm_params.setdefault("arm", arm or config_id)
+    arm_params.setdefault("k", k)
+    arm_params.setdefault("wiring", "standard")
+    arm_params.setdefault("history_input", "prev")
+    arm_params.setdefault("key_construction", "shifted_history")
+    arm_params.setdefault("bias", None)
+    arm_params.setdefault("residual_l2", None)
+    arm_params.setdefault("base_logits_md5", None)
+    arm_params.update({"positional_embedding": True, "n_parameters": n_params})
+    if arm is not None:
+        arm_params["arm"] = arm
+    if k is not None:
+        arm_params["k"] = k
     arm_params.update(extra_arm_params or {})
     (directory / "metrics.json").write_text(json.dumps({
         "config": {"arm": arm or config_id, "seed": seed,
                    "out": str(directory)},
         "arm_params": arm_params,
+        "validation_ll": float(validation_ll),
         "training_contract": {"mps_bit_reproducible": False,
                               "device": "mps"}}))
     (directory / "model.pt").write_bytes(b"not a real checkpoint")
-    signature = signature or st.sha256_text(f"signature::{config_id}")
-    components = components or _components(config_id)
+    components = components or _components(
+        config_id, directory_frame, arm_params_expected or None)
+    # The signature is the driver's own function of its components, so a
+    # fixture run passes the recomputation check for the same reason a real
+    # run does, and an explicitly passed `signature` is a deliberate forgery.
+    signature = signature or st.recompute_training_signature(components)
     (directory / "run_record.json").write_text(json.dumps({
         "config_id": record_config_id or config_id,
         "seed": record_seed if record_seed is not None else seed,
@@ -277,7 +389,10 @@ def _write_run(runs_root: Path, config_id: str, seed: int, frame: pd.DataFrame,
                             "VECLIB_MAXIMUM_THREADS": "2"},
             "repo_is_worktree": seed == 7},
         "training_signature": signature,
-        "training_signature_components": components}))
+        "training_signature_components": components,
+        **({} if drop_arm_params_expected
+           else {"arm_params_expected": arm_params_expected}),
+    }))
     manifest = {}
     for name in st.RUN_ARTEFACTS:
         path = directory / name
@@ -297,16 +412,59 @@ def checkpoint_md5(runs_root: Path, config_id: str, seed: int) -> str:
     return st.md5_file(runs_root / config_id / f"seed_{seed}" / "model.pt")
 
 
+def _restamp_metrics(directory: Path) -> None:
+    """Re-record `metrics.json` in the completion manifest after an edit.
+
+    Only that one entry: a test that deliberately corrupted another artefact's
+    manifest entry must keep its corruption.
+    """
+    completion_path = directory / "COMPLETE.json"
+    if not completion_path.exists():
+        return
+    completion = json.loads(completion_path.read_text())
+    metrics_path = directory / "metrics.json"
+    (completion.setdefault("artifacts", {}))["metrics.json"] = {
+        "bytes": metrics_path.stat().st_size,
+        "md5": st.md5_file(metrics_path)}
+    completion_path.write_text(json.dumps(completion))
+
+
+def _sync_metrics_ll(runs_root: Path, config_id: str, seed: int,
+                     value: float) -> None:
+    """Make the run's own `metrics.json` agree with the summary it feeds.
+
+    The driver writes `summary.yaml`'s `ll` straight from
+    `metrics.json[validation_ll]`, so a consistent fixture must too. A test
+    that wants a hand-edited summary passes `tamper_ll=True` instead.
+    """
+    directory = runs_root / config_id / f"seed_{seed}"
+    metrics_path = directory / "metrics.json"
+    if not metrics_path.exists():
+        return
+    metrics = json.loads(metrics_path.read_text())
+    metrics["validation_ll"] = float(value)
+    metrics_path.write_text(json.dumps(metrics))
+    _restamp_metrics(directory)
+
+
 def _write_summary(runs_root: Path, config_id: str,
                    per_seed: dict[int, float | None],
-                   signature: str | None = None) -> Path:
+                   signature: str | None = None,
+                   tamper_ll: bool = False) -> Path:
     path = runs_root / config_id / "summary.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
-    signature = signature or st.sha256_text(f"signature::{config_id}")
+    if signature is None:
+        record = (runs_root / config_id / f"seed_{sorted(per_seed)[0]}"
+                  / "run_record.json")
+        signature = (json.loads(record.read_text())["training_signature"]
+                     if record.exists()
+                     else st.sha256_text(f"signature::{config_id}"))
     rows = []
     for seed, value in per_seed.items():
         if value is None:
             continue
+        if not tamper_ll:
+            _sync_metrics_ll(runs_root, config_id, seed, value)
         model = runs_root / config_id / f"seed_{seed}" / "model.pt"
         rows.append({"seed": seed, "ll": value, "best_epoch": 4,
                      "wall_seconds": 12.3,
@@ -1003,8 +1161,8 @@ def test_base_only_readout_rejects_a_stale_or_mislabelled_sidecar(
 # ---------------------------------------------------------------------------
 
 def _k_runs(tmp_path: Path, values: dict[str, dict[int, float | None]],
-            frame_dir: Path | None = None, *, skip: tuple[str, ...] = ()
-            ) -> Path:
+            frame_dir: Path | None = None, *, skip: tuple[str, ...] = (),
+            components_by_k: Mapping[str, dict] | None = None) -> Path:
     """A runs tree for the k sweep, keyed by the REGISTERED config ids."""
     root = tmp_path / "kruns"
     frame = (pd.read_parquet(frame_dir / "cricket_data_i7_validation.parquet")
@@ -1017,7 +1175,8 @@ def _k_runs(tmp_path: Path, values: dict[str, dict[int, float | None]],
             if value is None:
                 continue
             _write_run(root, config_id, seed, frame, arm="same_entity",
-                       k=(k if k == "unr" else int(k)))
+                       k=(k if k == "unr" else int(k)),
+                       components=(components_by_k or {}).get(k))
         _write_summary(root, config_id, per_seed)
     return root
 
@@ -1451,12 +1610,34 @@ def test_two_signatures_for_one_configuration_refuse(tmp_path, frame_dir,
     frame = pd.read_parquet(frame_dir / "cricket_data_i7_validation.parquet")
     for config_id in CONFIG_IDS:
         for seed in SEEDS:
-            signature = ("c" * 64 if (config_id == "fox" and seed == 13)
-                         else None)
-            _write_run(root, config_id, seed, frame, signature=signature)
+            components = None
+            if config_id == "fox" and seed == 13:
+                # A self-consistent signature that is nonetheless a DIFFERENT
+                # signature: its arm_params component moved, so it recomputes
+                # correctly and still cannot sit in one table with seed 7.
+                components = _components(
+                    config_id, arm_params_expected={"arm": "fox", "k": None,
+                                                    "wiring": "standard",
+                                                    "history_input": "prev",
+                                                    "key_construction": "x",
+                                                    "bias": None,
+                                                    "residual_l2": None,
+                                                    "base_logits_md5": None})
+            _write_run(root, config_id, seed, frame, components=components)
         _write_summary(root, config_id, {7: 1.5, 13: 1.5})
     with pytest.raises(st.RefusalError, match="different training signatures"):
         _run_stats(config_path, root, frame_dir, block_source, tmp_path)
+
+
+def test_a_hand_edited_signature_string_refuses(tmp_path, frame_dir):
+    """MUST-FIX A: the signature is recomputed from its own components, so an
+    edited string cannot pass even when every component is well formed."""
+    frame = pd.read_parquet(frame_dir / "cricket_data_i7_validation.parquet")
+    directory = _write_run(tmp_path / "runs", "full", 7, frame,
+                           signature="c" * 64)
+    admission = st.verify_run_admission(directory, "full", 7)
+    assert admission.ok is False
+    assert "is not the signature its own components produce" in admission.reason
 
 
 def test_a_moved_frame_component_refuses_across_arms(tmp_path, frame_dir,
@@ -1467,7 +1648,9 @@ def test_a_moved_frame_component_refuses_across_arms(tmp_path, frame_dir,
     for config_id in CONFIG_IDS:
         for seed in SEEDS:
             components = _components(
-                config_id, frame=("moved" if config_id == "fox" else "fr"))
+                config_id,
+                **({"frame": st.sha256_text("moved")}
+                   if config_id == "fox" else {}))
             _write_run(root, config_id, seed, frame, components=components)
         _write_summary(root, config_id, {7: 1.5, 13: 1.5})
     with pytest.raises(st.RefusalError, match="component 'frame' differs"):
@@ -1589,3 +1772,430 @@ def test_machine_provenance_degrades_when_the_block_is_absent():
     assert provenance["thread_caps"] is None
     # The confound statement does not depend on any recorded field.
     assert provenance["machine_term_fitted"] is False
+
+
+# ---------------------------------------------------------------------------
+# Astra gate 1 round 3 — admission fails closed (MUST-FIX 2), summary values
+# are authenticated and comparability reaches the k sweep (MUST-FIX 3), the
+# four cross-arm requirements, and complete disclosure of inadmissible runs
+# ---------------------------------------------------------------------------
+
+def test_the_pin_translation_matches_the_drivers_own_construction(frame_dir):
+    """The shared components are anchored to the pin, and the translation from
+    the pin's shape to the driver's `signature_components` is exact.
+
+    Without this lock, `pinned_component_digests` could drift from
+    `retrain_stage2.signature_components` and every run would refuse (or,
+    worse, agree with a wrong expectation).
+    """
+    config, pin, anchored = _anchor(frame_dir)
+    driver = st.training_driver()
+    provenance = config["provenance"]
+    resolved = {
+        "frame_dir_configured": provenance["frame"]["dir"],
+        "frame_version": provenance["frame"]["version"],
+        "feature_hash": provenance["frame"]["feature_hash"],
+        "split_files": {split: provenance["frame"]["splits"][split]
+                        for split in driver.CONTRACT_SPLITS},
+        "stats_cache": {"role": CACHE_ROLE, "md5": CACHE_MD5},
+    }
+    training = config["training"]
+    effective = {
+        "config_id": "mlp",
+        "arch": {"dmodel": training["dmodel"], "layers": training["layers"],
+                 "heads": training["heads"]},
+        "optimiser": {"lr": training["learning_rate"],
+                      "batch": training["batch"],
+                      "epochs": training["epochs"],
+                      "patience": training["patience"],
+                      "aux": training["aux"],
+                      "aux_weight": driver.t1.AUX_WEIGHT_DEFAULT},
+        "arm_params": {"arm": "mlp", "k": None, "wiring": "token_mlp",
+                       "history_input": "none", "key_construction": "none",
+                       "bias": None, "residual_l2": None,
+                       "base_logits_md5": None},
+        "overrides": {},
+    }
+    produced = driver.signature_components(effective, resolved)
+    for name in st.SIGNATURE_SHARED_COMPONENTS:
+        assert produced[name] == anchored[name], name
+    assert produced["base_logits"] == anchored[
+        "base_logits_by_reads_base"][False]
+    # The implementation component: a pin carrying the real on-disk source
+    # hashes must reproduce the driver's own `implementation_identity`, for a
+    # non-recurrent and for a recurrent arm.
+    real = _config_payload(frame_dir=frame_dir, same_entity=True)
+    real["provenance"]["sources"]["source_sha256"] = {
+        name: st.sha256_text((REPO / name).read_text())
+        for name in (driver.TRAINER_SOURCE, driver.FEATURE_CONTRACT_SOURCE,
+                     driver.ARTIFACT_RESOLVER_SOURCE,
+                     driver.RECURRENT_SOURCE)}
+    real_anchored = st.pinned_component_digests(real, st.load_pin(real))
+    assert real_anchored["implementation_by_recurrent"][False] == (
+        st.component_digest(driver.implementation_identity("mlp")))
+    assert real_anchored["implementation_by_recurrent"][True] == (
+        st.component_digest(driver.implementation_identity("lstm")))
+
+
+def test_a_manifest_missing_one_artefact_entry_refuses(tmp_path, frame_dir):
+    """MUST-FIX A: an absent, empty or incomplete manifest is a refusal."""
+    frame = pd.read_parquet(frame_dir / "cricket_data_i7_validation.parquet")
+    directory = _write_run(tmp_path / "runs", "full", 7, frame)
+    completion = json.loads((directory / "COMPLETE.json").read_text())
+    dropped = dict(completion["artifacts"])
+    dropped.pop("predictions_validation.npz")
+    completion["artifacts"] = dropped
+    (directory / "COMPLETE.json").write_text(json.dumps(completion))
+    admission = st.verify_run_admission(directory, "full", 7)
+    assert admission.ok is False
+    assert "manifests no entry for predictions_validation.npz" in (
+        admission.reason)
+
+
+@pytest.mark.parametrize("mutate,expected", [
+    ("empty_manifest", "carries no artefact manifest"),
+    ("no_manifest_key", "carries no artefact manifest"),
+    ("no_size", "declares no integer size"),
+    ("no_md5", "declares no md5"),
+    ("no_components", "carries no training_signature_components"),
+    ("missing_component", "is missing ['stats_cache']"),
+    ("mistyped_component", "are not sha256 hex digests"),
+    ("no_validation_ll", "carries no finite validation_ll"),
+])
+def test_admission_fails_closed_on_every_missing_declaration(
+        tmp_path, frame_dir, mutate, expected):
+    frame = pd.read_parquet(frame_dir / "cricket_data_i7_validation.parquet")
+    directory = _write_run(tmp_path / "runs", "full", 7, frame)
+    completion = json.loads((directory / "COMPLETE.json").read_text())
+    record = json.loads((directory / "run_record.json").read_text())
+    if mutate == "empty_manifest":
+        completion["artifacts"] = {}
+    if mutate == "no_manifest_key":
+        completion.pop("artifacts")
+    if mutate == "no_size":
+        completion["artifacts"]["model.pt"].pop("bytes")
+    if mutate == "no_md5":
+        completion["artifacts"]["model.pt"].pop("md5")
+    if mutate == "no_components":
+        record.pop("training_signature_components")
+    if mutate == "missing_component":
+        record["training_signature_components"].pop("stats_cache")
+        completion["training_signature_components"].pop("stats_cache")
+    if mutate == "mistyped_component":
+        record["training_signature_components"]["frame"] = 17
+        completion["training_signature_components"]["frame"] = 17
+    (directory / "COMPLETE.json").write_text(json.dumps(completion))
+    (directory / "run_record.json").write_text(json.dumps(record))
+    if mutate == "no_validation_ll":
+        metrics = json.loads((directory / "metrics.json").read_text())
+        metrics.pop("validation_ll")
+        (directory / "metrics.json").write_text(json.dumps(metrics))
+        _restamp_metrics(directory)
+    admission = st.verify_run_admission(directory, "full", 7)
+    assert admission.ok is False
+    assert expected in (admission.reason or "")
+
+
+def test_a_hand_edited_summary_ll_refuses(tmp_path, frame_dir, block_source,
+                                          config_path):
+    """MUST-FIX B: changing only an `ll` in summary.yaml is refused, because it
+    no longer equals the manifest-verified metrics.json validation LL."""
+    root = tmp_path / "runs"
+    frame = pd.read_parquet(frame_dir / "cricket_data_i7_validation.parquet")
+    for config_id in CONFIG_IDS:
+        for seed in SEEDS:
+            _write_run(root, config_id, seed, frame)
+        _write_summary(root, config_id, {7: 1.5, 13: 1.5})
+    # The winner is edited to a better number and nothing else is touched.
+    path = root / "fox" / "summary.yaml"
+    payload = yaml.safe_load(path.read_text())
+    payload["splits"]["validation"]["per_seed"][0]["ll"] = 0.9
+    path.write_text(yaml.safe_dump(payload, sort_keys=False))
+    with pytest.raises(st.RefusalError,
+                       match="the summary was edited"):
+        _run_stats(config_path, root, frame_dir, block_source, tmp_path)
+
+
+def test_load_runs_calls_the_summary_verifier(tmp_path, frame_dir,
+                                              block_source, config_path):
+    """MUST-FIX B: `load_runs` used to read summaries without verifying them."""
+    root = tmp_path / "runs"
+    frame = pd.read_parquet(frame_dir / "cricket_data_i7_validation.parquet")
+    for config_id in CONFIG_IDS:
+        for seed in SEEDS:
+            _write_run(root, config_id, seed, frame)
+        _write_summary(root, config_id, {7: 1.5, 13: 1.5})
+    # A checkpoint md5 the manifest does not have: verifiable provenance fails,
+    # so no log loss from this summary is reported at all.
+    path = root / "fox" / "summary.yaml"
+    payload = yaml.safe_load(path.read_text())
+    payload["splits"]["validation"]["per_seed"][0]["checkpoint_md5"] = "0" * 32
+    path.write_text(yaml.safe_dump(payload, sort_keys=False))
+    stats = _run_stats(config_path, root, frame_dir, block_source, tmp_path)
+    block = stats["runs"]["fox"]
+    assert block["summary_log_losses_dropped"] is True
+    assert any("claims checkpoint md5" in problem
+               for problem in block["summary_verification_problems"])
+    assert all(row["summary_yaml_validation_ll"] is None
+               for row in block["seeds"])
+    # An untouched configuration still reports its summary number.
+    assert stats["runs"]["full"]["seeds"][0][
+        "summary_yaml_validation_ll"] == 1.5
+
+
+def test_a_summary_ll_the_metrics_do_not_support_blocks_the_k_sweep(
+        tmp_path, frame_dir, k_config):
+    root = _k_runs(tmp_path, {
+        "0": {7: 1.60, 13: 1.60}, "6": {7: 1.58, 13: 1.58},
+        "12": {7: 1.56, 13: 1.56}, "30": {7: 1.54, 13: 1.54},
+        "unr": {7: 1.53, 13: 1.53}}, frame_dir)
+    path = root / "same_entity_unr" / "summary.yaml"
+    payload = yaml.safe_load(path.read_text())
+    for row in payload["splits"]["validation"]["per_seed"]:
+        row["ll"] = 1.10
+    path.write_text(yaml.safe_dump(payload, sort_keys=False))
+    record = st.k_sweep(root, k_config, seeds=SEEDS)
+    assert record["selection"] == "BLOCKED_INCOMPLETE"
+    assert "same_entity_unr" in record["blocked_on"]
+    assert any("the summary was edited" in reason
+               for reason in record["admission_rejections"])
+
+
+def test_k_sweep_refuses_incompatible_shared_components(tmp_path, frame_dir,
+                                                        k_config):
+    """MUST-FIX B: `k_sweep` never applied comparability, so five individually
+    consistent summaries from incompatible runs could enter one selection."""
+    moved = _components("same_entity_unr",
+                        frame_dir, None, stats_cache=st.sha256_text("other"))
+    root = _k_runs(tmp_path, {
+        "0": {7: 1.60, 13: 1.60}, "6": {7: 1.58, 13: 1.58},
+        "12": {7: 1.56, 13: 1.56}, "30": {7: 1.54, 13: 1.54},
+        "unr": {7: 1.20, 13: 1.20}}, frame_dir,
+        components_by_k={"unr": moved})
+    with pytest.raises(st.RefusalError,
+                       match="component 'stats_cache'"):
+        st.k_sweep(root, k_config, seeds=SEEDS)
+
+
+def test_k_sweep_records_that_it_applied_comparability(tmp_path, frame_dir,
+                                                       k_config):
+    root = _k_runs(tmp_path, {
+        "0": {7: 1.60, 13: 1.60}, "6": {7: 1.58, 13: 1.58},
+        "12": {7: 1.56, 13: 1.56}, "30": {7: 1.54, 13: 1.54},
+        "unr": {7: 1.53, 13: 1.53}}, frame_dir)
+    record = st.k_sweep(root, k_config, seeds=SEEDS)
+    assert record["comparability"]["anchored_to_the_pin"] is True
+    assert record["comparability"]["signature_recomputed_from_components"]
+    assert len(record["comparability"]["training_signature_by_config"]) == 5
+
+
+def _residual_config(frame_dir: Path) -> dict:
+    """A config with the two residual arms, for the base-logits identity rule."""
+    config = _config_payload(frame_dir=frame_dir)
+    config["configurations"] = [
+        {"id": "residual_mlp", "arm": "residual_mlp",
+         "params": {"base_logits_dir": "models/embeddings/seq_stage2/"
+                                       "base_logits", "residual_l2": 0.001},
+         "access": {"features": True, "history": False, "identity": False,
+                    "prod_logits": True},
+         "history_input": "none", "wiring": "token_mlp",
+         "reference": ["mlp"], "tests": "control", "queue_order": 1},
+        {"id": "residual_t1", "arm": "residual_t1",
+         "params": {"base_logits_dir": "models/embeddings/seq_stage2/"
+                                       "base_logits", "residual_l2": 0.001},
+         "access": {"features": True, "history": True, "identity": False,
+                    "prod_logits": True},
+         "history_input": "innings_previous", "wiring": "standard",
+         "reference": ["residual_mlp"], "tests": "candidate",
+         "queue_order": 2},
+    ]
+    return config
+
+
+def _residual_admissions(frame_dir: Path, base_digests: Mapping[str, str]
+                         ) -> dict:
+    config = _residual_config(frame_dir)
+    pin = st.load_pin(config)
+    entries = {str(e["id"]): e for e in config["configurations"]}
+    anchored = st.pinned_component_digests(config, pin)
+    admissions: dict[str, dict[int, st.Admission]] = {}
+    for config_id, entry in entries.items():
+        identity = st.expected_arm_identity(config_id, entry, pin)
+        arm_params = _registered_arm_params(config_id, entry, pin)
+        components = {
+            "config_id": identity["config_id"], "arm": identity["arm"],
+            "arm_params": st.component_digest(dict(arm_params)),
+            "training_block": anchored["training_block"],
+            "frame": anchored["frame"],
+            "stats_cache": anchored["stats_cache"],
+            "base_logits": base_digests[config_id],
+            "implementation": anchored["implementation_by_recurrent"][False],
+        }
+        admissions[config_id] = {7: st.Admission(
+            True, None, st.recompute_training_signature(components),
+            components, "md5",
+            metrics_validation_ll=1.5,
+            metrics_arm_params=dict(arm_params),
+            arm_params_expected=dict(arm_params))}
+    return config, pin, entries, admissions
+
+
+def test_the_two_residual_arms_refuse_on_differing_base_logit_identity(
+        frame_dir):
+    """Astra round 3, cross-arm requirement 2."""
+    config = _residual_config(frame_dir)
+    pin = st.load_pin(config)
+    right = st.component_digest(pin.base_logits_digest)
+    wrong = st.component_digest("a different base-logits build")
+    # Matched: one base-logits identity across both residual arms.
+    config, pin, entries, admissions = _residual_admissions(
+        frame_dir, {"residual_mlp": right, "residual_t1": right})
+    report = st.assert_comparable(admissions, entries, config, pin)
+    assert list(report["residual_base_logits_identities"]) == [right]
+
+    config, pin, entries, admissions = _residual_admissions(
+        frame_dir, {"residual_mlp": right, "residual_t1": wrong})
+    with pytest.raises(st.RefusalError,
+                       match="residual arms carry different `base_logits`"):
+        st.assert_comparable(admissions, entries, config, pin)
+
+
+def test_an_arms_components_must_match_its_registered_identity(tmp_path,
+                                                               frame_dir):
+    """Astra round 3, cross-arm requirement 3."""
+    frame = pd.read_parquet(frame_dir / "cricket_data_i7_validation.parquet")
+    root = tmp_path / "runs"
+    # `full` is registered with history_input `prev`; this run recorded `none`.
+    wrong = _registered_arm_params("full", _entries()["full"],
+                                   st.load_pin(_anchor(frame_dir)[0]))
+    wrong["history_input"] = "none"
+    _write_run(root, "full", 7, frame, arm_params_expected=wrong)
+    admissions = {"full": {7: st.verify_run_admission(
+        root / "full" / "seed_7", "full", 7)}}
+    config, pin, _ = _anchor(frame_dir)
+    with pytest.raises(st.RefusalError, match="history_input"):
+        st.assert_comparable(admissions, _entries(), config, pin)
+
+
+def test_a_recurrent_arms_implementation_set_may_differ_but_not_the_common_one(
+        frame_dir):
+    """Astra round 3, cross-arm requirement 1."""
+    config, pin, anchored = _anchor(frame_dir)
+    non_recurrent = anchored["implementation_by_recurrent"][False]
+    recurrent = anchored["implementation_by_recurrent"][True]
+    assert non_recurrent != recurrent
+    sources = anchored["implementation_sources_by_recurrent"]
+    driver = st.training_driver()
+    assert driver.RECURRENT_SOURCE in sources["True"]
+    assert driver.RECURRENT_SOURCE not in sources["False"]
+    for name in (driver.TRAINER_SOURCE, driver.FEATURE_CONTRACT_SOURCE,
+                 driver.ARTIFACT_RESOLVER_SOURCE):
+        assert name in sources["False"] and name in sources["True"]
+
+
+def test_a_foreign_implementation_digest_refuses(tmp_path, frame_dir):
+    frame = pd.read_parquet(frame_dir / "cricket_data_i7_validation.parquet")
+    root = tmp_path / "runs"
+    _write_run(root, "full", 7, frame, components=_components(
+        "full", frame_dir, None, implementation=st.sha256_text("other build")))
+    admissions = {"full": {7: st.verify_run_admission(
+        root / "full" / "seed_7", "full", 7)}}
+    config, pin, _ = _anchor(frame_dir)
+    with pytest.raises(st.RefusalError, match="`implementation` component"):
+        st.assert_comparable(admissions, _entries(), config, pin)
+
+
+def test_every_inadmissible_run_is_reported_not_only_the_first(tmp_path,
+                                                              frame_dir,
+                                                              block_source,
+                                                              config_path):
+    """Astra round 3 minor item: report ALL of them."""
+    root = tmp_path / "runs"
+    frame = pd.read_parquet(frame_dir / "cricket_data_i7_validation.parquet")
+    for config_id in CONFIG_IDS:
+        for seed in SEEDS:
+            _write_run(root, config_id, seed, frame,
+                       break_manifest=(config_id in ("full", "fox")))
+        _write_summary(root, config_id, {7: 1.5, 13: 1.5})
+    stats = _run_stats(config_path, root, frame_dir, block_source, tmp_path)
+    listed = {(row["config_id"], row["seed"])
+              for row in stats["admission"]["inadmissible_runs"]}
+    assert listed == {("full", 7), ("full", 13), ("fox", 7), ("fox", 13)}
+    assert stats["admission"]["n_inadmissible_runs"] == 4
+    assert all(row["reason"] for row in stats["admission"]["inadmissible_runs"])
+
+
+def test_every_comparability_violation_is_reported_together(tmp_path,
+                                                            frame_dir):
+    frame = pd.read_parquet(frame_dir / "cricket_data_i7_validation.parquet")
+    root = tmp_path / "runs"
+    for config_id, moved in (("full", "frame"), ("fox", "stats_cache")):
+        _write_run(root, config_id, 7, frame, components=_components(
+            config_id, frame_dir, None,
+            **{moved: st.sha256_text("moved " + moved)}))
+    admissions = {config_id: {7: st.verify_run_admission(
+        root / config_id / "seed_7", config_id, 7)}
+        for config_id in ("full", "fox")}
+    config, pin, _ = _anchor(frame_dir)
+    with pytest.raises(st.RefusalError) as error:
+        st.assert_comparable(admissions, _entries(), config, pin)
+    message = str(error.value)
+    assert "'frame'" in message and "'stats_cache'" in message
+    assert "comparability violation(s)" in message
+
+
+def test_a_provenance_block_without_a_validation_hash_is_no_pin(frame_dir):
+    """MUST-FIX A, last clause."""
+    config = _config_payload(frame_dir=frame_dir)
+    config["provenance"]["frame"]["splits"]["validation"].pop("md5")
+    pin = st.load_pin(config)
+    assert pin.available is False
+    assert "validation.md5" in pin.reason
+
+    config = _config_payload(frame_dir=frame_dir)
+    config["provenance"] = {"pinned_by": "someone"}
+    pin = st.load_pin(config)
+    assert pin.available is False
+    assert "not a usable pin" in pin.reason
+
+
+def test_no_run_is_admitted_without_a_pin_to_anchor_to(tmp_path, frame_dir):
+    frame = pd.read_parquet(frame_dir / "cricket_data_i7_validation.parquet")
+    root = tmp_path / "runs"
+    _write_run(root, "full", 7, frame)
+    admissions = {"full": {7: st.verify_run_admission(
+        root / "full" / "seed_7", "full", 7)}}
+    config = _config_payload(frame_dir=frame_dir)
+    config["provenance"] = {"pinned_by": "someone"}
+    with pytest.raises(st.RefusalError, match="no run may be admitted"):
+        st.assert_comparable(admissions, _entries(), config,
+                             st.load_pin(config))
+
+
+def test_an_absent_component_is_never_skipped(frame_dir):
+    """MUST-FIX A: `assert_comparable` used to `continue` past a missing one."""
+    config, pin, anchored = _anchor(frame_dir)
+    components = _components("full", frame_dir)
+    components.pop("stats_cache")
+    admissions = {"full": {7: st.Admission(
+        True, None, "x" * 64, components, "md5",
+        metrics_validation_ll=1.5)}}
+    with pytest.raises(st.RefusalError, match=r"\['stats_cache'\] are absent"):
+        st.assert_comparable(admissions, _entries(), config, pin)
+
+
+def test_a_wrong_key_construction_refuses(tmp_path, frame_dir):
+    """Requirement 3 covers `key_construction`, whose authority is the
+    trainer's registered table — legitimately `None` for a non-attention arm."""
+    frame = pd.read_parquet(frame_dir / "cricket_data_i7_validation.parquet")
+    root = tmp_path / "runs"
+    config, pin, _ = _anchor(frame_dir)
+    identity = st.expected_arm_identity("mlp", _entries()["mlp"], pin)
+    assert identity["key_construction"] is None
+    forged = _registered_arm_params("full", _entries()["full"], pin)
+    forged["key_construction"] = "own_outcome"
+    _write_run(root, "full", 7, frame, arm_params_expected=forged)
+    admissions = {"full": {7: st.verify_run_admission(
+        root / "full" / "seed_7", "full", 7)}}
+    with pytest.raises(st.RefusalError, match="key_construction"):
+        st.assert_comparable(admissions, _entries(), config, pin)

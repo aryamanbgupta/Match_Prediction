@@ -56,6 +56,26 @@ READOUT_LABELS = {"seed_7": "seed 7 (estimand i)",
                   "seed_13": "seed 13 (estimand i)",
                   "seed_mean_joint": "seed mean (estimand ii)"}
 
+# ---------------------------------------------------------------------------
+# D10.12 — the masked arms the dependency recertification must cover, and the
+# configuration each certificate belongs to.
+#
+# Astra gate 1 round 3 ruling: the deferred recertification is acceptable, but
+# the heading must say **pending** rather than "recertified" until trained-
+# checkpoint coverage is verified, and a failed certificate must BLOCK the
+# affected interpretation and eligibility rather than merely appear in a
+# table. A failed or missing certificate for a masked arm therefore forces
+# that arm's family to NOT_EVALUABLE here, in the report itself.
+DEPENDENCY_REQUIRED: dict[tuple[str, str], str] = {
+    ("same_entity", "0"): "same_entity_k0",
+    ("same_entity", "30"): "same_entity_k30",
+    ("same_entity", "unr"): "same_entity_unr",
+    ("recency", "30"): "recency_k30",
+}
+DEPENDENCY_HEADING = ("### Ownership dependency certificates (D7; D10.12 "
+                      "recertification **pending**)")
+DEPENDENCY_BLOCKED_STATUS = "NOT_EVALUABLE"
+
 NO_SEQUENCE_GAIN_SENTENCE = ("This model family, at this resolution, shows no "
                              "further sequence gain")
 NO_SEQUENCE_GAIN_QUALIFIER = (
@@ -475,7 +495,7 @@ def section_arms(config: Mapping[str, Any], stats: Mapping[str, Any],
            or "*none recorded*")
         + ".",
         "",
-        "### Ownership dependency certificates (D7, recertified in D10.12)",
+        DEPENDENCY_HEADING,
         "",
         "| arm | k | checkpoint | n targets | max |Δ| | p99 |Δ| | "
         "n > 1e-6 | role | result |",
@@ -503,6 +523,7 @@ def section_arms(config: Mapping[str, Any], stats: Mapping[str, Any],
             f"{sci(record.get('p99_abs_delta'))} | "
             f"{text_or_dash(record.get('n_nonzero_gt_1e-6'))} | {role} | "
             f"{result} |")
+    certificates = dependency_certificates(dependency)
     lines += [
         "",
         "The positive controls establish sensitivity to excluded-past "
@@ -512,7 +533,41 @@ def section_arms(config: Mapping[str, Any], stats: Mapping[str, Any],
         "one from the one-epoch smoke weights; masking is a property of the "
         "architecture, and D10.12 re-runs it on the admitted checkpoints.",
         "",
+        "This section is **pending**, not recertified: D10.12 requires the "
+        "test rerun on the admitted trained checkpoints of `same_entity_k0`, "
+        "`same_entity_k30`, `same_entity_unr` and `recency_k30` at **both** "
+        "seeds, and trained-checkpoint coverage is "
+        + ("complete for "
+           + ", ".join(f"`{name}`"
+                       for name in certificates["trained_checkpoint_coverage"])
+           if certificates["trained_checkpoint_coverage"]
+           else "**not yet established for any of the four**")
+        + ".",
+        "",
+        "| configuration | certificate | trained-checkpoint coverage | "
+        "consequence |",
+        "|---|---|---|---|",
     ]
+    for config_id in certificates["required"]:
+        block = certificates["by_config"][config_id]
+        consequence = (
+            f"family forced to `{DEPENDENCY_BLOCKED_STATUS}`; arm not eligible"
+            if config_id in certificates["blocked"]
+            else "no block from this check")
+        coverage = ("smoke checkpoint only (structural)"
+                    if block["smoke_only"] else
+                    ("trained checkpoints" if block["status"] == "PASS"
+                     else "none"))
+        lines.append(f"| `{config_id}` | `{block['status']}` | {coverage} | "
+                     f"{consequence} |")
+    lines.append("")
+    if certificates["blocked"]:
+        lines += ["A failed or missing masked-arm certificate **blocks** the "
+                  "affected interpretation and eligibility; it does not merely "
+                  "appear in the table above (Astra gate 1 round 3). Blocked: "
+                  + ", ".join(f"`{name}`"
+                              for name in sorted(certificates["blocked"]))
+                  + ".", ""]
     return lines
 
 
@@ -604,12 +659,19 @@ def section_rule(config: Mapping[str, Any],
     return lines
 
 
-def _holm_table(family: Mapping[str, Any], readout: str) -> list[str]:
+def _holm_table(family: Mapping[str, Any], readout: str,
+                blocked: Mapping[str, str] | None = None) -> list[str]:
     table = (family.get("holm") or {}).get(readout) or {}
+    candidate = family["candidate"]
+    computed = (family.get("screen") or {}).get(readout, {}).get("status")
+    is_blocked = candidate in (blocked or {})
+    status = DEPENDENCY_BLOCKED_STATUS if is_blocked else computed
     lines = [
-        f"**{family['candidate']}** — {READOUT_LABELS.get(readout, readout)}, "
+        f"**{candidate}** — {READOUT_LABELS.get(readout, readout)}, "
         f"Holm group `{family.get('holm_group')}`, screen status "
-        f"`{(family.get('screen') or {}).get(readout, {}).get('status')}`",
+        f"`{status}`"
+        + (f" (forced from `{computed}` by a failed or missing dependency "
+           "certificate)" if is_blocked else ""),
         "",
         "| member | contrast | slice | t | point | 95% interval | U95 | "
         "raw p | Holm p | rank | rank-local interval | rejected | status |",
@@ -634,7 +696,9 @@ def _holm_table(family: Mapping[str, Any], readout: str) -> list[str]:
     return lines
 
 
-def section_results(stats: Mapping[str, Any]) -> list[str]:
+def section_results(stats: Mapping[str, Any],
+                    blocked: Mapping[str, str] | None = None) -> list[str]:
+    blocked = dict(blocked or {})
     lines = [
         "## 4. Results — the 15 registered families, Holm step-down",
         "",
@@ -656,8 +720,10 @@ def section_results(stats: Mapping[str, Any]) -> list[str]:
         "",
     ]
     for family in stats.get("families") or []:
+        if family["candidate"] in blocked:
+            lines += [blocking_note(family["candidate"], blocked), ""]
         for readout in READOUTS:
-            lines += _holm_table(family, readout)
+            lines += _holm_table(family, readout, blocked)
         note = family.get("note")
         if note:
             lines += [f"Registered note on `{family['candidate']}`: "
@@ -831,7 +897,31 @@ def section_mechanism(stats: Mapping[str, Any]) -> list[str]:
     return lines
 
 
-def section_gates(stats: Mapping[str, Any]) -> list[str]:
+def _equivalent_slices(stats: Mapping[str, Any]) -> list[tuple[str, str, int]]:
+    """Registered slice pairs that select the same row set on this frame.
+
+    Astra gate 1 round 3 ruling: `innings_2` and `chase` are acceptable as two
+    registered slices only if their equivalence is disclosed and they are never
+    presented as independent corroboration. This finds the equivalence from the
+    computed slice statistics rather than asserting it from memory, so a frame
+    on which they diverge is reported as diverging.
+    """
+    table = ((stats.get("slices") or {}).get("stats") or {})
+    out = []
+    for left, right in (("innings_2", "chase"),):
+        a, b = table.get(left) or {}, table.get(right) or {}
+        if not (a.get("available") and b.get("available")):
+            continue
+        if (a.get("n_rows") == b.get("n_rows")
+                and a.get("n_matches") == b.get("n_matches")
+                and a.get("n_blocks") == b.get("n_blocks")):
+            out.append((left, right, int(a.get("n_rows") or 0)))
+    return out
+
+
+def section_gates(stats: Mapping[str, Any],
+                  blocked: Mapping[str, str] | None = None) -> list[str]:
+    blocked = dict(blocked or {})
     lines = [
         "## 8. Non-inferiority gates, exploratory slices and the residual "
         "readouts",
@@ -852,7 +942,9 @@ def section_gates(stats: Mapping[str, Any]) -> list[str]:
     ]
     for gate in stats.get("gates") or []:
         for readout in READOUTS:
-            values = (gate.get("readouts") or {}).get(readout) or {}
+            values = dict((gate.get("readouts") or {}).get(readout) or {})
+            if gate["candidate"] in blocked:
+                values["status"] = DEPENDENCY_BLOCKED_STATUS
             lines.append(
                 f"| `{gate['candidate']}` | `{gate['slice']}` | "
                 f"{READOUT_LABELS.get(readout, readout)} | "
@@ -864,6 +956,13 @@ def section_gates(stats: Mapping[str, Any]) -> list[str]:
     if not stats.get("gates"):
         lines.append("| *no gate is registered* | — | — | — | — | — | — | — "
                      "| — | — |")
+    if blocked:
+        lines += ["",
+                  "Gate rows for " + ", ".join(f"`{name}`" for name
+                                               in sorted(blocked))
+                  + f" read `{DEPENDENCY_BLOCKED_STATUS}` regardless of their "
+                  "intervals: a failed or missing dependency certificate "
+                  "blocks eligibility (D10.12)."]
 
     lines += [
         "",
@@ -871,7 +970,18 @@ def section_gates(stats: Mapping[str, Any]) -> list[str]:
         "",
         "Every reading below is exploratory: it changes no k, no family and "
         "no advancement, and this validation-only run opened no test rows.",
-        "",
+        "",]
+    for left, right, n_rows in _equivalent_slices(stats):
+        lines += [
+            f"**Disclosure — `{left}` and `{right}` are the same rows on this "
+            f"frame.** Both predicates select {n_rows} rows, the same matches "
+            "and the same tournament blocks, so the two readouts are one "
+            "readout written twice. They are **never** independent "
+            f"corroboration of each other, and only `{right}` is a "
+            "three-member family member; the other is exploratory (Astra "
+            "gate 1 round 3 ruling).",
+            "",]
+    lines += [
         "| contrast | slice | mean point | mean 95% interval | blocks | "
         "descriptive |",
         "|---|---|---|---|---|---|",
@@ -1009,15 +1119,21 @@ def _best_observed(stats: Mapping[str, Any]) -> dict:
     return best
 
 
-def _sequence_gain(stats: Mapping[str, Any]) -> dict:
+def _sequence_gain(stats: Mapping[str, Any],
+                   blocked: Mapping[str, str] | None = None) -> dict:
     """Which sequence arms beat mlp CI-clean on the all slice, and on what."""
     contrasts = stats.get("contrasts") or {}
+    blocked = dict(blocked or {})
     evaluable, clean = [], []
     for config_id in (stats.get("runs") or {}):
         if config_id in ("mlp", "residual_mlp"):
             continue
         record = contrasts.get(f"{config_id}-mlp@all")
         if not (record or {}).get("available"):
+            continue
+        if config_id in blocked:
+            # Blocked by a failed or missing dependency certificate: it is
+            # NOT_EVALUABLE, so it is neither evaluable nor CI-clean here.
             continue
         evaluable.append(config_id)
         readouts = [record["estimand_i"].get("seed_7"),
@@ -1027,15 +1143,18 @@ def _sequence_gain(stats: Mapping[str, Any]) -> dict:
             clean.append(config_id)
     return {"evaluable": sorted(evaluable), "ci_clean_favourable":
             sorted(clean),
+            "blocked_by_dependency_certificate": sorted(blocked),
             "criterion": ("CI-clean favourable on both per-seed estimand (i) "
                           "readouts and on the estimand (ii) seed mean of "
                           "`arm − mlp` on the `all` slice")}
 
 
 def section_plain(stats: Mapping[str, Any],
-                  k_record: Mapping[str, Any] | None) -> list[str]:
+                  k_record: Mapping[str, Any] | None,
+                  blocked: Mapping[str, str] | None = None) -> list[str]:
+    blocked = dict(blocked or {})
     best = _best_observed(stats)
-    gain = _sequence_gain(stats)
+    gain = _sequence_gain(stats, blocked)
     incomplete = sorted(config_id for config_id, block
                         in (stats.get("runs") or {}).items()
                         if not block.get("complete_paired_seeds"))
@@ -1106,6 +1225,18 @@ def section_plain(stats: Mapping[str, Any],
             "slice has complete paired seeds, so the registered sentence "
             "about no further sequence gain is not yet available and is not "
             "asserted.",
+            "",
+        ]
+    if blocked:
+        lines += [
+            "**Blocked by dependency certificates.** "
+            + ", ".join(f"`{name}`" for name in sorted(blocked))
+            + f" are reported `{DEPENDENCY_BLOCKED_STATUS}` and are not "
+            "eligible, because a masked-arm dependency certificate is failed "
+            "or missing for each. That block is not a result about cricket: "
+            "it means the arm has not been shown to depend only on the rows "
+            "its registered mask allows, so nothing it scores can be "
+            "interpreted as that mechanism (D10.12).",
             "",
         ]
     if incomplete:
@@ -1226,6 +1357,83 @@ def section_falsification(stats: Mapping[str, Any]) -> list[str]:
 # main
 # ---------------------------------------------------------------------------
 
+def dependency_certificates(dependency: Sequence[Mapping[str, Any]]) -> dict:
+    """Which masked arms hold a passing certificate, and which are blocked.
+
+    Astra gate 1 round 3: a failed **or missing** certificate for a masked arm
+    blocks that arm's interpretation and eligibility. This returns the per
+    configuration disposition plus the set of configurations whose family the
+    report must therefore force to `NOT_EVALUABLE`.
+
+    A certificate whose checkpoint lies under `smoke/` counts as PRESENT — the
+    masking it certifies is structural, a property of the architecture — but it
+    is not trained-checkpoint coverage, so the section stays **pending**. A
+    registered positive control that did not fire blocks too: without it the
+    passing certificate is not evidence of anything.
+    """
+    by_config: dict[str, dict] = {
+        config_id: {"config_id": config_id, "arm": arm, "k": k,
+                    "masked_records": 0, "failed": [], "controls": 0,
+                    "controls_did_not_fire": 0, "smoke_only": None,
+                    "status": "MISSING", "reason": None}
+        for (arm, k), config_id in DEPENDENCY_REQUIRED.items()}
+    smoke_flags: dict[str, list[bool]] = {name: [] for name in by_config}
+    for record in dependency:
+        key = (str(record.get("arm")), str(record.get("k")))
+        config_id = DEPENDENCY_REQUIRED.get(key)
+        if config_id is None:
+            continue
+        block = by_config[config_id]
+        if record.get("positive_control_expected"):
+            block["controls"] += 1
+            if not record.get("positive_control_observed"):
+                block["controls_did_not_fire"] += 1
+            continue
+        block["masked_records"] += 1
+        smoke_flags[config_id].append(
+            "/smoke/" in str(record.get("checkpoint") or ""))
+        if not record.get("pass"):
+            block["failed"].append(str(record.get("checkpoint") or "?"))
+    blocked: dict[str, str] = {}
+    for config_id, block in by_config.items():
+        flags = smoke_flags[config_id]
+        block["smoke_only"] = bool(flags) and all(flags)
+        if block["masked_records"] == 0:
+            block["status"] = "MISSING"
+            block["reason"] = ("no masked-arm dependency certificate is "
+                               "present for this configuration")
+        elif block["failed"]:
+            block["status"] = "FAILED"
+            block["reason"] = ("its dependency certificate failed for "
+                               + ", ".join(f"`{name}`"
+                                           for name in block["failed"]))
+        elif block["controls_did_not_fire"]:
+            block["status"] = "CONTROL_DID_NOT_FIRE"
+            block["reason"] = ("its matched positive control did not fire, so "
+                               "the passing certificate establishes no "
+                               "sensitivity to excluded-past information")
+        else:
+            block["status"] = "PASS"
+        if block["status"] != "PASS":
+            blocked[config_id] = block["reason"] or block["status"]
+    trained = [config_id for config_id, block in by_config.items()
+               if block["status"] == "PASS" and not block["smoke_only"]]
+    return {"by_config": by_config,
+            "blocked": blocked,
+            "trained_checkpoint_coverage": sorted(trained),
+            "trained_checkpoint_coverage_complete":
+                len(trained) == len(DEPENDENCY_REQUIRED),
+            "required": sorted(DEPENDENCY_REQUIRED.values())}
+
+
+def blocking_note(config_id: str, blocked: Mapping[str, str]) -> str:
+    """One sentence naming why a family is forced to `NOT_EVALUABLE`."""
+    return (f"**Dependency certificate blocks `{config_id}`**: "
+            f"{blocked[config_id]}. Its whole family is therefore reported as "
+            f"`{DEPENDENCY_BLOCKED_STATUS}` and the arm is not eligible, "
+            "whatever the intervals below say (D10.12; Astra gate 1 round 3).")
+
+
 def load_dependency(directory: Path) -> list[dict]:
     directory = guard_path(directory)
     if not directory.is_dir():
@@ -1247,19 +1455,22 @@ def render(stats_path: Path, config_path: Path, k_path: Path | None,
     if k_path is not None and guard_path(k_path).exists():
         k_record = read_json(k_path)
     dependency = load_dependency(dependency_dir)
+    # A failed or missing masked-arm certificate blocks that arm's family and
+    # its eligibility, everywhere the report states a status.
+    blocked = dependency_certificates(dependency)["blocked"]
 
     lines: list[str] = []
     lines += header(stats, config_path, out, stats_path, k_path)
     lines += section_question(config)
     lines += section_arms(config, stats, dependency)
     lines += section_rule(config, stats)
-    lines += section_results(stats)
+    lines += section_results(stats, blocked)
     lines += section_estimands(stats)
     lines += section_ksweep(k_record)
     lines += section_mechanism(stats)
-    lines += section_gates(stats)
+    lines += section_gates(stats, blocked)
     lines += section_limitations(config)
-    lines += section_plain(stats, k_record)
+    lines += section_plain(stats, k_record, blocked)
     lines += section_falsification(stats)
 
     markdown = "\n".join(lines).rstrip() + "\n"
