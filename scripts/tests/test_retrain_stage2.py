@@ -497,6 +497,116 @@ def test_missing_arm_params_block_refuses_reuse(tmp_path, config):
     assert "no arm_params block" in str(error.value)
 
 
+# --- the stage 4 identity fields (rungs 4b / C114 / 4d) --------------------
+# The trainer records these nested inside its own blocks and under its own
+# names; `expected_arm_params` carries them flat. Each kind is exercised with
+# a recorded value that agrees and one that has drifted, and a configuration
+# that sets none of them must see byte-identical behaviour.
+
+STAGE4_CASES = [
+    # (kind, expected flat keys, recorded block, drifted recorded block,
+    #  the fragment the problem must name)
+    ("4b_base_probs_digests",
+     {"base_probs_sha256": {"train": "a" * 64, "validation": "b" * 64}},
+     {"base_probs": {"dir": "models/embeddings/stage4/refs", "name": "eb_ctx",
+                     "sha256_by_split": {"train": "a" * 64,
+                                         "validation": "b" * 64}}},
+     {"base_probs": {"dir": "models/embeddings/stage4/refs", "name": "eb_ctx",
+                     "sha256_by_split": {"train": "a" * 64,
+                                         "validation": "c" * 64}}},
+     "arm_params.base_probs.sha256_by_split"),
+    ("4b_residual_lambda",
+     {"residual_lambda": 0.001},
+     {"base_probs": {"residual_lambda": 0.001}},
+     {"base_probs": {"residual_lambda": 0.01}},
+     "arm_params.base_probs.residual_lambda"),
+    ("c114_feature_contract",
+     {"feature_contract": "v7_114", "feature_contract_n": 114,
+      "feature_contract_sha256": "d" * 64},
+     {"feature_contract": {"name": "v7_114", "n_features": 114,
+                           "feature_names_sha256": "d" * 64}},
+     {"feature_contract": {"name": "v7_114", "n_features": 114,
+                           "feature_names_sha256": "e" * 64}},
+     "arm_params.feature_contract.feature_names_sha256"),
+    ("4d_extra_features",
+     {"extra_features": {"dir": "models/embeddings/stage4/exposure",
+                         "cols": ["batter_N_asof"], "col_set": "exposure",
+                         "sha256": {"train": "f" * 64,
+                                    "validation": "0" * 64}}},
+     {"extra_features": {"dir": "models/embeddings/stage4/exposure",
+                         "n_cols": 1,
+                         "sha256_by_split": {"train": "f" * 64,
+                                             "validation": "0" * 64}}},
+     {"extra_features": {"dir": "models/embeddings/stage4/exposure",
+                         "n_cols": 1,
+                         "sha256_by_split": {"train": "f" * 64,
+                                             "validation": "1" * 64}}},
+     "arm_params.extra_features.sha256_by_split"),
+]
+
+
+def _stage4_effective(config, want_patch):
+    """A stage 2 `effective` whose arm_params also carry a stage 4 field."""
+    entry = configurations(config)["mlp"]
+    effective = effective_settings(config, entry)
+    effective["arm_params"] = {**effective["arm_params"], **want_patch}
+    return effective
+
+
+def _stage4_recorded(effective, block_patch):
+    """What the trainer's metrics.json would carry for that run."""
+    recorded = {key: value for key, value in effective["arm_params"].items()
+                if key in driver.ARM_PARAM_FIELDS}
+    recorded.update({"positional_embedding": False, "n_parameters": 123})
+    recorded.update(copy.deepcopy(block_patch))
+    return {"arm_params": recorded}
+
+
+@pytest.mark.parametrize(
+    "want_patch,block", [(case[1], case[2]) for case in STAGE4_CASES],
+    ids=[case[0] for case in STAGE4_CASES])
+def test_stage4_identity_field_matching_recorded_value_passes(
+        config, want_patch, block):
+    effective = _stage4_effective(config, want_patch)
+    metrics = _stage4_recorded(effective, block)
+    assert driver.arm_params_problems(metrics, effective) == []
+
+
+@pytest.mark.parametrize(
+    "want_patch,drifted,fragment",
+    [(case[1], case[3], case[4]) for case in STAGE4_CASES],
+    ids=[case[0] for case in STAGE4_CASES])
+def test_stage4_identity_field_mismatch_is_a_problem(
+        config, want_patch, drifted, fragment):
+    effective = _stage4_effective(config, want_patch)
+    metrics = _stage4_recorded(effective, drifted)
+    problems = driver.arm_params_problems(metrics, effective)
+    assert [p for p in problems if p.startswith(fragment)], problems
+
+
+@pytest.mark.parametrize(
+    "want_patch,block", [(case[1], case[2]) for case in STAGE4_CASES],
+    ids=[case[0] for case in STAGE4_CASES])
+def test_stage4_identity_field_missing_block_is_a_problem(
+        config, want_patch, block):
+    """A checkpoint from before the rung records no block at all."""
+    effective = _stage4_effective(config, want_patch)
+    metrics = _stage4_recorded(effective, block)
+    for name in block:
+        metrics["arm_params"].pop(name)
+    assert driver.arm_params_problems(metrics, effective)
+
+
+def test_stage2_config_is_untouched_by_the_stage4_checks(config):
+    """A configuration that sets none of them compares exactly as before."""
+    entry = configurations(config)["same_entity_k30"]
+    effective = effective_settings(config, entry, base_logits_digest="d" * 32)
+    for path, _, _ in driver.NESTED_ARM_PARAM_FIELDS:
+        assert path[0] not in effective["arm_params"]
+    metrics = _stage4_recorded(effective, {})
+    assert driver.arm_params_problems(metrics, effective) == []
+
+
 def test_override_drift_refuses_reuse(tmp_path, config):
     entry = configurations(config)["mlp"]
     smoke = effective_settings(config, entry, epochs=1, overrides={"epochs": 1})
@@ -1026,16 +1136,37 @@ def test_provenance_compares_the_base_logits_digest_only_when_read():
     assert "base_logits" in check["skipped"]
 
 
+NIGHT3_CONFIG_PATH = driver.REPO / "experiments/configs/seq_stage3_night3_v1.yaml"
+
+
 @pytest.mark.needs_artifacts
-def test_preflight_compares_the_committed_pin(config):
-    """The real config, the real frame: the comparison must pass as shipped."""
+def test_preflight_compares_the_committed_pin():
+    """The ACTIVE config, the real frame: the comparison must pass as shipped.
+
+    Night 3 (2026-09-13): the active config is the night-3 one. The sealed
+    stage 2 configs keep the provenance of the sources AS TRAINED, so after
+    a later trainer edit their preflight is expected to refuse — that is the
+    behaviour the next test locks in — and their runs are anchored by the
+    statistics tool to the pin's hashes of each run's own source list.
+    """
+    config = driver.load_config(NIGHT3_CONFIG_PATH)
     entries = configurations(config)
     resolved = driver.preflight(
-        config, [entries["mlp"], entries["residual_t1"]], CONFIG_PATH)
+        config, [entries["mlp_pool"], entries["mlp_E_tiercond"]],
+        NIGHT3_CONFIG_PATH)
     check = resolved["provenance"]
     assert "frame.splits" in check["compared"]
-    assert "base_logits.train_validation_digest" in check["compared"]
     assert "cohort" in check["skipped"]
+
+
+@pytest.mark.needs_artifacts
+def test_a_sealed_stage_config_refuses_preflight_after_a_trainer_edit(config):
+    """The stage 2 pin records the trainer as trained; the committed trainer
+    has moved since (night 3), so preflight must refuse rather than train
+    stage 2 configurations under a different implementation."""
+    entries = configurations(config)
+    with pytest.raises(driver.RetrainError, match="transformer_t1.py"):
+        driver.preflight(config, [entries["mlp"]], CONFIG_PATH)
 
 
 # ---------------------------------------------------------------------------

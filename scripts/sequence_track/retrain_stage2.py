@@ -196,6 +196,20 @@ SPLIT_IDENTITY_FIELDS = ("md5", "n_rows", "match_date_min", "match_date_max")
 # different model even when every other field still matches.
 ARM_PARAM_FIELDS = ("arm", "k", "wiring", "history_input", "key_construction",
                     "bias", "residual_l2", "base_logits_md5")
+# The stage 4 identity fields (rungs 4b / C114 / 4d). They are checked apart
+# from the flat table above because the trainer records them NESTED, inside
+# its own blocks and under its own names, while `expected_arm_params` carries
+# them as flat keys — so the two spellings need an explicit map:
+#     (path into the EXPECTED arm_params, recorded block, recorded field).
+# A configuration that does not set the param carries no expected value and is
+# skipped, which is why every stage 2 and night 3 configuration behaves
+# exactly as it did before this table existed.
+NESTED_ARM_PARAM_FIELDS = (
+    (("base_probs_sha256",), "base_probs", "sha256_by_split"),
+    (("residual_lambda",), "base_probs", "residual_lambda"),
+    (("feature_contract_sha256",), "feature_contract", "feature_names_sha256"),
+    (("extra_features", "sha256"), "extra_features", "sha256_by_split"),
+)
 CONFIG_REQUIRED_FIELDS = ("id", "arm", "access", "history_input", "wiring",
                           "reference", "tests", "queue_order", "command")
 # The optional `role` a stage 3 configuration may declare (night 3 draft
@@ -2144,14 +2158,35 @@ def arm_params_problems(metrics: dict, effective: dict) -> list[str]:
     want_all = effective["arm_params"]
     for field in ARM_PARAM_FIELDS:
         got, want = recorded.get(field, ABSENT), want_all[field]
-        if isinstance(want, float) and isinstance(got, (int, float)) and not (
-                isinstance(got, bool)):
-            ok = float(got) == want
-        else:
-            ok = got == want
-        if not ok:
+        if not _arm_param_agrees(got, want):
             problems.append(f"arm_params.{field} {got!r} != {want!r}")
+    # The stage 4 identity: only for a configuration that actually sets it.
+    for want_path, block_name, field in NESTED_ARM_PARAM_FIELDS:
+        want = want_all
+        for key in want_path:
+            want = want.get(key) if isinstance(want, dict) else None
+            if want is None:
+                break
+        if want is None:
+            continue
+        block = recorded.get(block_name)
+        got = block.get(field, ABSENT) if isinstance(block, dict) else ABSENT
+        if not _arm_param_agrees(got, want):
+            problems.append(
+                f"arm_params.{block_name}.{field} {got!r} != {want!r}")
     return problems
+
+
+def _arm_param_agrees(got, want) -> bool:
+    """Does a recorded arm_params value equal the expected one?
+
+    JSON round-trips an integral float as an int, so a numeric expectation is
+    compared as a float; `True`/`False` are excluded because bool is an int.
+    """
+    if isinstance(want, float) and isinstance(got, (int, float)) and not (
+            isinstance(got, bool)):
+        return float(got) == want
+    return got == want
 
 
 def verify_checkpoint(out_dir: Path, metrics: dict, config: dict,

@@ -1,0 +1,36 @@
+{
+ "what_this_is": "Night 3 (Stage 3a) analysis record: hashes of the files of record and the exact invocations. No k selection and no dependency certificates exist for this block (token-MLP arms only), so the stage 2 analysis-pin tool does not apply.",
+ "written_at_utc": "2026-09-12T20:32:02.070079Z",
+ "git_head_short": "65f2f63",
+ "frozen_commit": "90acca8",
+ "launch_commit": "65f2f63",
+ "analysis_code": {
+  "scripts/sequence_track/stage2_stats.py": "73c4f2396e50817156aed41e56e8da9316c23117cb44595f7f54c8e2bbfdc20f",
+  "scripts/sequence_track/render_night3_report.py": "8d40445fff024fa624942b116700634ce70f728daff00da4387e84fd59a94827",
+  "scripts/sim_eval/eval_statistics.py": "d3fcfe454269d334766a35965dff2e33db9c5e3bbb06ea16a0d7b14bde2ba1ca",
+  "scripts/registered_experiment.py": "ae8f027b9b9b100f377be03413973b35edb5f2c62c632cf1daf7590cceb8595f",
+  "scripts/sequence_track/retrain_stage2.py": "b0befcc263f26b9428057990ecfd52503e2564202775fe5820fc247f3a20ac3c",
+  "scripts/transformer_t1.py": "e9482ac919c8151105dda45d9240273a163cc4ad7e78812fb4ac2e7786b39f1b"
+ },
+ "evidence": {
+  "eval_out/seq_stage3_night3/stats.json": "35c5b301cd0a29d69898129016e66795f5ecf451249e3826c962c04863034ebf",
+  "experiments/configs/seq_stage3_night3_v1.yaml": "fc952ba6ab4bf3a3018b5fe14d399a80db36e999c676eca1dbe1df79e1d5903a",
+  "research/reports/embeddings/SEQ_STAGE3A_NIGHT3_REPORT.md": "e811157186a2cb69b164d58377e55d863e8ea5668bdb189c68cc06a7b8d0ed7c",
+  "experiments/stage3a/manifest.json": "6cad98e0766d8112fb7f63fe6645b6b157b3cf888a690bcf167e74cce4c8db4a"
+ },
+ "summary_yaml": {
+  "mlp_pool": "b35b9d71b56646faecf7006150816e54757048ef58ab4b46858d290884610df4",
+  "mlp_pool_tiercond": "d7c796afba891f4f0a17f6af208f3de9b6abf4da27a1d95ee50d069004bde9e6",
+  "mlp_P_tiercond": "70ed13dbed66bf471b227f611c6dfcac3fed40ac8a2b539f4055619ec2bc99a5",
+  "mlp_rowmatch_P_tiercond": "1375af23d2c0bcb26c18f8f7c772e987a40603a7d9aa4cd27119c18a2bde4f95",
+  "mlp_E_tiercond": "b9ab98ad9085eeb20874573b2d44493d650e997eed25fd48f0937ebdb27ced9b",
+  "mlp_rowmatch_E_tiercond": "0bd20522d3e11465eb3fa9924d7263606a527dcbb46d5936021aa041d863b993"
+ },
+ "invocations": {
+  "consolidate": "uv run --no-sync python scripts/sequence_track/retrain_stage2.py --consolidate --config experiments/configs/seq_stage3_night3_v1.yaml --seeds 7,13,29,42,101 --machine laptop",
+  "statistics": "uv run --no-sync python scripts/sequence_track/stage2_stats.py stats --config experiments/configs/seq_stage3_night3_v1.yaml --runs-root models/embeddings/seq_stage3/night3/runs --frame-dir data/xgb_data_i7 --block-source-dir data/t20s_json --base-logits models/embeddings/seq_stage2/base_logits/validation.npz --out eval_out/seq_stage3_night3/stats.json --reps 2000 --rng-seed 29 --seeds 7,13,29,42,101",
+  "renderer": "uv run --no-sync python scripts/sequence_track/render_night3_report.py"
+ },
+ "note_base_logits": "--base-logits is a required CLI argument of stage2_stats.py; no night-3 configuration reads base logits, so the stage 2 file is passed and unused.",
+ "note_rerun": "statistics and report re-rendered 2026-09-13 ~03:10 IST after a second verify-only consolidation rewrote the six summary.yaml files (identical log losses, new timestamps); every number is unchanged."
+}
