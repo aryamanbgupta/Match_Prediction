@@ -2621,6 +2621,12 @@ def k_sweep(runs_root: Path, config: Mapping[str, Any],
     mapping = k_configurations(config)
     entries = {str(entry["id"]): entry
                for entry in (config.get("configurations") or [])}
+    # Astra gate 2 round 2 follow-up: the record's own prose named "two-seed"
+    # regardless of the seeds it was given, so a five-seed selection record
+    # labelled itself a two-seed screen and the report quoted that label. The
+    # count is written from the seed list; at two seeds the wording is the
+    # registered wording verbatim.
+    word = seed_word(len(seeds))
 
     # Astra round 3 MUST-FIX 3: `k_sweep` never applied comparability, so five
     # individually consistent summaries from incompatible training runs could
@@ -2693,7 +2699,7 @@ def k_sweep(runs_root: Path, config: Mapping[str, Any],
         "tie_rule": ("exact ties between qualifying minima use the registered "
                      "sweep order " + str(registered) + ", recorded before "
                      "selection"),
-        "rule": ("choose the k with the lowest two-seed arithmetic mean "
+        "rule": (f"choose the k with the lowest {word}-seed arithmetic mean "
                  "validation log loss, but only when "
                  "mean_LL(30) - mean_LL(best) > tolerance; otherwise keep 30. "
                  "Equality at the tolerance keeps 30. Any k may win, unr "
@@ -2706,13 +2712,14 @@ def k_sweep(runs_root: Path, config: Mapping[str, Any],
         "validation_only": ("no test predictions, test rows, cohort rows or "
                             "cohort base logits are loaded; test and cohort "
                             "results cannot change k"),
-        "labelling": "two-seed directional screen",
+        "labelling": f"{word}-seed directional screen",
         "interpretation_guard": (
             "the 0.002 tolerance is a selection tolerance, not a significance "
-            "threshold and not demonstrated two-seed resolution; the chosen k "
+            f"threshold and not demonstrated {word}-seed resolution; the "
+            "chosen k "
             "is never called reliably optimal"),
         "provisional": True,
-        "provisional_note": ("the two-seed selection remains explicitly "
+        "provisional_note": (f"the {word}-seed selection remains explicitly "
                              "provisional pending any registered "
                              "whole-family seed extension"),
         "k_to_config_id": {k: config_id for k, config_id in mapping},
@@ -2773,7 +2780,7 @@ def k_sweep(runs_root: Path, config: Mapping[str, Any],
             "range_delta": float(max(values) - min(values)),
             "favourable_direction_count": int(sum(1 for v in values if v < 0)),
             "n_seeds": len(values),
-            "spread_note": ("empirical spread over two seeds, not a "
+            "spread_note": (f"empirical spread over {word} seeds, not a "
                             "confidence interval"),
         }
 
@@ -2782,7 +2789,8 @@ def k_sweep(runs_root: Path, config: Mapping[str, Any],
         block = paired[selected_k]
         values = list(block["per_seed_delta_vs_k30"].values())
         if min(values) < 0 < max(values):
-            flags.append("paired differences change sign across the two seeds")
+            flags.append("paired differences change sign across the "
+                         f"{word} seeds")
         if block["range_delta"] >= tolerance:
             flags.append(f"paired range {block['range_delta']:.6f} >= the "
                          f"{tolerance} tolerance")

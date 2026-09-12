@@ -614,10 +614,10 @@ def test_render_refuses_when_a_config_entry_is_not_rendered(built, tmp_path,
 
     real = rr.section_limitations
 
-    def without_the_new_one(cfg):
+    def without_the_new_one(cfg, *args, **kwargs):
         trimmed = dict(cfg)
         trimmed["known_limitations"] = cfg["known_limitations"][:-1]
-        return real(trimmed)
+        return real(trimmed, *args, **kwargs)
 
     monkeypatch.setattr(rr, "section_limitations", without_the_new_one)
     with pytest.raises(st.RefusalError, match="coverage check failed"):
@@ -758,8 +758,8 @@ def test_cli_writes_the_report(built, capsys):
 def test_cli_returns_two_on_a_refusal(built, tmp_path, capsys, monkeypatch):
     real = rr.coverage_manifest
 
-    def with_an_unrenderable_entry(config):
-        return list(real(config)) + [
+    def with_an_unrenderable_entry(config, *args, **kwargs):
+        return list(real(config, *args, **kwargs)) + [
             {"key": "d10.13:never_rendered_key",
              "must_contain": ["`never_rendered_key`"]}]
 
@@ -1190,3 +1190,181 @@ def test_equivalence_falls_back_to_counts_and_says_so(built):
     for name in ("innings_2", "chase"):
         stats["slices"]["stats"][name].pop("mask_sha256", None)
     assert rr._equivalent_slices(stats)[0][3] == "counts_only"
+
+
+# ---------------------------------------------------------------------------
+# Five seeds: the PROSE, not only the numbers (Astra gate 2 round 2 follow-up)
+#
+# `readouts_for`/`contract.readouts` made every Holm table, gate and screen
+# seed-derived, but the report still described itself as "two seeds" in a dozen
+# authored sentences and § 5 / § 6 / § 7 / § 8 still carried literal `seed-7`
+# and `seed-13` columns reading `points['7']` and `points['13']`. These tests
+# render a real five-seed statistics JSON and a real five-seed D9 record.
+#
+# Scope note: the synthetic config here is the fixture config with its seeds
+# changed. The renderer still QUOTES config-sourced provenance verbatim (§ 3's
+# k-selection rule, § 9's registered entries), and the registered five-seed
+# config's own launch-era text does contain the historical phrase "two-seed";
+# quoting registered provenance is not the renderer describing itself, and is
+# deliberately not rewritten. Everything the renderer authors, and everything
+# it derives from the statistics and the D9 record, is checked here.
+# ---------------------------------------------------------------------------
+
+FIVE_SEEDS = (7, 13, 29, 42, 101)
+
+
+@pytest.fixture
+def built_five(tmp_path, frame_dir, block_source):
+    """A five-seed statistics JSON, config and k-selection record on disk."""
+    import pandas as pd
+
+    config = _config_payload(frame_dir=frame_dir, same_entity=True)
+    config["training"] = dict(config.get("training") or {})
+    config["training"]["seeds"] = list(FIVE_SEEDS)
+    config_path = tmp_path / "config_five.yaml"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False))
+
+    frame = pd.read_parquet(frame_dir / "cricket_data_i7_validation.parquet")
+    runs = tmp_path / "runs"
+    biases = {"mlp": 0.0, "full": 0.9, "fixed_decay": 0.5, "fox": 0.7}
+    for config_id, bias in biases.items():
+        for seed in FIVE_SEEDS:
+            _write_run(runs, config_id, seed, frame, bias=bias)
+        _write_summary(runs, config_id,
+                       {seed: 1.5 - bias / 10 + seed / 100000
+                        for seed in FIVE_SEEDS})
+    for k, config_id in K_IDS.items():
+        for seed in FIVE_SEEDS:
+            _write_run(runs, config_id, seed, frame, bias=0.4,
+                       arm="same_entity", k=(k if k == "unr" else int(k)))
+        _write_summary(runs, config_id,
+                       {seed: 1.5 + seed / 100000 for seed in FIVE_SEEDS})
+
+    stats = st.compute_statistics(
+        config_path, runs, frame_dir, block_source,
+        tmp_path / "no_base_logits.npz", reps=50, seed=29, seeds=FIVE_SEEDS,
+        expect=dict(EXPECT), expected_families=8)
+    stats_path = tmp_path / "stage2_statistics_five.json"
+    stats_path.write_text(json.dumps(stats, indent=2, default=str))
+
+    k_record = st.k_sweep(runs, config, seeds=FIVE_SEEDS)
+    k_path = tmp_path / "k_selection_five.json"
+    k_path.write_text(json.dumps(k_record, indent=2, default=str))
+
+    dependency = _write_dependency_evidence(tmp_path)
+    return {"config": config, "config_path": config_path,
+            "stats": stats, "stats_path": stats_path,
+            "k_record": k_record, "k_path": k_path,
+            "dependency": dependency, "out": tmp_path / "REPORT_FIVE.md"}
+
+
+def _section(markdown: str, heading: str, next_heading: str) -> str:
+    return markdown.split(heading)[1].split(next_heading)[0]
+
+
+def test_a_five_seed_render_describes_itself_as_five_seed(built_five):
+    markdown = _render(built_five)
+    for banned in ("two seeds", "two-seed", "2 seed"):
+        assert banned not in markdown, banned
+    assert "five" in markdown
+    assert markdown.startswith(
+        "# Sequence track — stage 2 report (sixteen configurations, five "
+        "seeds, validation only)")
+    assert "validation-only five-seed directional screen" in markdown
+    assert "Every configuration has all five registered seeds." in markdown
+
+
+def test_the_five_seed_mechanism_table_has_one_column_per_seed(built_five):
+    markdown = _render(built_five)
+    section = _section(markdown, "## 7. Mechanism contrasts (D10.5)",
+                       "## 8. Non-inferiority gates")
+    header = next(line for line in section.splitlines()
+                  if line.startswith("| contrast |"))
+    for seed in FIVE_SEEDS:
+        assert f"seed-{seed} point" in header, seed
+    assert header.count("point") == len(FIVE_SEEDS) + 1  # + the mean point
+    # The separator row and every body row carry the same column count.
+    rows = [line for line in section.splitlines() if line.startswith("|")]
+    widths = {line.count("|") for line in rows}
+    assert len(widths) == 1, rows
+
+
+def test_every_five_seed_table_has_one_column_per_seed(built_five):
+    markdown = _render(built_five)
+    estimands = _section(markdown, "## 5. The two estimands",
+                         "## 6. The k sweep")
+    for seed in FIVE_SEEDS:
+        assert f"seed-{seed} point" in estimands, seed
+    ksweep = _section(markdown, "## 6. The k sweep (D9)",
+                      "## 7. Mechanism contrasts")
+    for seed in FIVE_SEEDS:
+        assert f"seed {seed} LL" in ksweep, seed
+    for table in (estimands, ksweep):
+        rows = [line for line in table.splitlines() if line.startswith("|")]
+        assert len({line.count("|") for line in rows}) == 1, rows
+
+
+def test_every_seed_appears_in_the_five_seed_holm_readouts(built_five):
+    markdown = _render(built_five)
+    section = _section(markdown, "## 4. Results", "## 5. The two estimands")
+    for seed in FIVE_SEEDS:
+        assert f"— seed {seed} (estimand i)," in section, seed
+    assert "— seed mean (estimand ii)," in section
+    # And the 4/5 favourable-direction requirement is stated as enforced.
+    assert "favourable-direction requirement (4/5)" in section
+    assert "per-seed primary directions" in section
+
+
+def test_the_five_seed_reasons_drop_the_seed_count_and_keep_the_cohort(
+        built_five):
+    markdown = _render(built_five)
+    section = _section(markdown, "**Why no arm advances tonight.**",
+                       "**The exact next step")
+    assert "are a directional screen" not in section
+    assert "Two reasons" in section
+    assert "selection optimism" in section
+    assert "**deferred** by the reviewer" in section
+    assert "`advances: []`" in section
+    assert "the directional-screen reason no longer applies" in section
+    # No advancement, at any seed count: the cohort alone settles it.
+    assert "cohort_status: DEFERRED_UNOPENED" in markdown
+    assert "There is no LANDED verdict" in markdown
+    assert "No arm advances." in markdown
+
+
+def test_the_five_seed_machine_confound_names_every_seed(built_five):
+    markdown = _render(built_five)
+    section = _section(markdown, "### Machine provenance per run (D8.8)",
+                       "### Admission and provenance verification")
+    assert "seed 7 trained on the laptop" in section.lower()
+    for seed in (13, 29, 42, 101):
+        assert str(seed) in section.split("\n\n")[1]
+    # § 9 restates the same derived fact, and coverage demands that text.
+    rr.assert_coverage(markdown,
+                       rr.coverage_manifest(built_five["config"],
+                                            built_five["stats"]))
+
+
+def test_the_five_seed_next_step_is_no_longer_training_the_new_seeds(
+        built_five):
+    markdown = _render(built_five)
+    section = markdown.split("**The exact next step")[1]
+    # The registered unlock conditions are restated in full, unabbreviated.
+    assert "Seeds **29, 42 and 101** are added" in section
+    # But the derived next step is what actually remains.
+    assert "the seed count is no longer what is outstanding" in section
+    assert "(0) plus (4)–(6)" in section
+
+
+def test_the_two_seed_report_of_record_is_byte_unchanged():
+    """The committed report must not move under a renderer change."""
+    stats = REPO / "eval_out" / "seq_stage2" / "stats.json"
+    k_path = REPO / "eval_out" / "seq_stage2" / "k_selection.json"
+    committed = (REPO / "research" / "reports" / "embeddings"
+                 / "SEQ_STAGE2_REPORT.md")
+    if not (stats.is_file() and committed.is_file()):
+        pytest.skip("the two-seed evidence of record is not present here")
+    markdown = rr.render(stats, rr.DEFAULT_CONFIG,
+                         k_path if k_path.is_file() else None,
+                         rr.DEFAULT_DEPENDENCY_DIR, committed)
+    assert markdown == committed.read_text()

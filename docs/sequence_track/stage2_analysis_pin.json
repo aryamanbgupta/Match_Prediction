@@ -1,8 +1,8 @@
 {
   "pin_version": "seq_stage2_analysis_pin_v1",
   "what_this_is": "the stage 2 ANALYSIS and DECISION manifest (D10.9). It is separate from experiments/configs/seq_stage2_v1.yaml's provenance block, which is immutable training provenance and is not written or verified here.",
-  "written_at_utc": "2026-09-12T05:18:43Z",
-  "git_head_short": "443b2ab",
+  "written_at_utc": "2026-09-12T05:45:42Z",
+  "git_head_short": "d411174",
   "compared_fields": [
     "pin_version",
     "analysis_code",
@@ -25,8 +25,8 @@
     "live_summary_state is informational: a later training night rewrites runs/<config>/summary.yaml, so the evidence of record is the hash the statistics consumed, not the file's live hash"
   ],
   "analysis_code": {
-    "scripts/sequence_track/stage2_stats.py": "573e8984da8b488638bdb04f96c8863e7e1a55025805c18bad6acfe38188855e",
-    "scripts/sequence_track/render_stage2_report.py": "fc162e4b59d28f3d9a9e84ce42864e54e48ce9e0ed0c254674cc1c6a3f5580d1",
+    "scripts/sequence_track/stage2_stats.py": "75383af425f6223a65d9f4052fbb8709693a06ae4c8f875ad2f8a4d8092db264",
+    "scripts/sequence_track/render_stage2_report.py": "37459fe3df12bcadaadabf9e4b2b3d9dc997b3c69767f2d34ab5ee2f2651d069",
     "scripts/sim_eval/eval_statistics.py": "d3fcfe454269d334766a35965dff2e33db9c5e3bbb06ea16a0d7b14bde2ba1ca",
     "scripts/registered_experiment.py": "ae8f027b9b9b100f377be03413973b35edb5f2c62c632cf1daf7590cceb8595f",
     "scripts/sequence_track/pin_stage2_analysis.py": "011f55040a84eec3d8bada45b9629165d87b75546b969df37cb5cd14ce5d847e"
@@ -306,82 +306,82 @@
   "live_summary_state": {
     "aligned_hist": {
       "summary_path": "models/embeddings/seq_stage2/runs/aligned_hist/summary.yaml",
-      "sha256_now": "a85e560c4b548685d8a2b2f76453d91a0d5cbb5364b4582814abc579d4e2d975",
+      "sha256_now": "dae0141f8c629def7b5284dfd965000f6565c16446723eb18dc72174b44a952c",
       "matches_statistics": false
     },
     "aligned_hist_rf": {
       "summary_path": "models/embeddings/seq_stage2/runs/aligned_hist_rf/summary.yaml",
-      "sha256_now": "1f4413b892fb16c82335c65aeabeabead1b2f678c374f11df9b668587e006a06",
-      "matches_statistics": true
+      "sha256_now": "504668cdc62441de373031506f00168aaedc1457c372f17e0c2292520523319d",
+      "matches_statistics": false
     },
     "fixed_decay": {
       "summary_path": "models/embeddings/seq_stage2/runs/fixed_decay/summary.yaml",
-      "sha256_now": "935c682cfb637f4461682b86a7b5ae1c04ab9dfea85a8b66a81951490b4c37fc",
+      "sha256_now": "cd434ae71f3a31b8bc01cec7fea3f3f3258eb8e98cd646fc9f145b9f06732ce1",
       "matches_statistics": false
     },
     "fox": {
       "summary_path": "models/embeddings/seq_stage2/runs/fox/summary.yaml",
-      "sha256_now": "6e96ba50d7ac274058acf1bb78279c5e2b0eebda162f527226ee3e2da1c5d317",
+      "sha256_now": "b1f665cc625a253b262495c8702915ccab12f40bca29f9a9c13294e5525bf80e",
       "matches_statistics": false
     },
     "full": {
       "summary_path": "models/embeddings/seq_stage2/runs/full/summary.yaml",
-      "sha256_now": "46eb76734d3d80ab199e5a0924bce1ef61772548a8bf5659b6ef520e27a44fa4",
+      "sha256_now": "e54dce17ee4a6653f32b9d59b3c63b86890caee4d85790c8870376198eee4790",
       "matches_statistics": false
     },
     "lstm": {
       "summary_path": "models/embeddings/seq_stage2/runs/lstm/summary.yaml",
-      "sha256_now": "cdd7ce9cc477d820efb7e58e6e9e5141b59437e9fdb6cb9ed8730ed4e42c05f3",
-      "matches_statistics": true
+      "sha256_now": "32746df103d9f095376715b97a74db77a6861a6e41abb40263bdef8a3abb2c91",
+      "matches_statistics": false
     },
     "mlp": {
       "summary_path": "models/embeddings/seq_stage2/runs/mlp/summary.yaml",
-      "sha256_now": "783a332d77620d5152004b1d31e3a5ccd5ec5fcd8fd79eb51ca94a52cc1373c1",
+      "sha256_now": "83bb2425adf68e4334a3b371f980cc8040a2c346df00bdf88d43a36d528f7205",
       "matches_statistics": false
     },
     "recency_k30": {
       "summary_path": "models/embeddings/seq_stage2/runs/recency_k30/summary.yaml",
-      "sha256_now": "30c8bad07a3728f3644780b5530e1ed9aa69cfecb3f121f2fb51762674b3b25f",
-      "matches_statistics": true
+      "sha256_now": "f0c765eb7676a1722955c8e2141fcf872ee8b40562643ab29dc40cb381e2920f",
+      "matches_statistics": false
     },
     "residual_mlp": {
       "summary_path": "models/embeddings/seq_stage2/runs/residual_mlp/summary.yaml",
-      "sha256_now": "894b5ceb4cad19ce8db6c4ffdc018bcd6d862b7fa997820b3e5505816c5c3ee0",
+      "sha256_now": "de94639b528e66cee5659646a3ec0652b2bfaf5fde055212814dfa1c9dc68c76",
       "matches_statistics": false
     },
     "residual_t1": {
       "summary_path": "models/embeddings/seq_stage2/runs/residual_t1/summary.yaml",
-      "sha256_now": "f672e4f585cc9bd8050dc56728586bb8e3a9f6d32a32c1ca57e608e83e628b7e",
+      "sha256_now": "e8d2d4a1287ce5c2c651f06f524c5f79269e455c7123d5eb86fe389188055350",
       "matches_statistics": false
     },
     "same_entity_k0": {
       "summary_path": "models/embeddings/seq_stage2/runs/same_entity_k0/summary.yaml",
-      "sha256_now": "509c34567e74e8143a7c39219d9016960287567894f515a68578f33573a44df9",
-      "matches_statistics": true
+      "sha256_now": "d5b7cf8aec34c16b182ed7cfc53aa4edc210a439b92ccdacedc0eb7b515d9dc6",
+      "matches_statistics": false
     },
     "same_entity_k12": {
       "summary_path": "models/embeddings/seq_stage2/runs/same_entity_k12/summary.yaml",
-      "sha256_now": "863b760479cd69220506c4da8fdcda2abf46df95bbdf1b581ddde64299b8850a",
-      "matches_statistics": true
+      "sha256_now": "bad52222acc53c7f1837c690d170aad4392d0eda79af9667d8340dd0cc8e68de",
+      "matches_statistics": false
     },
     "same_entity_k30": {
       "summary_path": "models/embeddings/seq_stage2/runs/same_entity_k30/summary.yaml",
-      "sha256_now": "44f0c30042cf65a0cd0ff7a7cc26694452edda9f1fe3785ac5c10ac130ed3aea",
-      "matches_statistics": true
+      "sha256_now": "3aa5af02c6642164f15c2763c90e7470798ecf2debcd0a2fc3bab50677fab012",
+      "matches_statistics": false
     },
     "same_entity_k6": {
       "summary_path": "models/embeddings/seq_stage2/runs/same_entity_k6/summary.yaml",
-      "sha256_now": "1beafa9fccf86f9144eb81828b4e99d0fbce4a39aa6b59482aaa37dec89589eb",
-      "matches_statistics": true
+      "sha256_now": "8b408a85fb22ca5ee32024826f426c7fc88cf1d6813414d12526efbb18e13287",
+      "matches_statistics": false
     },
     "same_entity_unr": {
       "summary_path": "models/embeddings/seq_stage2/runs/same_entity_unr/summary.yaml",
-      "sha256_now": "dfb02fc0bc55be94d6d2f0b41df2f95ef188d3cd58bc243002c6eaf252440182",
-      "matches_statistics": true
+      "sha256_now": "195b2b8231b011d37da8de6e4cadf0ba5e07001a43de07e715cba9507c3d3a8b",
+      "matches_statistics": false
     },
     "xlstm": {
       "summary_path": "models/embeddings/seq_stage2/runs/xlstm/summary.yaml",
-      "sha256_now": "e76c3f49069ea34146afedc7e995bb8a59484f5378bc41ea285954b89d5fa426",
+      "sha256_now": "b9e14ea2b1a0851bcfaab688b360b328e9670489f84ec60082c8709c76203cf6",
       "matches_statistics": false
     }
   },

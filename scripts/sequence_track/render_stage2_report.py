@@ -36,10 +36,13 @@ from sequence_track.stage2_stats import (  # noqa: E402
     DEFAULT_CONFIG,
     DEFAULT_KSWEEP_OUT,
     DEFAULT_STATS_OUT,
+    FIVE_SEED_FAVOURABLE_DIRECTIONS,
+    FIVE_SEED_MINIMUM,
     FORBIDDEN_FRAGMENTS,
     JOINT_READOUT,
     MARGIN_LL,
     READOUTS,
+    REGISTERED_SEEDS,
     RefusalError,
     require_distinct_out,
     guard_path,
@@ -47,6 +50,7 @@ from sequence_track.stage2_stats import (  # noqa: E402
     read_json,
     read_yaml,
     rel,
+    seed_word,
     sha256_file,
 )
 
@@ -88,6 +92,181 @@ def readouts_of(stats: Mapping[str, Any]) -> tuple[str, ...]:
     if isinstance(recorded, (list, tuple)) and recorded:
         return tuple(str(r) for r in recorded)
     return tuple(READOUTS)
+
+
+# ---------------------------------------------------------------------------
+# Seed-derived prose (Astra gate 2 round 2 follow-up).
+#
+# The numbers were made seed-derived first; the PROSE was still hard-coded
+# "two seeds" in a dozen places, and § 5 / § 6 / § 7 / § 8 carried literal
+# `seed-7` and `seed-13` columns reading `points['7']` and `points['13']`. A
+# five-seed statistics JSON therefore rendered a report that described itself
+# as two-seed and showed two of its five seeds. Every sentence and every
+# column below is now built from the seed list the statistics recorded, and
+# every one of them reproduces the two-seed report of record verbatim at two
+# seeds.
+# ---------------------------------------------------------------------------
+
+def seeds_of(stats: Mapping[str, Any]) -> tuple[int, ...]:
+    """The registered seeds these statistics were computed at, in their order.
+
+    Read from `contract.seeds`; a statistics JSON predating that field is read
+    back from its own readout names, and only a JSON carrying neither falls
+    back to the registered two.
+    """
+    contract = ((stats.get("contract") or {})
+                if isinstance(stats, Mapping) else {})
+    recorded = contract.get("seeds")
+    if isinstance(recorded, (list, tuple)) and recorded:
+        return tuple(int(s) for s in recorded)
+    derived: list[int] = []
+    for readout in readouts_of(stats):
+        name = str(readout)
+        if name == JOINT_READOUT or not name.startswith("seed_"):
+            continue
+        try:
+            derived.append(int(name[len("seed_"):]))
+        except ValueError:
+            continue
+    return tuple(derived) or tuple(REGISTERED_SEEDS)
+
+
+def n_seeds_of(stats: Mapping[str, Any]) -> int:
+    return len(seeds_of(stats))
+
+
+def seed_count_phrase(n_seeds: int) -> str:
+    """`two seeds`, `five seeds` — a number word, because this reads as prose."""
+    return f"{seed_word(n_seeds)} seed" + ("" if int(n_seeds) == 1 else "s")
+
+
+def every_seed_word(n_seeds: int) -> str:
+    """`both` at two seeds, `all five` at five — for "… registered seeds"."""
+    return "both" if int(n_seeds) == 2 else f"all {seed_word(n_seeds)}"
+
+
+def join_list(items: Sequence[Any]) -> str:
+    """`7`, `7 and 13`, `7, 13, 29, 42 and 101`."""
+    text = [str(item) for item in items]
+    if not text:
+        return ""
+    if len(text) == 1:
+        return text[0]
+    return ", ".join(text[:-1]) + " and " + text[-1]
+
+
+def provisional_clause(n_seeds: int) -> str:
+    """Why this report can never be LANDED, at whatever seed count it has.
+
+    Below five seeds the seed count itself is the disqualifier and the
+    registered two-seed wording is reproduced verbatim. At five or more the
+    seed count no longer is, so the reason is restated as what actually still
+    holds: validation-only, checkpoint-selected on the same split, cohort
+    unopened.
+    """
+    if int(n_seeds) < FIVE_SEED_MINIMUM:
+        return (f"{seed_word(n_seeds)}-seed evidence is provisional and can "
+                "never be LANDED (invariant 9)")
+    return ("this evidence is provisional (validation-only, "
+            "checkpoint-selected on the same split it is scored on, with the "
+            "untouched cohort unopened), and provisional evidence can never "
+            "be LANDED (invariant 9)")
+
+
+def no_sequence_gain_qualifier(n_seeds: int) -> str:
+    return (f"That is screening evidence from {seed_count_phrase(n_seeds)} on "
+            "one validation split, and it is **not** proof that the "
+            "scoreboard summary suffices.")
+
+
+def seed_weakness_text(n_seeds: int) -> str:
+    """The D10.13 seed-count limitation, at whatever seed count this run has."""
+    if int(n_seeds) < FIVE_SEED_MINIMUM:
+        return (f"{seed_count_phrase(n_seeds)} are a directional screen. "
+                "Estimand (ii) is descriptive; no interval here is a "
+                f"confirmation, and a {seed_word(n_seeds)}-seed result can "
+                "never be LANDED (invariant 9).")
+    return (f"{seed_count_phrase(n_seeds)} clear the registered seed-extension "
+            "count, but this remains a validation-only screen. Estimand (ii) "
+            "is descriptive; no interval here is a confirmation, and a "
+            "validation-only result whose checkpoints were selected on the "
+            "same split can never be LANDED (invariant 9).")
+
+
+# The machine label each run records, in prose. An unrecognised label is
+# printed as recorded rather than guessed at.
+MACHINE_PROSE = {"laptop": "the laptop", "mini": "the Mac mini",
+                 "mac_mini": "the Mac mini", "macmini": "the Mac mini"}
+
+
+def machine_groups(stats: Mapping[str, Any]) -> list[tuple[str, list[int]]]:
+    """Which seeds trained on which machine, from the admitted runs' own
+    provenance — never from a memorised two-seed assignment."""
+    groups: dict[str, set[int]] = {}
+    for block in (stats.get("runs") or {}).values():
+        for row in block.get("seeds") or []:
+            if not row.get("admitted"):
+                continue
+            machine = (row.get("provenance") or {}).get("machine")
+            seed = row.get("seed")
+            if machine in (None, "") or seed is None:
+                continue
+            groups.setdefault(str(machine), set()).add(int(seed))
+    return [(machine, sorted(seeds)) for machine, seeds
+            in sorted(groups.items(), key=lambda item: min(item[1]))]
+
+
+def machine_assignment_clause(stats: Mapping[str, Any]) -> str:
+    """`seed 7 trained on the laptop and seed 13 on the Mac mini`, derived."""
+    groups = machine_groups(stats)
+    if not groups:
+        return ""
+    parts = []
+    for index, (machine, seeds) in enumerate(groups):
+        label = MACHINE_PROSE.get(machine, f"`{machine}`")
+        noun = "seed" if len(seeds) == 1 else "seeds"
+        parts.append(f"{noun} {join_list(seeds)}"
+                     + (" trained on " if index == 0 else " on ") + label)
+    return join_list(parts)
+
+
+def machine_confound_sentence(stats: Mapping[str, Any]) -> str:
+    """§ 2's machine-confound paragraph, derived from recorded provenance."""
+    clause = machine_assignment_clause(stats)
+    if not clause:
+        return ("No admitted run records a training machine, so whether "
+                "machine is confounded with seed cannot be read from this "
+                "evidence; every registered contrast is still formed within "
+                "one seed and **no machine term is fitted**.")
+    head = clause[0].upper() + clause[1:]
+    if len(machine_groups(stats)) < 2:
+        return (f"{head}, so there is no machine contrast in this run set and "
+                "**machine is not confounded with seed** here; **no machine "
+                "term is fitted** either.")
+    return (f"{head}, so **machine is confounded with seed**. Every "
+            "registered contrast is within-machine at each seed, so an "
+            "additive machine effect cancels inside it; arm-by-machine "
+            "interaction remains inseparable from seed variation and **no "
+            "machine term is fitted**.")
+
+
+def machine_confound_disposition(stats: Mapping[str, Any]) -> str:
+    """The same fact as the D10.13 entry states it."""
+    clause = machine_assignment_clause(stats)
+    if not clause:
+        return ("no admitted run records a training machine, so whether "
+                "machine is confounded with seed cannot be read from this "
+                "evidence; every registered contrast is still formed within "
+                "one seed and **no machine term is fitted**.")
+    if len(machine_groups(stats)) < 2:
+        return (f"{clause}, so there is no machine contrast in this run set "
+                "and MACHINE IS NOT CONFOUNDED WITH SEED here; **no machine "
+                "term is fitted** either.")
+    return (f"{clause}, so MACHINE IS CONFOUNDED WITH SEED. Every registered "
+            "contrast is within-machine at each seed, so an additive machine "
+            "effect cancels inside it, but arm-by-machine interaction is "
+            "inseparable from seed variation and **no machine term is "
+            "fitted**.")
 
 # ---------------------------------------------------------------------------
 # D10.12 — the masked arms the dependency recertification must cover, and the
@@ -151,12 +330,18 @@ def dependency_heading(certificates: Mapping[str, Any]) -> str:
 
 NO_SEQUENCE_GAIN_SENTENCE = ("This model family, at this resolution, shows no "
                              "further sequence gain")
-NO_SEQUENCE_GAIN_QUALIFIER = (
-    "That is screening evidence from two seeds on one validation split, and "
-    "it is **not** proof that the scoreboard summary suffices.")
+NO_SEQUENCE_GAIN_QUALIFIER = no_sequence_gain_qualifier(
+    len(REGISTERED_SEEDS))
 
 # D10.13 — every item the report must carry, beyond the config's own entries.
-D10_13_REQUIRED: tuple[tuple[str, str], ...] = (
+#
+# Two of these entries are seed-dependent: the machine confound names which
+# seed trained where, and the seed-count weakness names the count. Both are
+# overridden from the statistics by `d10_13_required(stats)`, which the render
+# and the coverage manifest both use, so the § 9 text and the text coverage
+# demands are one string. The tuple below is the two-seed default the module
+# exposes as `D10_13_REQUIRED`.
+D10_13_BASE: tuple[tuple[str, str], ...] = (
     ("blocked_cross_fitting_not_past_only_forecasting",
      "the residual base logits on the train split are BLOCKED cross-fitting, "
      "not past-only forecasting: earlier date blocks are scored by boosters "
@@ -256,6 +441,28 @@ D10_13_REQUIRED: tuple[tuple[str, str], ...] = (
      "the historical per-seed peak RSS recorded as a `RUSAGE_CHILDREN` delta "
      "is invalid and is reported as unavailable, never reconstructed."),
 )
+
+# The two seed-dependent entries keep their registered D10.13 key names — those
+# are identifiers, not prose — and only their text moves with the seed count.
+def d10_13_required(stats: Mapping[str, Any] | None = None
+                    ) -> tuple[tuple[str, str], ...]:
+    """The D10.13 list, with its seed-dependent entries derived from `stats`.
+
+    At two seeds with the recorded laptop/Mac-mini split this returns
+    `D10_13_BASE` unchanged, so the report of record does not move.
+    """
+    if stats is None:
+        return D10_13_BASE
+    overrides = {
+        "machine_confounded_with_seed_no_machine_term":
+            machine_confound_disposition(stats),
+        "two_seed_weakness": seed_weakness_text(n_seeds_of(stats)),
+    }
+    return tuple((key, overrides.get(key) or text)
+                 for key, text in D10_13_BASE)
+
+
+D10_13_REQUIRED: tuple[tuple[str, str], ...] = D10_13_BASE
 
 
 # ---------------------------------------------------------------------------
@@ -371,11 +578,16 @@ def section_9_body(markdown: str) -> str | None:
     return tail
 
 
-def coverage_manifest(config: Mapping[str, Any]) -> list[dict]:
+def coverage_manifest(config: Mapping[str, Any],
+                      stats: Mapping[str, Any] | None = None) -> list[dict]:
     """Every § 9 entry the report must carry, with what proves it is there.
 
     Every fragment is the COMPLETE normalised entry text, consequence clauses
     included — not a prefix. A truncated entry therefore fails the check.
+
+    `stats` supplies the seed-dependent D10.13 texts, so at five seeds coverage
+    demands the five-seed wording § 9 actually rendered. Omitting it keeps the
+    two-seed default.
     """
     manifest: list[dict] = []
     for entry in config.get("deviations") or []:
@@ -400,7 +612,7 @@ def coverage_manifest(config: Mapping[str, Any]) -> list[dict]:
                          "must_contain": [
                              f"`known_limitations[{index}]`",
                              correct_config_text(normalise(str(entry)))[0]]})
-    for key, text in D10_13_REQUIRED:
+    for key, text in d10_13_required(stats):
         manifest.append({"key": f"d10.13:{key}",
                          "must_contain": [f"`{key}`", normalise(text)]})
     return manifest
@@ -441,9 +653,11 @@ def assert_coverage(markdown: str, manifest: Sequence[Mapping[str, Any]]
 def header(stats: Mapping[str, Any], config_path: Path, out: Path,
            stats_path: Path, k_path: Path | None) -> list[str]:
     cohort = stats.get("cohort") or {}
+    n_seeds = n_seeds_of(stats)
     return [
         "# Sequence track — stage 2 report "
-        "(sixteen configurations, two seeds, validation only)",
+        f"(sixteen configurations, {seed_count_phrase(n_seeds)}, validation "
+        "only)",
         "",
         f"Generated (declared timestamp, the only value that moves on a "
         f"re-render): **{stats.get('generated_at_utc')}** by "
@@ -461,13 +675,14 @@ def header(stats: Mapping[str, Any], config_path: Path, out: Path,
         f"(sha256 `{stats['config']['sha256'][:12]}…`)",
         f"* acceptance checks and every result block: `{rel(ACCEPTANCE)}`",
         "",
-        "**Status: validation-only two-seed directional screen. "
+        f"**Status: validation-only {seed_word(n_seeds)}-seed directional "
+        "screen. "
         f"`cohort_status: {cohort.get('cohort_status')}`, "
         f"`cohort_scored: {str(cohort.get('cohort_scored')).lower()}`, "
         f"`advances: {cohort.get('advances')}`, "
         f"`provisional: {str(cohort.get('provisional')).lower()}`. "
-        "No arm advances. No market claim. No LANDED verdict — two-seed "
-        "evidence is provisional and can never be LANDED (invariant 9). "
+        "No arm advances. No market claim. No LANDED verdict — "
+        + provisional_clause(n_seeds) + ". "
         "The user's verdict is outstanding.**",
         "",
         "Statuses this stage can emit: "
@@ -511,6 +726,7 @@ def section_arms(config: Mapping[str, Any], stats: Mapping[str, Any],
     runs = stats.get("runs") or {}
     pin = stats.get("pin") or {}
     admission = stats.get("admission") or {}
+    n_seeds = n_seeds_of(stats)
     lines = [
         "## 2. Arms and settings",
         "",
@@ -561,9 +777,11 @@ def section_arms(config: Mapping[str, Any], stats: Mapping[str, Any],
                   if not block.get("complete_paired_seeds")]
     lines += [
         "",
-        ("Every configuration has both registered seeds."
+        (f"Every configuration has {every_seed_word(n_seeds)} registered "
+         "seeds."
          if not incomplete else
-         "**Incomplete configurations** (a reported contrast requires both "
+         "**Incomplete configurations** (a reported contrast requires "
+         f"{every_seed_word(n_seeds)} "
          "seeds for every member, D8.9): "
          + ", ".join(f"`{c}`" for c in sorted(incomplete)) + "."),
         "",
@@ -573,11 +791,7 @@ def section_arms(config: Mapping[str, Any], stats: Mapping[str, Any],
         "",
         "### Machine provenance per run (D8.8)",
         "",
-        "Seed 7 trained on the laptop and seed 13 on the Mac mini, so "
-        "**machine is confounded with seed**. Every registered contrast is "
-        "within-machine at each seed, so an additive machine effect cancels "
-        "inside it; arm-by-machine interaction remains inseparable from seed "
-        "variation and **no machine term is fitted**.",
+        machine_confound_sentence(stats),
         "",
         "| config id | seed | machine | host | chip | os | torch | device / "
         "MPS | thread caps | wall s | reconstructed val LL | summary.yaml "
@@ -933,6 +1147,51 @@ def _holm_table(family: Mapping[str, Any], readout: str,
     return lines
 
 
+def _five_seed_qualification(stats: Mapping[str, Any]) -> list[str]:
+    """The registered 4/5 favourable-direction requirement, when it applies.
+
+    Below five seeds the count cannot reach 4/5, so it is neither required nor
+    able to fail a status, and nothing is rendered — the two-seed report of
+    record is unchanged. At five or more seeds the requirement is live and is
+    enforced inside every screen status, so it is stated, per family, from the
+    screen blocks' own recorded counts.
+    """
+    n_seeds = n_seeds_of(stats)
+    if n_seeds < FIVE_SEED_MINIMUM:
+        return []
+    lines = [
+        "### The registered favourable-direction requirement "
+        f"({FIVE_SEED_FAVOURABLE_DIRECTIONS}/{FIVE_SEED_MINIMUM}), enforced "
+        "at these " + seed_count_phrase(n_seeds),
+        "",
+        f"At {seed_word(FIVE_SEED_MINIMUM)} or more seeds a family "
+        "qualifies for the "
+        f"registered extension only with at least "
+        f"{FIVE_SEED_FAVOURABLE_DIRECTIONS} of {FIVE_SEED_MINIMUM} favourable "
+        "per-seed directions on its registered primary, on top of everything "
+        "the screen already requires. That requirement is live here and is "
+        "enforced inside the screen statuses above; it is a necessary "
+        "condition for the extension and is never an advancement.",
+        "",
+        "| candidate | favourable per-seed directions | required | "
+        "requirement met | extension qualified | note |",
+        "|---|---|---|---|---|---|",
+    ]
+    for family in stats.get("families") or []:
+        screen = (family.get("screen") or {}).get(JOINT_READOUT) or {}
+        lines.append(
+            f"| `{family.get('candidate')}` | "
+            f"{text_or_dash(screen.get('favourable_direction_count'))}"
+            f"/{text_or_dash(screen.get('n_seeds'))} | "
+            f"{text_or_dash(screen.get('required_favourable_directions'))} | "
+            f"{flag(screen.get('favourable_direction_requirement_met'))} | "
+            f"{flag(screen.get('five_seed_extension_qualified'))} | "
+            + normalise(str(screen.get("five_seed_qualification_note") or ""))
+            + " |")
+    lines.append("")
+    return lines
+
+
 def section_results(stats: Mapping[str, Any],
                     blocked: Mapping[str, str] | None = None) -> list[str]:
     blocked = dict(blocked or {})
@@ -956,6 +1215,7 @@ def section_results(stats: Mapping[str, Any],
         "exact zero.",
         "",
     ]
+    lines += _five_seed_qualification(stats)
     for family in stats.get("families") or []:
         if family["candidate"] in blocked:
             lines += [blocking_note(family["candidate"], blocked), ""]
@@ -974,8 +1234,20 @@ def section_results(stats: Mapping[str, Any],
     return lines
 
 
+def _per_seed_columns(seeds: Sequence[Any], suffix: str = "point") -> str:
+    """`seed-7 point | seed-13 point`, one column per registered seed."""
+    return " | ".join(f"seed-{seed} {suffix}" for seed in seeds)
+
+
+def _per_seed_cells(points: Mapping[str, Any], seeds: Sequence[Any]) -> str:
+    """One cell per registered seed, read by that seed's own key."""
+    return " | ".join(f5((points or {}).get(str(seed))) for seed in seeds)
+
+
 def section_estimands(stats: Mapping[str, Any]) -> list[str]:
     contract = stats.get("contract") or {}
+    seeds = seeds_of(stats)
+    n_seeds = len(seeds)
     lines = [
         "## 5. The two estimands, seed spread, and what (ii) is not",
         "",
@@ -988,9 +1260,9 @@ def section_estimands(stats: Mapping[str, Any]) -> list[str]:
         "**not** the log loss of averaged probabilities. Tonight's (ii) is "
         + normalise(str(contract.get("estimand_ii_label") or "")) + ".",
         "",
-        "| contrast | slice | seed-7 point | seed-13 point | seed range | "
+        f"| contrast | slice | {_per_seed_columns(seeds)} | seed range | "
         "favourable seeds | mean point | mean 95% interval |",
-        "|---|---|---|---|---|---|---|---|",
+        "|" + "---|" * (6 + n_seeds),
     ]
     for key, record in (stats.get("contrasts") or {}).items():
         if not str(record.get("role", "")).startswith("family_"):
@@ -1000,31 +1272,47 @@ def section_estimands(stats: Mapping[str, Any]) -> list[str]:
         joint = record.get("estimand_ii") or {}
         lines.append(
             f"| `{record['candidate']} − {record['reference']}` | "
-            f"`{record['slice']}` | {f5(points.get('7'))} | "
-            f"{f5(points.get('13'))} | {f5(spread.get('range'))} | "
+            f"`{record['slice']}` | {_per_seed_cells(points, seeds)} | "
+            f"{f5(spread.get('range'))} | "
             f"{text_or_dash(record.get('favourable_direction_count'))}"
             f"/{text_or_dash(record.get('n_seeds'))} | "
             f"{f5(joint.get('point'))} | {ci(joint.get('ci95'))} |")
     if not any(str(r.get("role", "")).startswith("family_")
                and r.get("available")
                for r in (stats.get("contrasts") or {}).values()):
-        lines.append("| *no family contrast is evaluable* | — | — | — | — | "
-                     "— | — | — |")
+        lines.append("| *no family contrast is evaluable* |"
+                     + " — |" * (5 + n_seeds))
     lines += [
         "",
-        "Seed ranges are empirical spreads over two seeds, not confidence "
+        f"Seed ranges are empirical spreads over {seed_count_phrase(n_seeds)}, "
+        "not confidence "
         "intervals. No seed is selected and no CI endpoint is averaged.",
         "",
     ]
     return lines
 
 
-def section_ksweep(record: Mapping[str, Any] | None) -> list[str]:
+def _k_sweep_seeds(record: Mapping[str, Any],
+                   fallback: Sequence[Any]) -> tuple[str, ...]:
+    """The seeds the D9 record itself carries, in its own recorded order."""
+    recorded = record.get("seeds")
+    if isinstance(recorded, (list, tuple)) and recorded:
+        return tuple(str(seed) for seed in recorded)
+    for row in record.get("rows") or []:
+        per_seed = row.get("per_seed") or {}
+        if per_seed:
+            return tuple(str(seed) for seed in per_seed)
+    return tuple(str(seed) for seed in fallback)
+
+
+def section_ksweep(record: Mapping[str, Any] | None,
+                   seeds: Sequence[Any] = REGISTERED_SEEDS) -> list[str]:
     lines = ["## 6. The k sweep (D9)", ""]
     if record is None:
         lines += ["The D9 selection record has not been written, so no k is "
                   "selected and no k is defaulted.", ""]
         return lines
+    k_seeds = _k_sweep_seeds(record, seeds)
     lines += [
         "Numbers of record: " + normalise(str(record.get(
             "numbers_of_record") or "")) + ". The k-to-configuration mapping "
@@ -1042,9 +1330,11 @@ def section_ksweep(record: Mapping[str, Any] | None) -> list[str]:
            f"(k = {record.get('selected_k')})**"
            if record.get("selected_config_id") else "**"),
         "",
-        "| k | config id | seed 7 LL | seed 13 LL | mean | min | max | "
+        "| k | config id | "
+        + " | ".join(f"seed {seed} LL" for seed in k_seeds)
+        + " | mean | min | max | "
         "range | paired mean vs k30 | paired range | favourable seeds |",
-        "|---|---|---|---|---|---|---|---|---|---|---|",
+        "|" + "---|" * (9 + len(k_seeds)),
     ]
     paired = record.get("paired_vs_k30") or {}
     for row in record.get("rows") or []:
@@ -1052,7 +1342,8 @@ def section_ksweep(record: Mapping[str, Any] | None) -> list[str]:
         per_seed = row.get("per_seed") or {}
         lines.append(
             f"| {row['k']} | `{row['config_id']}` | "
-            f"{f6(per_seed.get('7'))} | {f6(per_seed.get('13'))} | "
+            + " | ".join(f6(per_seed.get(str(seed))) for seed in k_seeds)
+            + " | "
             f"{f6(row.get('mean_ll'))} | {f6(row.get('min_ll'))} | "
             f"{f6(row.get('max_ll'))} | {f6(row.get('range_ll'))} | "
             f"{f5(block.get('mean_delta'))} | "
@@ -1069,7 +1360,7 @@ def section_ksweep(record: Mapping[str, Any] | None) -> list[str]:
         lines += ["",
                   "**BLOCKED_INCOMPLETE**: "
                   + ", ".join(f"`{c}`" for c in record.get("blocked_on") or [])
-                  + " lack both registered seeds. "
+                  + f" lack {every_seed_word(len(k_seeds))} registered seeds. "
                   + normalise(str(record.get("note") or ""))]
     else:
         lines += ["",
@@ -1106,13 +1397,14 @@ def section_mechanism(stats: Mapping[str, Any],
     ordinary interval here.
     """
     blocked = dict(blocked or {})
+    seeds = seeds_of(stats)
     lines = [
         "## 7. Mechanism contrasts (D10.5)",
         "",
         "| contrast | what it measures (registered label) | inferential in a "
-        "registered family | seed-7 point | seed-13 point | mean point | "
+        f"registered family | {_per_seed_columns(seeds)} | mean point | "
         "mean 95% interval | mean raw p | disposition |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "|" + "---|" * (7 + len(seeds)),
     ]
     blocked_contrasts: list[str] = []
     for entry in stats.get("mechanism_contrasts") or []:
@@ -1135,7 +1427,7 @@ def section_mechanism(stats: Mapping[str, Any],
             f"| {name} | "
             f"{normalise(str(entry.get('registered_label') or ''))} | "
             f"{flag(entry.get('inferential_in_a_registered_family'))} | "
-            f"{f5(points.get('7'))} | {f5(points.get('13'))} | "
+            f"{_per_seed_cells(points, seeds)} | "
             f"{f5(joint.get('point'))} | {ci(joint.get('ci95'))} | "
             f"{text_or_dash(joint.get('p_display'))} | {disposition} |")
     unavailable = [f"`{e['candidate']} − {e['reference']}`"
@@ -1207,6 +1499,7 @@ def _equivalent_slices(stats: Mapping[str, Any]) -> list[tuple[str, str, int]]:
 def section_gates(stats: Mapping[str, Any],
                   blocked: Mapping[str, str] | None = None) -> list[str]:
     blocked = dict(blocked or {})
+    seeds = seeds_of(stats)
     lines = [
         "## 8. Non-inferiority gates, exploratory slices and the residual "
         "readouts",
@@ -1348,16 +1641,16 @@ def section_gates(stats: Mapping[str, Any],
             f"{provenance.get('renormalised')}. Row alignment: "
             + normalise(str(provenance.get("row_alignment") or "")) + ".",
             "",
-            "| residual arm − base only | seed-7 point | seed-13 point | "
+            f"| residual arm − base only | {_per_seed_columns(seeds)} | "
             "mean point | mean 95% interval |",
-            "|---|---|---|---|---|",
+            "|" + "---|" * (3 + len(seeds)),
         ]
         for record in residual.get("against_base_only") or []:
             points = record.get("per_seed_points") or {}
             joint = record.get("estimand_ii") or {}
             lines.append(
                 f"| `{record['candidate']} − base_only` | "
-                f"{f5(points.get('7'))} | {f5(points.get('13'))} | "
+                f"{_per_seed_cells(points, seeds)} | "
                 f"{f5(joint.get('point'))} | {ci(joint.get('ci95'))} |")
         lines.append("")
     else:
@@ -1367,7 +1660,8 @@ def section_gates(stats: Mapping[str, Any],
     return lines
 
 
-def section_limitations(config: Mapping[str, Any]) -> list[str]:
+def section_limitations(config: Mapping[str, Any],
+                        stats: Mapping[str, Any] | None = None) -> list[str]:
     lines = [
         "## 9. Registered deviations, asymmetries, limitations "
         "(restated, none dropped)",
@@ -1412,7 +1706,7 @@ def section_limitations(config: Mapping[str, Any]) -> list[str]:
     lines += ["",
               "### Additional dispositions D10.13 requires by name",
               ""]
-    for key, text in D10_13_REQUIRED:
+    for key, text in d10_13_required(stats):
         lines.append(f"- `{key}` — {normalise(text)}")
     lines += [
         "",
@@ -1446,7 +1740,12 @@ def section_limitations(config: Mapping[str, Any]) -> list[str]:
 
 
 def _best_observed(stats: Mapping[str, Any]) -> dict:
-    """The lowest observed two-seed mean validation LL among admitted arms."""
+    """The lowest observed across-seed mean validation LL among admitted arms.
+
+    The mean is over however many registered seeds the arm has — two tonight,
+    five after a registered seed extension — and the prose in § 10 names that
+    count from the seed list rather than asserting "two-seed".
+    """
     best = {"config_id": None, "mean_ll": None, "source": None,
             "per_seed": {}}
     for config_id, block in (stats.get("runs") or {}).items():
@@ -1503,7 +1802,7 @@ def _sequence_gain(stats: Mapping[str, Any],
             "criterion": (
                 "CI-clean favourable on "
                 + ("both" if len(readouts_of(stats)) == 3
-                   else f"all {len(readouts_of(stats)) - 1}")
+                   else f"all {seed_word(len(readouts_of(stats)) - 1)}")
                 + " per-seed estimand (i) readouts and on the estimand (ii) "
                   "seed mean of `arm − mlp` on the `all` slice")}
 
@@ -1512,6 +1811,8 @@ def section_plain(stats: Mapping[str, Any],
                   k_record: Mapping[str, Any] | None,
                   blocked: Mapping[str, str] | None = None) -> list[str]:
     blocked = dict(blocked or {})
+    n_seeds = n_seeds_of(stats)
+    word = seed_word(n_seeds)
     best = _best_observed(stats)
     gain = _sequence_gain(stats, blocked)
     incomplete = sorted(config_id for config_id, block
@@ -1549,25 +1850,29 @@ def section_plain(stats: Mapping[str, Any],
     ]
     if best["config_id"] is None:
         lines += ["**Best observed validation configuration.** Not yet "
-                  "determinable: no configuration has both registered seeds "
-                  "admitted, so there is no observed two-seed mean to "
+                  f"determinable: no configuration has "
+                  f"{every_seed_word(n_seeds)} registered seeds "
+                  f"admitted, so there is no observed {word}-seed mean to "
                   "report.", ""]
     else:
         lines += [
             f"**Best observed validation configuration.** `"
-            f"{best['config_id']}`, with an observed two-seed mean validation "
+            f"{best['config_id']}`, with an observed {word}-seed mean "
+            f"validation "
             f"log loss of {f6(best['mean_ll'])} "
             f"(per seed: {', '.join(f'seed {s} {f6(v)}' for s, v in best['per_seed'].items())}; "
             f"source: {best['source']}). That is an *observed* ranking on the "
-            "same split its own early stopping used, over two seeds. Its "
+            f"same split its own early stopping used, over "
+            f"{seed_count_phrase(n_seeds)}. Its "
             "uncertainty is the paired interval of its registered primary "
-            "contrast in § 4, not this number, and the two-seed spread in "
+            f"contrast in § 4, not this number, and the {word}-seed spread in "
             "§ 5 is an empirical range rather than a confidence interval.",
             "",
         ]
     if gain["evaluable"] and not gain["ci_clean_favourable"]:
         lines += [
-            f"**{NO_SEQUENCE_GAIN_SENTENCE}.** " + NO_SEQUENCE_GAIN_QUALIFIER
+            f"**{NO_SEQUENCE_GAIN_SENTENCE}.** "
+            + no_sequence_gain_qualifier(n_seeds)
             + f" The criterion was {gain['criterion']}, over "
             f"{len(gain['evaluable'])} evaluable arms.",
             "",
@@ -1578,7 +1883,8 @@ def section_plain(stats: Mapping[str, Any],
             "`all` slice under "
             + gain["criterion"] + ": "
             + ", ".join(f"`{a}`" for a in gain["ci_clean_favourable"])
-            + ". That is a screening readout on two seeds, and whether any "
+            + f". That is a screening readout on {seed_count_phrase(n_seeds)}"
+            + ", and whether any "
             "of them clears its registered family is decided in § 4, not "
             "here.",
             "",
@@ -1605,24 +1911,55 @@ def section_plain(stats: Mapping[str, Any],
             "",
         ]
     if incomplete:
-        lines += ["Configurations without both registered seeds, which make "
+        lines += [f"Configurations without {every_seed_word(n_seeds)} "
+                  "registered seeds, which make "
                   "every contrast that needs them `NOT_EVALUABLE`: "
                   + ", ".join(f"`{c}`" for c in incomplete) + ".", ""]
-    lines += [
-        "**Why no arm advances tonight.** Three reasons, all registered "
-        "before the results were read. (1) Two seeds are a directional "
-        "screen: the seed-mean estimand is descriptive, so no interval here "
-        "is a confirmation. (2) Checkpoint selection used the same "
+    # The reasons are assembled, not asserted: the seed-count reason is only a
+    # reason below the registered five-seed minimum, and at five seeds it is
+    # dropped and said to have been met rather than left standing as stale
+    # prose. Checkpoint-selection optimism and the unopened cohort are
+    # independent of the seed count and stand at every count — the cohort one
+    # alone blocks advancement.
+    reasons = []
+    if n_seeds < FIVE_SEED_MINIMUM:
+        reasons.append(
+            f"{seed_count_phrase(n_seeds).capitalize()} are a directional "
+            "screen: the seed-mean estimand is descriptive, so no interval "
+            "here is a confirmation.")
+    reasons += [
+        "Checkpoint selection used the same "
         "validation split the contrasts are computed on, so every number "
-        "carries selection optimism. (3) The one untouched cohort was ruled "
+        "carries selection optimism.",
+        "The one untouched cohort was ruled "
         "**deferred** by the reviewer, so nothing has been confirmed out of "
-        "sample. `advances: []`.",
+        "sample."]
+    lines += [
+        f"**Why no arm advances tonight.** {seed_word(len(reasons)).capitalize()}"
+        " reasons, "
+        + ("both" if len(reasons) == 2 else "all")
+        + " registered "
+        "before the results were read. "
+        + " ".join(f"({index}) {reason}"
+                   for index, reason in enumerate(reasons, start=1))
+        + " `advances: []`.",
         "",
+    ]
+    if n_seeds >= FIVE_SEED_MINIMUM:
+        lines += [
+            f"The registered seed-count condition is met at these "
+            f"{seed_count_phrase(n_seeds)}, so the directional-screen reason "
+            "no longer applies and is not restated. It is not replaced by an "
+            "advancement: the reasons above still stand on their own, and the "
+            "cohort alone is decisive.",
+            "",
+        ]
+    lines += [
         "**Cohort confirmation is pending.** `cohort_status: "
         "DEFERRED_UNOPENED`, `cohort_scored: false`: no cohort feature, "
         "prediction or base-logit read happened. **There is no "
-        "market claim. There is no LANDED verdict** — two-seed evidence is "
-        "provisional and can never be LANDED (invariant 9). **The user's "
+        "market claim. There is no LANDED verdict** — "
+        + provisional_clause(n_seeds) + ". **The user's "
         "verdict is outstanding.**",
         "",
         "**The exact next step, and the complete set of conditions that "
@@ -1665,10 +2002,19 @@ def section_plain(stats: Mapping[str, Any],
         "exposure**, and **never claims a fresh untouched read**.",
         "8. If no candidate qualifies, **the cohort is left unopened**.",
         "",
-        "So the immediate next step is (0) plus (1)–(3): resolve historical "
-        "consumption, freeze the extension and selection procedure, then "
-        "train seeds 29, 42 and 101 across whole families and rerun these "
-        "identical gates"
+        ("So the immediate next step is (0) plus (1)–(3): resolve historical "
+         "consumption, freeze the extension and selection procedure, then "
+         "train seeds 29, 42 and 101 across whole families and rerun these "
+         "identical gates"
+         if n_seeds < FIVE_SEED_MINIMUM else
+         "Conditions (1)–(3) are the seed extension itself, and this render "
+         f"is at {seed_count_phrase(n_seeds)} (seeds "
+         f"{join_list(seeds_of(stats))}) with the registered gates rerun and "
+         "the favourable-direction count reported above, so the seed count is "
+         "no longer what is outstanding. The immediate next step is (0) plus "
+         "(4)–(6): resolve historical consumption, write and verify the final "
+         "family, checkpoint and analysis freeze, and re-verify the cohort's "
+         "provenance — and nothing here opens it")
         + ("" if k_record is None else
            f"; tonight's k selection is `{k_record.get('selection')}` and is "
            "explicitly provisional")
@@ -2096,15 +2442,15 @@ def render(stats_path: Path, config_path: Path, k_path: Path | None,
     lines += section_rule(config, stats)
     lines += section_results(stats, blocked)
     lines += section_estimands(stats)
-    lines += section_ksweep(k_record)
+    lines += section_ksweep(k_record, seeds_of(stats))
     lines += section_mechanism(stats, blocked)
     lines += section_gates(stats, blocked)
-    lines += section_limitations(config)
+    lines += section_limitations(config, stats)
     lines += section_plain(stats, k_record, blocked)
     lines += section_falsification(stats, blocked)
 
     markdown = "\n".join(lines).rstrip() + "\n"
-    assert_coverage(markdown, coverage_manifest(config))
+    assert_coverage(markdown, coverage_manifest(config, stats))
     return markdown
 
 
