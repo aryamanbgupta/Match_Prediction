@@ -1007,7 +1007,7 @@ night 1's provenance block and COMPLETE markers stay valid.
 Launched 2026-09-12 ~08:37 IST (laptop, seeds 29 then 42, from the worktree at
 `92cc3c5`) and ~08:38 (mini, seed 101, same commit). Both pins verify:
 `pin_stage2: OK` on the extension config and on the five-seed merge config.
-Completions and wall times are filled when the queues finish.
+Completions and wall times: see the COMPLETE result block below.
 
 **12.5 verified early, on the seeds that had landed (2026-09-12 ~09:00).** The
 training signature is **identical across every landed seed of every one of the
@@ -1018,3 +1018,134 @@ machines *and* two separate registrations (`seq_stage2_v1.yaml` and
 (seed 7 and 29 `laptop`, seed 13 `mini`). This confirms the extension config's
 training block is byte-identical to night 1's, which is the precondition for
 reading the two nights as one five-seed table rather than assuming it.
+
+### Result (D12) — COMPLETE 2026-09-12
+
+**All training finished: 80 runs, 16 configurations × 5 seeds, 0 failures, 0
+timeouts, 0 memory refusals** across four queues on two machines. Extension 1
+(eight families) and extension 2 (the five window arms, `recency_k30`,
+`aligned_hist_rf`, `lstm`) both completed; the mini's 16 seed-101 runs were
+rsynced home config by config after its writers were confirmed dead.
+`--consolidate --config experiments/configs/seq_stage2_5seed_v1.yaml --seeds
+7,13,29,42,101` verified all 80 and rewrote all 16 summaries at 5/5, with **no
+refusals** — so the cross-registration signature identity held on real data, not
+only in tests. 12.1–12.9 all PASS; 12.5 was verified early and again here.
+
+**Five-seed k sweep** (`eval_out/seq_stage2_5seed/k_selection.json`):
+**SELECTED `same_entity_k30` again.** Means: k=0 1.4393197, k=6 1.4381917,
+k=12 1.4373955, k=30 **1.4368982**, k=unr 1.4365476. `unr` leads by
+**0.0003506**, still inside the registered 0.002 tolerance, so the default is
+kept — the same decision as at two seeds, now on five.
+
+**Five-seed statistics** (`eval_out/seq_stage2_5seed/stats.json`), addendum
+`research/reports/embeddings/SEQ_STAGE2_FIVE_SEED_ADDENDUM.md` (1,509 lines),
+analysis pin `eval_out/seq_stage2_5seed/analysis_pin.json` verifying, snapshot
+`docs/sequence_track/stage2_five_seed_analysis_pin.json`. Night-1 evidence was
+not touched: every output went to its own path, which the tools now require.
+
+#### What five seeds changed
+
+| candidate − reference | two seeds | five seeds | verdict |
+|---|---|---|---|
+| `aligned_hist − full` | −0.00154 [−0.00263, −0.00051] **2/2 CI-clean** | −0.00074 [−0.00174, **+0.00027**] **3/5** | **DID NOT SURVIVE** |
+| `same_entity_unr − aligned_hist_rf` | −0.00051, 1/2 | **+0.00004** [−0.00088, +0.00086] **1/5** | reversed sign, nothing there |
+| `fixed_decay − mlp` | −0.00349 [−0.00576, −0.00136] 2/2 clean | −0.00405 [−0.00559, −0.00263] **5/5 clean** | **strengthened** |
+| `xlstm − mlp` | −0.00468 [−0.00636, −0.00316] 2/2 clean | −0.00400 [−0.00534, −0.00280] **5/5 clean** | held |
+| `residual_mlp − mlp` | −0.00552 [−0.00671, −0.00435] 2/2 clean | −0.00553 [−0.00674, −0.00427] **5/5 clean** | held |
+| `full − mlp` | −0.00042, 1/2 | −0.00078 [−0.00201, +0.00034] 4/5 | still not clean |
+| `fox − fixed_decay` | −0.00005, 1/2 | −0.00011 [−0.00024, +0.00004] 4/5 | still no detected benefit |
+| `same_entity_k30 − recency_k30` | −0.00117, 2/2 | −0.00084 [−0.00177, +0.00020] 4/5 | still unresolved |
+| `residual_t1 − residual_mlp` | −0.00003, 1/2 | −0.00013 [−0.00068, +0.00030] 4/5 | still unresolved |
+| `same_entity_k0 − mlp` | +0.00102, 0/2 | **+0.00121 [+0.00004, +0.00251] 0/5** | now CI-clean **adverse** |
+| `lstm − mlp` | +0.00269, 0/2 | +0.00239 [−0.00158, +0.00875] **0/5** | adverse on every seed |
+
+**The death-over harm is confirmed at five seeds**: `full − mlp` on `death` is
+**+0.00463 [+0.00177, +0.00733], 0 of 5 seeds favourable**. The 2026-08
+ablation reported +0.0053 on 0 of 5 seeds on a different frame. Two independent
+five-seed measurements now agree that the transformer is worse at the death
+overs, and the interval excludes zero adversely.
+
+**Extension qualification** (the registered 4/5 favourable-direction count,
+enforced only at ≥5 seeds): met by `full`, `fixed_decay`, `fox`,
+`same_entity_k30`, `same_entity_k12`, `xlstm`, `residual_mlp`, `residual_t1`;
+not met by `aligned_hist`, `aligned_hist_rf`, `recency_k30`, `same_entity_unr`
+(1/5), `same_entity_k6`, `same_entity_k0` (0/5), `lstm` (0/5). **Only
+`residual_mlp` is `extension qualified: yes`** — screen pass on all five seeds
+*and* the joint estimand. Every other family is `SCREEN_NOT_PASS` on the joint
+estimand; `xlstm` passes on seeds 7 and 101 only.
+
+#### The finding that matters most about method
+
+**`aligned_hist − full` was the one CI-clean mechanism result at two seeds and
+it did not survive.** Its interval now crosses zero and only three of five
+seeds favour it. This is precisely what the plan's five-seed requirement exists
+to catch, and it is the strongest argument in this stage for never reading a
+two-seed CI-clean result as a finding. The two-seed report is not wrong — it
+labelled itself a screen throughout — but the substantive claim it carried is
+now withdrawn.
+
+#### Open item for the results gate
+
+The k-rule text quoted from the config still reads "the best (lowest)
+**two-seed** mean validation log loss". At five seeds the tool computes the
+five-seed mean, so the quoted registered rule is stale. The config body is held
+byte-equal to the two-seed one by test and by Astra's instruction, so this was
+**not** edited; it is raised for the gate to rule on.
+
+### Gate 3 round 1 — `VERDICT: NO SIGN-OFF`, and the closure of its four blockers
+
+Prompt `docs/sequence_track/astra/gate3_prompt.md`, output
+`<scratchpad>/astra/gate3.md`. Astra's **independent verification** first, because
+it is the strongest check this stage has had: it checked **all 80 runs'
+signatures and 320 artefact hashes, reconstructed the validation losses and all
+147 contrast intervals, and checked all 270 Holm member decisions and 90 screen
+statuses**, and reported "the reported headline numbers agree". It confirmed the
+unrestricted mean beats k=30 by **0.0003506332**, below 0.002, so retaining
+k=30 is correct; that the 4/5 rule fails at three favourable directions and
+passes at four with missing counts failing closed; that **`residual_mlp` is
+correctly the only joint-estimand qualified family** and additionally passes
+every individual seed; that **xLSTM is correctly disqualified with a joint death
+U95 of ≈ +0.00203**; and that the analysis pin verifies, its snapshot matches,
+and the two-seed report was unchanged at that point.
+
+| Astra item | closure |
+|---|---|
+| **MUST-FIX 1 — dependency coverage was hard-coded to two seeds**, so the four masked arms held authenticated certificates only for seeds 7 and 13 and **12 recertifications were missing**; requiring five correctly blocked all four | **CLOSED with evidence, not a relaxation.** The orchestrator ran the 12 missing recertifications: `models/embeddings/seq_stage2/dependency/recert/` now holds **20 certificates — 4 masked arms × 5 seeds — and every one passes at max \|Δ\| exactly 0.000e+00 over 2,000 targets at seed 29**. In code, `dependency_required_checkpoint_seeds(stats)` derives the required seeds from the same registration `seeds_of(stats)` reads, the block propagates into the **4/5 qualification table** as well as results, gates, mechanism and falsification, and the pin records `dependency_coverage.required_checkpoint_seeds` so it no longer verifies the old requirement. A test renders a five-seed analysis over two-seed certificates and asserts all four arms block |
+| **MUST-FIX 2 — the withdrawal lived only in D12, and two independence claims were unsupported** | **CLOSED.** A new § 12 renders a two-seed-versus-five-seed comparison for every registered primary (only with `--prior-stats-json`, so the two-seed report is unaffected) and **explicitly withdraws `aligned_hist − full`** with the reading "unresolved, not evidence of no benefit". Sign reversals now read "point estimate reversed; evidence remains unresolved". The death paragraph says the harm is **reproduced in this five-seed validation extension** and states that the extension **is not an independent replication** because seeds 7 and 13 are in both, and that a different frame does not make two analyses independent. The renderer refuses if the prior seed list equals the current one |
+| **MUST-FIX 3 — the quoted k-rule was stale** ("the best (lowest) **two-seed** mean") | **CLOSED** by the same substitution-with-disclosure mechanism already used for `known_limitations[1]`: § 9 quotes the original and states the operative rule applies to the arithmetic mean over all five registered seeds, with tolerance, default, sweep and tie rules unchanged. The config body is **not** edited and remains byte-equal to the two-seed config. It fires only when the render's seed count differs from the registered two |
+| **MUST-FIX 4 — "favourable seeds" actually counted seeds below the +0.002 margin.** Astra's example: xLSTM's death row read 5/5 when only two seeds have negative deltas | **CLOSED.** Both counts are reported and separately labelled, with the threshold exposed; the gate arithmetic and every primary's zero-threshold count are untouched. Astra's row now renders `+0.00200 \| 5/5 \| 2/5`. **This mislabel was also in the committed two-seed report, on 15 gate rows** (`full − mlp@chase` 2/2 below the margin but 1/2 favourable, and fourteen more), which is why that report was re-rendered and re-committed — see below |
+| SHOULD 5 — obsolete seed prose | **CLOSED.** `evidence_status` is seed-derived; the completed five-seed selection now reads "validation-only and remains explicitly provisional, awaiting final disposition; no further seed extension is implied". The five-seed statistics were **re-run** so the artifact no longer carries 90 stale `screening: two seeds` strings; the selection is unchanged (k=30, unrestricted margin 0.0003506) |
+| SHOULD 6 — mark the original D12 scope superseded | the D12 table's eight-configuration scope stands as the historical registration; **the executed scope is all 16 configurations at 5 seeds**, recorded in D12's COMPLETE result. Extension 2 was registered separately and is recorded there |
+
+**The committed two-seed report was re-rendered and re-committed as a disclosed
+correction.** Two causes, both verified not to move a single result:
+
+1. **Twelve more certificates.** § 2 enumerates every certificate the recorded
+   `--dependency-dir` yields, and the 12 recertifications landed after the first
+   commit. More evidence, not a changed result. This drift is present on the
+   unmodified generator too.
+2. **MUST-FIX 4's relabel**, which is in the shared renderer and so reaches the
+   two-seed rendering. It had to: the committed report carried the same
+   overstatement on 15 rows.
+
+**Verified section by section before committing**: every results section is
+**numerically identical** — § 4's Holm tables (1,217 numbers), § 6 the k sweep,
+§ 7 mechanism, § 8 gates (850 numbers), § 10 and § 11 all byte-identical in
+their number sequences. Only § 2 (196 → 220 numbers, the twelve certificates)
+and § 5 (270 → 316, the added labelled column) changed. Report 987 → 1,001
+lines. The stale test that permitted this drift was replaced by
+`test_the_two_seed_report_of_record_is_byte_reproducible`, so from this commit
+the report of record is exactly reproducible again.
+
+Both analysis pins re-written and verifying; both tracked snapshots refreshed.
+Suite: **1799 passed, 1 skipped, 56 deselected**.
+
+**Astra's standing rulings carried forward**: `same_entity_k0 − mlp` is CI-clean
+adverse but its **Holm-adjusted p is 0.0880**, so it is *not* a
+multiplicity-adjusted finding and it does **not** isolate history (k0 retains
+aligned previous-outcome inputs and differs from the MLP in other ways). And on
+the cohort: "`residual_mlp` legitimately passes its registered family — do not
+retrospectively disqualify it numerically. But it is a production-prior control
+without within-innings sequence access, so confirming it would not confirm the
+sequence hypothesis. **My ruling is to keep the sequence cohort unopened.**"
+

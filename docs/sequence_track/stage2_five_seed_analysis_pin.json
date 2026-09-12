@@ -1,7 +1,7 @@
 {
   "pin_version": "seq_stage2_analysis_pin_v1",
   "what_this_is": "the stage 2 ANALYSIS and DECISION manifest (D10.9). It is separate from experiments/configs/seq_stage2_v1.yaml's provenance block, which is immutable training provenance and is not written or verified here.",
-  "written_at_utc": "2026-09-12T06:53:20Z",
+  "written_at_utc": "2026-09-12T06:53:21Z",
   "git_head_short": "f0d96dc",
   "compared_fields": [
     "pin_version",
@@ -41,7 +41,7 @@
       "scripts/sequence_track/stage2_stats.py",
       "stats",
       "--config",
-      "experiments/configs/seq_stage2_v1.yaml",
+      "experiments/configs/seq_stage2_5seed_v1.yaml",
       "--runs-root",
       "models/embeddings/seq_stage2/runs",
       "--frame-dir",
@@ -51,13 +51,13 @@
       "--base-logits",
       "models/embeddings/seq_stage2/base_logits/validation.npz",
       "--out",
-      "eval_out/seq_stage2/stats.json",
+      "eval_out/seq_stage2_5seed/stats.json",
       "--reps",
       "2000",
       "--rng-seed",
       "29",
       "--seeds",
-      "7,13"
+      "7,13,29,42,101"
     ],
     "ksweep": [
       "uv",
@@ -67,13 +67,13 @@
       "scripts/sequence_track/stage2_stats.py",
       "ksweep",
       "--config",
-      "experiments/configs/seq_stage2_v1.yaml",
+      "experiments/configs/seq_stage2_5seed_v1.yaml",
       "--runs-root",
       "models/embeddings/seq_stage2/runs",
       "--out",
-      "eval_out/seq_stage2/k_selection.json",
+      "eval_out/seq_stage2_5seed/k_selection.json",
       "--seeds",
-      "7,13"
+      "7,13,29,42,101"
     ],
     "renderer": [
       "uv",
@@ -82,37 +82,37 @@
       "python",
       "scripts/sequence_track/render_stage2_report.py",
       "--stats-json",
-      "eval_out/seq_stage2/stats.json",
+      "eval_out/seq_stage2_5seed/stats.json",
       "--k-selection",
-      "eval_out/seq_stage2/k_selection.json",
+      "eval_out/seq_stage2_5seed/k_selection.json",
       "--config",
-      "experiments/configs/seq_stage2_v1.yaml",
+      "experiments/configs/seq_stage2_5seed_v1.yaml",
       "--dependency-dir",
       "models/embeddings/seq_stage2/dependency",
       "--out",
-      "research/reports/embeddings/SEQ_STAGE2_REPORT.md"
+      "research/reports/embeddings/SEQ_STAGE2_FIVE_SEED_ADDENDUM.md"
     ]
   },
   "evidence": {
     "statistics": {
-      "path": "eval_out/seq_stage2/stats.json",
+      "path": "eval_out/seq_stage2_5seed/stats.json",
       "present": true,
-      "sha256": "5d0539c841d4ba364bfd525f11a7e2f2642c9c2ebe11b0fb28c21259364bfb9f"
+      "sha256": "2e12a9f958ae972a023bb3a67568516c342fa7c0ba6852b8dd7f5cce3ee8b748"
     },
     "k_selection": {
-      "path": "eval_out/seq_stage2/k_selection.json",
+      "path": "eval_out/seq_stage2_5seed/k_selection.json",
       "present": true,
-      "sha256": "423b121f0a9e950b8596d3d1d468a96f3effd278094e59d79f7b0f9d33efc1cd"
+      "sha256": "3b1792958bbe551fe179a2fe99b73060b454f2b4824925dd01a3da93f0f6086f"
     },
     "report": {
-      "path": "research/reports/embeddings/SEQ_STAGE2_REPORT.md",
+      "path": "research/reports/embeddings/SEQ_STAGE2_FIVE_SEED_ADDENDUM.md",
       "present": true,
-      "sha256": "a3ebcd391b0a95051899d9b97f9b6252da5bbd944c82b5a6a73d6b3e42fd1000"
+      "sha256": "db30048f27e355cd1912135716055cd80611cc2cee7f0ebf262ad0fb3a070037"
     },
     "config": {
-      "path": "experiments/configs/seq_stage2_v1.yaml",
+      "path": "experiments/configs/seq_stage2_5seed_v1.yaml",
       "present": true,
-      "sha256": "ff3341a4b0574a45b22986016feea96bc65357a3d371a9015163f943e47d11f0"
+      "sha256": "bd352e032380c6bd0fa7a54b8fe9d37e4d6d73366d42d6bf2ee7d0ff9946f48c"
     },
     "dependency_dir": "models/embeddings/seq_stage2/dependency",
     "dependency_certificates": [
@@ -224,130 +224,178 @@
     "summary_yaml_at_statistics": {
       "aligned_hist": {
         "summary_path": "models/embeddings/seq_stage2/runs/aligned_hist/summary.yaml",
-        "sha256": "feb93480496551345505775a604156834cfb66b54a66f94b48b75e53a026a6f8",
+        "sha256": "5689f9b918d11f367113ed0ad2aea1c8b4105f390af83924613e3c23baff7029",
         "seeds_recorded": [
           7,
-          13
+          13,
+          29,
+          42,
+          101
         ]
       },
       "aligned_hist_rf": {
         "summary_path": "models/embeddings/seq_stage2/runs/aligned_hist_rf/summary.yaml",
-        "sha256": "1f4413b892fb16c82335c65aeabeabead1b2f678c374f11df9b668587e006a06",
+        "sha256": "e6b7796bc6e1ac63d0870db55025be92a128f4590c1d01a47a10db9d1639369d",
         "seeds_recorded": [
           7,
-          13
+          13,
+          29,
+          42,
+          101
         ]
       },
       "fixed_decay": {
         "summary_path": "models/embeddings/seq_stage2/runs/fixed_decay/summary.yaml",
-        "sha256": "e02c95274f0a1c3ebdd09238600e663db6eb699c4ade76b6aed704dbdf96499e",
+        "sha256": "80e601804e55073a7b7330f9b894001d6ccb2e0cef4b6744c6d9860d27e77fb1",
         "seeds_recorded": [
           7,
-          13
+          13,
+          29,
+          42,
+          101
         ]
       },
       "fox": {
         "summary_path": "models/embeddings/seq_stage2/runs/fox/summary.yaml",
-        "sha256": "a474ed14f99cd232a1a609f730a411aa5ee41e365c3d36ce86ad142f8aa9719d",
+        "sha256": "42eb9beeb5c80108359e7ff4e7daeb7522c2bde0ec697bb255240edd5d37d56d",
         "seeds_recorded": [
           7,
-          13
+          13,
+          29,
+          42,
+          101
         ]
       },
       "full": {
         "summary_path": "models/embeddings/seq_stage2/runs/full/summary.yaml",
-        "sha256": "1a64ffd84a357bc6427b97766aaf1d5a4d04e88385addd9a800b2592a28297c8",
+        "sha256": "649421b07f28c76aaecb1d2c129b38d47a597049f9d8bb421bf3a846fa66062c",
         "seeds_recorded": [
           7,
-          13
+          13,
+          29,
+          42,
+          101
         ]
       },
       "lstm": {
         "summary_path": "models/embeddings/seq_stage2/runs/lstm/summary.yaml",
-        "sha256": "cdd7ce9cc477d820efb7e58e6e9e5141b59437e9fdb6cb9ed8730ed4e42c05f3",
+        "sha256": "e1151bfc029c383db7d90439bbeb7e243e805133066fe4c0d58789f7de7b980a",
         "seeds_recorded": [
           7,
-          13
+          13,
+          29,
+          42,
+          101
         ]
       },
       "mlp": {
         "summary_path": "models/embeddings/seq_stage2/runs/mlp/summary.yaml",
-        "sha256": "d26ff6bf776bdf7d9bce38c12be4400697f97733d15c118f85522482b98a6a3d",
+        "sha256": "e2b2dfa4330bae9143a875e8b22e8b01739367f0eea38e3de6b6db0458126b36",
         "seeds_recorded": [
           7,
-          13
+          13,
+          29,
+          42,
+          101
         ]
       },
       "recency_k30": {
         "summary_path": "models/embeddings/seq_stage2/runs/recency_k30/summary.yaml",
-        "sha256": "30c8bad07a3728f3644780b5530e1ed9aa69cfecb3f121f2fb51762674b3b25f",
+        "sha256": "638023752d58dc00deb32b561d8f95055e19ed1437db03ae1b6d755acc781aa7",
         "seeds_recorded": [
           7,
-          13
+          13,
+          29,
+          42,
+          101
         ]
       },
       "residual_mlp": {
         "summary_path": "models/embeddings/seq_stage2/runs/residual_mlp/summary.yaml",
-        "sha256": "ffae79902ca32c6351fd504370765a2dd4a76d6862c2a423615e72aff4331fa6",
+        "sha256": "f7a8d4f89a33df512044c2386969055d2fb7b00c64776f864aa64c258cf65f6d",
         "seeds_recorded": [
           7,
-          13
+          13,
+          29,
+          42,
+          101
         ]
       },
       "residual_t1": {
         "summary_path": "models/embeddings/seq_stage2/runs/residual_t1/summary.yaml",
-        "sha256": "d7d8c9fb38f505f1e14d68c4d04831ce132383aeb1ef8d1f588bfc0561fc8e29",
+        "sha256": "4089d663a75a089fd839660389b976e78221a48cc651fcec8f162ca25fc56915",
         "seeds_recorded": [
           7,
-          13
+          13,
+          29,
+          42,
+          101
         ]
       },
       "same_entity_k0": {
         "summary_path": "models/embeddings/seq_stage2/runs/same_entity_k0/summary.yaml",
-        "sha256": "509c34567e74e8143a7c39219d9016960287567894f515a68578f33573a44df9",
+        "sha256": "32c51ea4fd46d512ca33d9aaf099d432683a8a57e68e55fdb5a429d307e05c43",
         "seeds_recorded": [
           7,
-          13
+          13,
+          29,
+          42,
+          101
         ]
       },
       "same_entity_k12": {
         "summary_path": "models/embeddings/seq_stage2/runs/same_entity_k12/summary.yaml",
-        "sha256": "863b760479cd69220506c4da8fdcda2abf46df95bbdf1b581ddde64299b8850a",
+        "sha256": "3171393e3cb048f27a6ce50fdae444ca63cc3c5e4dedfd748c059f4cbde03e51",
         "seeds_recorded": [
           7,
-          13
+          13,
+          29,
+          42,
+          101
         ]
       },
       "same_entity_k30": {
         "summary_path": "models/embeddings/seq_stage2/runs/same_entity_k30/summary.yaml",
-        "sha256": "44f0c30042cf65a0cd0ff7a7cc26694452edda9f1fe3785ac5c10ac130ed3aea",
+        "sha256": "6e42ba93de4c45f06f393cc7afebe44631f76a1d0bb7b3e28ed7fc6b46a5b9f5",
         "seeds_recorded": [
           7,
-          13
+          13,
+          29,
+          42,
+          101
         ]
       },
       "same_entity_k6": {
         "summary_path": "models/embeddings/seq_stage2/runs/same_entity_k6/summary.yaml",
-        "sha256": "1beafa9fccf86f9144eb81828b4e99d0fbce4a39aa6b59482aaa37dec89589eb",
+        "sha256": "849029122090aafc8bd2e911bc77ab2f5e047162e3013332bd3fd4d10d4559d7",
         "seeds_recorded": [
           7,
-          13
+          13,
+          29,
+          42,
+          101
         ]
       },
       "same_entity_unr": {
         "summary_path": "models/embeddings/seq_stage2/runs/same_entity_unr/summary.yaml",
-        "sha256": "dfb02fc0bc55be94d6d2f0b41df2f95ef188d3cd58bc243002c6eaf252440182",
+        "sha256": "535a41e2b8c16511039638a006cb1c42a239e6372b9e362210e162b04b2df501",
         "seeds_recorded": [
           7,
-          13
+          13,
+          29,
+          42,
+          101
         ]
       },
       "xlstm": {
         "summary_path": "models/embeddings/seq_stage2/runs/xlstm/summary.yaml",
-        "sha256": "fb73c135784fff74c1a705f9add01f1aefe84354d881597731b0048b6e078ab4",
+        "sha256": "0f97d16ce4a2de527b133d60b806794bf8846a25122d86e01c9bc3225c5b8adf",
         "seeds_recorded": [
           7,
-          13
+          13,
+          29,
+          42,
+          101
         ]
       }
     },
@@ -362,88 +410,91 @@
     "aligned_hist": {
       "summary_path": "models/embeddings/seq_stage2/runs/aligned_hist/summary.yaml",
       "sha256_now": "5689f9b918d11f367113ed0ad2aea1c8b4105f390af83924613e3c23baff7029",
-      "matches_statistics": false
+      "matches_statistics": true
     },
     "aligned_hist_rf": {
       "summary_path": "models/embeddings/seq_stage2/runs/aligned_hist_rf/summary.yaml",
       "sha256_now": "e6b7796bc6e1ac63d0870db55025be92a128f4590c1d01a47a10db9d1639369d",
-      "matches_statistics": false
+      "matches_statistics": true
     },
     "fixed_decay": {
       "summary_path": "models/embeddings/seq_stage2/runs/fixed_decay/summary.yaml",
       "sha256_now": "80e601804e55073a7b7330f9b894001d6ccb2e0cef4b6744c6d9860d27e77fb1",
-      "matches_statistics": false
+      "matches_statistics": true
     },
     "fox": {
       "summary_path": "models/embeddings/seq_stage2/runs/fox/summary.yaml",
       "sha256_now": "42eb9beeb5c80108359e7ff4e7daeb7522c2bde0ec697bb255240edd5d37d56d",
-      "matches_statistics": false
+      "matches_statistics": true
     },
     "full": {
       "summary_path": "models/embeddings/seq_stage2/runs/full/summary.yaml",
       "sha256_now": "649421b07f28c76aaecb1d2c129b38d47a597049f9d8bb421bf3a846fa66062c",
-      "matches_statistics": false
+      "matches_statistics": true
     },
     "lstm": {
       "summary_path": "models/embeddings/seq_stage2/runs/lstm/summary.yaml",
       "sha256_now": "e1151bfc029c383db7d90439bbeb7e243e805133066fe4c0d58789f7de7b980a",
-      "matches_statistics": false
+      "matches_statistics": true
     },
     "mlp": {
       "summary_path": "models/embeddings/seq_stage2/runs/mlp/summary.yaml",
       "sha256_now": "e2b2dfa4330bae9143a875e8b22e8b01739367f0eea38e3de6b6db0458126b36",
-      "matches_statistics": false
+      "matches_statistics": true
     },
     "recency_k30": {
       "summary_path": "models/embeddings/seq_stage2/runs/recency_k30/summary.yaml",
       "sha256_now": "638023752d58dc00deb32b561d8f95055e19ed1437db03ae1b6d755acc781aa7",
-      "matches_statistics": false
+      "matches_statistics": true
     },
     "residual_mlp": {
       "summary_path": "models/embeddings/seq_stage2/runs/residual_mlp/summary.yaml",
       "sha256_now": "f7a8d4f89a33df512044c2386969055d2fb7b00c64776f864aa64c258cf65f6d",
-      "matches_statistics": false
+      "matches_statistics": true
     },
     "residual_t1": {
       "summary_path": "models/embeddings/seq_stage2/runs/residual_t1/summary.yaml",
       "sha256_now": "4089d663a75a089fd839660389b976e78221a48cc651fcec8f162ca25fc56915",
-      "matches_statistics": false
+      "matches_statistics": true
     },
     "same_entity_k0": {
       "summary_path": "models/embeddings/seq_stage2/runs/same_entity_k0/summary.yaml",
       "sha256_now": "32c51ea4fd46d512ca33d9aaf099d432683a8a57e68e55fdb5a429d307e05c43",
-      "matches_statistics": false
+      "matches_statistics": true
     },
     "same_entity_k12": {
       "summary_path": "models/embeddings/seq_stage2/runs/same_entity_k12/summary.yaml",
       "sha256_now": "3171393e3cb048f27a6ce50fdae444ca63cc3c5e4dedfd748c059f4cbde03e51",
-      "matches_statistics": false
+      "matches_statistics": true
     },
     "same_entity_k30": {
       "summary_path": "models/embeddings/seq_stage2/runs/same_entity_k30/summary.yaml",
       "sha256_now": "6e42ba93de4c45f06f393cc7afebe44631f76a1d0bb7b3e28ed7fc6b46a5b9f5",
-      "matches_statistics": false
+      "matches_statistics": true
     },
     "same_entity_k6": {
       "summary_path": "models/embeddings/seq_stage2/runs/same_entity_k6/summary.yaml",
       "sha256_now": "849029122090aafc8bd2e911bc77ab2f5e047162e3013332bd3fd4d10d4559d7",
-      "matches_statistics": false
+      "matches_statistics": true
     },
     "same_entity_unr": {
       "summary_path": "models/embeddings/seq_stage2/runs/same_entity_unr/summary.yaml",
       "sha256_now": "535a41e2b8c16511039638a006cb1c42a239e6372b9e362210e162b04b2df501",
-      "matches_statistics": false
+      "matches_statistics": true
     },
     "xlstm": {
       "summary_path": "models/embeddings/seq_stage2/runs/xlstm/summary.yaml",
       "sha256_now": "0f97d16ce4a2de527b133d60b806794bf8846a25122d86e01c9bc3225c5b8adf",
-      "matches_statistics": false
+      "matches_statistics": true
     }
   },
   "dependency_coverage": {
     "required_checkpoint_seeds": [
       7,
-      13
+      13,
+      29,
+      42,
+      101
     ],
     "trained_checkpoint_coverage": [
       "recency_k30",
@@ -461,7 +512,7 @@
       "selection": "SELECTED",
       "selected_k": "30",
       "selected_config_id": "same_entity_k30",
-      "rule": "choose the k with the lowest two-seed arithmetic mean validation log loss, but only when mean_LL(30) - mean_LL(best) > tolerance; otherwise keep 30. Equality at the tolerance keeps 30. Any k may win, unr included.",
+      "rule": "choose the k with the lowest five-seed arithmetic mean validation log loss, but only when mean_LL(30) - mean_LL(best) > tolerance; otherwise keep 30. Equality at the tolerance keeps 30. Any k may win, unr included.",
       "tolerance_ll": 0.002,
       "registered_sweep": [
         "0",
@@ -471,60 +522,75 @@
         "unr"
       ],
       "means": {
-        "0": 1.439104943847542,
-        "6": 1.438120916808286,
-        "12": 1.4371491048036178,
-        "30": 1.436635389115043,
-        "unr": 1.4362081992558764
+        "0": 1.4393196652520286,
+        "6": 1.4381917461310263,
+        "12": 1.4373955298044547,
+        "30": 1.4368982104103403,
+        "unr": 1.4365475772224738
       },
       "best_mean_k": "unr",
-      "margin_vs_k30": 0.0004271898591665657,
+      "margin_vs_k30": 0.0003506331878664337,
       "provisional": true,
-      "selection_record_sha256": "78581e69a635a30288f5d83326b64fc2354fe226875445d7b71dec9e6c37591f",
+      "selection_record_sha256": "01044d9f4170248c0b8a6e36329139d2869938ba570d1d8853654e4169cd47d7",
       "rows": [
         {
           "k": "0",
           "config_id": "same_entity_k0",
-          "mean_ll": 1.439104943847542,
+          "mean_ll": 1.4393196652520286,
           "per_seed": {
             "7": 1.4393325357699134,
-            "13": 1.4388773519251707
+            "13": 1.4388773519251707,
+            "29": 1.4387253772974382,
+            "42": 1.4402837535109916,
+            "101": 1.43937930775663
           }
         },
         {
           "k": "6",
           "config_id": "same_entity_k6",
-          "mean_ll": 1.438120916808286,
+          "mean_ll": 1.4381917461310263,
           "per_seed": {
             "7": 1.4379940134012863,
-            "13": 1.4382478202152857
+            "13": 1.4382478202152857,
+            "29": 1.4380448811489683,
+            "42": 1.4389348742152723,
+            "101": 1.437737141674319
           }
         },
         {
           "k": "12",
           "config_id": "same_entity_k12",
-          "mean_ll": 1.4371491048036178,
+          "mean_ll": 1.4373955298044547,
           "per_seed": {
             "7": 1.4373027603447828,
-            "13": 1.4369954492624528
+            "13": 1.4369954492624528,
+            "29": 1.4373819800109056,
+            "42": 1.438132165229009,
+            "101": 1.4371652941751243
           }
         },
         {
           "k": "30",
           "config_id": "same_entity_k30",
-          "mean_ll": 1.436635389115043,
+          "mean_ll": 1.4368982104103403,
           "per_seed": {
             "7": 1.4368647387756528,
-            "13": 1.4364060394544331
+            "13": 1.4364060394544331,
+            "29": 1.436806895530326,
+            "42": 1.4376767759377376,
+            "101": 1.4367366023535522
           }
         },
         {
           "k": "unr",
           "config_id": "same_entity_unr",
-          "mean_ll": 1.4362081992558764,
+          "mean_ll": 1.4365475772224738,
           "per_seed": {
             "7": 1.4361948795949677,
-            "13": 1.4362215189167853
+            "13": 1.4362215189167853,
+            "29": 1.436937605955983,
+            "42": 1.4366259413250686,
+            "101": 1.4367579403195645
           }
         }
       ]
@@ -983,7 +1049,10 @@
     ],
     "seeds": [
       7,
-      13
+      13,
+      29,
+      42,
+      101
     ],
     "reps": 2000,
     "rng_seed": 29

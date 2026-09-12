@@ -2509,3 +2509,101 @@ def test_a_wrong_key_construction_refuses(tmp_path, frame_dir):
         root / "full" / "seed_7", "full", 7)}}
     with pytest.raises(st.RefusalError, match="key_construction"):
         st.assert_comparable(admissions, _entries(), config, pin)
+
+
+# ---------------------------------------------------------------------------
+# Astra gate 2 round 3 — MUST-FIX 4 (two direction counts, not one) and
+# SHOULD 5 (no obsolete seed-status prose).
+# ---------------------------------------------------------------------------
+
+def _five_seed_statistics(tmp_path, frame_dir, block_source):
+    config = _config_payload(frame_dir=frame_dir, same_entity=True)
+    config["training"] = dict(config.get("training") or {})
+    config["training"]["seeds"] = list(FIVE_SEEDS)
+    config_path = tmp_path / "config_five.yaml"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False))
+    frame = pd.read_parquet(frame_dir / "cricket_data_i7_validation.parquet")
+    runs = tmp_path / "runs"
+    for config_id, bias in (("mlp", 0.0), ("full", 0.9),
+                            ("fixed_decay", 0.5), ("fox", 0.7)):
+        for seed in FIVE_SEEDS:
+            _write_run(runs, config_id, seed, frame, bias=bias)
+        _write_summary(runs, config_id,
+                       {seed: 1.5 - bias / 10 + seed / 100000
+                        for seed in FIVE_SEEDS})
+    for k, config_id in K_IDS.items():
+        for seed in FIVE_SEEDS:
+            _write_run(runs, config_id, seed, frame, bias=0.4,
+                       arm="same_entity", k=(k if k == "unr" else int(k)))
+        _write_summary(runs, config_id,
+                       {seed: 1.5 + seed / 100000 for seed in FIVE_SEEDS})
+    stats = st.compute_statistics(
+        config_path, runs, frame_dir, block_source,
+        tmp_path / "no_base_logits.npz", reps=50, seed=29, seeds=FIVE_SEEDS,
+        expect=dict(EXPECT), expected_families=8)
+    return config, runs, stats
+
+
+def test_both_direction_counts_are_recorded_with_their_threshold(
+        tmp_path, frame_dir, block_source):
+    """MUST-FIX 4: the registered count keeps its key and its arithmetic, and
+    the strictly favourable count is published beside it."""
+    _, _, stats = _five_seed_statistics(tmp_path, frame_dir, block_source)
+    gates, primaries = 0, 0
+    for record in stats["contrasts"].values():
+        if not record.get("available") or not str(
+                record.get("role", "")).startswith("family_"):
+            continue
+        points = list(record["per_seed_points"].values())
+        threshold = record["direction_count_threshold"]
+        assert threshold == record["threshold"]
+        assert (record["favourable_direction_count"]
+                == record["seeds_below_registered_threshold_count"]
+                == sum(1 for value in points if value < threshold))
+        assert record["seeds_below_zero_count"] == sum(
+            1 for value in points if value < 0.0)
+        assert "may still have an ADVERSE" in record["direction_count_note"]
+        if record["role"] == "family_primary":
+            primaries += 1
+            assert threshold == 0.0
+            assert (record["seeds_below_zero_count"]
+                    == record["favourable_direction_count"])
+        else:
+            gates += 1
+            assert threshold == st.MARGIN_LL
+            assert (record["seeds_below_zero_count"]
+                    <= record["favourable_direction_count"])
+    assert primaries and gates
+
+
+def test_the_family_evidence_status_names_the_actual_seed_count(
+        tmp_path, frame_dir, block_source):
+    """SHOULD 5: the family JSON said "screening: two seeds" at five seeds."""
+    _, _, stats = _five_seed_statistics(tmp_path, frame_dir, block_source)
+    for family in stats["families"]:
+        for screen in family["screen"].values():
+            assert screen["evidence_status"] == (
+                "screening: five seeds, validation only, checkpoint selected "
+                "on the same split")
+    family, tables, contrasts = _screen_inputs(2, 2)
+    screen = st.family_screen(family, tables, contrasts, st.JOINT_READOUT)
+    assert screen["evidence_status"] == (
+        "screening: two seeds, validation only, checkpoint selected on the "
+        "same split")
+
+
+def test_the_completed_five_seed_k_selection_awaits_disposition_not_another_extension(
+        tmp_path, frame_dir, block_source):
+    """SHOULD 5: the five-seed selection must not imply a further extension."""
+    config, runs, _ = _five_seed_statistics(tmp_path, frame_dir, block_source)
+    five = st.k_sweep(runs, config, seeds=FIVE_SEEDS)
+    assert five["provisional"] is True
+    assert "whole-family seed extension" not in five["provisional_note"]
+    assert "awaiting final disposition" in five["provisional_note"]
+    assert "validation-only" in five["provisional_note"]
+    # Below the registered minimum the outstanding condition really is the
+    # extension, and that wording is unchanged.
+    two = st.k_sweep(runs, config, seeds=SEEDS)
+    assert two["provisional_note"] == (
+        "the two-seed selection remains explicitly provisional pending any "
+        "registered whole-family seed extension")

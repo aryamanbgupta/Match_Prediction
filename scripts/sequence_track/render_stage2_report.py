@@ -305,26 +305,64 @@ DEPENDENCY_CONTROLS: dict[tuple[str, str], dict[str, str]] = {
 # any other setting is not the registered test and does not count as coverage.
 DEPENDENCY_REGISTERED_SETTINGS: dict[str, Any] = {
     "n_targets": 2000, "seed": 29, "split": "validation"}
-# D10.12 requires the recertification at BOTH registered training seeds.
+# D10.12 requires the recertification at every registered training seed of the
+# analysis being rendered. This constant is only the historical two-seed
+# default, kept so a caller that passes no seeds reproduces the two-seed report
+# of record; the required set is DERIVED from the analysis registration by
+# `dependency_required_checkpoint_seeds(stats)`.
+#
+# Astra gate 2 round 3 MUST-FIX 1: it was a hard-coded `(7, 13)`, so a
+# five-seed render demanded two seeds, read "coverage complete" off the two
+# night-1 certificates, and let all four masked configurations carry five-seed
+# interpretations on two-seed ownership evidence. The requirement now moves
+# with the registration: a two-seed render requires two, a five-seed render
+# requires five, and the twelve missing recertifications block until they land.
 DEPENDENCY_REQUIRED_CHECKPOINT_SEEDS: tuple[int, ...] = (7, 13)
+
+
+def dependency_required_checkpoint_seeds(stats: Mapping[str, Any] | None = None
+                                         ) -> tuple[int, ...]:
+    """The training seeds D10.12 requires a certificate at, from `stats`.
+
+    Derived from the same source `seeds_of` uses — the statistics contract's
+    own registered seed list — so the dependency requirement can never disagree
+    with the seed count the rest of the report describes itself by. `None`
+    keeps the historical two-seed default.
+    """
+    if stats is None:
+        return tuple(DEPENDENCY_REQUIRED_CHECKPOINT_SEEDS)
+    return tuple(seeds_of(stats))
+
 
 DEPENDENCY_HEADING_PENDING = (
     "### Ownership dependency certificates (D7; D10.12 recertification "
     "**pending**)")
-DEPENDENCY_HEADING_COMPLETE = (
-    "### Ownership dependency certificates (D7; D10.12 recertification "
-    "**complete on trained checkpoints at both registered seeds, with the "
-    "registered positive controls matched**)")
 DEPENDENCY_BLOCKED_STATUS = "NOT_EVALUABLE"
+
+
+def dependency_heading_complete(n_seeds: int) -> str:
+    """The complete-coverage heading, naming the seed count it was verified at."""
+    return ("### Ownership dependency certificates (D7; D10.12 recertification "
+            f"**complete on trained checkpoints at {every_seed_word(n_seeds)} "
+            "registered seeds, with the registered positive controls "
+            "matched**)")
+
+
+# The two-seed heading of record, unchanged: `every_seed_word(2)` is "both".
+DEPENDENCY_HEADING_COMPLETE = dependency_heading_complete(
+    len(DEPENDENCY_REQUIRED_CHECKPOINT_SEEDS))
 
 
 def dependency_heading(certificates: Mapping[str, Any]) -> str:
     """SHOULD 8: the heading is derived from verified coverage, never asserted.
 
     The report may not say "pending" while also saying coverage is complete,
-    nor the reverse.
+    nor the reverse. The complete heading names the number of registered seeds
+    the coverage was actually verified at, read from the certificate block's own
+    recorded requirement.
     """
-    return (DEPENDENCY_HEADING_COMPLETE
+    required = certificates.get("required_checkpoint_seeds") or ()
+    return (dependency_heading_complete(len(required))
             if certificates.get("trained_checkpoint_coverage_complete")
             else DEPENDENCY_HEADING_PENDING)
 
@@ -491,10 +529,60 @@ CONFIG_TEXT_CORRECTIONS: tuple[dict[str, str], ...] = (
 )
 
 
-def correct_config_text(text: str) -> tuple[str, list[dict[str, str]]]:
+#
+# Astra gate 2 round 3 MUST-FIX 3 adds one SEED-DERIVED correction. The
+# registered k-selection rule quoted in § 3 says "the best (lowest) *two-seed*
+# mean validation log loss". The consolidation config's body is held
+# byte-equal to the two-seed one by test and by Astra's instruction, so it is
+# NOT edited; at five seeds the tool computes the five-seed arithmetic mean, so
+# the quoted operative clause is stale and is corrected here through exactly
+# the mechanism `known_limitations[1]` uses: the clause is replaced, the
+# original wording is quoted in the § 9 disclosure, and the reason is given.
+# Tolerance, the keep-30 default, the registered sweep and the tie rule are
+# untouched. At two seeds the quoted rule and the computed rule agree, so
+# nothing fires and the two-seed report of record does not move.
+K_RULE_OLD = "the best (lowest) two-seed mean validation log loss"
+
+
+def k_rule_correction(stats: Mapping[str, Any] | None) -> dict[str, str] | None:
+    """The disclosed correction to the quoted k rule, when the count differs."""
+    if stats is None:
+        return None
+    n_seeds = n_seeds_of(stats)
+    if n_seeds == len(REGISTERED_SEEDS):
+        return None
+    return {
+        "source": "statistics.k_selection.rule",
+        "old": K_RULE_OLD,
+        "new": ("the best (lowest) arithmetic mean validation log loss over "
+                f"{every_seed_word(n_seeds)} registered seeds "
+                f"({join_list(seeds_of(stats))})"),
+        "reason": ("Astra gate 2 round 3 MUST-FIX 3 and the D12 open item for "
+                   "the results gate: this registration is analysed at "
+                   f"{seed_count_phrase(n_seeds)}, and the tool applies the "
+                   "rule to the arithmetic mean over "
+                   f"{every_seed_word(n_seeds)} of them, so the registered "
+                   'wording "two-seed" is stale as an operative statement. '
+                   "The config body is held byte-equal to the two-seed one by "
+                   "test and by instruction and is not edited; the tolerance "
+                   "(0.002), the keep-30 default, the registered sweep and "
+                   "the tie rule are unchanged, and only the seed count the "
+                   "mean is taken over is corrected")}
+
+
+def config_text_corrections(stats: Mapping[str, Any] | None = None
+                            ) -> tuple[dict[str, str], ...]:
+    """The registered corrections, including the seed-derived k-rule one."""
+    correction = k_rule_correction(stats)
+    return (CONFIG_TEXT_CORRECTIONS
+            + ((correction,) if correction else ()))
+
+
+def correct_config_text(text: str, stats: Mapping[str, Any] | None = None
+                        ) -> tuple[str, list[dict[str, str]]]:
     """Apply the registered § 9 prose corrections to one config-sourced entry."""
     applied: list[dict[str, str]] = []
-    for correction in CONFIG_TEXT_CORRECTIONS:
+    for correction in config_text_corrections(stats):
         if correction["old"] in text:
             text = text.replace(correction["old"], correction["new"])
             applied.append(correction)
@@ -593,12 +681,12 @@ def coverage_manifest(config: Mapping[str, Any],
     for entry in config.get("deviations") or []:
         key = str(entry.get("id"))
         must = [f"`{key}`", correct_config_text(
-            normalise(str(entry.get("statement") or "")))[0]]
+            normalise(str(entry.get("statement") or "")), stats)[0]]
         if entry.get("reason"):
             must.append(correct_config_text(
-                normalise(str(entry.get("reason"))))[0])
+                normalise(str(entry.get("reason"))), stats)[0])
         for line in entry.get("simplifications") or []:
-            must.append(correct_config_text(normalise(str(line)))[0])
+            must.append(correct_config_text(normalise(str(line)), stats)[0])
         manifest.append({"key": f"deviation:{key}", "must_contain": must})
     for entry in config.get("known_asymmetries") or []:
         key = str(entry.get("id"))
@@ -606,12 +694,14 @@ def coverage_manifest(config: Mapping[str, Any],
                          "must_contain": [
                              f"`{key}`",
                              correct_config_text(
-                                 normalise(str(entry.get("text") or "")))[0]]})
+                                 normalise(str(entry.get("text") or "")),
+                                 stats)[0]]})
     for index, entry in enumerate(config.get("known_limitations") or []):
         manifest.append({"key": f"limitation:{index}",
                          "must_contain": [
                              f"`known_limitations[{index}]`",
-                             correct_config_text(normalise(str(entry)))[0]]})
+                             correct_config_text(normalise(str(entry)),
+                                                 stats)[0]]})
     for key, text in d10_13_required(stats):
         manifest.append({"key": f"d10.13:{key}",
                          "must_contain": [f"`{key}`", normalise(text)]})
@@ -721,7 +811,8 @@ def section_arms(config: Mapping[str, Any], stats: Mapping[str, Any],
                  dependency: Sequence[Mapping[str, Any]],
                  certificates: Mapping[str, Any] | None = None) -> list[str]:
     if certificates is None:
-        certificates = dependency_certificates(dependency)
+        certificates = dependency_certificates(
+            dependency, dependency_required_checkpoint_seeds(stats))
     training = config.get("training") or {}
     runs = stats.get("runs") or {}
     pin = stats.get("pin") or {}
@@ -938,7 +1029,8 @@ def section_arms(config: Mapping[str, Any], stats: Mapping[str, Any],
         "",
         "Trained-checkpoint coverage is verified, not asserted: it requires, "
         "for each of the four masked configurations, a passing certificate at "
-        "**both** registered training seeds "
+        f"**{every_seed_word(len(certificates['required_checkpoint_seeds']))}"
+        "** registered training seeds "
         + ", ".join(str(s) for s in certificates["required_checkpoint_seeds"])
         + ", each certificate's recorded checkpoint md5 recomputed from "
         "`model.pt` on disk and matching, the registered perturbation "
@@ -1064,7 +1156,10 @@ def section_rule(config: Mapping[str, Any],
         "averaging of CI endpoints.",
         f"* **k selection.** tolerance {k_rule.get('tolerance_ll')} over the "
         f"registered sweep {k_rule.get('registered_sweep')}: "
-        f"{normalise(str(k_rule.get('rule') or ''))}",
+        # MUST-FIX 3: the operative clause is corrected here and the original
+        # wording is quoted in § 9's disclosure block.
+        + correct_config_text(normalise(str(k_rule.get('rule') or '')),
+                              stats)[0],
         f"* **Intervals.** "
         f"{normalise(str((statistics.get('interval_labelling') or {}).get('rank_local') or ''))}",
         f"* **Not imported.** "
@@ -1147,7 +1242,9 @@ def _holm_table(family: Mapping[str, Any], readout: str,
     return lines
 
 
-def _five_seed_qualification(stats: Mapping[str, Any]) -> list[str]:
+def _five_seed_qualification(stats: Mapping[str, Any],
+                             blocked: Mapping[str, str] | None = None
+                             ) -> list[str]:
     """The registered 4/5 favourable-direction requirement, when it applies.
 
     Below five seeds the count cannot reach 4/5, so it is neither required nor
@@ -1155,7 +1252,15 @@ def _five_seed_qualification(stats: Mapping[str, Any]) -> list[str]:
     record is unchanged. At five or more seeds the requirement is live and is
     enforced inside every screen status, so it is stated, per family, from the
     screen blocks' own recorded counts.
+
+    Astra gate 2 round 3 MUST-FIX 1: a dependency block reached the results,
+    gate, mechanism and falsification sections but NOT this table, so a masked
+    arm whose ownership certificate is missing at the registered seeds still
+    read `extension qualified: yes/no` here as though its evidence existed. A
+    blocked candidate's qualification cells are now forced to
+    `NOT_EVALUABLE`, whatever its counts say.
     """
+    blocked = dict(blocked or {})
     n_seeds = n_seeds_of(stats)
     if n_seeds < FIVE_SEED_MINIMUM:
         return []
@@ -1173,14 +1278,26 @@ def _five_seed_qualification(stats: Mapping[str, Any]) -> list[str]:
         "enforced inside the screen statuses above; it is a necessary "
         "condition for the extension and is never an advancement.",
         "",
-        "| candidate | favourable per-seed directions | required | "
-        "requirement met | extension qualified | note |",
+        "| candidate | seeds with a favourable (negative) primary delta | "
+        "required | requirement met | extension qualified | note |",
         "|---|---|---|---|---|---|",
     ]
+    blocked_rows: list[str] = []
     for family in stats.get("families") or []:
+        candidate = str(family.get("candidate"))
         screen = (family.get("screen") or {}).get(JOINT_READOUT) or {}
+        if candidate in blocked:
+            blocked_rows.append(candidate)
+            lines.append(
+                f"| `{candidate}` | `{DEPENDENCY_BLOCKED_STATUS}` | "
+                f"{text_or_dash(screen.get('required_favourable_directions'))}"
+                f" | `{DEPENDENCY_BLOCKED_STATUS}` | "
+                f"`{DEPENDENCY_BLOCKED_STATUS}` | its dependency certificate "
+                f"blocks this arm, so no qualification can be read for it: "
+                + normalise(str(blocked[candidate])) + " |")
+            continue
         lines.append(
-            f"| `{family.get('candidate')}` | "
+            f"| `{candidate}` | "
             f"{text_or_dash(screen.get('favourable_direction_count'))}"
             f"/{text_or_dash(screen.get('n_seeds'))} | "
             f"{text_or_dash(screen.get('required_favourable_directions'))} | "
@@ -1188,6 +1305,21 @@ def _five_seed_qualification(stats: Mapping[str, Any]) -> list[str]:
             f"{flag(screen.get('five_seed_extension_qualified'))} | "
             + normalise(str(screen.get("five_seed_qualification_note") or ""))
             + " |")
+    lines += ["",
+              "The count above is the number of seeds whose primary delta is "
+              "strictly below **zero**; the registered primary threshold is "
+              "zero, so it is a favourable-direction count and not a count "
+              "against a non-inferiority margin (contrast the gate columns in "
+              "§ 5 and § 8; Astra gate 2 round 3 MUST-FIX 4)."]
+    if blocked_rows:
+        lines += ["",
+                  "Qualification is `" + DEPENDENCY_BLOCKED_STATUS + "` for "
+                  + ", ".join(f"`{name}`" for name in sorted(blocked_rows))
+                  + ": a failed, missing, unauthenticated or seed-incomplete "
+                  "masked-arm dependency certificate blocks the arm, and a "
+                  "blocked arm cannot qualify for the registered extension "
+                  "however its per-seed directions fall (D10.12; Astra gate 2 "
+                  "round 3 MUST-FIX 1)."]
     lines.append("")
     return lines
 
@@ -1215,7 +1347,7 @@ def section_results(stats: Mapping[str, Any],
         "exact zero.",
         "",
     ]
-    lines += _five_seed_qualification(stats)
+    lines += _five_seed_qualification(stats, blocked)
     for family in stats.get("families") or []:
         if family["candidate"] in blocked:
             lines += [blocking_note(family["candidate"], blocked), ""]
@@ -1244,6 +1376,35 @@ def _per_seed_cells(points: Mapping[str, Any], seeds: Sequence[Any]) -> str:
     return " | ".join(f5((points or {}).get(str(seed))) for seed in seeds)
 
 
+def _direction_threshold(record: Mapping[str, Any]) -> Any:
+    """The threshold this row's `favourable_direction_count` counted against.
+
+    Read from the statistics where recorded, and otherwise from the contrast's
+    own registered `threshold` — which is what `stage2_stats` counted against
+    — so a statistics JSON written before the key existed still exposes the
+    threshold instead of leaving the column blank (MUST-FIX 4).
+    """
+    recorded = record.get("direction_count_threshold")
+    return record.get("threshold") if recorded is None else recorded
+
+
+def _below_zero_count(record: Mapping[str, Any]) -> Any:
+    """How many per-seed points are strictly favourable (below zero).
+
+    Recomputed from the row's own per-seed points when the statistics JSON
+    predates the key, so the distinction Astra's MUST-FIX 4 requires does not
+    depend on recomputing the statistics.
+    """
+    recorded = record.get("seeds_below_zero_count")
+    if recorded is not None:
+        return recorded
+    points = record.get("per_seed_points")
+    if not isinstance(points, Mapping) or not points:
+        return None
+    return int(sum(1 for value in points.values()
+                   if value is not None and float(value) < 0.0))
+
+
 def section_estimands(stats: Mapping[str, Any]) -> list[str]:
     contract = stats.get("contract") or {}
     seeds = seeds_of(stats)
@@ -1261,8 +1422,9 @@ def section_estimands(stats: Mapping[str, Any]) -> list[str]:
         + normalise(str(contract.get("estimand_ii_label") or "")) + ".",
         "",
         f"| contrast | slice | {_per_seed_columns(seeds)} | seed range | "
-        "favourable seeds | mean point | mean 95% interval |",
-        "|" + "---|" * (6 + n_seeds),
+        "registered threshold t | seeds below t | seeds with a favourable "
+        "(negative) delta | mean point | mean 95% interval |",
+        "|" + "---|" * (8 + n_seeds),
     ]
     for key, record in (stats.get("contrasts") or {}).items():
         if not str(record.get("role", "")).startswith("family_"):
@@ -1274,19 +1436,33 @@ def section_estimands(stats: Mapping[str, Any]) -> list[str]:
             f"| `{record['candidate']} − {record['reference']}` | "
             f"`{record['slice']}` | {_per_seed_cells(points, seeds)} | "
             f"{f5(spread.get('range'))} | "
+            f"{f5(_direction_threshold(record))} | "
             f"{text_or_dash(record.get('favourable_direction_count'))}"
+            f"/{text_or_dash(record.get('n_seeds'))} | "
+            f"{text_or_dash(_below_zero_count(record))}"
             f"/{text_or_dash(record.get('n_seeds'))} | "
             f"{f5(joint.get('point'))} | {ci(joint.get('ci95'))} |")
     if not any(str(r.get("role", "")).startswith("family_")
                and r.get("available")
                for r in (stats.get("contrasts") or {}).values()):
         lines.append("| *no family contrast is evaluable* |"
-                     + " — |" * (5 + n_seeds))
+                     + " — |" * (7 + n_seeds))
     lines += [
         "",
         f"Seed ranges are empirical spreads over {seed_count_phrase(n_seeds)}, "
         "not confidence "
         "intervals. No seed is selected and no CI endpoint is averaged.",
+        "",
+        "**The two direction counts are different things** (Astra gate 2 "
+        "round 3 MUST-FIX 4). `seeds below t` counts per-seed points below "
+        "that row's own **registered threshold**, which is 0 on a primary "
+        f"contrast and the +{MARGIN_LL} non-inferiority margin on a gate row; "
+        "on a gate row a seed counted there may still have an **adverse** "
+        "(positive) delta, so that column is *not* a favourable-direction "
+        "count. `seeds with a favourable (negative) delta` is the "
+        "zero-threshold count, and the two coincide only where t = 0. The "
+        "registered gate arithmetic and the primary's zero-threshold count "
+        "are unchanged; only the labelling is.",
         "",
     ]
     return lines
@@ -1677,9 +1853,17 @@ def section_limitations(config: Mapping[str, Any],
     applied: list[tuple[str, dict[str, str]]] = []
 
     def corrected(source: str, text: str) -> str:
-        fixed, hits = correct_config_text(normalise(text))
+        fixed, hits = correct_config_text(normalise(text), stats)
         applied.extend((source, hit) for hit in hits)
         return fixed
+
+    # § 3 quotes the registered k-selection rule. Where that quotation names a
+    # seed count this analysis is not at, the same substitution-with-disclosure
+    # mechanism corrects it there, and the disclosure belongs in this section
+    # beside every other correction (Astra gate 2 round 3 MUST-FIX 3).
+    corrected("statistics.k_selection.rule",
+              str(((config.get("statistics") or {}).get("k_selection") or {})
+                  .get("rule") or ""))
 
     for entry in config.get("deviations") or []:
         key = str(entry.get("id"))
@@ -2024,6 +2208,245 @@ def section_plain(stats: Mapping[str, Any],
     return lines
 
 
+# ---------------------------------------------------------------------------
+# Astra gate 2 round 3 MUST-FIX 2 — the two-seed versus five-seed comparison,
+# and the explicit withdrawal of what the extension did not preserve.
+#
+# The standalone addendum reported every mechanism contrast "as computed" and
+# said nothing about the two-seed result it superseded, so a reader of that
+# file alone could not tell that the one CI-clean mechanism finding of night 1
+# had not survived. This section is rendered ONLY when a prior statistics JSON
+# is supplied, so the committed two-seed report is unaffected; everything in it
+# is derived from the two files, never authored per contrast.
+# ---------------------------------------------------------------------------
+
+PRIOR_HEADING = ("## 12. What the seed extension changed, and what is "
+                 "withdrawn")
+
+# The three readings this comparison can draw from one interval, and nothing
+# stronger. "unresolved" is never rendered as an absence of an effect.
+UNRESOLVED_PHRASE = ("unresolved, not evidence of no benefit")
+REVERSED_PHRASE = ("point estimate reversed; evidence remains unresolved")
+
+
+def _reading(record: Mapping[str, Any] | None) -> str:
+    """`favourable`, `adverse`, `unresolved` or `unavailable` for one row."""
+    if not (record or {}).get("available"):
+        return "unavailable"
+    joint = record.get("estimand_ii") or {}
+    if joint.get("ci_clean_favourable"):
+        return "favourable"
+    if joint.get("l95") is not None and float(joint["l95"]) > 0:
+        return "adverse"
+    return "unresolved"
+
+
+def _holm_p(stats: Mapping[str, Any], key: str, readout: str) -> Any:
+    """The Holm-adjusted p of the family member whose contrast key this is."""
+    for family in stats.get("families") or []:
+        table = (family.get("holm") or {}).get(readout) or {}
+        for row in table.get("members") or []:
+            if row.get("contrast_key") == key:
+                return row.get("p_holm")
+    return None
+
+
+def _movement(prior_reading: str, current_reading: str,
+              prior_point: Any, current_point: Any) -> tuple[str, str]:
+    """The verdict for one row, and the kind of note it needs.
+
+    Derived only from the two readings and the two point estimates. No verdict
+    upgrades an unresolved interval into an absence, and none calls the
+    extension a replication.
+    """
+    if "unavailable" in (prior_reading, current_reading):
+        return ("NOT COMPARABLE — one of the two analyses does not evaluate "
+                "this contrast", "none")
+    if prior_reading == "favourable" and current_reading == "favourable":
+        return ("held — CI-clean favourable at both seed counts", "none")
+    if prior_reading == "favourable" and current_reading == "unresolved":
+        return ("**WITHDRAWN** — CI-clean favourable at the earlier seed "
+                "count, the interval crosses zero at this one: "
+                f"{UNRESOLVED_PHRASE}", "withdrawn")
+    if prior_reading == "favourable" and current_reading == "adverse":
+        return ("**WITHDRAWN AND REVERSED** — CI-clean favourable at the "
+                "earlier seed count, CI-clean adverse at this one", "withdrawn")
+    if prior_reading != "favourable" and current_reading == "favourable":
+        return ("strengthened — not CI-clean at the earlier seed count, "
+                "CI-clean favourable at this one", "none")
+    if current_reading == "adverse":
+        return ("CI-clean **adverse** at this seed count"
+                + ("" if prior_reading == "adverse"
+                   else ", where the earlier seed count was unresolved"),
+                "adverse")
+    sign_flipped = (prior_point is not None and current_point is not None
+                    and float(prior_point) < 0.0 <= float(current_point))
+    if sign_flipped:
+        return (f"{REVERSED_PHRASE}: {UNRESOLVED_PHRASE}", "reversed")
+    return (f"unresolved at both seed counts: {UNRESOLVED_PHRASE}", "none")
+
+
+def section_prior_comparison(stats: Mapping[str, Any],
+                             prior: Mapping[str, Any] | None) -> list[str]:
+    """Compare every registered primary against a prior analysis of the same
+    families at a lower seed count, and withdraw what did not survive.
+    """
+    if prior is None:
+        return []
+    seeds, prior_seeds = seeds_of(stats), seeds_of(prior)
+    if tuple(seeds) == tuple(prior_seeds):
+        raise RefusalError(
+            "the prior statistics JSON registers the same seeds "
+            f"({join_list(prior_seeds)}) as the analysis being rendered, so "
+            "there is no seed extension to compare and no comparison is "
+            "written; supply the earlier analysis or omit --prior-stats-json")
+    shared = [seed for seed in prior_seeds if seed in seeds]
+    contrasts = stats.get("contrasts") or {}
+    prior_contrasts = prior.get("contrasts") or {}
+    lines = [
+        PRIOR_HEADING,
+        "",
+        f"This analysis registers {seed_count_phrase(len(seeds))} "
+        f"({join_list(seeds)}); the prior analysis registered "
+        f"{seed_count_phrase(len(prior_seeds))} ({join_list(prior_seeds)}). "
+        + (f"**The extension is not an independent replication:** "
+           f"{join_list(shared)} "
+           + ("is" if len(shared) == 1 else "are")
+           + " in both, so every row below shares "
+           f"{len(shared)} of {len(seeds)} seeds with the result it is "
+           "compared against, and agreement between the two columns is "
+           "partly the same runs agreeing with themselves."
+           if shared else
+           "The two analyses share no seed, but they share the frame, the "
+           "split, the cache and the code, so neither is an independent "
+           "replication of the other."),
+        "",
+        "Both columns are validation-only screens whose checkpoints were "
+        "selected on the split they are scored on. A row that moves from "
+        "CI-clean to interval-crosses-zero is a **withdrawal of the earlier "
+        "claim**, never a demonstration that the effect is absent; a row "
+        "whose point estimate changes sign is a **reversed point estimate on "
+        "unresolved evidence**, not a finding of no benefit.",
+        "",
+        f"| registered primary | slice | prior point ({len(prior_seeds)} "
+        f"seeds) | prior 95% interval | prior favourable seeds | this point "
+        f"({len(seeds)} seeds) | this 95% interval | favourable seeds | "
+        "what the extension did |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    withdrawn: list[tuple[str, Mapping[str, Any], Mapping[str, Any]]] = []
+    reversed_rows: list[str] = []
+    adverse_rows: list[tuple[str, str]] = []
+    for key, record in contrasts.items():
+        if record.get("role") != "family_primary":
+            continue
+        before = prior_contrasts.get(key)
+        if before is None:
+            continue
+        label = f"`{record['candidate']} − {record['reference']}`"
+        prior_joint = (before.get("estimand_ii") or {}) if before else {}
+        joint = record.get("estimand_ii") or {}
+        prior_reading, reading = _reading(before), _reading(record)
+        verdict, kind = _movement(prior_reading, reading,
+                                  prior_joint.get("point"), joint.get("point"))
+        if kind == "withdrawn":
+            withdrawn.append((label, before, record))
+        elif kind == "reversed":
+            reversed_rows.append(label)
+        elif kind == "adverse":
+            adverse_rows.append((label, key))
+        lines.append(
+            f"| {label} | `{record['slice']}` | {f5(prior_joint.get('point'))} "
+            f"| {ci(prior_joint.get('ci95'))} | "
+            f"{text_or_dash(_below_zero_count(before))}"
+            f"/{text_or_dash(before.get('n_seeds'))} | "
+            f"{f5(joint.get('point'))} | {ci(joint.get('ci95'))} | "
+            f"{text_or_dash(_below_zero_count(record))}"
+            f"/{text_or_dash(record.get('n_seeds'))} | {verdict} |")
+    lines.append("")
+    if withdrawn:
+        for label, before, record in withdrawn:
+            prior_joint = before.get("estimand_ii") or {}
+            joint = record.get("estimand_ii") or {}
+            lines += [
+                f"**Withdrawn: {label}.** At {seed_count_phrase(len(prior_seeds))} "
+                f"it read {f5(prior_joint.get('point'))} "
+                f"{ci(prior_joint.get('ci95'))}, an interval excluding zero "
+                f"favourably, with {text_or_dash(_below_zero_count(before))} "
+                f"of {text_or_dash(before.get('n_seeds'))} per-seed deltas "
+                f"favourable. At {seed_count_phrase(len(seeds))} it reads "
+                f"{f5(joint.get('point'))} {ci(joint.get('ci95'))} with "
+                f"{text_or_dash(_below_zero_count(record))} of "
+                f"{text_or_dash(record.get('n_seeds'))} favourable. **The "
+                "earlier CI-clean claim for this contrast is withdrawn.** The "
+                f"reading now is *{UNRESOLVED_PHRASE}*: the extension did not "
+                "measure the effect away, it failed to resolve it, and the "
+                "earlier interval is the one that is no longer supported.",
+                "",
+            ]
+    if reversed_rows:
+        lines += [
+            "**Sign reversals.** " + ", ".join(sorted(reversed_rows))
+            + f" changed the sign of the point estimate: {REVERSED_PHRASE}. "
+              "A reversed sign on an interval that straddles zero is not a "
+              "finding in the other direction and is not evidence of no "
+              "benefit.",
+            "",
+        ]
+    if adverse_rows:
+        lines += [
+            "**Adverse readings and what they are not.** "
+            + "; ".join(
+                f"{label} has Holm-adjusted p "
+                f"{f4(_holm_p(stats, key, JOINT_READOUT))} on the seed-mean "
+                "readout in its registered family"
+                for label, key in adverse_rows)
+            + ". An interval excluding zero adversely is a rank-local "
+              "reading; it is a multiplicity-adjusted finding only where the "
+              "family's Holm rejection in § 4 also holds, so an adjusted p "
+              "above the family's rejection level leaves it CI-clean adverse "
+              "and unadjusted. No such contrast isolates history either: a "
+              "masked arm still reads aligned previous-outcome inputs and "
+              "differs from `mlp` in capacity, architecture and key "
+              "construction as well (§ 9).",
+            "",
+        ]
+    death_key = "full-mlp@death"
+    death, prior_death = contrasts.get(death_key), prior_contrasts.get(death_key)
+    if death is not None and prior_death is not None:
+        reading, prior_reading = _reading(death), _reading(prior_death)
+        joint = death.get("estimand_ii") or {}
+        prior_joint = prior_death.get("estimand_ii") or {}
+        lines += [
+            f"**The death-over harm.** `full − mlp` on `death` reads "
+            f"{f5(prior_joint.get('point'))} {ci(prior_joint.get('ci95'))} "
+            f"({prior_reading}) at {seed_count_phrase(len(prior_seeds))} and "
+            f"{f5(joint.get('point'))} {ci(joint.get('ci95'))} ({reading}) "
+            f"at {seed_count_phrase(len(seeds))}."
+            + (" The harm is **reproduced in this five-seed validation "
+               "extension**."
+               if reading == "adverse" and prior_reading == "adverse"
+               else " The two seed counts do not agree on it.")
+            + f" Because {join_list(shared)} "
+            + ("is" if len(shared) == 1 else "are")
+            + " in both analyses, that is reproduction WITHIN one extended "
+              "validation analysis and **not** an independent replication. "
+              "Any agreement with a historical ablation is not independent "
+              "corroboration either: a different frame does not make two "
+              "analyses independent — the arms, the code, the cache lineage "
+              "and the target definition are shared, and independence would "
+              "have to be established, not inferred from the frame differing.",
+            "",
+        ]
+    lines += [
+        "Nothing in this section is an advancement, a verdict or a market "
+        "claim: it records which earlier readings the extension preserved and "
+        "which it withdrew.",
+        "",
+    ]
+    return lines
+
+
 def section_falsification(stats: Mapping[str, Any],
                           blocked: Mapping[str, str] | None = None
                           ) -> list[str]:
@@ -2164,8 +2587,15 @@ def authenticate_checkpoint(checkpoint: Any, recorded_md5: Any) -> dict:
     return out
 
 
-def dependency_certificates(dependency: Sequence[Mapping[str, Any]]) -> dict:
+def dependency_certificates(dependency: Sequence[Mapping[str, Any]],
+                            required_seeds: Sequence[int] | None = None
+                            ) -> dict:
     """Which masked arms hold a complete, authenticated certificate.
+
+    `required_seeds` is the registered seed list of the analysis being
+    rendered (Astra gate 2 round 3 MUST-FIX 1). Omitting it keeps the
+    historical two-seed requirement, so the two-seed report of record and every
+    caller that predates the argument are unchanged.
 
     Astra gate 1 round 3: a failed **or missing** certificate for a masked arm
     blocks that arm's interpretation and eligibility. Astra gate 2 round 1
@@ -2196,6 +2626,9 @@ def dependency_certificates(dependency: Sequence[Mapping[str, Any]]) -> dict:
     `TRAINED_SEEDS_INCOMPLETE` whether the arm holds one registered seed or
     none.
     """
+    required = (tuple(DEPENDENCY_REQUIRED_CHECKPOINT_SEEDS)
+                if required_seeds is None
+                else tuple(int(s) for s in required_seeds))
     by_config: dict[str, dict] = {
         config_id: {"config_id": config_id, "arm": arm, "k": k,
                     "masked_records": 0, "failed": [],
@@ -2277,7 +2710,7 @@ def dependency_certificates(dependency: Sequence[Mapping[str, Any]]) -> dict:
         block["trained_seeds"].append(seed)
 
     blocked: dict[str, str] = {}
-    required_seeds = set(DEPENDENCY_REQUIRED_CHECKPOINT_SEEDS)
+    required_set = set(required)
     for config_id, block in by_config.items():
         block["trained_seeds"] = sorted(set(block["trained_seeds"]))
         block["smoke_seeds"] = sorted(set(block["smoke_seeds"]))
@@ -2287,7 +2720,7 @@ def dependency_certificates(dependency: Sequence[Mapping[str, Any]]) -> dict:
         fired = [c for c in controls
                  if c["fired"] and c["arm_matches_registration"]]
         block["controls_fired"] = len(fired)
-        missing_seeds = sorted(required_seeds - set(block["trained_seeds"]))
+        missing_seeds = sorted(required_set - set(block["trained_seeds"]))
         if block["masked_records"] == 0:
             block["status"] = "MISSING"
             block["reason"] = ("no masked-arm dependency certificate is "
@@ -2343,7 +2776,9 @@ def dependency_certificates(dependency: Sequence[Mapping[str, Any]]) -> dict:
                 + held
                 + ", not at seed(s) "
                 + ", ".join(str(s) for s in missing_seeds)
-                + ", and D10.12 requires both registered seeds."
+                + f", and D10.12 requires {every_seed_word(len(required))} "
+                  "registered seeds ("
+                + ", ".join(str(s) for s in required) + ")."
                 + smoke_note)
         else:
             block["status"] = "PASS"
@@ -2366,7 +2801,7 @@ def dependency_certificates(dependency: Sequence[Mapping[str, Any]]) -> dict:
 
     trained = [config_id for config_id, block in by_config.items()
                if block["status"] == "PASS" and set(block["trained_seeds"])
-               >= required_seeds]
+               >= required_set]
     controls_complete = all(
         any(c["fired"] and c["arm_matches_registration"]
             for c in by_config[spec["config_id"]]["controls"])
@@ -2375,8 +2810,7 @@ def dependency_certificates(dependency: Sequence[Mapping[str, Any]]) -> dict:
             "blocked": blocked,
             "unmatched_controls": unmatched_controls,
             "registered_controls_complete": controls_complete,
-            "required_checkpoint_seeds":
-                list(DEPENDENCY_REQUIRED_CHECKPOINT_SEEDS),
+            "required_checkpoint_seeds": list(required),
             "registered_settings": dict(DEPENDENCY_REGISTERED_SETTINGS),
             "trained_checkpoint_coverage": sorted(trained),
             "trained_checkpoint_coverage_complete":
@@ -2421,8 +2855,15 @@ def load_dependency(directory: Path) -> list[dict]:
 
 
 def render(stats_path: Path, config_path: Path, k_path: Path | None,
-           dependency_dir: Path, out: Path) -> str:
+           dependency_dir: Path, out: Path,
+           prior_stats_path: Path | None = None) -> str:
     stats = read_json(stats_path)
+    # Astra gate 2 round 3 MUST-FIX 2: an earlier analysis of the same
+    # families at a lower seed count, so the report itself carries the
+    # comparison and the withdrawal. Absent, § 12 is not rendered at all and
+    # the two-seed report of record is unaffected.
+    prior = (read_json(guard_path(prior_stats_path))
+             if prior_stats_path is not None else None)
     config = read_yaml(config_path) or {}
     k_record = None
     if k_path is not None and guard_path(k_path).exists():
@@ -2432,7 +2873,8 @@ def render(stats_path: Path, config_path: Path, k_path: Path | None,
     # masked-arm certificate blocks that arm's family and its eligibility,
     # everywhere the report states a status — including the mechanism (D10.5)
     # and falsification (D10.15) sections (Astra gate 2 round 1 MUST-FIX 1).
-    certificates = dependency_certificates(dependency)
+    certificates = dependency_certificates(
+        dependency, dependency_required_checkpoint_seeds(stats))
     blocked = certificates["blocked"]
 
     lines: list[str] = []
@@ -2448,6 +2890,7 @@ def render(stats_path: Path, config_path: Path, k_path: Path | None,
     lines += section_limitations(config, stats)
     lines += section_plain(stats, k_record, blocked)
     lines += section_falsification(stats, blocked)
+    lines += section_prior_comparison(stats, prior)
 
     markdown = "\n".join(lines).rstrip() + "\n"
     assert_coverage(markdown, coverage_manifest(config, stats))
@@ -2462,12 +2905,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--dependency-dir", type=Path,
                         default=DEFAULT_DEPENDENCY_DIR)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument("--prior-stats-json", type=Path, default=None,
+                        help="an earlier statistics JSON over the same "
+                             "families at a lower seed count; renders § 12, "
+                             "the two-seed versus this-seed-count comparison "
+                             "and the withdrawal of what did not survive")
     args = parser.parse_args(argv)
     try:
         # A five-seed render may not overwrite the two-seed report of record.
         require_distinct_out(args.config, args.out, DEFAULT_OUT)
         markdown = render(args.stats_json, args.config, args.k_selection,
-                          args.dependency_dir, args.out)
+                          args.dependency_dir, args.out,
+                          args.prior_stats_json)
     except RefusalError as error:
         print(f"REFUSED: {error}", file=sys.stderr)
         return 2

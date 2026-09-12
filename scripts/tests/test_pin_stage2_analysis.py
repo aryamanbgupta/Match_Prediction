@@ -402,3 +402,61 @@ def test_the_compared_field_list_is_explicit(analysis):
     # Every compared field resolves to something in the written manifest.
     for field in pin.COMPARED_FIELDS:
         assert pin._get(payload, field) is not None, field
+
+
+# ---------------------------------------------------------------------------
+# Astra gate 2 round 3 — MUST-FIX 1 ("the pin currently verifies the same
+# incomplete requirement") and MUST-FIX 2 (the prior-statistics evidence).
+# ---------------------------------------------------------------------------
+
+def test_the_pin_requires_the_registered_seeds_for_dependency_coverage(
+        analysis, tmp_path):
+    """The required trained-checkpoint seeds are the registration's seeds.
+
+    With the same two-seed certificate tree, a two-seed analysis pin records
+    complete coverage and a five-seed one records all four masked arms blocked.
+    Before this fix both recorded complete coverage at seeds 7 and 13.
+    """
+    assert _write(analysis) == 0
+    two_seed = json.loads(analysis["pin"].read_text())["dependency_coverage"]
+    assert two_seed["required_checkpoint_seeds"] == [7, 13]
+    assert two_seed["trained_checkpoint_coverage_complete"] is True
+    assert two_seed["blocked"] == []
+
+    assert _write(analysis, **{"--seeds": "7,13,29,42,101"}) == 0
+    five_seed = json.loads(analysis["pin"].read_text())["dependency_coverage"]
+    assert five_seed["required_checkpoint_seeds"] == [7, 13, 29, 42, 101]
+    assert five_seed["trained_checkpoint_coverage_complete"] is False
+    assert five_seed["blocked"] == ["recency_k30", "same_entity_k0",
+                                    "same_entity_k30", "same_entity_unr"]
+
+
+def test_the_pin_records_and_verifies_the_prior_statistics_argument(
+        analysis, tmp_path, capsys):
+    """MUST-FIX 2: which prior analysis § 12 compared against is part of the
+    recorded invocation, and its hash is compared evidence."""
+    prior = tmp_path / "prior_stats.json"
+    prior.write_text(analysis["stats_path"].read_text())
+    assert _write(analysis, **{"--prior-stats-json": prior}) == 0
+    capsys.readouterr()
+    payload = json.loads(analysis["pin"].read_text())
+    renderer = payload["invocations"]["renderer"]
+    assert "--prior-stats-json" in renderer
+    assert renderer[renderer.index("--prior-stats-json") + 1] == pin.rel(prior)
+    recorded = payload["evidence"]["prior_statistics"]
+    assert recorded["compared"] is True and recorded["present"] is True
+    assert pin.main(["--verify", "--pin", str(analysis["pin"])]) == 0
+    capsys.readouterr()
+    # Editing the prior statistics is drift, because its hash is compared.
+    prior.write_text(prior.read_text() + "\n")
+    assert pin.main(["--verify", "--pin", str(analysis["pin"])]) == 1
+    assert "evidence.prior_statistics" in capsys.readouterr().err
+
+
+def test_a_pin_without_a_prior_statistics_argument_still_resolves_the_field(
+        analysis):
+    assert _write(analysis) == 0
+    recorded = json.loads(
+        analysis["pin"].read_text())["evidence"]["prior_statistics"]
+    assert recorded == {"path": None, "present": False, "sha256": None,
+                        "compared": False}

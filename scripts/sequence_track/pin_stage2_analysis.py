@@ -126,6 +126,7 @@ COMPARED_FIELDS: tuple[str, ...] = (
     "evidence.dependency_dir",
     "evidence.dependency_certificates",
     "evidence.summary_yaml_at_statistics",
+    "evidence.prior_statistics",
     "dependency_coverage",
     "decisions.k_selection",
     "decisions.family_map",
@@ -189,14 +190,25 @@ def ksweep_invocation(config: Path, runs_root: Path, k_selection: Path,
 
 
 def renderer_invocation(stats_json: Path, k_selection: Path, config: Path,
-                        dependency_dir: Path, report: Path) -> list[str]:
-    return ["uv", "run", "--no-sync", "python",
+                        dependency_dir: Path, report: Path,
+                        prior_stats: Path | None = None) -> list[str]:
+    """The renderer argv of record, `--prior-stats-json` included.
+
+    Astra gate 2 round 3 MUST-FIX 2: the report now renders a two-seed versus
+    five-seed comparison from an earlier statistics JSON, so which prior
+    analysis it was compared against is part of the invocation the pin records
+    and `--verify` rebuilds from.
+    """
+    argv = ["uv", "run", "--no-sync", "python",
             "scripts/sequence_track/render_stage2_report.py",
             "--stats-json", rel(stats_json),
             "--k-selection", rel(k_selection),
             "--config", rel(config),
             "--dependency-dir", rel(dependency_dir),
             "--out", rel(report)]
+    if prior_stats is not None:
+        argv += ["--prior-stats-json", rel(prior_stats)]
+    return argv
 
 
 def consumed_certificates(dependency_dir: Path) -> list[dict[str, Any]]:
@@ -284,7 +296,8 @@ def k_decision(k_record: Mapping[str, Any] | None) -> dict[str, Any]:
 def build(stats_json: Path, k_selection: Path, config: Path,
           dependency_dir: Path, report: Path, runs_root: Path,
           frame_dir: Path, block_source: Path, base_logits: Path,
-          reps: int, rng_seed: int, seeds: Sequence[int]) -> dict[str, Any]:
+          reps: int, rng_seed: int, seeds: Sequence[int],
+          prior_stats: Path | None = None) -> dict[str, Any]:
     stats_json = guard_path(stats_json)
     if not stats_json.is_file():
         raise RefusalError(
@@ -294,7 +307,12 @@ def build(stats_json: Path, k_selection: Path, config: Path,
     stats = read_json(stats_json)
     k_record = (read_json(k_selection)
                 if guard_path(k_selection).is_file() else None)
-    certificates = dependency_certificates(load_dependency(dependency_dir))
+    # Astra gate 2 round 3 MUST-FIX 1: the required trained-checkpoint seeds
+    # are the ANALYSIS REGISTRATION's seeds, the same list the statistics and
+    # the renderer use. Verifying the old hard-coded two-seed requirement is
+    # what let the pin confirm an incomplete coverage claim.
+    certificates = dependency_certificates(load_dependency(dependency_dir),
+                                           seeds)
     return {
         "pin_version": PIN_VERSION,
         "what_this_is": (
@@ -317,7 +335,8 @@ def build(stats_json: Path, k_selection: Path, config: Path,
                 stats_json, reps, rng_seed, seeds),
             "ksweep": ksweep_invocation(config, runs_root, k_selection, seeds),
             "renderer": renderer_invocation(stats_json, k_selection, config,
-                                            dependency_dir, report),
+                                            dependency_dir, report,
+                                            prior_stats),
         },
         "evidence": {
             "statistics": _hash_or_missing(stats_json),
@@ -327,9 +346,18 @@ def build(stats_json: Path, k_selection: Path, config: Path,
             "dependency_dir": rel(dependency_dir),
             "dependency_certificates": consumed_certificates(dependency_dir),
             "summary_yaml_at_statistics": summary_hashes_at_statistics(stats),
+            # Recorded whether or not a prior analysis was compared against, so
+            # the field resolves in every manifest and a § 12 comparison that
+            # was added or dropped is drift rather than an absent key.
+            "prior_statistics": (
+                {"path": None, "present": False, "sha256": None,
+                 "compared": False} if prior_stats is None
+                else dict(_hash_or_missing(prior_stats), compared=True)),
         },
         "live_summary_state": live_summary_state(stats),
         "dependency_coverage": {
+            "required_checkpoint_seeds":
+                certificates["required_checkpoint_seeds"],
             "trained_checkpoint_coverage":
                 certificates["trained_checkpoint_coverage"],
             "trained_checkpoint_coverage_complete":
@@ -395,6 +423,8 @@ def verify(pin_path: Path) -> tuple[bool, list[str], dict[str, Any]]:
     dependency_dir = REPO / str(argument(renderer, "--dependency-dir",
                                          rel(DEFAULT_DEPENDENCY_DIR)))
     report = REPO / str(argument(renderer, "--out", rel(DEFAULT_REPORT)))
+    prior_recorded = argument(renderer, "--prior-stats-json", None)
+    prior_stats = None if prior_recorded is None else REPO / str(prior_recorded)
     runs_root = REPO / str(argument(statistics, "--runs-root",
                                     rel(DEFAULT_RUNS_ROOT)))
     frame_dir = REPO / str(argument(statistics, "--frame-dir",
@@ -414,7 +444,7 @@ def verify(pin_path: Path) -> tuple[bool, list[str], dict[str, Any]]:
 
     rebuilt = build(stats_json, k_selection, config, dependency_dir, report,
                     runs_root, frame_dir, block_source, base_logits,
-                    reps, rng_seed, seeds)
+                    reps, rng_seed, seeds, prior_stats)
     drift = compare(recorded, rebuilt)
     if k_from_sweep is not None and str(k_from_sweep) != rel(k_selection):
         drift.append("invocations.ksweep --out disagrees with "
@@ -436,6 +466,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--dependency-dir", type=Path,
                         default=DEFAULT_DEPENDENCY_DIR)
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT)
+    parser.add_argument("--prior-stats-json", type=Path, default=None,
+                        help="the earlier statistics JSON the report's § 12 "
+                             "comparison was rendered against; recorded in "
+                             "the renderer invocation and hashed as evidence")
     parser.add_argument("--runs-root", type=Path, default=DEFAULT_RUNS_ROOT)
     parser.add_argument("--frame-dir", type=Path, default=DEFAULT_FRAME_DIR)
     parser.add_argument("--block-source-dir", type=Path,
@@ -455,7 +489,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             payload = build(args.stats_json, args.k_selection, args.config,
                             args.dependency_dir, args.report, args.runs_root,
                             args.frame_dir, args.block_source_dir,
-                            args.base_logits, args.reps, args.rng_seed, seeds)
+                            args.base_logits, args.reps, args.rng_seed, seeds,
+                            args.prior_stats_json)
             pin = guard_path(args.pin)
             pin.parent.mkdir(parents=True, exist_ok=True)
             pin.write_text(json.dumps(payload, indent=2, sort_keys=False,

@@ -10,54 +10,45 @@ roles are still `docs/sequence_track/stage2_handoff_opus.md`.
 
 ## 0. NEXT ACTION (read this first)
 
-> **State at 2026-09-12 ~10:05 IST. A /loop is now driving this to completion.**
+> **State at 2026-09-12 ~12:20 IST. ALL TRAINING IS DONE.**
 >
-> Night 1: complete, consolidated, statistics run, k = `same_entity_k30`, eight
-> ownership certificates passing on trained checkpoints, report at 987 lines.
-> **Astra results gate round 2 = NO SIGN-OFF with exactly two MUST-FIX left**:
-> (1) a masked arm with ZERO trained certificates is still eligible on its
-> one-epoch smoke record — block it and propagate through results, gates,
-> mechanism and falsification; (2) the analysis pin's compared set omits
-> `evidence.config` and `dependency_coverage`, so failed checkpoint
-> authentication and a changed config produce no drift. Both are being fixed.
+> **80 runs, 16 configurations × 5 seeds (7, 13, 29, 42, 101), 0 failures, 0
+> timeouts, 0 memory refusals**, across four queues on two machines. Everything
+> is consolidated at 5/5 with no refusals, so the cross-registration signature
+> identity held on real data.
 >
-> **Astra also audited the extension setup and found two more, which block the
-> five-seed addendum, not the commit**: (3) `READOUTS` in `stage2_stats.py` is
-> hard-coded to `seed_7, seed_13, seed_mean_joint`, so a five-seed run would
-> silently omit seeds 29/42/101 from the Holm tables, gates and screens, and
-> `family_screen` does not enforce the registered 4/5 favourable-direction
-> count; (4) `seq_stage2_5seed_v1.yaml` must be rebuilt as **all sixteen
-> configurations, orders 1..16, all fifteen families**, because with only eight
-> it cannot run `ksweep` at all. Astra: "No fourth config is necessary."
-> Five-seed outputs must use **distinct `--out` paths** so night-1 evidence is
-> not overwritten.
+> **Committed:** the two-seed screen result (`d411174`), the seed-derived report
+> prose (`f0d96dc`), and every gate-2 fix before them. **Five-seed artifacts
+> built and pinned**: `eval_out/seq_stage2_5seed/{stats.json,k_selection.json,analysis_pin.json}`
+> and `research/reports/embeddings/SEQ_STAGE2_FIVE_SEED_ADDENDUM.md` (1,509
+> lines). Night-1 evidence untouched — the tools refuse to overwrite it.
 >
-> **Training: extension 1 is COMPLETE** — all 24 runs, and its eight families
-> now hold **five seeds each locally** (night 1's 7 and 13 plus 29, 42, 101),
-> verified by counting `COMPLETE.json`. Its seed-101 runs were rsynced home
-> selectively, config by config, because the mini is concurrently writing other
-> seed-101 directories for extension 2. **Extension 2** (the five window arms,
-> `recency_k30`, `aligned_hist_rf`, `lstm`) is running on **both** machines now:
-> seed 101 on the mini and seeds 29/42 on the laptop.
+> **THE ONE REMAINING STEP: Astra gate 3 on the addendum, then commit.** The
+> prompt is `docs/sequence_track/astra/gate3_prompt.md`; run it exactly as the
+> earlier gates were run and iterate to SIGN-OFF, recording each round in D11.
+> Then commit the addendum, the acceptance D12 result, both five-seed pins
+> (`docs/sequence_track/stage2_five_seed_analysis_pin.json` needs `git add -f`,
+> it is gitignored) and the gate prompt. **Then the loop is done.**
 >
-> **Ordered remainder:** close (1) and (2) → commit the two-seed result →
-> launch extension 2 on the laptop → both queues finish → rsync seed_101 with
-> `--exclude='summary.yaml'` → consolidate under the rebuilt five-seed config →
-> five-seed statistics and report to distinct paths → Astra gate → commit.
-> `log_verdict.py` is NOT run and the cohort is NOT opened; both are the user's.
+> **Headline result, five seeds.** The death-over harm is CONFIRMED: `full − mlp`
+> on `death` is **+0.00463 [+0.00177, +0.00733], 0 of 5 seeds favourable**,
+> against the 2026-08 ablation's +0.0053 on 0 of 5 on a different frame.
+> **`aligned_hist − full` DID NOT SURVIVE** — the only CI-clean mechanism result
+> at two seeds is now −0.00074 with the interval crossing zero at 3/5, so its
+> substantive claim is withdrawn. `same_entity_unr − aligned_hist_rf` reversed
+> sign to +0.00004 at 1/5. Held at 5/5 CI-clean: `fixed_decay − mlp` −0.00405,
+> `xlstm − mlp` −0.00400, `residual_mlp − mlp` −0.00553. Newly CI-clean
+> **adverse**: `same_entity_k0 − mlp` +0.00121 at 0/5. **Only `residual_mlp`
+> qualifies the extension** — and it carries no history at all, while
+> `residual_t1 − residual_mlp` stays unresolved at −0.00013.
 >
-> **Four launch mistakes already made, do not repeat**: (1) an rsync `***`
-> include pattern macOS openrsync ignores, so it copies directory shells and
-> reports success; (2) queue commands that omit `--config`, so the driver reads
-> the night-1 registration and refuses to widen its seeds; (3) filtered configs
-> keeping non-contiguous `queue_order`, which the driver validates as 1..N;
-> (4) **launching from the training worktree without re-pointing it at the
-> current commit first** — it sat at the extension-1 commit, which predates the
-> extension-2 queue files, so the runner reported "queue file not found",
-> launched nothing and exited 0. **Always
-> `git -C "$WT" checkout --detach $(git -C "$MAIN" rev-parse HEAD)` and assert
-> it, immediately before any laptop launch.** Every one of these four failed
-> loudly-but-harmlessly or exited 0 with nothing launched; none corrupted data.
+> **Raised for the gate:** the k-rule text quoted from the config still says
+> "the best (lowest) **two-seed** mean", which is stale at five seeds; the config
+> body is held byte-equal by test so it was not edited.
+>
+> **Still NOT done and NOT ours:** `research/log_verdict.py` is not run, and the
+> cohort stays `DEFERRED_UNOPENED`. Five seeds meets only condition (1) of
+> D10.16; the historical-consumption question (condition 0) is still open.
 
 ### Autonomy grant (user, 2026-09-12 ~01:15 IST)
 

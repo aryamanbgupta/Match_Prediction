@@ -1953,8 +1953,27 @@ def evaluate_contrast(candidate: str, reference: str, slice_name: str,
     record["seed_spread"] = {"min": float(min(points)),
                              "max": float(max(points)),
                              "range": float(max(points) - min(points))}
-    record["favourable_direction_count"] = int(
-        sum(1 for p in points if p < threshold))
+    # Astra gate 2 round 3 MUST-FIX 4: this count is "seeds whose point is
+    # below the registered threshold", and on a non-inferiority gate that
+    # threshold is +0.002, not zero. Reporting it as "favourable seeds" made a
+    # row of five adverse-but-small deltas read as five favourable seeds. The
+    # count itself and its key are unchanged — the gate arithmetic and every
+    # primary's zero-threshold count depend on them — and the strictly
+    # favourable (negative-delta) count is reported beside it, with the
+    # threshold exposed so neither number can be read as the other.
+    below_threshold = int(sum(1 for p in points if p < threshold))
+    record["favourable_direction_count"] = below_threshold
+    record["direction_count_threshold"] = float(threshold)
+    record["seeds_below_registered_threshold_count"] = below_threshold
+    record["seeds_below_zero_count"] = int(sum(1 for p in points if p < 0.0))
+    record["direction_count_note"] = (
+        "`seeds_below_registered_threshold_count` (= "
+        "`favourable_direction_count`, the registered key) counts per-seed "
+        f"points below the registered threshold {float(threshold)!r}; on a "
+        "non-inferiority gate that threshold is the margin, so a seed counted "
+        "there may still have an ADVERSE (positive) delta. "
+        "`seeds_below_zero_count` is the count of strictly favourable "
+        "per-seed deltas. The two coincide only where the threshold is zero")
     record["n_seeds"] = len(points)
     record["available"] = True
     return record
@@ -2279,6 +2298,16 @@ def family_screen(family: Mapping[str, Any], tables: Mapping[str, Any],
             "required_favourable_directions": (
                 FIVE_SEED_FAVOURABLE_DIRECTIONS if applies else None),
             "favourable_direction_count": direction_count,
+            # MUST-FIX 4: the primary's threshold is zero, so this count is
+            # both "below the registered threshold" and "strictly favourable".
+            # Both keys are published so the qualification table can label the
+            # column it prints, and the threshold is exposed beside them.
+            "direction_count_threshold":
+                primary_record.get("direction_count_threshold"),
+            "seeds_below_registered_threshold_count":
+                primary_record.get("seeds_below_registered_threshold_count"),
+            "seeds_below_zero_count":
+                primary_record.get("seeds_below_zero_count"),
             "favourable_direction_requirement_met": direction_ok,
             "five_seed_extension_qualified": (
                 bool(status == STATUS_PASS and applies and direction_ok)),
@@ -2305,8 +2334,15 @@ def family_screen(family: Mapping[str, Any], tables: Mapping[str, Any],
             "all_row_candidate_minus_mlp_ci_clean_favourable": all_row_clean,
             "all_row_reading_is_exploratory_when_outside_the_family": (
                 family["members"][0]["reference"] != "mlp"),
-            "evidence_status": ("screening: two seeds, validation only, "
-                               "checkpoint selected on the same split"),
+            # Astra gate 2 round 3 SHOULD 5: this said "two seeds" whatever the
+            # run's seed count, so a five-seed family JSON described itself as
+            # a two-seed screen. The count is derived from the primary
+            # contrast's own seeds; what does NOT change with the count is that
+            # this is validation-only, same-split checkpoint selection.
+            "evidence_status": (f"screening: {seed_word(n_seeds)} "
+                                f"seed{'' if n_seeds == 1 else 's'}, "
+                                "validation only, "
+                                "checkpoint selected on the same split"),
             "note": ("neither a point below the margin nor a failure to "
                      "detect harm establishes non-inferiority")}
 
@@ -2719,9 +2755,19 @@ def k_sweep(runs_root: Path, config: Mapping[str, Any],
             "chosen k "
             "is never called reliably optimal"),
         "provisional": True,
-        "provisional_note": (f"the {word}-seed selection remains explicitly "
-                             "provisional pending any registered "
-                             "whole-family seed extension"),
+        # Astra gate 2 round 3 SHOULD 5: below the registered five-seed minimum
+        # the outstanding condition really is a whole-family seed extension, and
+        # that wording is kept verbatim. At or above it the extension has
+        # happened, so the note must not imply that another one is already
+        # required; what remains outstanding is that this is validation-only
+        # and awaits final disposition.
+        "provisional_note": (
+            f"the {word}-seed selection remains explicitly provisional "
+            "pending any registered whole-family seed extension"
+            if len(seeds) < FIVE_SEED_MINIMUM else
+            f"the {word}-seed selection is validation-only and remains "
+            "explicitly provisional, awaiting final disposition; no further "
+            "seed extension is implied by this note"),
         "k_to_config_id": {k: config_id for k, config_id in mapping},
         "k_to_config_id_source": ("derived from the config's own "
                                   "`configurations` entries by arm and "

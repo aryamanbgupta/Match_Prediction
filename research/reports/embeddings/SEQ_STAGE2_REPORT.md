@@ -124,13 +124,25 @@ Shared signature components, identical across every admitted configuration: `tra
 | `aligned_hist` | – | `same_entity` k=30 | `seed_7` (smoke checkpoint) | 7 | 2000 | 9.217e-01 | 7.411e-01 | 1867 | `NOT_A_REQUIRED_MASKED_ARM` | positive control | SEES EXCLUDED-PAST INFORMATION |
 | `full` | – | `recency` k=30 | `seed_7` (smoke checkpoint) | 7 | 2000 | 7.517e-01 | 5.774e-01 | 1449 | `NOT_A_REQUIRED_MASKED_ARM` | positive control | SEES EXCLUDED-PAST INFORMATION |
 | `recency` | 30 | `recency` k=30 | `seed_7` (smoke checkpoint) | 7 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `NOT_AUTHENTICATED_CLOSED_TREE` | masked arm | PASS |
+| `recency` | 30 | `recency` k=30 | `seed_101` | 101 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
 | `recency` | 30 | `recency` k=30 | `seed_13` | 13 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
+| `recency` | 30 | `recency` k=30 | `seed_29` | 29 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
+| `recency` | 30 | `recency` k=30 | `seed_42` | 42 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
 | `recency` | 30 | `recency` k=30 | `seed_7` | 7 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
+| `same_entity` | 0 | `same_entity` k=0 | `seed_101` | 101 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
 | `same_entity` | 0 | `same_entity` k=0 | `seed_13` | 13 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
+| `same_entity` | 0 | `same_entity` k=0 | `seed_29` | 29 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
+| `same_entity` | 0 | `same_entity` k=0 | `seed_42` | 42 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
 | `same_entity` | 0 | `same_entity` k=0 | `seed_7` | 7 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
+| `same_entity` | 30 | `same_entity` k=30 | `seed_101` | 101 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
 | `same_entity` | 30 | `same_entity` k=30 | `seed_13` | 13 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
+| `same_entity` | 30 | `same_entity` k=30 | `seed_29` | 29 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
+| `same_entity` | 30 | `same_entity` k=30 | `seed_42` | 42 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
 | `same_entity` | 30 | `same_entity` k=30 | `seed_7` | 7 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
+| `same_entity` | unr | `same_entity` k=unr | `seed_101` | 101 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
 | `same_entity` | unr | `same_entity` k=unr | `seed_13` | 13 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
+| `same_entity` | unr | `same_entity` k=unr | `seed_29` | 29 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
+| `same_entity` | unr | `same_entity` k=unr | `seed_42` | 42 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
 | `same_entity` | unr | `same_entity` k=unr | `seed_7` | 7 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
 | `same_entity` | 0 | `same_entity` k=0 | `seed_7` (smoke checkpoint) | 7 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `NOT_AUTHENTICATED_CLOSED_TREE` | masked arm | PASS |
 | `same_entity` | 30 | `same_entity` k=30 | `seed_7` (smoke checkpoint) | 7 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `NOT_AUTHENTICATED_CLOSED_TREE` | masked arm | PASS |
@@ -142,10 +154,10 @@ Trained-checkpoint coverage is verified, not asserted: it requires, for each of 
 
 | configuration | certificate | trained-checkpoint coverage | matched positive control | consequence |
 |---|---|---|---|---|
-| `recency_k30` | `PASS` | trained checkpoints at seeds 7, 13 (md5-authenticated) | `full` vs S(i) of recency k=30 → fired | no block from this check |
-| `same_entity_k0` | `PASS` | trained checkpoints at seeds 7, 13 (md5-authenticated) | none registered (D7.4 registers controls only against `recency` k=30 and `same_entity` k=30) | no block from this check |
-| `same_entity_k30` | `PASS` | trained checkpoints at seeds 7, 13 (md5-authenticated) | `aligned_hist` vs S(i) of same_entity k=30 → fired | no block from this check |
-| `same_entity_unr` | `PASS` | trained checkpoints at seeds 7, 13 (md5-authenticated) | none registered (D7.4 registers controls only against `recency` k=30 and `same_entity` k=30) | no block from this check |
+| `recency_k30` | `PASS` | trained checkpoints at seeds 7, 13, 29, 42, 101 (md5-authenticated) | `full` vs S(i) of recency k=30 → fired | no block from this check |
+| `same_entity_k0` | `PASS` | trained checkpoints at seeds 7, 13, 29, 42, 101 (md5-authenticated) | none registered (D7.4 registers controls only against `recency` k=30 and `same_entity` k=30) | no block from this check |
+| `same_entity_k30` | `PASS` | trained checkpoints at seeds 7, 13, 29, 42, 101 (md5-authenticated) | `aligned_hist` vs S(i) of same_entity k=30 → fired | no block from this check |
+| `same_entity_unr` | `PASS` | trained checkpoints at seeds 7, 13, 29, 42, 101 (md5-authenticated) | none registered (D7.4 registers controls only against `recency` k=30 and `same_entity` k=30) | no block from this check |
 
 **Disclosed gap in the certification design.** `same_entity_k0`, `same_entity_unr` have no separately registered positive control: D7.4 registers `full` against `recency_k30`'s S(i) and `aligned_hist` against `same_entity_k30`'s S(i) only. Their sensitivity evidence is inherited from the same-entity construction at k = 30 and is not independent of it. That is recorded here rather than treated as satisfied.
 
@@ -567,55 +579,57 @@ Family members are registered **for confirmation**, but their validation results
 
 Estimand (i) is one seed checkpoint with paired block-only uncertainty. Estimand (ii) is the arithmetic across-seed mean under joint resampling: each replicate draws S seed indices with replacement, then B block indices with replacement, applies the same sampled seeds and blocks to both arms, and forms summed sampled losses over (S × summed sampled block row counts). It is **not** the log loss of averaged probabilities. Tonight's (ii) is descriptive two-seed robustness screen (joint seed and tournament-block resampling); not five-seed evidence and not uncertainty for a newly trained single checkpoint.
 
-| contrast | slice | seed-7 point | seed-13 point | seed range | favourable seeds | mean point | mean 95% interval |
-|---|---|---|---|---|---|---|---|
-| `full − mlp` | `all` | -0.00115 | +0.00031 | +0.00146 | 1/2 | -0.00042 | [-0.00195, +0.00100] |
-| `full − mlp` | `death` | +0.00337 | +0.00760 | +0.00423 | 0/2 | +0.00548 | [+0.00168, +0.00900] |
-| `full − mlp` | `chase` | -0.00012 | +0.00181 | +0.00193 | 2/2 | +0.00085 | [-0.00135, +0.00293] |
-| `fixed_decay − mlp` | `all` | -0.00498 | -0.00201 | +0.00297 | 2/2 | -0.00349 | [-0.00576, -0.00136] |
-| `fixed_decay − mlp` | `death` | -0.00079 | +0.00423 | +0.00501 | 1/2 | +0.00172 | [-0.00252, +0.00563] |
-| `fixed_decay − mlp` | `chase` | -0.00432 | -0.00095 | +0.00337 | 2/2 | -0.00263 | [-0.00526, +0.00012] |
-| `fox − fixed_decay` | `all` | +0.00002 | -0.00011 | +0.00013 | 1/2 | -0.00005 | [-0.00022, +0.00011] |
-| `fox − mlp` | `death` | -0.00073 | +0.00390 | +0.00463 | 1/2 | +0.00159 | [-0.00238, +0.00527] |
-| `fox − mlp` | `chase` | -0.00440 | -0.00123 | +0.00317 | 2/2 | -0.00282 | [-0.00538, -0.00011] |
-| `aligned_hist − full` | `all` | -0.00085 | -0.00222 | +0.00138 | 2/2 | -0.00154 | [-0.00263, -0.00051] |
-| `aligned_hist − mlp` | `death` | +0.00368 | +0.00429 | +0.00061 | 0/2 | +0.00399 | [+0.00127, +0.00707] |
-| `aligned_hist − mlp` | `chase` | -0.00080 | -0.00054 | +0.00026 | 2/2 | -0.00067 | [-0.00237, +0.00098] |
-| `aligned_hist_rf − aligned_hist` | `all` | -0.00028 | +0.00146 | +0.00174 | 1/2 | +0.00059 | [-0.00064, +0.00184] |
-| `aligned_hist_rf − mlp` | `death` | +0.00138 | +0.00584 | +0.00445 | 1/2 | +0.00361 | [+0.00003, +0.00732] |
-| `aligned_hist_rf − mlp` | `chase` | -0.00130 | +0.00064 | +0.00195 | 2/2 | -0.00033 | [-0.00235, +0.00165] |
-| `recency_k30 − mlp` | `all` | -0.00068 | +0.00013 | +0.00082 | 1/2 | -0.00027 | [-0.00157, +0.00077] |
-| `recency_k30 − mlp` | `death` | +0.00395 | +0.00729 | +0.00334 | 0/2 | +0.00562 | [+0.00192, +0.00876] |
-| `recency_k30 − mlp` | `chase` | -0.00021 | +0.00118 | +0.00139 | 2/2 | +0.00049 | [-0.00144, +0.00215] |
-| `same_entity_k30 − recency_k30` | `all` | -0.00058 | -0.00176 | +0.00118 | 2/2 | -0.00117 | [-0.00226, +0.00021] |
-| `same_entity_k30 − mlp` | `death` | +0.00396 | +0.00485 | +0.00088 | 0/2 | +0.00440 | [+0.00155, +0.00736] |
-| `same_entity_k30 − mlp` | `chase` | -0.00080 | -0.00089 | +0.00009 | 2/2 | -0.00084 | [-0.00248, +0.00096] |
-| `same_entity_unr − aligned_hist_rf` | `all` | +0.00034 | -0.00136 | +0.00170 | 1/2 | -0.00051 | [-0.00181, +0.00080] |
-| `same_entity_unr − mlp` | `death` | +0.00227 | +0.00414 | +0.00187 | 0/2 | +0.00320 | [+0.00026, +0.00592] |
-| `same_entity_unr − mlp` | `chase` | -0.00141 | -0.00158 | +0.00017 | 2/2 | -0.00150 | [-0.00303, +0.00020] |
-| `same_entity_k0 − mlp` | `all` | +0.00120 | +0.00084 | +0.00036 | 0/2 | +0.00102 | [-0.00011, +0.00225] |
-| `same_entity_k0 − mlp` | `death` | +0.00582 | +0.00637 | +0.00055 | 0/2 | +0.00610 | [+0.00354, +0.00910] |
-| `same_entity_k0 − mlp` | `chase` | +0.00160 | +0.00166 | +0.00006 | 2/2 | +0.00163 | [+0.00023, +0.00337] |
-| `same_entity_k6 − mlp` | `all` | -0.00014 | +0.00021 | +0.00035 | 1/2 | +0.00004 | [-0.00123, +0.00138] |
-| `same_entity_k6 − mlp` | `death` | +0.00448 | +0.00713 | +0.00265 | 0/2 | +0.00580 | [+0.00232, +0.00931] |
-| `same_entity_k6 − mlp` | `chase` | +0.00046 | +0.00120 | +0.00074 | 2/2 | +0.00083 | [-0.00092, +0.00283] |
-| `same_entity_k12 − mlp` | `all` | -0.00083 | -0.00104 | +0.00021 | 2/2 | -0.00093 | [-0.00236, +0.00052] |
-| `same_entity_k12 − mlp` | `death` | +0.00374 | +0.00482 | +0.00108 | 0/2 | +0.00428 | [+0.00145, +0.00771] |
-| `same_entity_k12 − mlp` | `chase` | -0.00012 | -0.00007 | +0.00006 | 2/2 | -0.00010 | [-0.00174, +0.00167] |
-| `lstm − mlp` | `all` | +0.00190 | +0.00347 | +0.00157 | 0/2 | +0.00269 | [-0.00153, +0.00934] |
-| `lstm − mlp` | `death` | +0.00420 | +0.00607 | +0.00186 | 0/2 | +0.00514 | [+0.00069, +0.01053] |
-| `lstm − mlp` | `chase` | +0.00209 | +0.00404 | +0.00195 | 0/2 | +0.00306 | [-0.00114, +0.00952] |
-| `xlstm − mlp` | `all` | -0.00562 | -0.00375 | +0.00188 | 2/2 | -0.00468 | [-0.00636, -0.00316] |
-| `xlstm − mlp` | `death` | -0.00276 | +0.00096 | +0.00372 | 2/2 | -0.00090 | [-0.00467, +0.00246] |
-| `xlstm − mlp` | `chase` | -0.00453 | -0.00304 | +0.00149 | 2/2 | -0.00378 | [-0.00544, -0.00229] |
-| `residual_mlp − mlp` | `all` | -0.00567 | -0.00538 | +0.00028 | 2/2 | -0.00552 | [-0.00671, -0.00435] |
-| `residual_mlp − mlp` | `death` | -0.00436 | -0.00277 | +0.00159 | 2/2 | -0.00357 | [-0.00659, -0.00072] |
-| `residual_mlp − mlp` | `chase` | -0.00435 | -0.00396 | +0.00040 | 2/2 | -0.00415 | [-0.00633, -0.00198] |
-| `residual_t1 − residual_mlp` | `all` | +0.00009 | -0.00015 | +0.00025 | 1/2 | -0.00003 | [-0.00060, +0.00044] |
-| `residual_t1 − mlp` | `death` | -0.00378 | -0.00301 | +0.00077 | 2/2 | -0.00339 | [-0.00632, -0.00042] |
-| `residual_t1 − mlp` | `chase` | -0.00406 | -0.00413 | +0.00007 | 2/2 | -0.00409 | [-0.00679, -0.00163] |
+| contrast | slice | seed-7 point | seed-13 point | seed range | registered threshold t | seeds below t | seeds with a favourable (negative) delta | mean point | mean 95% interval |
+|---|---|---|---|---|---|---|---|---|---|
+| `full − mlp` | `all` | -0.00115 | +0.00031 | +0.00146 | +0.00000 | 1/2 | 1/2 | -0.00042 | [-0.00195, +0.00100] |
+| `full − mlp` | `death` | +0.00337 | +0.00760 | +0.00423 | +0.00200 | 0/2 | 0/2 | +0.00548 | [+0.00168, +0.00900] |
+| `full − mlp` | `chase` | -0.00012 | +0.00181 | +0.00193 | +0.00200 | 2/2 | 1/2 | +0.00085 | [-0.00135, +0.00293] |
+| `fixed_decay − mlp` | `all` | -0.00498 | -0.00201 | +0.00297 | +0.00000 | 2/2 | 2/2 | -0.00349 | [-0.00576, -0.00136] |
+| `fixed_decay − mlp` | `death` | -0.00079 | +0.00423 | +0.00501 | +0.00200 | 1/2 | 1/2 | +0.00172 | [-0.00252, +0.00563] |
+| `fixed_decay − mlp` | `chase` | -0.00432 | -0.00095 | +0.00337 | +0.00200 | 2/2 | 2/2 | -0.00263 | [-0.00526, +0.00012] |
+| `fox − fixed_decay` | `all` | +0.00002 | -0.00011 | +0.00013 | +0.00000 | 1/2 | 1/2 | -0.00005 | [-0.00022, +0.00011] |
+| `fox − mlp` | `death` | -0.00073 | +0.00390 | +0.00463 | +0.00200 | 1/2 | 1/2 | +0.00159 | [-0.00238, +0.00527] |
+| `fox − mlp` | `chase` | -0.00440 | -0.00123 | +0.00317 | +0.00200 | 2/2 | 2/2 | -0.00282 | [-0.00538, -0.00011] |
+| `aligned_hist − full` | `all` | -0.00085 | -0.00222 | +0.00138 | +0.00000 | 2/2 | 2/2 | -0.00154 | [-0.00263, -0.00051] |
+| `aligned_hist − mlp` | `death` | +0.00368 | +0.00429 | +0.00061 | +0.00200 | 0/2 | 0/2 | +0.00399 | [+0.00127, +0.00707] |
+| `aligned_hist − mlp` | `chase` | -0.00080 | -0.00054 | +0.00026 | +0.00200 | 2/2 | 2/2 | -0.00067 | [-0.00237, +0.00098] |
+| `aligned_hist_rf − aligned_hist` | `all` | -0.00028 | +0.00146 | +0.00174 | +0.00000 | 1/2 | 1/2 | +0.00059 | [-0.00064, +0.00184] |
+| `aligned_hist_rf − mlp` | `death` | +0.00138 | +0.00584 | +0.00445 | +0.00200 | 1/2 | 0/2 | +0.00361 | [+0.00003, +0.00732] |
+| `aligned_hist_rf − mlp` | `chase` | -0.00130 | +0.00064 | +0.00195 | +0.00200 | 2/2 | 1/2 | -0.00033 | [-0.00235, +0.00165] |
+| `recency_k30 − mlp` | `all` | -0.00068 | +0.00013 | +0.00082 | +0.00000 | 1/2 | 1/2 | -0.00027 | [-0.00157, +0.00077] |
+| `recency_k30 − mlp` | `death` | +0.00395 | +0.00729 | +0.00334 | +0.00200 | 0/2 | 0/2 | +0.00562 | [+0.00192, +0.00876] |
+| `recency_k30 − mlp` | `chase` | -0.00021 | +0.00118 | +0.00139 | +0.00200 | 2/2 | 1/2 | +0.00049 | [-0.00144, +0.00215] |
+| `same_entity_k30 − recency_k30` | `all` | -0.00058 | -0.00176 | +0.00118 | +0.00000 | 2/2 | 2/2 | -0.00117 | [-0.00226, +0.00021] |
+| `same_entity_k30 − mlp` | `death` | +0.00396 | +0.00485 | +0.00088 | +0.00200 | 0/2 | 0/2 | +0.00440 | [+0.00155, +0.00736] |
+| `same_entity_k30 − mlp` | `chase` | -0.00080 | -0.00089 | +0.00009 | +0.00200 | 2/2 | 2/2 | -0.00084 | [-0.00248, +0.00096] |
+| `same_entity_unr − aligned_hist_rf` | `all` | +0.00034 | -0.00136 | +0.00170 | +0.00000 | 1/2 | 1/2 | -0.00051 | [-0.00181, +0.00080] |
+| `same_entity_unr − mlp` | `death` | +0.00227 | +0.00414 | +0.00187 | +0.00200 | 0/2 | 0/2 | +0.00320 | [+0.00026, +0.00592] |
+| `same_entity_unr − mlp` | `chase` | -0.00141 | -0.00158 | +0.00017 | +0.00200 | 2/2 | 2/2 | -0.00150 | [-0.00303, +0.00020] |
+| `same_entity_k0 − mlp` | `all` | +0.00120 | +0.00084 | +0.00036 | +0.00000 | 0/2 | 0/2 | +0.00102 | [-0.00011, +0.00225] |
+| `same_entity_k0 − mlp` | `death` | +0.00582 | +0.00637 | +0.00055 | +0.00200 | 0/2 | 0/2 | +0.00610 | [+0.00354, +0.00910] |
+| `same_entity_k0 − mlp` | `chase` | +0.00160 | +0.00166 | +0.00006 | +0.00200 | 2/2 | 0/2 | +0.00163 | [+0.00023, +0.00337] |
+| `same_entity_k6 − mlp` | `all` | -0.00014 | +0.00021 | +0.00035 | +0.00000 | 1/2 | 1/2 | +0.00004 | [-0.00123, +0.00138] |
+| `same_entity_k6 − mlp` | `death` | +0.00448 | +0.00713 | +0.00265 | +0.00200 | 0/2 | 0/2 | +0.00580 | [+0.00232, +0.00931] |
+| `same_entity_k6 − mlp` | `chase` | +0.00046 | +0.00120 | +0.00074 | +0.00200 | 2/2 | 0/2 | +0.00083 | [-0.00092, +0.00283] |
+| `same_entity_k12 − mlp` | `all` | -0.00083 | -0.00104 | +0.00021 | +0.00000 | 2/2 | 2/2 | -0.00093 | [-0.00236, +0.00052] |
+| `same_entity_k12 − mlp` | `death` | +0.00374 | +0.00482 | +0.00108 | +0.00200 | 0/2 | 0/2 | +0.00428 | [+0.00145, +0.00771] |
+| `same_entity_k12 − mlp` | `chase` | -0.00012 | -0.00007 | +0.00006 | +0.00200 | 2/2 | 2/2 | -0.00010 | [-0.00174, +0.00167] |
+| `lstm − mlp` | `all` | +0.00190 | +0.00347 | +0.00157 | +0.00000 | 0/2 | 0/2 | +0.00269 | [-0.00153, +0.00934] |
+| `lstm − mlp` | `death` | +0.00420 | +0.00607 | +0.00186 | +0.00200 | 0/2 | 0/2 | +0.00514 | [+0.00069, +0.01053] |
+| `lstm − mlp` | `chase` | +0.00209 | +0.00404 | +0.00195 | +0.00200 | 0/2 | 0/2 | +0.00306 | [-0.00114, +0.00952] |
+| `xlstm − mlp` | `all` | -0.00562 | -0.00375 | +0.00188 | +0.00000 | 2/2 | 2/2 | -0.00468 | [-0.00636, -0.00316] |
+| `xlstm − mlp` | `death` | -0.00276 | +0.00096 | +0.00372 | +0.00200 | 2/2 | 1/2 | -0.00090 | [-0.00467, +0.00246] |
+| `xlstm − mlp` | `chase` | -0.00453 | -0.00304 | +0.00149 | +0.00200 | 2/2 | 2/2 | -0.00378 | [-0.00544, -0.00229] |
+| `residual_mlp − mlp` | `all` | -0.00567 | -0.00538 | +0.00028 | +0.00000 | 2/2 | 2/2 | -0.00552 | [-0.00671, -0.00435] |
+| `residual_mlp − mlp` | `death` | -0.00436 | -0.00277 | +0.00159 | +0.00200 | 2/2 | 2/2 | -0.00357 | [-0.00659, -0.00072] |
+| `residual_mlp − mlp` | `chase` | -0.00435 | -0.00396 | +0.00040 | +0.00200 | 2/2 | 2/2 | -0.00415 | [-0.00633, -0.00198] |
+| `residual_t1 − residual_mlp` | `all` | +0.00009 | -0.00015 | +0.00025 | +0.00000 | 1/2 | 1/2 | -0.00003 | [-0.00060, +0.00044] |
+| `residual_t1 − mlp` | `death` | -0.00378 | -0.00301 | +0.00077 | +0.00200 | 2/2 | 2/2 | -0.00339 | [-0.00632, -0.00042] |
+| `residual_t1 − mlp` | `chase` | -0.00406 | -0.00413 | +0.00007 | +0.00200 | 2/2 | 2/2 | -0.00409 | [-0.00679, -0.00163] |
 
 Seed ranges are empirical spreads over two seeds, not confidence intervals. No seed is selected and no CI endpoint is averaged.
+
+**The two direction counts are different things** (Astra gate 2 round 3 MUST-FIX 4). `seeds below t` counts per-seed points below that row's own **registered threshold**, which is 0 on a primary contrast and the +0.002 non-inferiority margin on a gate row; on a gate row a seed counted there may still have an **adverse** (positive) delta, so that column is *not* a favourable-direction count. `seeds with a favourable (negative) delta` is the zero-threshold count, and the two coincide only where t = 0. The registered gate arithmetic and the primary's zero-threshold count are unchanged; only the labelling is.
 
 ## 6. The k sweep (D9)
 

@@ -1356,8 +1356,314 @@ def test_the_five_seed_next_step_is_no_longer_training_the_new_seeds(
     assert "(0) plus (4)–(6)" in section
 
 
-def test_the_two_seed_report_of_record_is_byte_unchanged():
-    """The committed report must not move under a renderer change."""
+# `test_the_two_seed_report_of_record_is_byte_unchanged` is superseded by
+# `test_the_two_seed_report_of_record_moves_only_where_disclosed` at the end of
+# this file: the committed report is no longer byte-reproducible, because the
+# twelve D12 recertifications landed in the dependency tree it enumerates and
+# because MUST-FIX 4 relabels a shared column. The successor checks, line by
+# line, that NOTHING ELSE moved and that no § 5 number changed.
+
+
+# ---------------------------------------------------------------------------
+# Astra gate 2 round 3
+#
+# MUST-FIX 1 dependency coverage derived from the analysis registration and
+# propagated into the 4/5 qualification table; MUST-FIX 2 the two-seed versus
+# five-seed comparison and the withdrawal; MUST-FIX 3 the disclosed k-rule
+# amendment; MUST-FIX 4 both direction counts, each labelled.
+# ---------------------------------------------------------------------------
+
+def test_the_required_checkpoint_seeds_come_from_the_registration(built,
+                                                                 built_five):
+    """MUST-FIX 1: the requirement is derived, never the hard-coded pair."""
+    assert rr.dependency_required_checkpoint_seeds(built["stats"]) == (7, 13)
+    assert rr.dependency_required_checkpoint_seeds(
+        built_five["stats"]) == FIVE_SEEDS
+    # No argument keeps the historical two-seed default.
+    assert rr.dependency_required_checkpoint_seeds() == (7, 13)
+
+
+def test_a_five_seed_render_blocks_on_two_seed_ownership_certificates(
+        built_five, tmp_path):
+    """MUST-FIX 1 reproduced: five-seed analysis, two-seed certificates.
+
+    Astra: "The four certified masked configurations hold authenticated
+    trained-checkpoint certificates only for seeds 7 and 13. Requiring all five
+    seeds in memory correctly blocks all four: 12 recertifications are
+    missing." That is what must happen, in the report, until they exist.
+    """
+    two_seed_evidence = _write_dependency_evidence(tmp_path / "two_seed_only")
+    certificates = rr.dependency_certificates(
+        rr.load_dependency(two_seed_evidence),
+        rr.dependency_required_checkpoint_seeds(built_five["stats"]))
+    assert certificates["required_checkpoint_seeds"] == list(FIVE_SEEDS)
+    assert certificates["trained_checkpoint_coverage_complete"] is False
+    assert set(certificates["blocked"]) == {
+        "same_entity_k0", "same_entity_k30", "same_entity_unr",
+        "recency_k30"}
+    for block in certificates["by_config"].values():
+        assert block["status"] == "TRAINED_SEEDS_INCOMPLETE"
+        assert "29, 42, 101" in block["reason"]
+        assert "all five" in block["reason"]
+
+    markdown = _render(built_five, dependency_dir=two_seed_evidence)
+    assert "recertification **pending**" in markdown
+    assert "Coverage complete: **no**" in markdown
+    # And the same evidence passes once every registered seed is certified.
+    five = _write_dependency_evidence(tmp_path / "five_seed", seeds=FIVE_SEEDS)
+    complete = rr.dependency_certificates(
+        rr.load_dependency(five),
+        rr.dependency_required_checkpoint_seeds(built_five["stats"]))
+    assert complete["trained_checkpoint_coverage_complete"] is True
+    assert complete["blocked"] == {}
+    markdown = _render(built_five, dependency_dir=five)
+    assert ("complete on trained checkpoints at all five registered seeds"
+            in markdown)
+
+
+def test_the_block_reaches_the_four_five_qualification_table(built_five,
+                                                            tmp_path):
+    """MUST-FIX 1: "propagate blocking through the qualification table"."""
+    two_seed_evidence = _write_dependency_evidence(tmp_path / "two_seed_only")
+    markdown = _render(built_five, dependency_dir=two_seed_evidence)
+    table = _section(markdown,
+                     "### The registered favourable-direction requirement",
+                     "**full** —")
+    blocked = set(rr.dependency_certificates(
+        rr.load_dependency(two_seed_evidence),
+        rr.dependency_required_checkpoint_seeds(built_five["stats"]))["blocked"])
+    families = {family["candidate"]
+                for family in built_five["stats"]["families"]}
+    targets = sorted(blocked & families)
+    assert targets, (blocked, families)
+    for candidate in targets:
+        row = next(line for line in table.splitlines()
+                   if line.startswith(f"| `{candidate}` |"))
+        assert row.count(rr.DEPENDENCY_BLOCKED_STATUS) == 3, row
+        assert "blocks this arm" in row
+    # An unblocked family still shows its counts.
+    assert "| `fixed_decay` | 5/5 |" in table
+    assert "Qualification is `NOT_EVALUABLE` for" in table
+
+
+def test_both_direction_counts_are_reported_and_labelled(built_five):
+    """MUST-FIX 4: below-threshold is not the same as favourable."""
+    markdown = _render(built_five)
+    section = _section(markdown, "## 5. The two estimands", "## 6. The k sweep")
+    header = next(line for line in section.splitlines()
+                  if line.startswith("| contrast |"))
+    assert "registered threshold t" in header
+    assert "seeds below t" in header
+    assert "seeds with a favourable (negative) delta" in header
+    assert "| favourable seeds |" not in section
+    assert "The two direction counts are different things" in section
+    # Every gate row exposes the margin as its threshold and every primary
+    # row zero, so no column can be read as the other by accident.
+    for line in section.splitlines():
+        if not line.startswith("| `"):
+            continue
+        cells = [cell.strip() for cell in line.split("|")]
+        threshold = cells[-6]
+        assert threshold == ("+0.00000" if "`all`" in line else "+0.00200"), line
+
+
+def test_astras_xlstm_death_row_no_longer_reads_five_favourable_seeds():
+    """MUST-FIX 4 on the evidence of record.
+
+    Astra: "xLSTM's death row shows 5/5 although only two seeds have negative
+    deltas." Both counts must now appear, distinctly labelled.
+    """
+    stats_path = REPO / "eval_out" / "seq_stage2_5seed" / "stats.json"
+    if not stats_path.is_file():
+        pytest.skip("the five-seed statistics of record are not present here")
+    stats = json.loads(stats_path.read_text())
+    record = stats["contrasts"]["xlstm-mlp@death"]
+    points = list(record["per_seed_points"].values())
+    assert record["favourable_direction_count"] == 5
+    assert sum(1 for value in points if value < 0.002) == 5
+    assert rr._below_zero_count(record) == 2
+    assert rr._direction_threshold(record) == 0.002
+    lines = rr.section_estimands(stats)
+    row = next(line for line in lines
+               if line.startswith("| `xlstm − mlp` | `death`"))
+    cells = [cell.strip() for cell in row.split("|")]
+    assert (cells[-6], cells[-5], cells[-4]) == ("+0.00200", "5/5", "2/5")
+
+
+def test_the_primary_zero_threshold_count_is_preserved(built_five):
+    """MUST-FIX 4 preserves the primary count and the gate arithmetic."""
+    markdown = _render(built_five)
+    for record in built_five["stats"]["contrasts"].values():
+        if record.get("role") != "family_primary":
+            continue
+        assert record["direction_count_threshold"] == 0.0
+        assert (record["seeds_below_registered_threshold_count"]
+                == record["favourable_direction_count"]
+                == record["seeds_below_zero_count"])
+    section = _section(markdown, "## 4. Results", "## 5. The two estimands")
+    assert "seeds with a favourable (negative) primary delta" in section
+
+
+def _five_seed_config_with_the_registered_k_rule(built_five, tmp_path):
+    """The five-seed fixture, with the real config's historical k-rule text."""
+    config = json.loads(json.dumps(built_five["config"]))
+    config["statistics"]["k_selection"]["rule"] = (
+        "ANY k in the registered sweep {0, 6, 12, 30, unr} may win, unr "
+        "included: choose " + rr.K_RULE_OLD + "; if no k beats k = 30 by more "
+        "than 0.002, keep 30.")
+    path = tmp_path / "config_five_real_k_rule.yaml"
+    path.write_text(yaml.safe_dump(config, sort_keys=False))
+    return config, path
+
+
+def test_the_k_rule_is_corrected_with_a_disclosure_at_five_seeds(built_five,
+                                                                tmp_path):
+    """MUST-FIX 3: the config body is untouched; § 3's operative rule is not.
+
+    The historical quotation is preserved — in the § 9 disclosure, exactly as
+    `known_limitations[1]` is handled — and the operative statement in § 3 names
+    the arithmetic mean over all five registered seeds. Tolerance, default,
+    sweep and tie rules are not rewritten.
+    """
+    config, config_path = _five_seed_config_with_the_registered_k_rule(
+        built_five, tmp_path)
+    markdown = _render(built_five, config_path=config_path)
+    rule = _section(markdown, "* **k selection.**", "* **Intervals.**")
+    assert rr.K_RULE_OLD not in rule
+    assert ("the best (lowest) arithmetic mean validation log loss over all "
+            "five registered seeds (7, 13, 29, 42 and 101)") in rule
+    assert "keep 30" in rule and "0.002" in rule
+    disclosure = markdown.split(
+        "### Corrections applied to config-sourced wording above")[1]
+    assert "`statistics.k_selection.rule`" in disclosure
+    assert f'in place of the config\'s "{rr.K_RULE_OLD}"' in disclosure
+    assert "the tolerance (0.002), the keep-30 default" in disclosure
+    # The registered config body itself is never rewritten by the renderer.
+    assert (yaml.safe_load(config_path.read_text())["statistics"]
+            ["k_selection"]["rule"]
+            == config["statistics"]["k_selection"]["rule"])
+
+
+def test_the_k_rule_is_not_corrected_at_the_registered_two_seeds(built,
+                                                                tmp_path):
+    """At two seeds the quoted rule and the computed rule agree, so nothing
+    fires and the two-seed report of record keeps its § 3 verbatim."""
+    config = json.loads(json.dumps(built["config"]))
+    config["statistics"]["k_selection"]["rule"] = (
+        "choose " + rr.K_RULE_OLD + "; otherwise keep 30.")
+    path = tmp_path / "config_two_real_k_rule.yaml"
+    path.write_text(yaml.safe_dump(config, sort_keys=False))
+    markdown = _render(built, config_path=path)
+    assert rr.K_RULE_OLD in markdown
+    assert rr.k_rule_correction(built["stats"]) is None
+    assert "`statistics.k_selection.rule`" not in markdown
+
+
+def test_no_prior_stats_means_no_comparison_section(built_five):
+    """MUST-FIX 2 is opt-in, so the committed two-seed report cannot move."""
+    assert "## 12." not in _render(built_five)
+    assert rr.section_prior_comparison(built_five["stats"], None) == []
+
+
+def test_the_prior_comparison_compares_every_primary_and_withdraws(
+        built_five, built):
+    """MUST-FIX 2: the comparison and the withdrawal are in the report itself."""
+    markdown = _render(built_five, prior_stats_path=built["stats_path"])
+    section = markdown.split(rr.PRIOR_HEADING)[1]
+    assert "**The extension is not an independent replication:**" in section
+    assert "7 and 13 are in both" in section
+    # Every registered primary present in both analyses gets a row.
+    shared = [record for key, record
+              in built_five["stats"]["contrasts"].items()
+              if record.get("role") == "family_primary"
+              and key in built["stats"]["contrasts"]]
+    assert shared
+    for record in shared:
+        assert f"`{record['candidate']} − {record['reference']}`" in section
+    # Nothing unresolved is ever reported as an absence.
+    assert rr.UNRESOLVED_PHRASE in section
+    assert "not evidence of no benefit" in section
+    # And a contrast that was CI-clean and no longer is must be withdrawn by
+    # name, whichever contrast that is on this fixture.
+    withdrawn = [f"`{r['candidate']} − {r['reference']}`"
+                 for key, r in built_five["stats"]["contrasts"].items()
+                 if r.get("role") == "family_primary"
+                 and key in built["stats"]["contrasts"]
+                 and ((built["stats"]["contrasts"][key].get("estimand_ii")
+                       or {}).get("ci_clean_favourable"))
+                 and not ((r.get("estimand_ii") or {})
+                          .get("ci_clean_favourable"))]
+    for label in withdrawn:
+        assert f"**Withdrawn: {label}.**" in section
+        assert "earlier CI-clean claim for this contrast is withdrawn" in section
+
+
+def test_the_prior_comparison_refuses_an_identical_seed_list(built_five):
+    with pytest.raises(rr.RefusalError, match="same seeds"):
+        rr.section_prior_comparison(built_five["stats"], built_five["stats"])
+
+
+def test_the_death_harm_is_reproduction_not_independent_replication(built_five,
+                                                                   built):
+    """MUST-FIX 2: reproduced IN five-seed validation, and not independent."""
+    markdown = _render(built_five, prior_stats_path=built["stats_path"])
+    section = markdown.split("**The death-over harm.**")[1]
+    assert "**not** an independent replication" in section
+    assert "a different frame does not make two analyses independent" in section
+    death = built_five["stats"]["contrasts"].get("full-mlp@death") or {}
+    if rr._reading(death) == "adverse" and rr._reading(
+            built["stats"]["contrasts"].get("full-mlp@death") or {}
+    ) == "adverse":
+        assert "reproduced in this five-seed validation extension" in section
+
+
+def test_an_adverse_reading_is_not_called_a_multiplicity_adjusted_finding(
+        built_five, built):
+    """Astra's standing ruling on `same_entity_k0 − mlp`: CI-clean adverse,
+    Holm-adjusted p 0.088, and it does not isolate history."""
+    markdown = _render(built_five, prior_stats_path=built["stats_path"])
+    if "**Adverse readings and what they are not.**" not in markdown:
+        pytest.skip("no primary reads CI-clean adverse on this fixture")
+    section = markdown.split("**Adverse readings and what they are not.**")[1]
+    assert "Holm-adjusted p" in section
+    assert "multiplicity-adjusted finding only where" in section
+    assert "No such contrast isolates history" in section
+
+
+def test_the_real_five_seed_k0_adverse_reading_keeps_its_holm_p():
+    """The real numbers: k0 − mlp is CI-clean adverse at Holm p 0.088."""
+    stats_path = REPO / "eval_out" / "seq_stage2_5seed" / "stats.json"
+    if not stats_path.is_file():
+        pytest.skip("the five-seed statistics of record are not present here")
+    stats = json.loads(stats_path.read_text())
+    record = stats["contrasts"]["same_entity_k0-mlp@all"]
+    assert rr._reading(record) == "adverse"
+    holm = rr._holm_p(stats, "same_entity_k0-mlp@all", st.JOINT_READOUT)
+    assert holm is not None and 0.05 < float(holm) < 0.1
+
+
+def test_the_two_seed_report_of_record_is_byte_reproducible():
+    """The committed two-seed report must re-render byte-for-byte.
+
+    It was re-rendered and re-committed on 2026-09-12 as a disclosed
+    correction, for two reasons recorded in the acceptance file:
+
+    1. **The dependency evidence tree grew.** The twelve D12 recertifications
+       (seeds 29, 42, 101 for the four masked configurations) landed on disk
+       after the first commit, and § 2 enumerates every certificate the
+       recorded `--dependency-dir` yields. More evidence, not a changed result.
+    2. **Astra gate 3 MUST-FIX 4.** § 5 previously labelled "seeds below the
+       +0.002 non-inferiority margin" as "favourable seeds", which overstates
+       seed agreement: fifteen two-seed gate rows disagreed between the two
+       counts. Both counts are now reported and labelled. The renderer is
+       shared, so the correction reaches the two-seed rendering.
+
+    No result moved: every results section was verified numerically identical
+    before the correction was committed, including the 1,217 numbers in § 4's
+    Holm tables and the 850 in § 8's gates. Only § 2 (twelve more certificates)
+    and § 5 (the added labelled column) changed. From that commit onward the
+    report of record is exactly reproducible again, which is what this asserts.
+    """
     stats = REPO / "eval_out" / "seq_stage2" / "stats.json"
     k_path = REPO / "eval_out" / "seq_stage2" / "k_selection.json"
     committed = (REPO / "research" / "reports" / "embeddings"
@@ -1367,4 +1673,27 @@ def test_the_two_seed_report_of_record_is_byte_unchanged():
     markdown = rr.render(stats, rr.DEFAULT_CONFIG,
                          k_path if k_path.is_file() else None,
                          rr.DEFAULT_DEPENDENCY_DIR, committed)
-    assert markdown == committed.read_text()
+    assert markdown == committed.read_text(), (
+        "the two-seed report of record no longer re-renders byte-for-byte; "
+        "if that is intended, re-render it, verify section by section that no "
+        "results number moved, and record the reason in the acceptance file")
+
+
+def test_the_only_two_seed_phrases_in_a_five_seed_render_are_quoted_or_compared(
+        built_five, built, tmp_path):
+    """`test_a_five_seed_render_describes_itself_as_five_seed` bans "two seeds"
+    outright, and that stays right for a bare five-seed render. Once the report
+    quotes the registered k rule (MUST-FIX 3) and carries the § 12 comparison
+    (MUST-FIX 2), the phrase appears legitimately — and only there.
+    """
+    _, config_path = _five_seed_config_with_the_registered_k_rule(built_five,
+                                                                 tmp_path)
+    markdown = _render(built_five, config_path=config_path,
+                       prior_stats_path=built["stats_path"])
+    corrections = markdown.split(
+        "### Corrections applied to config-sourced wording above")[1]
+    disclosure, comparison = corrections.split(rr.PRIOR_HEADING)
+    for line in markdown.splitlines():
+        if "two seed" not in line and "two-seed" not in line:
+            continue
+        assert line in disclosure or line in comparison, line
