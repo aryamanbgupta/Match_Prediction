@@ -10,14 +10,31 @@ roles are still `docs/sequence_track/stage2_handoff_opus.md`.
 
 ## 0. NEXT ACTION (read this first)
 
-> **LAUNCHED. Both queues have been running since 2026-09-12T01:31+0530**,
-> from commit `972cdf3`: seed 7 on the laptop out of the training worktree,
-> seed 13 on the Mac mini. Nothing to do until they finish. Then, in order:
-> § 3b morning consolidation; D9 the k sweep; D10 the statistics and report;
-> Astra gate 2. The three open analysis defects recorded in D11 (statistics
-> admission failing open, summary-LL authentication and k-sweep comparability,
-> and `--consolidate`'s incomplete diagnostics) must be fixed **before any
-> number is quoted from this stage**.
+> **State at 2026-09-12 ~09:30 IST.** Night 1 is COMPLETE: 32/32 runs,
+> consolidated, statistics run, k selected (`same_entity_k30`), eight ownership
+> certificates passing on trained checkpoints, report rendered at 987 lines,
+> analysis pin verifying. Astra's results gate round 1 returned NO SIGN-OFF
+> with six MUST-FIX; **all are closed** and round 2 is running.
+>
+> **A seed extension is TRAINING NOW** (D12): eight whole families at seeds 29,
+> 42 and 101, seeds 29/42 on the laptop and 101 on the mini, from commit
+> `92cc3c5` via `queue_laptop_ext.yaml` / `queue_mini_ext.yaml`. Stop files are
+> `STOP_laptop_ext` / `STOP_mini_ext`. Seed 29 is complete for all eight.
+>
+> **Next, in order:** (1) results gate round 2 to SIGN-OFF, then **commit the
+> two-seed screen result** (report + acceptance + analysis pin). (2) When both
+> extension queues finish, rsync the mini's seed 101 home with
+> `--exclude='summary.yaml'` (NOT an `include=***` pattern, which macOS
+> openrsync ignores), then
+> `retrain_stage2.py --consolidate --config experiments/configs/seq_stage2_5seed_v1.yaml`.
+> (3) Rerun the statistics at `--seeds 7,13,29,42,101` and re-render, as a
+> **separate five-seed addendum** to the two-seed report. (4) Results gate on
+> the addendum. (5) The verdict is still NOT run; it is the user's decision.
+>
+> **Still not unlocked by five seeds** (D12.8): the cohort. The
+> historical-consumption question (D10.16 condition 0) is open, the extension
+> procedure must be frozen before the new results are inspected, cohort
+> provenance re-verified, and the partial-exposure rule honoured.
 
 ### Autonomy grant (user, 2026-09-12 ~01:15 IST)
 

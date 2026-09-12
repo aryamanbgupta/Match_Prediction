@@ -872,6 +872,44 @@ from altering it, so **no dependency change during the night**; and the
 runner's exit status is not evidence of 32 completed runs, because memory
 refusals and exhausted retries still exit zero.
 
+### Gate 2 round 1 fixes — landed 2026-09-12
+
+| Astra item | closure |
+|---|---|
+| **1 — dependency certification admitted incomplete evidence** | **CLOSED.** Controls are matched through the recorded `dependency_set_arm`/`dependency_set_k`, i.e. the masked arm's S(i) they were scored against, never through their own arm and k. Coverage-complete now requires, per masked arm: a passing certificate at **both** training seeds (read from the checkpoint directory, not the perturbation seed field), the recorded `checkpoint_md5` **recomputed from `model.pt` on disk and matching**, the registered settings (2000 targets, seed 29, validation), its own S(i), **and** the registered matched control present and fired; globally both registered controls. Seven new blocking statuses (`MISSING`, `FAILED`, `SETTINGS_MISMATCH`, `CHECKPOINT_NOT_AUTHENTICATED`, `CONTROL_MISSING`, `CONTROL_DID_NOT_FIRE`, `TRAINED_SEEDS_INCOMPLETE`) each force the arm's family to `NOT_EVALUABLE`, and blocking now propagates to **§ 7 mechanism** and **§ 11 falsification** as well as results and gates, with the report stating that where it differs from the statistics JSON's own eligibility the report's block is operative. Certificate loading is recursive, so one invocation sees the whole evidence set. **Astra's exact attack now fails**: four seed-7 certificates and no controls gives `trained_checkpoint_coverage_complete=False` with all four arms blocked |
+| **2 — abbreviated cohort-unlock conditions** | **CLOSED.** § 10 renders all nine D10.16 conditions in full, including (0) unresolved historical consumption, freeze-before-inspection, the 4/5 direction count, the versioned analysis freeze, cohort-provenance verification, the single frozen batch, the partial-exposure recovery rule, and "five seeds alone cannot unlock this cohort". A new required § 9 disposition `unresolved_historical_consumption` was added (the required list is now 21 entries) |
+| **4 — unsupported conclusions** | **CLOSED.** All three named sentences are gone. The venue limitation no longer claims a level effect and says explicitly that whether its effect is the same across architectures is unmeasured; the ownership entry now names `same_entity_unr − aligned_hist_rf` as the contrast that **does** hold alignment fixed; "differ only in what they are allowed to remember" is replaced by an explicit list of the confounds (capacity, architecture, position scheme, key construction, production-logit access). Null wording corrected throughout: FoX reads "no detected benefit over fixed decay" and the residual increment "no incremental benefit … was established at this resolution". The config's `known_limitations[1]` was **not edited** — training provenance is immutable — so the renderer substitutes corrected prose and **discloses the swap with the original wording and the reason** |
+| **5 — coverage matched only short prefixes anywhere** | **CLOSED.** Coverage is checked **inside § 9 only** and against **complete normalised entries** including consequence clauses. Four mutation tests added, one of them Astra's exact attack (truncating the two-seed limitation's consequence while keeping its prefix), plus a missing historical-consumption disposition, an entry moved out of § 9, and an absent § 9 heading. A new test ties **named cells to their named source fields**, replacing the weaker "a decimal occurs somewhere among the source numbers" |
+| **6 — the analysis freeze was not concrete** | **CLOSED.** New `scripts/sequence_track/pin_stage2_analysis.py` (`--write` / `--verify`) writes `eval_out/seq_stage2/analysis_pin.json`, snapshotted to the tracked `docs/sequence_track/stage2_analysis_pin.json`. It records the current hashes of `stage2_stats.py`, `render_stage2_report.py`, `sim_eval/eval_statistics.py`, `registered_experiment.py` and itself; the **exact statistics, ksweep and renderer invocations including every path argument**; the evidence hashes; the k selection; and the family map. `--verify` rebuilds from the *recorded* invocation and names the drifting field. It does not touch the training config. Verify line: `OK: eval_out/seq_stage2/analysis_pin.json verifies — analysis code, invocations, evidence hashes, k selection and family map all match` |
+| **7 (SHOULD) — slice identity inferred from counts** | **CLOSED going forward**: `slice_stats` now persists a `mask_sha256` over the packed mask bits and `_equivalent_slices` compares digests. The existing statistics JSON predates the digest, so this report's `innings_2` / `chase` disclosure falls back to counts and **says so explicitly** |
+| **8 (SHOULD) — pending and complete coexisted** | **CLOSED.** The heading and disposition are derived from the verified coverage, so the two cannot coexist; matched controls are shown beside each masked configuration, with the disclosed gap that `same_entity_k0` and `same_entity_unr` have **no separately registered control** because D7.4 registers only two |
+
+**A defect in the orchestrator's own invocation, exposed by the fix.** The
+report had been rendered with `--dependency-dir …/dependency/recert`, which
+contains the eight trained certificates but **none of the positive controls**,
+since those live in the parent. Under the old, permissive code that rendered a
+report claiming complete coverage; under the fix it correctly reads
+`CONTROL_MISSING` and blocks two arms. The report of record is therefore
+rendered from the **evidence root** `models/embeddings/seq_stage2/dependency`,
+which is what the analysis pin records, and this is precisely the failure mode
+Astra's MUST-FIX 6 predicted: "a default regeneration therefore changes the
+certification evidence… Record and verify the actual invocation."
+
+**Coverage as it now stands**: 14 certificates in scope (8 trained recerts, 4
+one-epoch smoke, 2 controls). All 8 trained certificates pass at max |Δ| exactly
+0 and all 8 recorded checkpoint md5s **authenticate against `model.pt` on
+disk**; both registered controls are matched through their dependency set and
+fired (`full` vs S(i) of recency k=30 at 0.7517, `aligned_hist` vs S(i) of
+same_entity k=30 at 0.9217). Coverage **complete**, nothing blocked. Smoke-tree
+checkpoints are never opened and read `NOT_AUTHENTICATED_CLOSED_TREE`.
+
+**No statistic changed.** A number-by-number diff of the old and new report
+removes zero numbers and adds exactly three — `−0.00003`, `−0.00060`,
+`+0.00044` — which are re-reads of the existing `residual_t1 − residual_mlp`
+row inside the new null-wording sentence. Report 958 → 987 lines. Suites:
+`178 passed` on the three analysis test files, `1754 passed, 56 deselected` on
+the full artifact-free suite.
+
 ---
 
 ## D12. Seed extension to 29, 42 and 101 (registered 2026-09-12, after gate 2 round 1)
