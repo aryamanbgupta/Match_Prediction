@@ -1,0 +1,742 @@
+experiment:
+  name: seq_stage2_v1
+  registered: 2026-09-11
+  purpose: "Register the sixteen stage-2 sequence configurations \u2014 the mechanism arms (fixed decay, learned forgetting, participant-aligned history, relay-free wiring, recency and ownership masks,\
+    \ two recurrent arms) and the two residual arms over the production ball model \u2014 each trained fresh on the i7 identity frame under one protocol, so every contrast in the arm register is a matched\
+    \ pair. Stage 1 checkpoints are NOT reused (D2.2): these are separate runs, not replications."
+  predecessor: experiments/configs/seq_stage1_retrain_i7_v1.yaml
+  decision_record: docs/sequence_track/stage2_acceptance.md
+  arm_register: "docs/sequence_track/stage2_acceptance.md \xA7 \"Arm register\""
+  runner: scripts/sequence_track/retrain_stage2.py
+  pin: scripts/sequence_track/pin_stage2.py
+  queue:
+  - research/sequence_track/queue_laptop.yaml
+  - research/sequence_track/queue_mini.yaml
+  queue_note: 'night 1 is split BY SEED across two machines (the user''s decision 2026-09-12, Astra MUST-FIX 9): seed 7 on the laptop, seed 13 on the Mac mini, every configuration on both. Each half holds
+    sixteen jobs in the registered queue order with a SEED-SPECIFIC output_dir (runs/<config_id>/seed_<seed>), because run_queue.sh decides skip-vs-run from the COMPLETE marker in output_dir plus the config
+    sha256 alone and reads neither the command nor the seed subset.'
+  sign_convention: candidate minus reference, in validation log loss, negative favourable.
+  evidence_status: 'every validation and test number of this stage is SCREENING evidence (D2.1): two seeds on night 1, checkpoint selection on the same validation split the contrasts are computed on (D2.8),
+    and no market or betting layer anywhere. Nothing here can be LANDED on its own.'
+  forbidden_data:
+  - data/golden
+  - data/forward_holdout
+data:
+  directory: data/xgb_data_i7
+  frame_version: i7
+  frame_role: ball_frame_i7
+  stats_cache_role: stats_cache_i7
+  splits_read:
+  - train
+  - validation
+  eval_kit: none
+  feature_contract: transformer_t1.build_features
+  n_features: 50
+training:
+  device: mps
+  seeds:
+  - 7
+  - 13
+  - 29
+  - 42
+  - 101
+  dmodel: 128
+  layers: 2
+  heads: 4
+  batch: 128
+  epochs: 30
+  learning_rate: 0.0003
+  patience: 3
+  aux: false
+  no_kit: true
+  score_test: false
+  save_predictions: true
+  early_stopping: on the full validation split, patience 3, as in stage 1. A validation date-prefix disjoint from the selection rows (A15) is NOT adopted; see deviations.
+  seed_policy: every configuration trains at two seeds (7, 13) on the first night as a directional screen; seeds 29, 42, 101 may be added later, and only to whole hypothesis families (candidate plus every
+    matched control plus every k if k is selected), never to single arms; every validation and test number of the stage is screening evidence; the untouched cohort is opened exactly once, after candidates,
+    k, controls and families are frozen.
+  seed_policy_source: docs/sequence_track/stage2_acceptance.md, D2 check 2.1, quoted verbatim.
+outputs:
+  directory: models/embeddings/seq_stage2/runs
+  summary: summary.yaml
+  per_run:
+  - metrics.json
+  - model.pt
+  - run_record.json
+  - predictions_validation.npz
+  save_row_aligned_probabilities: true
+configurations:
+- id: mlp
+  arm: mlp
+  params: {}
+  access:
+    features: true
+    history: false
+    identity: false
+    prod_logits: false
+  history_input: none
+  wiring: token_mlp
+  reference: []
+  reference_note: 'the shared control: every candidate arm''s primary contrast is against this one, so it has none of its own.'
+  tests: "control \u2014 capacity-matched token model with no sequence access."
+  queue_order: 1
+  command:
+  - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 7 --data-dir data/xgb_data_i7 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit
+    --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/mlp/seed_7
+  - uv run --no-sync python scripts/transformer_t1.py --arm mlp --seed 13 --data-dir data/xgb_data_i7 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit
+    --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/mlp/seed_13
+- id: full
+  arm: full
+  params: {}
+  access:
+    features: true
+    history: true
+    identity: false
+    prod_logits: false
+  history_input: innings_previous
+  wiring: standard
+  reference:
+  - mlp
+  tests: "reference \u2014 stage 1 arm C's architecture retrained under the stage 2 protocol; the standard-wiring endpoint the aligned-history and relay-free arms are read against."
+  queue_order: 2
+  command:
+  - uv run --no-sync python scripts/transformer_t1.py --arm full --seed 7 --data-dir data/xgb_data_i7 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit
+    --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/full/seed_7
+  - uv run --no-sync python scripts/transformer_t1.py --arm full --seed 13 --data-dir data/xgb_data_i7 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit
+    --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/full/seed_13
+- id: fixed_decay
+  arm: fixed_decay
+  params: {}
+  access:
+    features: true
+    history: true
+    identity: false
+    prod_logits: false
+  history_input: innings_previous
+  wiring: standard
+  reference:
+  - mlp
+  tests: "fixed decay \u2014 ALiBi additive bias -m_h*(i-j) with slopes m_h = 2^(-8h/H) and no positional embedding; also the matched control for fox."
+  queue_order: 3
+  command:
+  - uv run --no-sync python scripts/transformer_t1.py --arm fixed_decay --seed 7 --data-dir data/xgb_data_i7 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps
+    --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/fixed_decay/seed_7
+  - uv run --no-sync python scripts/transformer_t1.py --arm fixed_decay --seed 13 --data-dir data/xgb_data_i7 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device
+    mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/fixed_decay/seed_13
+- id: fox
+  arm: fox
+  params: {}
+  access:
+    features: true
+    history: true
+    identity: false
+    prod_logits: false
+  history_input: innings_previous
+  wiring: standard
+  reference:
+  - mlp
+  - fixed_decay
+  tests: "learned forgetting \u2014 per-head scalar gate from the key token's layer-zero embedding, cumulative log-gate added before softmax; differs from fixed_decay ONLY in the bias and the gate parameters."
+  queue_order: 4
+  command:
+  - uv run --no-sync python scripts/transformer_t1.py --arm fox --seed 7 --data-dir data/xgb_data_i7 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit
+    --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/fox/seed_7
+  - uv run --no-sync python scripts/transformer_t1.py --arm fox --seed 13 --data-dir data/xgb_data_i7 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit
+    --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/fox/seed_13
+- id: aligned_hist
+  arm: aligned_hist
+  params: {}
+  access:
+    features: true
+    history: true
+    identity: true
+    prod_logits: false
+  history_input: participant_aligned
+  wiring: standard
+  reference:
+  - mlp
+  - full
+  tests: "aligned input alone \u2014 the last outcome of the same batter and of the same bowler in this innings replace the innings-previous outcome, with standard wiring unchanged, so aligned_hist - full\
+    \ is the input change by itself."
+  queue_order: 5
+  command:
+  - uv run --no-sync python scripts/transformer_t1.py --arm aligned_hist --seed 7 --data-dir data/xgb_data_i7 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device
+    mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/aligned_hist/seed_7
+  - uv run --no-sync python scripts/transformer_t1.py --arm aligned_hist --seed 13 --data-dir data/xgb_data_i7 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device
+    mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/aligned_hist/seed_13
+- id: xlstm
+  arm: xlstm
+  params: {}
+  access:
+    features: true
+    history: true
+    identity: false
+    prod_logits: false
+  history_input: innings_previous
+  wiring: recurrent
+  reference:
+  - mlp
+  tests: "exponential gating \u2014 sLSTM block then mLSTM block at 128-d, plain torch; the documented departures from Beck et al. 2024 are listed under deviations."
+  queue_order: 14
+  command:
+  - uv run --no-sync python scripts/transformer_t1.py --arm xlstm --seed 7 --data-dir data/xgb_data_i7 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit
+    --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/xlstm/seed_7
+  - uv run --no-sync python scripts/transformer_t1.py --arm xlstm --seed 13 --data-dir data/xgb_data_i7 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit
+    --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/xlstm/seed_13
+- id: residual_mlp
+  arm: residual_mlp
+  params:
+    base_logits_dir: models/embeddings/seq_stage2/base_logits
+    residual_l2: 0.001
+  access:
+    features: true
+    history: false
+    identity: false
+    prod_logits: true
+  history_input: none
+  wiring: token_mlp
+  reference:
+  - mlp
+  tests: "control for residual_t1 \u2014 token model over log p_base from the production ball model, zero-initialised head, L2 shrinkage on the residual."
+  queue_order: 15
+  command:
+  - uv run --no-sync python scripts/transformer_t1.py --arm residual_mlp --seed 7 --data-dir data/xgb_data_i7 --base-logits-dir models/embeddings/seq_stage2/base_logits --residual-l2 0.001 --dmodel 128
+    --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/residual_mlp/seed_7
+  - uv run --no-sync python scripts/transformer_t1.py --arm residual_mlp --seed 13 --data-dir data/xgb_data_i7 --base-logits-dir models/embeddings/seq_stage2/base_logits --residual-l2 0.001 --dmodel 128
+    --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/residual_mlp/seed_13
+- id: residual_t1
+  arm: residual_t1
+  params:
+    base_logits_dir: models/embeddings/seq_stage2/base_logits
+    residual_l2: 0.001
+  access:
+    features: true
+    history: true
+    identity: false
+    prod_logits: true
+  history_input: innings_previous
+  wiring: standard
+  reference:
+  - residual_mlp
+  reference_note: residual_t1 - residual_mlp is the confirmatory contrast; residual_t1 - mlp is reported but does not qualify (it mixes the sequence and the production prior).
+  tests: "sequence over production \u2014 causal attention on top of the production ball model's log probabilities."
+  queue_order: 16
+  command:
+  - uv run --no-sync python scripts/transformer_t1.py --arm residual_t1 --seed 7 --data-dir data/xgb_data_i7 --base-logits-dir models/embeddings/seq_stage2/base_logits --residual-l2 0.001 --dmodel 128 --layers
+    2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/residual_t1/seed_7
+  - uv run --no-sync python scripts/transformer_t1.py --arm residual_t1 --seed 13 --data-dir data/xgb_data_i7 --base-logits-dir models/embeddings/seq_stage2/base_logits --residual-l2 0.001 --dmodel 128
+    --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/residual_t1/seed_13
+queue_order_note: 'night 1 order (D2, arm register "Queue order"): mlp, full, fixed_decay, fox, aligned_hist, recency_k30, same_entity_k30, then aligned_hist_rf, same_entity_k0, same_entity_k6, same_entity_k12,
+  same_entity_unr, then lstm, xlstm, then residual_mlp, residual_t1. Two seeds each: 32 runs.'
+statistics:
+  registered_for: docs/sequence_track/stage2_acceptance.md, D10
+  per_row_log_loss: computed from the row-aligned validation probabilities each run saves (predictions_validation.npz), never from a scalar.
+  contrasts:
+  - name: arm_minus_mlp
+    definition: each arm - mlp
+    role: primary_screen
+  - name: fox_minus_fixed_decay
+    definition: fox - fixed_decay
+    role: mechanism
+    tests: learned forgetting beyond fixed decay
+  - name: same_entity_minus_recency
+    definition: same_entity_k - recency_k at the same k
+    role: mechanism
+    tests: ownership plus alignment beyond recency
+    registered_pairs:
+    - - same_entity_k30
+      - recency_k30
+  - name: same_entity_unr_minus_aligned_hist_rf
+    definition: same_entity_unr - aligned_hist_rf
+    role: mechanism
+    tests: mask alone, given aligned inputs and matched relay-free keys
+  - name: aligned_hist_rf_minus_aligned_hist
+    definition: aligned_hist_rf - aligned_hist
+    role: mechanism
+    tests: "the relay-free wiring PLUS the key construction \u2014 NOT the wiring alone. The relay-free arms read an earlier row j < i as a (state, OWN outcome) pair while the standard-wiring arms read\
+      \ every row as a (state, SHIFTED previous outcome) pair, so the two endpoints differ in both the wiring and what the keys carry (known_asymmetries relay_free_keys_carry_own_outcome)."
+  - name: aligned_hist_minus_full
+    definition: aligned_hist - full
+    role: mechanism
+    tests: the aligned history input
+  - name: residual_t1_minus_residual_mlp
+    definition: residual_t1 - residual_mlp
+    role: confirmatory
+    tests: sequence structure on top of the production prior
+  families:
+    definition: 'one registered family per candidate configuration, with exactly three members: {primary contrast = candidate - its named matched control on the `all` slice, death-over non-inferiority gate
+      = candidate - mlp on the `death` slice, chase non-inferiority gate = candidate - mlp on the `chase` slice}. The map below is the registration: it is not a template. Every reference is a config id
+      from the `configurations` list, and every family member names the slice it is evaluated on.'
+    gate_reference_rule: both non-inferiority gates are taken against mlp for every candidate, whatever the candidate's primary control is (D10.6), so the gate asks "does this arm lose ground against the
+      shared control on death overs / in chases", a question that is comparable across every family.
+    primary_slice: all
+    death_gate_slice: death
+    chase_gate_slice: chase
+    multiplicity: holm
+    multiplicity_scope: within a family, across its three members
+    holm:
+      scope: Holm operates WITHIN each three-member family, separately for each estimand / checkpoint readout. It is never pooled across the 15 families and never applied across the k search.
+      adjustment: "with three sorted raw p-values p_(1) <= p_(2) <= p_(3), the adjusted value at rank r is min(1, max over j <= r of (4 - j) * p_(j)) \u2014 the step-down stopping rule, which makes the\
+        \ adjusted values monotone in rank."
+      ties: stable in the registered member order (primary, death, chase)
+      missing_member: an unavailable member (a run that did not finish, a slice with no rows) gets a non-rejecting placeholder (adjusted p = 1) and the family CANNOT pass.
+      raw_p: the threshold-centred two-sided percentile form p = min(1, 2 * min[P(d* - t <= 0), P(d* - t >= 0)]) over the bootstrap draws d*, with t = 0 for the superiority (primary) member and t = +0.002
+        for each non-inferiority gate.
+    map:
+    - candidate: full
+      primary:
+        contrast: full - mlp
+        reference: mlp
+        slice: all
+      death_gate:
+        contrast: full - mlp
+        reference: mlp
+        slice: death
+      chase_gate:
+        contrast: full - mlp
+        reference: mlp
+        slice: chase
+      holm_group: family_full
+    - candidate: fixed_decay
+      primary:
+        contrast: fixed_decay - mlp
+        reference: mlp
+        slice: all
+      death_gate:
+        contrast: fixed_decay - mlp
+        reference: mlp
+        slice: death
+      chase_gate:
+        contrast: fixed_decay - mlp
+        reference: mlp
+        slice: chase
+      holm_group: family_fixed_decay
+    - candidate: fox
+      primary:
+        contrast: fox - fixed_decay
+        reference: fixed_decay
+        slice: all
+      death_gate:
+        contrast: fox - mlp
+        reference: mlp
+        slice: death
+      chase_gate:
+        contrast: fox - mlp
+        reference: mlp
+        slice: chase
+      holm_group: family_fox
+    - candidate: aligned_hist
+      primary:
+        contrast: aligned_hist - full
+        reference: full
+        slice: all
+      death_gate:
+        contrast: aligned_hist - mlp
+        reference: mlp
+        slice: death
+      chase_gate:
+        contrast: aligned_hist - mlp
+        reference: mlp
+        slice: chase
+      holm_group: family_aligned_hist
+    - candidate: xlstm
+      primary:
+        contrast: xlstm - mlp
+        reference: mlp
+        slice: all
+      death_gate:
+        contrast: xlstm - mlp
+        reference: mlp
+        slice: death
+      chase_gate:
+        contrast: xlstm - mlp
+        reference: mlp
+        slice: chase
+      holm_group: family_xlstm
+    - candidate: residual_mlp
+      primary:
+        contrast: residual_mlp - mlp
+        reference: mlp
+        slice: all
+      death_gate:
+        contrast: residual_mlp - mlp
+        reference: mlp
+        slice: death
+      chase_gate:
+        contrast: residual_mlp - mlp
+        reference: mlp
+        slice: chase
+      holm_group: family_residual_mlp
+      note: residual_mlp is registered as residual_t1's matched control; its own family measures what the production prior alone buys over mlp and it is read as such, not as a sequence claim.
+    - candidate: residual_t1
+      primary:
+        contrast: residual_t1 - residual_mlp
+        reference: residual_mlp
+        slice: all
+      death_gate:
+        contrast: residual_t1 - mlp
+        reference: mlp
+        slice: death
+      chase_gate:
+        contrast: residual_t1 - mlp
+        reference: mlp
+        slice: chase
+      holm_group: family_residual_t1
+      note: residual_t1 - mlp is reported but does not qualify as a primary contrast (it mixes the sequence and the production prior).
+    map_is_complete: "every configuration except mlp appears exactly once as a candidate; mlp is the shared control and is a candidate in no family. If the k sweep selects a k other than 30, that cell's\
+      \ family is the one registered above for that k (primary against mlp) \u2014 it does not acquire recency_k30 as a matched control (see k_selection matched_control_constraint)."
+    exploratory: every slice other than all, death and chase; every arm - mlp contrast that is not a member of the family above (for example aligned_hist - mlp, fox - mlp, same_entity_k30 - mlp on the all
+      slice, and residual_t1 - mlp on the all slice); the mechanism contrasts that are not any family's primary member; and the residual arms' base-only comparison.
+  slices:
+  - all
+  - death
+  - chase
+  - powerplay
+  - middle
+  - innings_1
+  - innings_2
+  - thin_pair
+  bootstrap:
+    contract: tournament_time_block_v1
+    blocks_from: scripts/sim_eval/eval_statistics.load_competition_clusters
+    block_source_dir: data/t20s_json
+    block_key: cricsheet match id
+    resample: tournament blocks, not matches
+    reps: 2000
+    seed: 29
+    weighting: ball_weighted
+    min_blocks: 10
+    below_min_blocks: descriptive
+    invariant: "CLAUDE.md critical invariant 7 \u2014 fewer than 10 blocks is descriptive, never a CI-clean claim."
+  estimands:
+  - id: i
+    definition: per checkpoint (one seed)
+    reported: separately
+  - id: ii
+    definition: joint resampling of seeds and tournament blocks
+    reported: separately
+  non_inferiority:
+    margin_ll: 0.002
+    sign: a candidate is non-inferior on a gate slice when U95, the 97.5th percentile of the paired harm draws of (candidate - mlp), is STRICTLY below +0.002 log loss. U95 = 0.002 exactly does not pass.
+    applies_to:
+    - death
+    - chase
+    reference: mlp
+    raw_p: 'the same threshold-centred two-sided percentile form as the primary member, with t = +0.002: p = min(1, 2 * min[P(d* - 0.002 <= 0), P(d* - 0.002 >= 0)]).'
+    not_imported_from_stage_1: stage 1's +-0.007 parity margin and its parity classification are NOT imported; this stage's only margin is +0.002 on log loss.
+  interval_labelling:
+    rank_local: every per-arm or per-rank interval is labelled "rank-local percentile interval; not simultaneous; not the rejection rule", as the stage 1 report did. The rejection rule is the Holm-adjusted
+      family above, never an interval read off a table.
+  k_selection:
+    tolerance_ll: 0.002
+    registered_sweep:
+    - 0
+    - 6
+    - 12
+    - 30
+    - unr
+    rule: "ANY k in the registered sweep {0, 6, 12, 30, unr} may win, unr included: choose the k with the best (lowest) two-seed mean validation log loss; if no k beats k = 30 by more than 0.002, keep 30.\
+      \ The rule is not restricted to k smaller than 30 \u2014 a larger window or the unrestricted innings wins on the same terms as a smaller one."
+    matched_control_constraint: 'only k = 30 has a registered recency control (recency_k30), so a selected k other than 30 does NOT acquire a matched recency comparison: it may not borrow recency_k30, because
+      recency_k30''s window is a different window. At k = unr the matched relay-free endpoint is aligned_hist_rf (same wiring, same key construction, no mask), which is registered; at k = 0, 6, 12 there
+      is no matched control on night 1 and the primary contrast is against mlp. A matched recency control at a newly selected k is a new run at the same seeds, queued before 2f.'
+  labelling:
+    two_seed_night: screen
+    note: a two-seed night is a directional screen; no interval from it is a confirmation, and no arm is promoted on it.
+cohort:
+  frozen: models/embeddings/seq_stage2/cohort/FROZEN.json
+  parquet: models/embeddings/seq_stage2/cohort/cricket_data_i7_cohort.parquet
+  window: 2026-04-17 .. 2026-08-05
+  cohort_status: DEFERRED_UNOPENED
+  cohort_scored: false
+  deferral: "Astra's ruling at gate 1 (2026-09-12): DEFER \u2014 the cohort is NOT opened on night 1. Two seeds are a directional screen (D2.1), and the one confirmatory read must not be spent on screening\
+    \ evidence."
+  unlock_requires: "seeds 29, 42 and 101 added to every retained whole family \u2014 candidate, every matched control, and ALL FIVE k configurations (k = 0, 6, 12, 30, unr) \u2014 before the cohort may\
+    \ be opened. Then it is scored exactly once."
+  scored: once, AFTER the unlock condition above is met and candidates, k, controls and families are frozen (D2.1, D10.9). No trainer, smoke or selection step loads it (D5.9), and nothing has loaded it
+    to date.
+  read_by: this config's statistics step only, once unlocked
+forbidden_data:
+- data/golden
+- data/forward_holdout
+forbidden_data_note: the cohort was built from the stat-generator zips; the only reads of these two trees anywhere in stage 2 are the two id-only exclusion reads recorded in D2.3, made by the cohort builder,
+  and nothing in the training path touches either.
+deviations:
+- id: a15_not_adopted
+  statement: early stopping on a validation date-prefix disjoint from the selection rows is NOT adopted for any arm.
+  reason: one protocol for all arms, and the k-sweep tolerance is the registered guard. It does not correct checkpoint-selection optimism, which is one reason every validation number of this stage is screening
+    evidence (D2.8, Astra SHOULD 12).
+- id: two_seeds_night_1
+  statement: every configuration runs at seeds 7 and 13 on night 1.
+  reason: the user's decision (D2.1); more seeds are added later to whole hypothesis families, never to single arms.
+- id: xlstm_simplifications
+  statement: the xLSTM arm is written in plain torch (no xlstm package is installed) and departs from Beck et al. 2024 as recorded by scripts/sequence_track/recurrent_arms.simplifications().
+  simplifications:
+  - no causal conv1d pre-block on either cell
+  - sLSTM cell is single-head with dense (d, d) input and recurrent matrices (no block-diagonal projections)
+  - no up/down projection around the mLSTM cell; it runs at dmodel so 4 heads of 32 holds at dmodel=128, and each block carries a SwiGLU feed-forward sublayer (hidden 4*dmodel//3) instead
+  - no learnable conv skip inside the mLSTM block
+  - exponential forget gate in both cells (paper allows sigmoid or exp); zero initial cell states and m_0 = 0
+  - sLSTM normaliser denominator clamped below at 1e-6 as a numerical guard
+- id: residual_oof_refits
+  statement: the train-split base logits are leave-one-date-block-out refits run at a fixed 25 rounds (production best_iteration + 1) with no early stopping and no eval set, instead of re-running production's
+    early stopping per fold; the production label encoders are reused verbatim.
+  reason: no fold may re-select its round count against the validation split. Recorded in the base-logits sidecars (D4).
+- id: encoders_reused
+  statement: every arm reuses the frame's own 50-feature contract and the production encoders; no encoder is refit for stage 2.
+known_asymmetries:
+- id: same_entity_vs_recency_history_input
+  text: 'same_entity and recency differ in the HISTORY INPUT as well as the mask: same_entity reads the participant-aligned input, recency reads the innings-previous one. So same_entity_k - recency_k is
+    "ownership plus alignment beyond recency"; the mask alone is isolated by same_entity_unr - aligned_hist_rf (D3.6, Astra MUST-FIX 5).'
+- id: relay_free_keys_carry_own_outcome
+  text: "the relay-free arms (recency, same_entity, aligned_hist_rf) read an earlier row j < i as a (state, OWN outcome) pair: the key/value token is feat_proj(feat_j) + own_out_emb(y_j) + pos_j, with y_j\
+    \ row j's own realised outcome. The standard-wiring arms (full, aligned_hist, fixed_decay, fox, residual_t1) read every row, key or query, as a (state, SHIFTED previous outcome) pair: feat_proj(feat_j)\
+    \ + hist(j) + pos_j. The target's own token in both wirings carries hist(i), never y_i, so no arm can read its own label (certified in D7). Consequence: aligned_hist_rf - aligned_hist measures the wiring\
+    \ PLUS the key construction, not the wiring alone, and the same qualification attaches to same_entity_unr - aligned_hist_rf only through its aligned_hist_rf endpoint (both of its arms are relay-free,\
+    \ so the key construction is matched there). Decided at the 2026-09-11 Fable-to-Opus handover, \xA7 3.1: the alternative was to keep one construction and widen the dependency set S(i), which would have\
+    \ made the ownership certificate weaker than the arm register states."
+- id: residual_arms_see_the_production_base
+  text: the residual arms carry the production ball model's log probabilities, which no other arm sees; residual_t1 - mlp therefore mixes two changes and only residual_t1 - residual_mlp is confirmatory.
+- id: positional_embedding_not_uniform
+  text: "the recurrent arms have no positional embedding by construction (position is carried by the recurrence), while the masked and standard attention arms do \u2014 except fixed_decay and fox, whose\
+    \ bias carries position and which are registered with no positional embedding."
+- id: token_mlp_parameter_count_not_matched
+  text: a token_mlp arm (mlp, residual_mlp) has no attention layer at all, so its parameter count is not matched to the attention arms parameter for parameter; counts are reported per run in arm_params.n_parameters.
+known_limitations:
+- the global outcome prior in the stats cache is not as-of-date, an inherited limitation of the frame; the direction and size of its effect on any stage-2 contrast are unknown.
+- venue history in the frame is not recency-weighted (TODO.md backlog item); every arm inherits the same feature, so it is a level effect on all of them rather than a per-arm advantage.
+- the i7 test split was read by the 2026-08 program, so it is not a clean holdout; stage 2 does not load it (score_test false) and the untouched cohort exists because of this.
+- MPS kernels are not bit-reproducible across runs or machines, so a rerun of any checkpoint may differ in the low decimals; every checkpoint records mps_bit_reproducible false.
+- checkpoint selection uses the same validation split the contrasts are computed on (A15 not adopted), so every number is screening evidence.
+
+# ---------------------------------------------------------------------------
+# FIVE-SEED MERGE config, registered 2026-09-12. ANALYSIS AND CONSOLIDATION
+# ONLY -- no training is launched from this file.
+#
+# It exists because `--consolidate` rewrites each summary.yaml from the
+# CONFIG'S registered seeds, so consolidating under seq_stage2_v1.yaml (7, 13)
+# or seq_stage2_ext_v1.yaml (29, 42, 101) would each drop the other night's
+# seeds out of the summary even though every run directory survives. This file
+# registers all five seeds for exactly the eight configurations that have them,
+# so one consolidation produces true five-seed summaries and the statistics can
+# be read at five seeds with the registered 4/5 favourable-direction count.
+#
+# The other eight configurations (the five same_entity k arms, recency_k30,
+# aligned_hist_rf, lstm) keep their two-seed summaries and their two-seed
+# screening status. No five-seed ownership or window claim is available until
+# they are extended too, which D10.16 requires to be all five k arms at once.
+#
+# The training block is byte-identical to both training configs, so the
+# seed-independent training signature is identical across all five seeds. That
+# identity is what makes one table legitimate, and the driver checks it.
+# ---------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+# GENERATED BLOCK. Written by `scripts/sequence_track/pin_stage2.py --write`
+# and checked by `--verify`, which recomputes every hash from the files on
+# disk and exits non-zero on any difference. Do not edit by hand.
+# --------------------------------------------------------------------------
+provenance:
+  pins_generated_at: '2026-09-12T03:09:35Z'
+  git_head_short: 92cc3c5
+  not_verified:
+  - provenance.pins_generated_at
+  - provenance.git_head_short
+  not_verified_reason: both change without the config's meaning changing (a re-pin
+    moves the timestamp; the commit that lands this file moves HEAD), so --verify
+    records them and does not compare them
+  pinned_by: scripts/sequence_track/pin_stage2.py
+  config_body_sha256: d33e0d6d1ec529f1d4b91e716de2d52d3cb6422293e58dacd09950fbcadf6b16
+  config_body_sha256_rule: sha256 of yaml.safe_dump(config without 'provenance',
+    sort_keys=True); a config cannot carry its own hash, so what is pinned is every
+    key the pin does not write
+  frame:
+    dir: data/xgb_data_i7
+    version: i7
+    feature_hash:
+      hash: c520a3ba08ae
+      version: i7
+      n_features: 114
+      splits:
+        train_end: '2024-12-31'
+        val_end: '2025-06-30'
+        test_end: '2026-04-16'
+        golden_start: '2026-04-17'
+      gender_filter: male
+      delivery_semantics: inclusive_total_runs_v1
+      venue_alias_version: venue_aliases_v1
+      venue_alias_sha256: 853b32b0ce3098dd8c0f33ba1437846f5505d50d9a425fbd37bff9c9f76745d8
+      venue_alias_active_count: 94
+      k_player: 30.0
+      k_venue: 200.0
+    splits:
+      train:
+        path: data/xgb_data_i7/cricket_data_i7_train.parquet
+        md5: fac0b7bededf0aae1989d654e3eba9e8
+        n_rows: 1876971
+        match_date_min: '2005-02-17'
+        match_date_max: '2024-12-30'
+      validation:
+        path: data/xgb_data_i7/cricket_data_i7_validation.parquet
+        md5: 326436317310adadabe0175825e57d1b
+        n_rows: 124292
+        match_date_min: '2024-12-31'
+        match_date_max: '2025-06-29'
+      test:
+        path: data/xgb_data_i7/cricket_data_i7_test.parquet
+        md5: 64b58fec51509567580c9122f2b5183f
+        read: 'hashed only: a base-logits sidecar records this parquet''s md5, and
+          no stage-2 step opens its rows'
+  stats_cache:
+    role: stats_cache_i7
+    path: models/player_stats_cache_i7.sqlite
+    md5: 671ac8200b275fa3d11d848e609f5132
+    venue_alias_version: venue_aliases_v1
+    same_day_order_version: date_then_match_id_lexicographic_v1
+  features:
+    count: 50
+    names:
+    - batter_p0
+    - batter_p1
+    - batter_p2
+    - batter_p4
+    - batter_p6
+    - batter_pw
+    - batter_p0_vs_pace
+    - batter_p1_vs_pace
+    - batter_p2_vs_pace
+    - batter_p4_vs_pace
+    - batter_p6_vs_pace
+    - batter_pw_vs_pace
+    - batter_p0_vs_spin
+    - batter_p1_vs_spin
+    - batter_p2_vs_spin
+    - batter_p4_vs_spin
+    - batter_p6_vs_spin
+    - batter_pw_vs_spin
+    - bowler_p0
+    - bowler_p1
+    - bowler_p2
+    - bowler_p4
+    - bowler_p6
+    - bowler_pw
+    - bowler_p0_vs_lhb
+    - bowler_p1_vs_lhb
+    - bowler_p2_vs_lhb
+    - bowler_p4_vs_lhb
+    - bowler_p6_vs_lhb
+    - bowler_pw_vs_lhb
+    - bowler_p0_vs_rhb
+    - bowler_p1_vs_rhb
+    - bowler_p2_vs_rhb
+    - bowler_p4_vs_rhb
+    - bowler_p6_vs_rhb
+    - bowler_pw_vs_rhb
+    - venue_p0
+    - venue_p1
+    - venue_p2
+    - venue_p4
+    - venue_p6
+    - venue_pw
+    - is_middle_overs
+    - is_death_overs
+    - wickets_in_hand
+    - chase_target
+    - balls_remaining
+    - score
+    - run_rate
+    - run_rate_required
+    sha256: 14f40e4a7429eac4644226fb02fbc88b01f0fab158709bce2bed2574708db564
+    order: EB_BAT + EB_BOWL + VENUE + CTX + STATE (embeddings_e1, transformer_t1);
+      a permutation is a different model input, not a relabelling
+  base_logits:
+    dir: models/embeddings/seq_stage2/base_logits
+    splits:
+      train:
+        npz: models/embeddings/seq_stage2/base_logits/train.npz
+        npz_md5: 584b2689a0e961d0a2d6a5e4eeec3eef
+        n_rows: 1876971
+        parquet_md5: fac0b7bededf0aae1989d654e3eba9e8
+        sidecar: models/embeddings/seq_stage2/base_logits/train.json
+        sidecar_sha256: 768862df009d1fa5b7e5be0046488743b7234a96a328132e601a777036dc63c4
+        booster_md5: 7ee1e1809917f45be7e726b3ea4a8a6c
+      validation:
+        npz: models/embeddings/seq_stage2/base_logits/validation.npz
+        npz_md5: 000ff0c49a86597a1475d90b98ec162a
+        n_rows: 124292
+        parquet_md5: 326436317310adadabe0175825e57d1b
+        sidecar: models/embeddings/seq_stage2/base_logits/validation.json
+        sidecar_sha256: cdf06e085975a49a224e97ea0230e4e89b3e83a1ad7fc2a4845e0c3e6f530f86
+        booster_md5: 7ee1e1809917f45be7e726b3ea4a8a6c
+      test:
+        npz: models/embeddings/seq_stage2/base_logits/test.npz
+        npz_md5: b39bf980a6a485971ee235d07279866f
+        n_rows: 186667
+        parquet_md5: 64b58fec51509567580c9122f2b5183f
+        sidecar: models/embeddings/seq_stage2/base_logits/test.json
+        sidecar_sha256: 5f52e39b32faad37b1905e36dd42551801e27480187c487e6d5f5aeeea899f9a
+        booster_md5: 7ee1e1809917f45be7e726b3ea4a8a6c
+    train_validation_digest: 20286a8ffe8dc4c4915b20f1b908e141
+    digest_rule: md5 of '<split>=<npz md5>' lines, sorted by split, over the splits
+      a stage-2 run reads; transformer_t1 records the same value in arm_params.base_logits_md5
+  sources:
+    count: 25
+    source_sha256:
+      scripts/transformer_t1.py: b1378d5527fd6e302bb18d7cad02d78ec344af477b8feb78f91b3604ab9b8a82
+      scripts/sequence_track/recurrent_arms.py: e5454280f7386650b80b42cd15dc2df1a5dfd3b032d4776387815e062108ce10
+      scripts/sequence_track/build_base_logits.py: 6643370313f8568644b59a0e74a4683980e2351f0eb255e046d1b69ad566e4c9
+      scripts/sequence_track/build_cohort_stage2.py: 8fd7ce63e77aea550c928a40d0bd8458f2b758e0aa922c5f96b5b9695b8eee43
+      scripts/sequence_track/retrain_stage2.py: e75e349c1b640ceb36ade7ee818d7c5d52021bf803cccf9be2fc6fec17fc03cc
+      scripts/sequence_track/pin_stage2.py: 61b94dab12323564796e8f3cfaac1422d8db0a817c831fdee6487f7ccb3f9c18
+      scripts/sequence_track/ownership_dependency_test.py: c25dce69a6930e4842c648538c03089e137918f687e894a9011d4f9d40e2285c
+      scripts/sequence_track/stage2_stats.py: 0701ed9c8d5d0a5e91b5d7c1259079c04c7e1418348f8f7513ec6b45cc7877ac
+      scripts/sequence_track/render_stage2_report.py: 245641e7ac57d7add8716440d50012db55c0b03ec59edc0be2e588b1c9dba076
+      scripts/sim_eval/eval_statistics.py: d3fcfe454269d334766a35965dff2e33db9c5e3bbb06ea16a0d7b14bde2ba1ca
+      scripts/embeddings_e1.py: 348dd073d0c859eb42507accc52a6fa5f6534c476a05b6a901671faf588d76ea
+      scripts/artifacts.py: da90ce3b77522310e593955d54406b9323d0af5341f7a7f214ed74abf37dc821
+      scripts/calibration.py: f79e511200422bed25e9db7bc9f2a91a278901664a6c40460527b7b0b22b9445
+      scripts/registered_experiment.py: ae8f027b9b9b100f377be03413973b35edb5f2c62c632cf1daf7590cceb8595f
+      scripts/materialize_features.py: 4bbb9dba8feed43eef00d383155cf9bb4af73c69414aae30ef730c2f71857cdd
+      scripts/build_stats_cache.py: 456c4cfb867295271933f6884260e95f665e32abf3e11ace8d6783cf79cb0113
+      scripts/feature_registry.py: 312fc5e238fedbd861d202781eaa3737b14e3f963578fed03b7c3a1cd9d72897
+      scripts/parsing_v2.py: 8ff14353dad013ba5fa16a72286f939d56dd93723f5e4897d183c6cddcd8c288
+      scripts/tracker_rehydration.py: b4175a747402e80e876380da4a2e1d086b4439ed9c61ff04d4d02a59ea563bbf
+      scripts/stats_provider.py: 7aabbd05b39d1cce6f80e8a51aaa82d6ac6a9c83644ea20402662cfe7eb27125
+      scripts/stats_sqlite_backend.py: e1d7262fe788833483e15ddc9e59d7af779a9b580989e93a575fd3fcddde4526
+      scripts/loaders_common.py: 1c14faa79391bb0b8160bd3c0d78c724d616c2824fc1aa971a889cbe7868f4e7
+      scripts/identity_maps.py: 687b34a0956b36058b5611cbd71efc6f82442f2a34262f04ec0f1b5eef229724
+      scripts/elo_update.py: a77765a6e6bbcbd9b02731953dc2eb894ad016ebafcacb3494640c4185eb05cb
+      scripts/player_metadata.py: ba94410137b1483996a9fed3f20d1cf925072f1a00bb3cda914914d938b24181
+    source_sha256_absent: []
+    source_sha256_absent_note: closure files not present on this checkout (a later
+      deliverable's script); they are dropped from the hash set and named here rather
+      than skipped silently
+    closure_rule: 'every source file on the stage-2 execution path is hashed, not
+      just the trainer: the recurrent arms, the base-logits builder, the cohort
+      builder, the multi-seed driver and this pin all move stage-2 results, so a
+      change to any of them must fail --verify. It also covers the IMPORTED modules
+      those scripts actually depend on — the 50-feature contract (embeddings_e1),
+      the manifest and encoder helpers (artifacts, calibration), the run-provenance
+      helper (registered_experiment), and the feature-construction, materialisation,
+      stats-cache, identity, ELO, chronology and rehydration stack the cohort''s
+      114 columns are built by — because each of them can change stage-2 behaviour
+      without any stage-2 script changing (Astra SHOULD 3)'
+  cohort:
+    frozen: models/embeddings/seq_stage2/cohort/FROZEN.json
+    status: frozen
+    frozen_json_sha256: 32265943c36b6d66e2922f8ad3996e956909991f566b17201cb58dcbdf0607ed
+    eligible_match_count: 210
+    eligible_ids_recorded: 210
+    frozen_at: '2026-09-11T17:23:20Z'
+    scored: once, in D10, after the family freeze
+  runtime:
+    python: 3.9.25
+    packages:
+      torch: 2.5.1
+      numpy: 1.24.3
+      pandas: 2.3.2
+      xgboost: 2.1.4
+      pyarrow: 21.0.0
+    read_via: importlib.metadata.version
+    note: torch and numpy change training output, so a stage-2 result produced under
+      different versions is a different result

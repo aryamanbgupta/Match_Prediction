@@ -871,3 +871,38 @@ shared `.venv` is workable only while dependencies do not change, since
 from altering it, so **no dependency change during the night**; and the
 runner's exit status is not evidence of 32 completed runs, because memory
 refusals and exhausted retries still exit zero.
+
+---
+
+## D12. Seed extension to 29, 42 and 101 (registered 2026-09-12, after gate 2 round 1)
+
+Astra's gate 2 round 1 named the next step and the minimum set. The user's
+autonomy grant directs the orchestrator to proceed rather than wait, and both
+machines were idle after night 1, so the extension was registered and launched
+before the report fixes landed. **Nothing here changes any night-1 number, and
+no five-seed claim may be read from it until D12.7 passes.**
+
+Registration: `experiments/configs/seq_stage2_ext_v1.yaml` (training, seeds
+29/42/101) and `experiments/configs/seq_stage2_5seed_v1.yaml` (consolidation
+and analysis only, all five seeds, the eight extended configurations, seven
+families). `experiments/configs/seq_stage2_v1.yaml` is **untouched**, so
+night 1's provenance block and COMPLETE markers stay valid.
+
+| # | Check | Pass condition |
+|---|---|---|
+| 12.1 | Whole families only | the extended set is `mlp`, `full`, `fixed_decay`, `fox`, `aligned_hist`, `xlstm`, `residual_mlp`, `residual_t1` — every family whose candidate is in the set has **every** reference in the set too (verified: references are `mlp`, `fixed_decay`, `full`, `residual_mlp`). Per D2.1 seeds are added to whole families, never to single arms |
+| 12.2 | Astra's minimum honoured | `xlstm` + `mlp` is the registered minimum; `full` is included as the reference for the reproduced death-over harm; `fixed_decay` and `fox` complete the forgetting family; `aligned_hist` completes the aligned-input family; `residual_mlp` is retained as the only screen pass and `residual_t1` with it |
+| 12.3 | Ownership and k NOT extended | the five `same_entity` arms, `recency_k30` and `aligned_hist_rf` are deliberately excluded, because D10.16 requires **all five k configurations** whenever a k claim is retained. Consequence recorded: **no five-seed ownership or window claim exists**, and those families keep their two-seed screening status |
+| 12.4 | Machine split preserved | seeds 29 and 42 on the laptop, seed 101 on the mini, so every contrast remains within-machine at each seed exactly as D8 requires; machine stays confounded with seed, never with arm, and no machine term is fitted |
+| 12.5 | Signature identity | the extension's training block is byte-identical to night 1's, so the seed-independent training signature must be **identical across all five seeds** for a configuration. This is the precondition for one five-seed table and the driver checks it; it is asserted before any merge |
+| 12.6 | Budgets | `expected_hours` from the same registered rule, F = 1.5 laptop / 3 mini: laptop 16 jobs / 4.30 h, mini 8 jobs / 3.90 h. Separate STOP files (`STOP_laptop_ext`, `STOP_mini_ext`) and seed-specific output dirs, so night-1 markers cannot be disturbed |
+| 12.7 | Merge and five-seed read | after both queues finish, `retrain_stage2.py --consolidate --config experiments/configs/seq_stage2_5seed_v1.yaml` rewrites the eight summaries at five seeds (needed because `--consolidate` rewrites from the **config's** registered seeds, so consolidating under either training config would drop the other night's seeds from the summary while leaving every run directory intact); then the statistics are rerun at `--seeds 7,13,29,42,101` with the registered **4/5 favourable-direction count**, and the report is regenerated. Only then does a five-seed reading exist |
+| 12.8 | What is still not unlocked | the cohort remains `DEFERRED_UNOPENED`. Five seeds is **necessary and not sufficient**: D10.16(0) — the historical-consumption question beyond the frame-and-cache ancestry — is still open, the extension procedure must be frozen before the new results are inspected, cohort provenance must be re-verified, and the partial-exposure recovery rule applies. Astra: "Five seeds alone cannot unlock this cohort" |
+| 12.9 | Launch record | the first launch failed all 16 laptop jobs in about a second each: the jobs' `config` field named the extension config, which is what the runner hashes, but the command did not pass `--config`, so the driver read the night-1 config and **correctly refused to widen its registered seeds**. That refusal is the D3.12 guard working, not a silent wrong run. Commands corrected to name the extension config, 16 stale `FAILED` markers cleared, relaunched |
+
+### Result (D12) — in progress
+
+Launched 2026-09-12 ~08:37 IST (laptop, seeds 29 then 42, from the worktree at
+`92cc3c5`) and ~08:38 (mini, seed 101, same commit). Both pins verify:
+`pin_stage2: OK` on the extension config and on the five-seed merge config.
+Completions and wall times are filled when the queues finish.
