@@ -32,12 +32,13 @@ roles are still `docs/sequence_track/stage2_handoff_opus.md`.
 > Five-seed outputs must use **distinct `--out` paths** so night-1 evidence is
 > not overwritten.
 >
-> **Training: extension 1** (eight families, seeds 29/42/101) is 8/8 on the
-> mini and 13/16 on the laptop. **Extension 2** (the five window arms,
-> `recency_k30`, `aligned_hist_rf`, `lstm`) is running on the mini at seed 101
-> and still needs its laptop half at seeds 29 and 42 — launch
-> `queue_laptop_ext2.yaml` only after `queue_laptop_ext.yaml` finishes, one
-> trainer per machine.
+> **Training: extension 1 is COMPLETE** — all 24 runs, and its eight families
+> now hold **five seeds each locally** (night 1's 7 and 13 plus 29, 42, 101),
+> verified by counting `COMPLETE.json`. Its seed-101 runs were rsynced home
+> selectively, config by config, because the mini is concurrently writing other
+> seed-101 directories for extension 2. **Extension 2** (the five window arms,
+> `recency_k30`, `aligned_hist_rf`, `lstm`) is running on **both** machines now:
+> seed 101 on the mini and seeds 29/42 on the laptop.
 >
 > **Ordered remainder:** close (1) and (2) → commit the two-seed result →
 > launch extension 2 on the laptop → both queues finish → rsync seed_101 with
@@ -45,10 +46,18 @@ roles are still `docs/sequence_track/stage2_handoff_opus.md`.
 > five-seed statistics and report to distinct paths → Astra gate → commit.
 > `log_verdict.py` is NOT run and the cohort is NOT opened; both are the user's.
 >
-> **Three launch mistakes already made, do not repeat**: an rsync `***` include
-> pattern macOS openrsync ignores; queue commands that omit `--config` so the
-> driver reads the night-1 registration; and filtered configs keeping
-> non-contiguous `queue_order`, which the driver validates as 1..N.
+> **Four launch mistakes already made, do not repeat**: (1) an rsync `***`
+> include pattern macOS openrsync ignores, so it copies directory shells and
+> reports success; (2) queue commands that omit `--config`, so the driver reads
+> the night-1 registration and refuses to widen its seeds; (3) filtered configs
+> keeping non-contiguous `queue_order`, which the driver validates as 1..N;
+> (4) **launching from the training worktree without re-pointing it at the
+> current commit first** — it sat at the extension-1 commit, which predates the
+> extension-2 queue files, so the runner reported "queue file not found",
+> launched nothing and exited 0. **Always
+> `git -C "$WT" checkout --detach $(git -C "$MAIN" rev-parse HEAD)` and assert
+> it, immediately before any laptop launch.** Every one of these four failed
+> loudly-but-harmlessly or exited 0 with nothing launched; none corrupted data.
 
 ### Autonomy grant (user, 2026-09-12 ~01:15 IST)
 
