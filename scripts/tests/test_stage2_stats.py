@@ -976,6 +976,283 @@ def test_statuses_are_only_the_three_allowed(config_path, runs_root, frame_dir,
 
 
 # ---------------------------------------------------------------------------
+# D10.16 — five-seed readouts and the 4/5 extension qualification
+# (Astra gate 2 round 2)
+# ---------------------------------------------------------------------------
+
+FIVE_SEEDS = (7, 13, 29, 42, 101)
+
+
+def test_readouts_are_derived_from_the_seeds_not_hard_coded():
+    assert st.readouts_for((7, 13)) == ("seed_7", "seed_13", "seed_mean_joint")
+    assert st.READOUTS == st.readouts_for(st.REGISTERED_SEEDS)
+    assert st.readouts_for(FIVE_SEEDS) == (
+        "seed_7", "seed_13", "seed_29", "seed_42", "seed_101",
+        "seed_mean_joint")
+    # One estimand (i) readout per seed, and exactly one joint readout.
+    for seeds in ((7,), (7, 13), FIVE_SEEDS):
+        readouts = st.readouts_for(seeds)
+        assert len(readouts) == len(seeds) + 1
+        assert readouts[-1] == st.JOINT_READOUT
+        assert readouts.count(st.JOINT_READOUT) == 1
+
+
+def test_five_seed_statistics_carry_five_readouts_in_the_contract(
+        config_path, runs_root, frame_dir, block_source, tmp_path):
+    """Holm tables, gates and screens must not omit seeds 29, 42 and 101."""
+    frame = pd.read_parquet(frame_dir / "cricket_data_i7_validation.parquet")
+    biases = {"mlp": 0.0, "full": 0.9, "fixed_decay": 0.5, "fox": 0.7}
+    for config_id, bias in biases.items():
+        for seed in FIVE_SEEDS:
+            _write_run(runs_root, config_id, seed, frame, bias=bias)
+        _write_summary(runs_root, config_id,
+                       {seed: 1.5 - bias / 10 for seed in FIVE_SEEDS})
+    payload = _run_stats(config_path, runs_root, frame_dir, block_source,
+                         tmp_path, seeds=FIVE_SEEDS)
+    expected = list(st.readouts_for(FIVE_SEEDS))
+    assert payload["contract"]["readouts"] == expected
+    assert payload["contract"]["seeds"] == list(FIVE_SEEDS)
+    assert payload["contract"]["n_seeds"] == 5
+    assert payload["contract"][
+        "five_seed_direction_requirement_applies"] is True
+    assert "five-seed" not in payload["contract"]["estimand_ii_label"] or (
+        "descriptive five-seed" in payload["contract"]["estimand_ii_label"])
+    for family in payload["families"]:
+        assert list(family["holm"]) == expected
+        assert list(family["screen"]) == expected
+    for gate in payload["gates"]:
+        assert list(gate["readouts"]) == expected
+    record = payload["contrasts"]["full-mlp@all"]
+    assert sorted(record["estimand_i"]) == sorted(
+        f"seed_{s}" for s in FIVE_SEEDS)
+    assert record["n_seeds"] == 5
+    # And the reported summary names the enforced requirement.
+    text = "\n".join(st._summary_lines(payload))
+    assert "seed_29" in text and "seed_101" in text
+    assert "4/5 favourable-direction count REQUIRED" in text
+
+
+def _screen_inputs(direction_count: int | None, n_seeds: int,
+                   pass_everything: bool = True) -> tuple[dict, dict, dict]:
+    """A family, its Holm tables and its contrasts, all passing but for 4/5."""
+    family = {"candidate": "full",
+              "members": [{"member": "primary", "candidate": "full",
+                           "reference": "mlp", "slice": "all"},
+                          {"member": "death_gate", "candidate": "full",
+                           "reference": "mlp", "slice": "death"},
+                          {"member": "chase_gate", "candidate": "full",
+                           "reference": "mlp", "slice": "chase"}]}
+    status = "SCREEN_PASS" if pass_everything else "SCREEN_NOT_PASS"
+    readout = st.JOINT_READOUT
+    tables = {readout: {"readout": readout, "members": [
+        {"member": "primary", "status": status, "rejected": pass_everything,
+         "u95": -0.01, "contrast_key": "full-mlp@all"},
+        {"member": "death_gate", "status": status, "rejected": pass_everything,
+         "u95": 0.0005, "contrast_key": "full-mlp@death"},
+        {"member": "chase_gate", "status": status, "rejected": pass_everything,
+         "u95": 0.0005, "contrast_key": "full-mlp@chase"}]}}
+    primary = {"available": True, "n_seeds": n_seeds,
+               "favourable_direction_count": direction_count,
+               "estimand_ii": _gate_readout(-0.01, point=-0.02)}
+    contrasts = {"full-mlp@all": primary}
+    return family, tables, contrasts
+
+
+def test_the_four_of_five_direction_count_is_enforced_at_five_seeds():
+    """Astra gate 2 round 2: the count was calculated and never enforced."""
+    for count, expected in ((5, "SCREEN_PASS"), (4, "SCREEN_PASS"),
+                            (3, "SCREEN_NOT_PASS"), (0, "SCREEN_NOT_PASS")):
+        family, tables, contrasts = _screen_inputs(count, 5)
+        screen = st.family_screen(family, tables, contrasts, st.JOINT_READOUT)
+        assert screen["status"] == expected, count
+        assert screen["five_seed_direction_requirement_applies"] is True
+        assert screen["required_favourable_directions"] == 4
+        assert screen["favourable_direction_count"] == count
+        assert screen["favourable_direction_requirement_met"] is (count >= 4)
+        assert screen["five_seed_extension_qualified"] is (
+            expected == "SCREEN_PASS")
+        assert screen["five_seed_eligibility_rule"] == (
+            st.FIVE_SEED_ELIGIBILITY_RULE)
+        assert "of 5 per-seed primary directions" in screen[
+            "five_seed_qualification_note"]
+
+
+def test_a_missing_direction_count_at_five_seeds_cannot_qualify():
+    family, tables, contrasts = _screen_inputs(None, 5)
+    screen = st.family_screen(family, tables, contrasts, st.JOINT_READOUT)
+    assert screen["status"] == "SCREEN_NOT_PASS"
+    assert screen["favourable_direction_requirement_met"] is False
+
+
+def test_a_two_seed_run_is_not_retroactively_failed_by_the_new_rule():
+    """At two seeds the count cannot reach 4/5, so it must not apply."""
+    for count in (0, 1, 2):
+        family, tables, contrasts = _screen_inputs(count, 2)
+        screen = st.family_screen(family, tables, contrasts, st.JOINT_READOUT)
+        assert screen["status"] == "SCREEN_PASS", count
+        assert screen["five_seed_direction_requirement_applies"] is False
+        assert screen["required_favourable_directions"] is None
+        assert screen["favourable_direction_requirement_met"] is None
+        # A two-seed PASS is explicitly NOT the extension qualification.
+        assert screen["five_seed_extension_qualified"] is False
+        note = screen["five_seed_qualification_note"]
+        assert "not applicable at 2 seed(s)" in note
+        assert "NOT the five-seed extension qualification" in note
+    # And a failure elsewhere still fails at two seeds.
+    family, tables, contrasts = _screen_inputs(2, 2, pass_everything=False)
+    assert st.family_screen(family, tables, contrasts,
+                            st.JOINT_READOUT)["status"] == "SCREEN_NOT_PASS"
+
+
+def test_a_two_seed_run_reports_that_the_requirement_does_not_apply(
+        config_path, runs_root, frame_dir, block_source, tmp_path):
+    payload = _run_stats(config_path, runs_root, frame_dir, block_source,
+                         tmp_path)
+    assert payload["contract"]["n_seeds"] == 2
+    assert payload["contract"][
+        "five_seed_direction_requirement_applies"] is False
+    assert payload["contract"]["readouts"] == list(st.readouts_for(SEEDS))
+    assert payload["contract"]["estimand_ii_label"] == st.ESTIMAND_II_LABEL
+    text = "\n".join(st._summary_lines(payload))
+    assert "does NOT apply at 2 seeds and fails nothing here" in text
+
+
+def test_the_registered_five_seed_rule_is_stated_in_full():
+    rule = st.FIVE_SEED_ELIGIBILITY_RULE
+    assert "4 of 5 favourable per-seed directions" in rule
+    assert "CI-clean under Holm" in rule
+    assert "strictly U95 < 0.002" in rule
+    assert "at least 10 blocks" in rule
+    assert "complete paired seeds" in rule
+    assert "no two-seed result is retroactively failed" in rule
+    assert (st.FIVE_SEED_MINIMUM, st.FIVE_SEED_FAVOURABLE_DIRECTIONS) == (5, 4)
+
+
+# ---------------------------------------------------------------------------
+# the expected family count is derived from the config, not a constant
+# ---------------------------------------------------------------------------
+
+def test_expected_family_count_is_derived_from_the_config():
+    seven = _config_payload(config_ids=("mlp", "full", "fixed_decay", "fox",
+                                        "aligned_hist", "xlstm",
+                                        "residual_mlp", "residual_t1"))
+    assert st.expected_family_count(seven) == 7
+    assert st.expected_family_count(
+        _config_payload(config_ids=CONFIG_IDS)) == 3
+    real = st.read_yaml(REPO / "experiments" / "configs"
+                        / "seq_stage2_v1.yaml")
+    assert st.expected_family_count(real) == st.N_FAMILIES == 15
+    five_seed = st.read_yaml(REPO / "experiments" / "configs"
+                             / "seq_stage2_5seed_v1.yaml")
+    assert st.expected_family_count(five_seed) == 15
+
+
+def test_registered_families_derives_the_count_when_none_is_given():
+    """A seven-family and a fifteen-family config must both run with no flag."""
+    payload = _config_payload(config_ids=CONFIG_IDS)
+    assert len(st.registered_families(payload)) == 3
+    real = st.read_yaml(REPO / "experiments" / "configs"
+                        / "seq_stage2_v1.yaml")
+    assert len(st.registered_families(real)) == 15
+    five_seed = st.read_yaml(REPO / "experiments" / "configs"
+                             / "seq_stage2_5seed_v1.yaml")
+    assert len(st.registered_families(five_seed)) == 15
+    # An explicit count still asserts.
+    with pytest.raises(st.RefusalError, match="registers 3 families, not 15"):
+        st.registered_families(payload, 15)
+    # And a family map that does not cover the configurations still refuses.
+    short = _config_payload(config_ids=CONFIG_IDS)
+    short["statistics"]["families"]["map"] = short["statistics"][
+        "families"]["map"][:-1]
+    with pytest.raises(st.RefusalError, match="registers 2 families, not 3"):
+        st.registered_families(short)
+
+
+# ---------------------------------------------------------------------------
+# night 1's evidence is never overwritten by a five-seed run
+# ---------------------------------------------------------------------------
+
+def test_the_five_seed_config_is_the_two_seed_one_with_only_the_seeds_changed():
+    """Astra gate 2 round 2 MUST-FIX D.
+
+    The earlier revision held eight configurations, so `ksweep` refused (no
+    window arm survived) and families could lose the references their
+    contrasts are defined against. The rebuild is `seq_stage2_v1.yaml` with
+    only the seed list changed.
+    """
+    two = st.read_yaml(REPO / "experiments" / "configs"
+                       / "seq_stage2_v1.yaml")
+    five = st.read_yaml(REPO / "experiments" / "configs"
+                        / "seq_stage2_5seed_v1.yaml")
+    assert five["training"]["seeds"] == [7, 13, 29, 42, 101]
+    assert two["training"]["seeds"] == [7, 13]
+
+    # All sixteen configurations, contiguous orders 1..16, all fifteen
+    # families -- including every gate reference and every window arm.
+    assert len(five["configurations"]) == 16
+    assert [e["queue_order"] for e in five["configurations"]] == list(
+        range(1, 17))
+    ids = [str(e["id"]) for e in five["configurations"]]
+    assert ids == [str(e["id"]) for e in two["configurations"]]
+    assert "mlp" in ids and "aligned_hist" in ids
+    for k, config_id in K_IDS.items():
+        assert config_id in ids, config_id
+    assert "recency_k30" in ids and "aligned_hist_rf" in ids and "lstm" in ids
+    assert len(five["statistics"]["families"]["map"]) == st.N_FAMILIES
+    assert len(st.registered_families(five)) == st.N_FAMILIES
+
+    # Nothing else differs: training settings, slices, families, deviations,
+    # limitations and the k sweep are preserved verbatim.
+    for key in ("data", "outputs", "configurations", "statistics", "cohort",
+                "deviations", "known_asymmetries", "known_limitations",
+                "forbidden_data", "queue_order_note"):
+        assert five[key] == two[key], key
+    training_five = {k: v for k, v in five["training"].items() if k != "seeds"}
+    training_two = {k: v for k, v in two["training"].items() if k != "seeds"}
+    assert training_five == training_two
+    assert five["experiment"] == two["experiment"]
+
+    # The k sweep can actually run: every registered k arm is present.
+    sweep = five["statistics"]["k_selection"]["registered_sweep"]
+    assert [str(k) for k in sweep] == list(st.REGISTERED_K_ORDER)
+
+    # And the file says, in its own text, what it is and is not for.
+    text = (REPO / "experiments" / "configs"
+            / "seq_stage2_5seed_v1.yaml").read_text()
+    assert "CONSOLIDATION AND ANALYSIS ONLY -- NEVER" in text
+    assert "TRAINING" in text
+    assert "SINGLE COMPLETE five-seed analysis registration" in text
+    assert "4 of 5 favourable per-seed directions" in text
+    assert "distinct from the two-seed ones" in text
+
+
+def test_a_non_default_config_must_name_its_own_out_path(tmp_path):
+    five_seed = REPO / "experiments" / "configs" / "seq_stage2_5seed_v1.yaml"
+    with pytest.raises(st.RefusalError, match="Name a distinct path"):
+        st.require_distinct_out(five_seed, st.DEFAULT_STATS_OUT,
+                                st.DEFAULT_STATS_OUT)
+    # An explicitly named path is accepted.
+    mine = tmp_path / "five_seed_stats.json"
+    assert st.require_distinct_out(five_seed, mine,
+                                   st.DEFAULT_STATS_OUT) == mine
+    # And the registered two-seed config keeps its default.
+    assert st.require_distinct_out(st.DEFAULT_CONFIG, st.DEFAULT_STATS_OUT,
+                                   st.DEFAULT_STATS_OUT) == (
+        st.DEFAULT_STATS_OUT)
+
+
+def test_the_cli_refuses_a_five_seed_run_at_the_two_seed_default(capsys):
+    five_seed = REPO / "experiments" / "configs" / "seq_stage2_5seed_v1.yaml"
+    for command, default in (("stats", st.DEFAULT_STATS_OUT),
+                             ("ksweep", st.DEFAULT_KSWEEP_OUT)):
+        assert st.main([command, "--config", str(five_seed),
+                        "--out", str(default)]) == 2
+        error = capsys.readouterr().err
+        assert "REFUSED" in error
+        assert "Name a distinct path explicitly" in error
+
+
+# ---------------------------------------------------------------------------
 # D10.7 slices
 # ---------------------------------------------------------------------------
 
@@ -992,6 +1269,39 @@ def test_slice_predicates_are_frozen_and_checked_against_the_frame(
     assert by_name["death"]["n_rows"] == N_MATCHES * 2 * 3
     assert by_name["chase"]["n_rows"] == N_MATCHES * BALLS_PER_INNINGS
     assert frame.masks["innings_1"].sum() == N_MATCHES * BALLS_PER_INNINGS
+
+
+def test_slice_stats_persist_a_row_mask_digest(frame_dir, config_path,
+                                              block_source):
+    """Astra gate 2 round 1 SHOULD 7.
+
+    Slice identity must be comparable by row membership, so every slice
+    persists the sha256 of its packed row mask. Two slices with identical row,
+    match and block counts but different rows get different digests.
+    """
+    import numpy as np
+
+    config = st.read_yaml(config_path)
+    frame = st.load_frame(frame_dir, config)
+    blocks = st.resolve_blocks(frame, block_source, **EXPECT_KW)
+    digests = {name: st.slice_stats(frame, blocks, name)["mask_sha256"]
+               for name in ("all", "death", "chase", "innings_1", "innings_2")}
+    assert all(isinstance(value, str) and len(value) == 64
+               for value in digests.values())
+    assert digests["innings_2"] == st.slice_stats(frame, blocks,
+                                                 "chase")["mask_sha256"]
+    assert digests["death"] != digests["chase"]
+    # Same counts, different membership: the digest separates them.
+    left = np.zeros(8, dtype=bool)
+    right = np.zeros(8, dtype=bool)
+    left[:3] = True
+    right[-3:] = True
+    assert left.sum() == right.sum()
+    assert st.mask_digest(left) != st.mask_digest(right)
+    assert st.mask_digest(left) == st.mask_digest(left.copy())
+    # Length is part of the digest, so a padded mask is not the same mask.
+    assert st.mask_digest(left) != st.mask_digest(np.concatenate(
+        [left, np.zeros(8, dtype=bool)]))
 
 
 def test_thin_pair_is_reported_unavailable_not_invented(frame_dir,

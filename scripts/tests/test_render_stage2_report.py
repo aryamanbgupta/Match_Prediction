@@ -40,6 +40,99 @@ pytest_plugins = ["tests.test_stage2_stats"]
 # fixtures
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Realistic dependency evidence (Astra gate 2 round 1 MUST-FIX 1)
+#
+# The previous fixture held one artificial masked-arm record with no checkpoint
+# md5, no `dependency_set_arm`/`k`, no perturbation settings and no training
+# seed, plus a "control" that was matched by its own arm. That record shape
+# concealed every defect Astra found. These fixtures mirror the real
+# certificates field for field, write real checkpoint files so the recorded md5
+# can actually be authenticated, and lay the evidence out the way the tree
+# does: trained recertifications under `dependency/recert/`, the registered
+# positive controls beside them under `dependency/`.
+# ---------------------------------------------------------------------------
+
+MASKED_CERTIFICATES = (("same_entity", 0, "same_entity_k0"),
+                       ("same_entity", 30, "same_entity_k30"),
+                       ("same_entity", "unr", "same_entity_unr"),
+                       ("recency", 30, "recency_k30"))
+CERTIFICATE_SEEDS = (7, 13)
+
+
+def _fake_checkpoint(root: Path, config_id: str, seed: int) -> tuple[str, str]:
+    """A checkpoint directory with a real `model.pt`, and its md5."""
+    import hashlib
+
+    directory = root / config_id / f"seed_{seed}"
+    directory.mkdir(parents=True, exist_ok=True)
+    model = directory / "model.pt"
+    model.write_bytes(f"{config_id}/{seed}".encode())
+    return (directory.as_posix(),
+            hashlib.md5(model.read_bytes()).hexdigest())
+
+
+def _masked_record(arm, k, checkpoint: str, md5: str, **overrides) -> dict:
+    record = {"arm": arm, "k": k,
+              "checkpoint": checkpoint, "checkpoint_md5": md5,
+              "control_floor": 0.001,
+              "dependency_set_arm": arm, "dependency_set_k": k,
+              "device": "cpu", "key_construction": "own_outcome",
+              "max_abs_delta": 0.0, "n_innings": 1088,
+              "n_nonzero_gt_1e-6": 0, "n_rows": 124292,
+              "n_targets": 2000, "n_targets_with_nothing_outside_s": 0,
+              "noise_sd": 3.0, "p99_abs_delta": 0.0, "pass": True,
+              "positive_control_expected": False,
+              "positive_control_observed": False,
+              "seed": 29, "split": "validation", "tolerance": 1e-06,
+              "wall_seconds": 2.5, "wiring": "relay_free"}
+    record.update(overrides)
+    return record
+
+
+def _control_record(arm, set_arm, set_k, checkpoint: str, md5: str,
+                    **overrides) -> dict:
+    record = {"arm": arm, "k": None,
+              "checkpoint": checkpoint, "checkpoint_md5": md5,
+              "control_floor": 0.001,
+              "dependency_set_arm": set_arm, "dependency_set_k": set_k,
+              "device": "cpu", "key_construction": "shifted_history",
+              "max_abs_delta": 0.9216543436050415, "n_innings": 1088,
+              "n_nonzero_gt_1e-6": 1867, "n_rows": 124292,
+              "n_targets": 2000, "n_targets_with_nothing_outside_s": 0,
+              "noise_sd": 3.0, "p99_abs_delta": 0.7410516822338105,
+              "pass": False,
+              "positive_control_expected": True,
+              "positive_control_observed": True,
+              "seed": 29, "split": "validation", "tolerance": 1e-06,
+              "wall_seconds": 2.1, "wiring": "standard"}
+    record.update(overrides)
+    return record
+
+
+def _write_dependency_evidence(tmp_path: Path, seeds=CERTIFICATE_SEEDS,
+                               controls: bool = True) -> Path:
+    """The whole evidence set: 4 masked arms x both seeds, plus both controls."""
+    checkpoints = tmp_path / "checkpoints"
+    dependency = tmp_path / "dependency"
+    recert = dependency / "recert"
+    recert.mkdir(parents=True, exist_ok=True)
+    for arm, k, config_id in MASKED_CERTIFICATES:
+        for seed in seeds:
+            checkpoint, md5 = _fake_checkpoint(checkpoints, config_id, seed)
+            (recert / f"{config_id}_seed{seed}.json").write_text(json.dumps(
+                _masked_record(arm, k, checkpoint, md5)))
+    if controls:
+        for control_arm, set_arm, set_k in (("full", "recency", 30),
+                                           ("aligned_hist", "same_entity",
+                                            30)):
+            checkpoint, md5 = _fake_checkpoint(checkpoints, control_arm, 7)
+            (dependency / f"{control_arm}.json").write_text(json.dumps(
+                _control_record(control_arm, set_arm, set_k, checkpoint,
+                                md5)))
+    return dependency
+
+
 @pytest.fixture
 def built(tmp_path, frame_dir, block_source):
     """A statistics JSON, a config and a k-selection record on disk."""
@@ -74,22 +167,7 @@ def built(tmp_path, frame_dir, block_source):
     k_path = tmp_path / "k_selection.json"
     k_path.write_text(json.dumps(k_record, indent=2, default=str))
 
-    dependency = tmp_path / "dependency"
-    dependency.mkdir()
-    (dependency / "same_entity_k30.json").write_text(json.dumps({
-        "arm": "same_entity", "k": 30,
-        "checkpoint": "models/embeddings/seq_stage2/runs/same_entity_k30/"
-                      "seed_7",
-        "n_targets": 2000, "max_abs_delta": 0.0, "p99_abs_delta": 0.0,
-        "n_nonzero_gt_1e-6": 0, "pass": True,
-        "positive_control_expected": False}))
-    (dependency / "full.json").write_text(json.dumps({
-        "arm": "full", "k": None,
-        "checkpoint": "models/embeddings/seq_stage2/smoke/full/seed_7",
-        "n_targets": 2000, "max_abs_delta": 0.75, "p99_abs_delta": 0.58,
-        "n_nonzero_gt_1e-6": 1449, "pass": False,
-        "positive_control_expected": True,
-        "positive_control_observed": True}))
+    dependency = _write_dependency_evidence(tmp_path)
     return {"config": config, "config_path": config_path,
             "stats": stats, "stats_path": stats_path,
             "k_record": k_record, "k_path": k_path,
@@ -184,12 +262,25 @@ def test_report_shows_the_admission_verification(built):
     assert "seed-independent training signature" in markdown
 
 
-def test_report_shows_the_dependency_certificates_and_marks_smoke(built):
+def test_report_shows_the_dependency_certificates_and_marks_smoke(built,
+                                                                  tmp_path):
     markdown = _render(built)
     assert "Ownership dependency certificates" in markdown
-    assert "(smoke checkpoint)" in markdown
     assert "SEES EXCLUDED-PAST INFORMATION" in markdown
     assert "not specifically multi-layer relay" in markdown
+    # A smoke-tree certificate is marked as such, is never authenticated (this
+    # stage may not open the smoke tree) and never counts as trained coverage.
+    (built["dependency"] / "smoke_extra.json").write_text(json.dumps(
+        _masked_record("recency", 30,
+                       "models/embeddings/seq_stage2/smoke/recency_k30/seed_7",
+                       "0" * 32)))
+    markdown = _render(built)
+    assert "(smoke checkpoint)" in markdown
+    assert "NOT_AUTHENTICATED_CLOSED_TREE" in markdown
+    certificates = rr.dependency_certificates(
+        rr.load_dependency(built["dependency"]))
+    assert certificates["by_config"]["recency_k30"]["smoke_seeds"] == [7]
+    assert certificates["by_config"]["recency_k30"]["status"] == "PASS"
 
 
 def test_report_names_the_registered_k_ids_not_a_template(built):
@@ -210,7 +301,8 @@ def test_report_has_no_hand_entered_numeric_cell(built):
     For each numeric cell in every markdown table, some number in the stats
     JSON, the selection record or the config must round to it at the cell's
     own displayed precision. A value the generator invented would match none
-    of them.
+    of them. Registered check ids (`D7.4`, `D10.16`) are prose, not results,
+    and are removed before scanning.
     """
     import re
 
@@ -218,7 +310,8 @@ def test_report_has_no_hand_entered_numeric_cell(built):
     sources = (built["stats_path"].read_text() + built["k_path"].read_text()
                + built["config_path"].read_text()
                + "".join(path.read_text()
-                         for path in sorted(built["dependency"].glob("*.json"))))
+                         for path in sorted(built["dependency"]
+                                            .rglob("*.json"))))
     source_numbers = [float(token) for token
                       in re.findall(r"-?\d+\.?\d*(?:[eE][-+]?\d+)?",
                                     sources)]
@@ -230,6 +323,7 @@ def test_report_has_no_hand_entered_numeric_cell(built):
     checked = 0
     for line in rows:
         for cell in line.split("|"):
+            cell = re.sub(r"\bD\d+\.\d+\b", "", cell)
             for token in re.findall(r"[-+]?\d+\.\d+(?:[eE][-+]?\d+)?",
                                     cell):
                 mantissa = token.split("e")[0].split("E")[0]
@@ -241,6 +335,68 @@ def test_report_has_no_hand_entered_numeric_cell(built):
                            for candidate in source_numbers), (line, token)
                 checked += 1
     assert checked > 50
+
+
+def _table_row(markdown: str, first_cell: str, section: str | None = None,
+               until: str | None = None) -> list[str]:
+    """The cells of the one table row whose leading cell is `first_cell`."""
+    text = markdown
+    if section is not None:
+        text = text.split(section)[1]
+        if until is not None:
+            text = text.split(until)[0]
+    matches = [line for line in text.splitlines()
+               if line.startswith("|")
+               and line.split("|")[1].strip() == first_cell]
+    assert len(matches) == 1, (first_cell, len(matches))
+    return [cell.strip() for cell in matches[0].split("|")[1:-1]]
+
+
+def test_named_cells_come_from_their_named_source_fields(built):
+    """Astra gate 2 round 1 MUST-FIX 5.
+
+    The scan above only proves that a decimal occurs somewhere among the source
+    numbers. These assertions tie a NAMED cell to its NAMED source field, so a
+    right-looking number in the wrong column fails.
+    """
+    markdown = _render(built)
+    stats = built["stats"]
+
+    # § 7 mechanism row: the seed-mean point and interval come from
+    # stats["mechanism_contrasts"][*]["record"]["estimand_ii"].
+    entry = next(e for e in stats["mechanism_contrasts"]
+                 if e["candidate"] == "fox" and e["reference"] == "fixed_decay")
+    joint = entry["record"]["estimand_ii"]
+    cells = _table_row(markdown, "`fox − fixed_decay`",
+                       section="## 7. Mechanism contrasts", until="## 8.")
+    assert cells[5] == rr.f5(joint["point"]), cells
+    assert cells[6] == rr.ci(joint["ci95"]), cells
+    per_seed = entry["record"]["per_seed_points"]
+    assert cells[3] == rr.f5(per_seed["7"])
+    assert cells[4] == rr.f5(per_seed["13"])
+
+    # § 2 dependency row: max|Δ| and p99 come from that certificate's own
+    # `max_abs_delta` / `p99_abs_delta`, and the seed from its checkpoint path.
+    control = json.loads(
+        (built["dependency"] / "aligned_hist.json").read_text())
+    cells = _table_row(markdown, "`aligned_hist`",
+                       section=rr.DEPENDENCY_HEADING_COMPLETE,
+                       until="The positive controls establish")
+    assert cells[2] == ("`" + str(control["dependency_set_arm"]) + "` k="
+                        + str(control["dependency_set_k"]))
+    assert cells[6] == rr.sci(control["max_abs_delta"]), cells
+    assert cells[7] == rr.sci(control["p99_abs_delta"]), cells
+    assert cells[8] == str(control["n_nonzero_gt_1e-6"])
+
+    # § 2 machine-provenance row: the summary log loss cell is the
+    # summary.yaml value, never the reconstruction.
+    seed_row = next(row for row in stats["runs"]["mlp"]["seeds"]
+                    if row["seed"] == 7)
+    line = next(l for l in markdown.splitlines()
+                if l.startswith("| `mlp` | 7 |"))
+    cells = [c.strip() for c in line.split("|")[1:-1]]
+    assert cells[-1] == rr.f6(seed_row["summary_yaml_validation_ll"])
+    assert cells[-2] == rr.f6(seed_row["reconstructed_validation_ll"])
 
 
 # ---------------------------------------------------------------------------
@@ -255,7 +411,8 @@ def test_coverage_manifest_covers_the_config_and_d10_13(built):
     assert "limitation:0" in keys
     for key, _ in rr.D10_13_REQUIRED:
         assert f"d10.13:{key}" in keys
-    assert len(rr.D10_13_REQUIRED) == 20
+    assert len(rr.D10_13_REQUIRED) == 21
+    assert "d10.13:unresolved_historical_consumption" in keys
 
 
 def test_coverage_check_passes_on_the_rendered_report(built):
@@ -292,6 +449,158 @@ def test_coverage_check_fails_when_a_d10_13_item_is_dropped(built):
             rr.normalise(text)[:70], "")
         with pytest.raises(st.RefusalError, match=key):
             rr.assert_coverage(without, manifest)
+
+
+def test_coverage_check_fails_when_a_consequence_clause_is_truncated(built):
+    """Astra gate 2 round 1 MUST-FIX 5, reproduced exactly.
+
+    Astra removed the two-seed limitation's confirmation / LANDED qualification
+    while preserving its prefix, and coverage still passed. The complete
+    normalised entry, consequence clause included, is now what is checked.
+    """
+    markdown = _render(built)
+    manifest = rr.coverage_manifest(built["config"])
+    text = dict(rr.D10_13_REQUIRED)["two_seed_weakness"]
+    assert "can never be LANDED" in text
+    truncated = text.split("Estimand")[0].strip()
+    mutated = markdown.replace(rr.normalise(text), truncated)
+    assert mutated != markdown
+    assert truncated in mutated  # the prefix survives, as in Astra's attack
+    with pytest.raises(st.RefusalError, match="two_seed_weakness"):
+        rr.assert_coverage(mutated, manifest)
+
+
+def test_coverage_check_fails_when_the_historical_consumption_item_is_dropped(
+        built):
+    """The unresolved historical-consumption disposition is a required § 9
+    entry (MUST-FIX 2): D10.16(0) is what keeps the cohort closed."""
+    markdown = _render(built)
+    manifest = rr.coverage_manifest(built["config"])
+    key = "unresolved_historical_consumption"
+    text = dict(rr.D10_13_REQUIRED)[key]
+    assert key in {entry_key for entry_key, _ in rr.D10_13_REQUIRED}
+    without = markdown.replace(f"`{key}`", "").replace(rr.normalise(text), "")
+    with pytest.raises(st.RefusalError, match=key):
+        rr.assert_coverage(without, manifest)
+
+
+def test_coverage_is_checked_inside_section_9_not_anywhere_in_the_document(
+        built):
+    """An entry rendered in some other section no longer counts as coverage."""
+    markdown = _render(built)
+    manifest = rr.coverage_manifest(built["config"])
+    key = "global_prior_not_as_of"
+    text = rr.normalise(dict(rr.D10_13_REQUIRED)[key])
+    section = rr.section_9_body(markdown)
+    assert section is not None and text in rr.normalise(section)
+    # Move the entry out of § 9 and into § 1: it is still in the document.
+    moved = markdown.replace(f"- `{key}` — {text}", "")
+    moved = moved.replace("## 1. Question",
+                          f"## 1. Question\n\n- `{key}` — {text}\n")
+    assert text in rr.normalise(moved)
+    with pytest.raises(st.RefusalError, match=key):
+        rr.assert_coverage(moved, manifest)
+
+
+def test_coverage_refuses_when_section_9_is_absent(built):
+    markdown = _render(built)
+    manifest = rr.coverage_manifest(built["config"])
+    with pytest.raises(st.RefusalError, match="section heading"):
+        rr.assert_coverage(markdown.replace(rr.SECTION_9_HEADING, "## 9. x"),
+                           manifest)
+
+
+def test_the_unsupported_config_conclusion_is_corrected_and_disclosed(
+        built, tmp_path):
+    """MUST-FIX 4: the venue-feature level-effect claim is removed from the
+    prose, the config itself is untouched, and the swap is disclosed."""
+    original = ("venue history in the frame is not recency-weighted (TODO.md "
+                "backlog item); every arm inherits the same feature, so it is "
+                "a level effect on all of them rather than a per-arm "
+                "advantage")
+    config = json.loads(json.dumps(built["config"], default=str))
+    config["known_limitations"] = list(config["known_limitations"]) + [original]
+    path = tmp_path / "config_with_the_claim.yaml"
+    path.write_text(yaml.safe_dump(config, sort_keys=False))
+
+    clause = ("every arm inherits the same feature, so it is a level effect "
+              "on all of them rather than a per-arm advantage")
+    reloaded = yaml.safe_load(path.read_text())
+    assert any(clause in str(item) for item in reloaded["known_limitations"])
+    markdown = _render(built, config_path=path)
+    section = rr.normalise(rr.section_9_body(markdown))
+    assert "Corrections applied to config-sourced wording above" in section
+    assert ("whether its effect is the SAME across architectures is "
+            "unmeasured") in section
+    # The unsupported clause appears only inside the disclosure of what was
+    # replaced, never as a statement of the report's own.
+    assert section.count(clause) == 1
+    assert clause in section.split("Corrections applied")[1]
+    # The coverage manifest asks for the CORRECTED text, so a report that
+    # restated the config verbatim would now fail the check.
+    manifest = rr.coverage_manifest(config)
+    entry = next(e for e in manifest
+                 if e["key"] == f"limitation:{len(config['known_limitations']) - 1}")
+    assert "no level effect is claimed" in entry["must_contain"][1]
+    with pytest.raises(st.RefusalError, match="coverage check failed"):
+        rr.assert_coverage(markdown.replace(
+            "no level effect is claimed", "it is a level effect"), manifest)
+
+
+def test_no_unsupported_conclusion_survives_in_the_prose(built):
+    markdown = _render(built)
+    for banned in ("ownership is not isolated from alignment anywhere "
+                   "tonight",
+                   "They differ only in what they are allowed to remember",
+                   "Sequence adds nothing over the production prior"):
+        assert banned not in markdown, banned
+
+
+def test_a_null_is_never_reported_as_an_absence(built, tmp_path):
+    """MUST-FIX 4 wording: an unresolved interval is "no benefit was
+    established at this resolution", never "adds nothing"."""
+    stats = json.loads(built["stats_path"].read_text())
+    for key, contrast in (("fox-fixed_decay@all", ("fox", "fixed_decay")),
+                          ("residual_t1-residual_mlp@all",
+                           ("residual_t1", "residual_mlp"))):
+        stats.setdefault("contrasts", {})[key] = {
+            "candidate": contrast[0], "reference": contrast[1],
+            "slice": "all", "role": "family", "available": True,
+            "per_seed_points": {"7": -0.00001, "13": 0.00002},
+            "estimand_i": {}, "estimand_ii": {
+                "point": -0.00003, "ci95": [-0.0006, 0.00044],
+                "u95": 0.00044, "l95": -0.0006,
+                "ci_clean_favourable": False, "descriptive_only": False,
+                "p_display": "0.8680"}}
+    path = tmp_path / "nulls.json"
+    path.write_text(json.dumps(stats))
+    markdown = _render(built, stats_path=path)
+    assert "no detected benefit over fixed decay" in markdown
+    assert ("no incremental benefit of residual T1 over residual MLP was "
+            "established at this resolution") in markdown
+
+
+def test_the_cohort_unlock_conditions_are_rendered_in_full(built):
+    """MUST-FIX 2: nothing in D10.16 may be abbreviated."""
+    section = _render(built).split("## 10. In plain language")[1]
+    for required in (
+            "historical-consumption question must be settled first",
+            "D10.16(0)",
+            "clean training ancestry does not prove untouched evaluation "
+            "status",
+            "29, 42 and 101",
+            "all five",
+            "frozen before any new-seed result is inspected",
+            "4/5 favourable",
+            "analysis** freeze",
+            "provenance is re-verified unchanged",
+            "one** frozen scoring batch",
+            "Partial-exposure recovery rule",
+            "discloses the partial exposure",
+            "never claims a fresh untouched read",
+            "the cohort is left unopened",
+            "five seeds alone cannot unlock this cohort"):
+        assert required in section, required
 
 
 def test_render_refuses_when_a_config_entry_is_not_rendered(built, tmp_path,
@@ -529,26 +838,143 @@ def test_render_refuses_a_forbidden_output_or_dependency_path(built):
 # is disclosed
 # ---------------------------------------------------------------------------
 
-def test_the_dependency_heading_says_pending_not_recertified(built):
+def test_the_dependency_heading_is_derived_from_verified_coverage(built,
+                                                                 tmp_path):
+    """SHOULD 8: the heading and the disposition come from the verified
+    coverage, so the report can never say "pending" and "complete" at once."""
+    markdown = _render(built)
+    assert "recertification **complete on trained checkpoints at both " \
+           "registered seeds" in markdown
+    assert "recertification **pending**" not in markdown
+    assert "Coverage complete: **yes**" in markdown
+
+    # Remove one seed's certificate and the heading flips back to pending.
+    (built["dependency"] / "recert" / "same_entity_k30_seed13.json").unlink()
     markdown = _render(built)
     assert "recertification **pending**" in markdown
-    assert "recertified in D10.12" not in markdown
-    assert "This section is **pending**, not recertified" in markdown
+    assert "Coverage complete: **no**" in markdown
 
 
-def test_a_failed_masked_arm_certificate_forces_not_evaluable(built, tmp_path):
+def test_coverage_is_not_complete_from_four_seed_7_certificates_and_no_controls(
+        tmp_path):
+    """Astra gate 2 round 1 MUST-FIX 1, reproduced exactly.
+
+    Astra obtained `trained_checkpoint_coverage_complete=True` from the four
+    seed-7 certificates alone, with no positive controls at all. That must now
+    fail, and every masked arm must be BLOCKED: two for the missing registered
+    control, two for the missing second seed.
+    """
+    dependency = _write_dependency_evidence(tmp_path, seeds=(7,),
+                                            controls=False)
+    certificates = rr.dependency_certificates(rr.load_dependency(dependency))
+    assert certificates["trained_checkpoint_coverage_complete"] is False
+    assert certificates["trained_checkpoint_coverage"] == []
+    assert certificates["registered_controls_complete"] is False
+    assert set(certificates["blocked"]) == {
+        "same_entity_k0", "same_entity_k30", "same_entity_unr",
+        "recency_k30"}
+    statuses = {name: block["status"]
+                for name, block in certificates["by_config"].items()}
+    assert statuses["recency_k30"] == "CONTROL_MISSING"
+    assert statuses["same_entity_k30"] == "CONTROL_MISSING"
+    assert statuses["same_entity_k0"] == "TRAINED_SEEDS_INCOMPLETE"
+    assert statuses["same_entity_unr"] == "TRAINED_SEEDS_INCOMPLETE"
+
+
+def test_both_seeds_are_required_for_trained_coverage(tmp_path):
+    full = rr.dependency_certificates(
+        rr.load_dependency(_write_dependency_evidence(tmp_path / "a")))
+    assert full["trained_checkpoint_coverage_complete"] is True
+    assert full["blocked"] == {}
+    assert full["by_config"]["same_entity_k30"]["trained_seeds"] == [7, 13]
+
+    one = rr.dependency_certificates(
+        rr.load_dependency(_write_dependency_evidence(tmp_path / "b",
+                                                      seeds=(7,))))
+    assert one["trained_checkpoint_coverage_complete"] is False
+    assert "seed(s) 13" in one["by_config"]["same_entity_k0"]["reason"]
+
+
+def test_the_real_controls_are_matched_through_the_dependency_set(built):
+    """The registered controls carry `arm` full / aligned_hist and no k, so
+    matching on arm/k skipped them entirely (MUST-FIX 1)."""
+    certificates = rr.dependency_certificates(
+        rr.load_dependency(built["dependency"]))
+    recency = certificates["by_config"]["recency_k30"]
+    same = certificates["by_config"]["same_entity_k30"]
+    assert [c["arm"] for c in recency["controls"]] == ["full"]
+    assert [c["arm"] for c in same["controls"]] == ["aligned_hist"]
+    assert recency["controls_fired"] == 1 and same["controls_fired"] == 1
+    markdown = _render(built)
+    assert "`full` vs S(i) of recency k=30 → fired" in markdown
+    assert "`aligned_hist` vs S(i) of same_entity k=30 → fired" in markdown
+
+
+def test_a_control_of_the_wrong_arm_does_not_satisfy_the_registration(built):
+    path = built["dependency"] / "full.json"
+    record = json.loads(path.read_text())
+    record["arm"] = "fixed_decay"
+    path.write_text(json.dumps(record))
+    certificates = rr.dependency_certificates(
+        rr.load_dependency(built["dependency"]))
+    assert certificates["by_config"]["recency_k30"]["status"] == (
+        "CONTROL_DID_NOT_FIRE")
+    assert "recency_k30" in certificates["blocked"]
+    assert certificates["trained_checkpoint_coverage_complete"] is False
+
+
+def test_a_certificate_whose_checkpoint_md5_does_not_authenticate_blocks(built):
+    path = built["dependency"] / "recert" / "same_entity_unr_seed7.json"
+    record = json.loads(path.read_text())
+    record["checkpoint_md5"] = "0" * 32
+    path.write_text(json.dumps(record))
+    certificates = rr.dependency_certificates(
+        rr.load_dependency(built["dependency"]))
+    assert certificates["by_config"]["same_entity_unr"]["status"] == (
+        "CHECKPOINT_NOT_AUTHENTICATED")
+    assert "same_entity_unr" in certificates["blocked"]
+    markdown = _render(built)
+    assert "MD5_MISMATCH" in markdown
+
+
+def test_a_certificate_under_unregistered_settings_blocks(built):
+    path = built["dependency"] / "recert" / "same_entity_k0_seed7.json"
+    record = json.loads(path.read_text())
+    record["n_targets"] = 200
+    path.write_text(json.dumps(record))
+    certificates = rr.dependency_certificates(
+        rr.load_dependency(built["dependency"]))
+    block = certificates["by_config"]["same_entity_k0"]
+    assert block["status"] == "SETTINGS_MISMATCH"
+    assert "n_targets=200" in block["reason"]
+
+
+def test_a_certificate_scored_against_another_arms_dependency_set_blocks(built):
+    path = built["dependency"] / "recert" / "same_entity_k30_seed7.json"
+    record = json.loads(path.read_text())
+    record["dependency_set_k"] = "unr"
+    path.write_text(json.dumps(record))
+    certificates = rr.dependency_certificates(
+        rr.load_dependency(built["dependency"]))
+    block = certificates["by_config"]["same_entity_k30"]
+    assert block["status"] == "SETTINGS_MISMATCH"
+    assert "not its own S(i)" in block["reason"]
+
+
+def test_a_failed_masked_arm_certificate_forces_not_evaluable(built):
     """Astra: a failed certificate must BLOCK the affected interpretation and
     eligibility, not merely appear in a table."""
-    path = built["dependency"] / "same_entity_k30.json"
+    path = built["dependency"] / "recert" / "same_entity_k30_seed7.json"
     record = json.loads(path.read_text())
     record["pass"] = False
     record["max_abs_delta"] = 0.42
     path.write_text(json.dumps(record))
+    certificates = rr.dependency_certificates(
+        rr.load_dependency(built["dependency"]))
+    assert certificates["by_config"]["same_entity_k30"]["status"] == "FAILED"
     markdown = _render(built)
-    assert rr.blocking_note("same_entity_k30", {
-        "same_entity_k30": "its dependency certificate failed for "
-                           "`models/embeddings/seq_stage2/runs/"
-                           "same_entity_k30/seed_7`"}) in markdown
+    assert rr.blocking_note("same_entity_k30",
+                            certificates["blocked"]) in markdown
     # Its family screen status reads NOT_EVALUABLE on every readout.
     block = markdown.split("**same_entity_k30** —")[1:]
     assert block, "the family is not rendered at all"
@@ -560,48 +986,160 @@ def test_a_failed_masked_arm_certificate_forces_not_evaluable(built, tmp_path):
 
 
 def test_a_missing_masked_arm_certificate_also_blocks(built):
-    """The fixture holds a certificate for k30 only, so k0 and unr are MISSING."""
-    markdown = _render(built)
+    for name in ("same_entity_k0_seed7.json", "same_entity_k0_seed13.json"):
+        (built["dependency"] / "recert" / name).unlink()
     certificates = rr.dependency_certificates(
         rr.load_dependency(built["dependency"]))
-    assert certificates["blocked"].keys() >= {"same_entity_k0",
-                                             "same_entity_unr",
-                                             "recency_k30"}
-    assert "same_entity_k30" not in certificates["blocked"]
+    assert certificates["by_config"]["same_entity_k0"]["status"] == "MISSING"
+    assert "same_entity_k0" in certificates["blocked"]
     assert certificates["trained_checkpoint_coverage_complete"] is False
-    for config_id in ("same_entity_k0", "same_entity_unr"):
-        assert f"**Dependency certificate blocks `{config_id}`**" in markdown
+    markdown = _render(built)
+    assert "**Dependency certificate blocks `same_entity_k0`**" in markdown
 
 
-def test_a_smoke_only_certificate_is_present_but_not_trained_coverage(built):
-    path = built["dependency"] / "same_entity_k30.json"
-    record = json.loads(path.read_text())
-    record["checkpoint"] = ("models/embeddings/seq_stage2/smoke/"
-                            "same_entity_k30/seed_7")
-    path.write_text(json.dumps(record))
+def _smoke_only_dependency(tmp_path: Path) -> Path:
+    """A tree with NO trained certificate: only the one-epoch smoke records."""
+    dependency = _write_dependency_evidence(tmp_path, seeds=())
+    for arm, k, config_id in MASKED_CERTIFICATES:
+        (dependency / f"{config_id}.json").write_text(json.dumps(
+            _masked_record(
+                arm, k,
+                f"models/embeddings/seq_stage2/smoke/{config_id}/seed_7",
+                "0" * 32)))
+    return dependency
+
+
+def test_a_smoke_only_certificate_is_present_but_blocks_eligibility(tmp_path):
+    """Astra gate 2 round 2: a smoke record may not carry eligibility.
+
+    Structural masking from the smoke weights is PRESENT and is never
+    trained-checkpoint coverage — and when the trained recertifications are
+    absent altogether, the arm must BLOCK rather than inherit `PASS` from the
+    smoke record. Previously the trained-seed shortfall was only checked for an
+    arm that already held at least one trained certificate, so a tree in which
+    trained certificates had disappeared and smoke records alone remained read
+    `PASS`.
+    """
+    dependency = _smoke_only_dependency(tmp_path)
+    certificates = rr.dependency_certificates(rr.load_dependency(dependency))
+    for config_id in certificates["required"]:
+        block = certificates["by_config"][config_id]
+        assert block["smoke_only"] is True
+        assert block["status"] == "TRAINED_SEEDS_INCOMPLETE", config_id
+        assert block["coverage"] == "smoke checkpoint only (structural)"
+        assert "no seed at all" in block["reason"]
+        assert "one-epoch smoke record" in block["reason"]
+        assert config_id in certificates["blocked"]
+    assert set(certificates["blocked"]) == set(certificates["required"])
+    assert certificates["trained_checkpoint_coverage"] == []
+    assert certificates["trained_checkpoint_coverage_complete"] is False
+
+
+def test_one_trained_seed_still_blocks_and_says_which_seed_is_held(built):
+    """The one-trained-seed case keeps its own, more specific wording."""
+    (built["dependency"] / "recert" / "recency_k30_seed13.json").unlink()
     certificates = rr.dependency_certificates(
         rr.load_dependency(built["dependency"]))
-    assert "same_entity_k30" not in certificates["blocked"]
-    assert certificates["by_config"]["same_entity_k30"]["smoke_only"] is True
-    assert "same_entity_k30" not in certificates["trained_checkpoint_coverage"]
-    markdown = _render(built)
-    assert "smoke checkpoint only (structural)" in markdown
+    block = certificates["by_config"]["recency_k30"]
+    assert block["status"] == "TRAINED_SEEDS_INCOMPLETE"
+    assert block["trained_seeds"] == [7]
+    assert "at 7, not at seed(s) 13" in block["reason"]
+    assert "one-epoch smoke record" not in block["reason"]
+
+
+def test_smoke_only_blocking_propagates_through_the_whole_report(built,
+                                                                tmp_path):
+    """The block must reach the results tables, the gates, § 7 and § 11.
+
+    Astra gate 2 round 2 required the smoke-only block to be verified all the
+    way through, not merely in `dependency_certificates`.
+    """
+    dependency = _smoke_only_dependency(tmp_path / "smoke_only")
+    certificates = rr.dependency_certificates(rr.load_dependency(dependency))
+    blocked = certificates["blocked"]
+    assert set(blocked) == {"same_entity_k0", "same_entity_k30",
+                            "same_entity_unr", "recency_k30"}
+    markdown = _render(built, dependency_dir=dependency)
+
+    # § 4 results: every blocked family carries the blocking note and reads
+    # NOT_EVALUABLE on every readout, and no eligibility survives.
+    families = {f["candidate"] for f in built["stats"]["families"]}
+    for config_id in sorted(set(blocked) & families):
+        assert rr.blocking_note(config_id, blocked) in markdown
+        chunks = markdown.split(f"**{config_id}** —")[1:]
+        assert chunks, f"{config_id} family is not rendered at all"
+        for chunk in chunks[:len(rr.READOUTS)]:
+            assert "screen status `NOT_EVALUABLE`" in chunk.splitlines()[0]
+    assert "family forced to `NOT_EVALUABLE`; arm not eligible" in markdown
+
+    # § 8 gates.
+    gates = markdown.split("## 8. Non-inferiority gates")[1].split("## 9.")[0]
+    assert f"read `{rr.DEPENDENCY_BLOCKED_STATUS}` regardless of their " \
+           "intervals" in gates
+    for config_id in blocked:
+        assert f"`{config_id}`" in gates
+
+    # § 7 mechanism contrasts.
+    mechanism = markdown.split("## 7. Mechanism contrasts")[1].split("## 8.")[0]
+    assert "**Blocked mechanism contrasts.**" in mechanism
+    assert "`same_entity_k30 − recency_k30`" in mechanism
+    assert "`same_entity_unr − aligned_hist_rf`" in mechanism
+
+    # § 10 plain language and § 11 falsification.
+    assert "**Blocked by dependency certificates.**" in markdown
+    falsification = markdown.split("## 11. Falsification wording")[1]
+    assert "NOT_EVALUABLE (dependency certificate blocks an endpoint)" in (
+        falsification)
+
+    # And no smoke-only arm is CI-clean anywhere in the plain-language summary.
+    gain = rr._sequence_gain(built["stats"], blocked)
+    for config_id in blocked:
+        assert config_id not in gain["evaluable"]
+        assert config_id not in gain["ci_clean_favourable"]
 
 
 def test_a_positive_control_that_did_not_fire_blocks(built):
-    (built["dependency"] / "control.json").write_text(json.dumps({
-        "arm": "same_entity", "k": 30,
-        "checkpoint": "models/embeddings/seq_stage2/runs/same_entity_k30/"
-                      "seed_13",
-        "n_targets": 2000, "max_abs_delta": 0.0, "p99_abs_delta": 0.0,
-        "n_nonzero_gt_1e-6": 0,
-        "positive_control_expected": True,
-        "positive_control_observed": False}))
+    path = built["dependency"] / "aligned_hist.json"
+    record = json.loads(path.read_text())
+    record["positive_control_observed"] = False
+    record["max_abs_delta"] = 0.0
+    path.write_text(json.dumps(record))
     certificates = rr.dependency_certificates(
         rr.load_dependency(built["dependency"]))
     assert certificates["by_config"]["same_entity_k30"]["status"] == (
         "CONTROL_DID_NOT_FIRE")
     assert "same_entity_k30" in certificates["blocked"]
+    assert certificates["trained_checkpoint_coverage_complete"] is False
+
+
+def test_load_dependency_reads_the_recert_subdirectory(built):
+    """MUST-FIX 6: loading only immediate *.json let the command line choose
+    which evidence existed."""
+    records = rr.load_dependency(built["dependency"])
+    paths = {Path(str(r.get("checkpoint"))).parent.name for r in records}
+    assert len(records) == 10  # 4 arms x 2 seeds + 2 controls
+    assert paths
+    only_top = sorted((built["dependency"]).glob("*.json"))
+    assert len(only_top) == 2, "the controls alone live at the top level"
+
+
+def test_blocking_reaches_the_mechanism_and_falsification_sections(built):
+    """MUST-FIX 1: blocking previously stopped at the results and gate
+    sections, so a blocked endpoint still read as an interval in § 7 and § 11."""
+    for name in ("recency_k30.json",):
+        pass
+    path = built["dependency"] / "recert" / "same_entity_unr_seed13.json"
+    record = json.loads(path.read_text())
+    record["pass"] = False
+    path.write_text(json.dumps(record))
+    markdown = _render(built)
+    mechanism = markdown.split("## 7. Mechanism contrasts")[1].split("## 8.")[0]
+    assert "**Blocked mechanism contrasts.**" in mechanism
+    assert "`same_entity_unr − aligned_hist_rf`" in mechanism
+    assert "dependency certificate blocks" in mechanism
+    falsification = markdown.split("## 11. Falsification wording")[1]
+    assert "NOT_EVALUABLE (dependency certificate blocks an endpoint)" in (
+        falsification)
 
 
 def test_a_blocked_arm_cannot_be_reported_as_ci_clean(built):
@@ -630,6 +1168,25 @@ def test_the_report_discloses_the_innings_2_and_chase_equivalence(built):
 
 
 def test_diverging_slices_are_not_reported_as_equivalent(built):
+    """SHOULD 7: identity comes from the mask digest, not the counts.
+
+    Equal row, match and block counts are NOT enough, and a differing digest
+    is enough on its own.
+    """
     stats = json.loads(json.dumps(built["stats"], default=str))
-    stats["slices"]["stats"]["chase"]["n_rows"] = 1
+    assert rr._equivalent_slices(stats)[0][3] == "mask_sha256"
+    stats["slices"]["stats"]["chase"]["mask_sha256"] = "f" * 64
     assert rr._equivalent_slices(stats) == []
+    # Counts still agree exactly; the digest is what decides.
+    for field in ("n_rows", "n_matches", "n_blocks"):
+        assert (stats["slices"]["stats"]["chase"][field]
+                == stats["slices"]["stats"]["innings_2"][field])
+
+
+def test_equivalence_falls_back_to_counts_and_says_so(built):
+    """A statistics JSON predating the digest still gets the disclosure, but
+    the report must label the basis as counts-only."""
+    stats = json.loads(json.dumps(built["stats"], default=str))
+    for name in ("innings_2", "chase"):
+        stats["slices"]["stats"][name].pop("mask_sha256", None)
+    assert rr._equivalent_slices(stats)[0][3] == "counts_only"

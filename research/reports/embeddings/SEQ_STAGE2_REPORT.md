@@ -117,29 +117,37 @@ No number in this report comes from a run that was admitted on file existence al
 
 Shared signature components, identical across every admitted configuration: `training_block` = `3c17a16c7ba6…`, `frame` = `cc3270fde76d…`, `stats_cache` = `b46b06e42951…`.
 
-### Ownership dependency certificates (D7; D10.12 recertification **pending**)
+### Ownership dependency certificates (D7; D10.12 recertification **complete on trained checkpoints at both registered seeds, with the registered positive controls matched**)
 
-| arm | k | checkpoint | n targets | max |Δ| | p99 |Δ| | n > 1e-6 | role | result |
-|---|---|---|---|---|---|---|---|---|
-| `recency` | 30 | `seed_13` | 2000 | 0.000e+00 | 0.000e+00 | 0 | masked arm | PASS |
-| `recency` | 30 | `seed_7` | 2000 | 0.000e+00 | 0.000e+00 | 0 | masked arm | PASS |
-| `same_entity` | 0 | `seed_13` | 2000 | 0.000e+00 | 0.000e+00 | 0 | masked arm | PASS |
-| `same_entity` | 0 | `seed_7` | 2000 | 0.000e+00 | 0.000e+00 | 0 | masked arm | PASS |
-| `same_entity` | 30 | `seed_13` | 2000 | 0.000e+00 | 0.000e+00 | 0 | masked arm | PASS |
-| `same_entity` | 30 | `seed_7` | 2000 | 0.000e+00 | 0.000e+00 | 0 | masked arm | PASS |
-| `same_entity` | unr | `seed_13` | 2000 | 0.000e+00 | 0.000e+00 | 0 | masked arm | PASS |
-| `same_entity` | unr | `seed_7` | 2000 | 0.000e+00 | 0.000e+00 | 0 | masked arm | PASS |
+| arm | k | scored against S(i) of | checkpoint | seed | n targets | max |Δ| | p99 |Δ| | n > 1e-6 | checkpoint md5 | role | result |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `aligned_hist` | – | `same_entity` k=30 | `seed_7` (smoke checkpoint) | 7 | 2000 | 9.217e-01 | 7.411e-01 | 1867 | `NOT_A_REQUIRED_MASKED_ARM` | positive control | SEES EXCLUDED-PAST INFORMATION |
+| `full` | – | `recency` k=30 | `seed_7` (smoke checkpoint) | 7 | 2000 | 7.517e-01 | 5.774e-01 | 1449 | `NOT_A_REQUIRED_MASKED_ARM` | positive control | SEES EXCLUDED-PAST INFORMATION |
+| `recency` | 30 | `recency` k=30 | `seed_7` (smoke checkpoint) | 7 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `NOT_AUTHENTICATED_CLOSED_TREE` | masked arm | PASS |
+| `recency` | 30 | `recency` k=30 | `seed_13` | 13 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
+| `recency` | 30 | `recency` k=30 | `seed_7` | 7 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
+| `same_entity` | 0 | `same_entity` k=0 | `seed_13` | 13 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
+| `same_entity` | 0 | `same_entity` k=0 | `seed_7` | 7 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
+| `same_entity` | 30 | `same_entity` k=30 | `seed_13` | 13 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
+| `same_entity` | 30 | `same_entity` k=30 | `seed_7` | 7 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
+| `same_entity` | unr | `same_entity` k=unr | `seed_13` | 13 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
+| `same_entity` | unr | `same_entity` k=unr | `seed_7` | 7 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `AUTHENTICATED` | masked arm | PASS |
+| `same_entity` | 0 | `same_entity` k=0 | `seed_7` (smoke checkpoint) | 7 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `NOT_AUTHENTICATED_CLOSED_TREE` | masked arm | PASS |
+| `same_entity` | 30 | `same_entity` k=30 | `seed_7` (smoke checkpoint) | 7 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `NOT_AUTHENTICATED_CLOSED_TREE` | masked arm | PASS |
+| `same_entity` | unr | `same_entity` k=unr | `seed_7` (smoke checkpoint) | 7 | 2000 | 0.000e+00 | 0.000e+00 | 0 | `NOT_AUTHENTICATED_CLOSED_TREE` | masked arm | PASS |
 
-The positive controls establish sensitivity to excluded-past information, not specifically multi-layer relay (Astra gate 1, D7.4). A relay-free certificate always uses its own S(i). Where a row is marked *smoke checkpoint* the certificate is the structural one from the one-epoch smoke weights; masking is a property of the architecture, and D10.12 re-runs it on the admitted checkpoints.
+The positive controls establish sensitivity to excluded-past information, not specifically multi-layer relay (Astra gate 1, D7.4). A relay-free certificate always uses its own S(i); a control is a standard-wiring arm scored against the **masked arm's** S(i), which is why it is matched through the `scored against S(i) of` column and never through its own arm and k (Astra gate 2 round 1 MUST-FIX 1). Where a row is marked *smoke checkpoint* the certificate is the structural one from the one-epoch smoke weights; masking is a property of the architecture, and that row is never counted as trained-checkpoint coverage. Checkpoints inside the closed smoke tree are not opened by this report, so their recorded md5 reads `NOT_AUTHENTICATED_CLOSED_TREE`. A smoke record can never carry an arm's eligibility either: an arm whose trained recertifications are absent reads `TRAINED_SEEDS_INCOMPLETE` and is blocked, even when the smoke record is the only certificate present (Astra gate 2 round 2).
 
-This section is **pending**, not recertified: D10.12 requires the test rerun on the admitted trained checkpoints of `same_entity_k0`, `same_entity_k30`, `same_entity_unr` and `recency_k30` at **both** seeds, and trained-checkpoint coverage is complete for `recency_k30`, `same_entity_k0`, `same_entity_k30`, `same_entity_unr`.
+Trained-checkpoint coverage is verified, not asserted: it requires, for each of the four masked configurations, a passing certificate at **both** registered training seeds 7, 13, each certificate's recorded checkpoint md5 recomputed from `model.pt` on disk and matching, the registered perturbation settings (n_targets 2000, seed 29, split 'validation'), and the registered matched positive control present and fired. Coverage complete: **yes** — `recency_k30`, `same_entity_k0`, `same_entity_k30`, `same_entity_unr`.
 
-| configuration | certificate | trained-checkpoint coverage | consequence |
-|---|---|---|---|
-| `recency_k30` | `PASS` | trained checkpoints | no block from this check |
-| `same_entity_k0` | `PASS` | trained checkpoints | no block from this check |
-| `same_entity_k30` | `PASS` | trained checkpoints | no block from this check |
-| `same_entity_unr` | `PASS` | trained checkpoints | no block from this check |
+| configuration | certificate | trained-checkpoint coverage | matched positive control | consequence |
+|---|---|---|---|---|
+| `recency_k30` | `PASS` | trained checkpoints at seeds 7, 13 (md5-authenticated) | `full` vs S(i) of recency k=30 → fired | no block from this check |
+| `same_entity_k0` | `PASS` | trained checkpoints at seeds 7, 13 (md5-authenticated) | none registered (D7.4 registers controls only against `recency` k=30 and `same_entity` k=30) | no block from this check |
+| `same_entity_k30` | `PASS` | trained checkpoints at seeds 7, 13 (md5-authenticated) | `aligned_hist` vs S(i) of same_entity k=30 → fired | no block from this check |
+| `same_entity_unr` | `PASS` | trained checkpoints at seeds 7, 13 (md5-authenticated) | none registered (D7.4 registers controls only against `recency` k=30 and `same_entity` k=30) | no block from this check |
+
+**Disclosed gap in the certification design.** `same_entity_k0`, `same_entity_unr` have no separately registered positive control: D7.4 registers `full` against `recency_k30`'s S(i) and `aligned_hist` against `same_entity_k30`'s S(i) only. Their sensitivity evidence is inherited from the same-entity construction at k = 30 and is not independent of it. That is recorded here rather than treated as satisfied.
 
 ## 3. Decision rule (as registered, before any result was read)
 
@@ -637,13 +645,13 @@ the two-seed selection remains explicitly provisional pending any registered who
 
 ## 7. Mechanism contrasts (D10.5)
 
-| contrast | what it measures (registered label) | inferential in a registered family | seed-7 point | seed-13 point | mean point | mean 95% interval | mean raw p |
-|---|---|---|---|---|---|---|---|
-| `fox − fixed_decay` | learned forgetting beyond fixed decay | yes | +0.00002 | -0.00011 | -0.00005 | [-0.00022, +0.00011] | 0.5560 |
-| `same_entity_k30 − recency_k30` | ownership plus alignment beyond recency | yes | -0.00058 | -0.00176 | -0.00117 | [-0.00226, +0.00021] | 0.1040 |
-| `same_entity_unr − aligned_hist_rf` | mask alone, given aligned inputs and matched relay-free keys | yes | +0.00034 | -0.00136 | -0.00051 | [-0.00181, +0.00080] | 0.5170 |
-| `aligned_hist_rf − aligned_hist` | the relay-free wiring PLUS the key construction, not the wiring alone | yes | -0.00028 | +0.00146 | +0.00059 | [-0.00064, +0.00184] | 0.4480 |
-| `aligned_hist − full` | the aligned history input | yes | -0.00085 | -0.00222 | -0.00154 | [-0.00263, -0.00051] | 0.0010 |
+| contrast | what it measures (registered label) | inferential in a registered family | seed-7 point | seed-13 point | mean point | mean 95% interval | mean raw p | disposition |
+|---|---|---|---|---|---|---|---|---|
+| `fox − fixed_decay` | learned forgetting beyond fixed decay | yes | +0.00002 | -0.00011 | -0.00005 | [-0.00022, +0.00011] | 0.5560 | reported as computed |
+| `same_entity_k30 − recency_k30` | ownership plus alignment beyond recency | yes | -0.00058 | -0.00176 | -0.00117 | [-0.00226, +0.00021] | 0.1040 | reported as computed |
+| `same_entity_unr − aligned_hist_rf` | mask alone, given aligned inputs and matched relay-free keys | yes | +0.00034 | -0.00136 | -0.00051 | [-0.00181, +0.00080] | 0.5170 | reported as computed |
+| `aligned_hist_rf − aligned_hist` | the relay-free wiring PLUS the key construction, not the wiring alone | yes | -0.00028 | +0.00146 | +0.00059 | [-0.00064, +0.00184] | 0.4480 | reported as computed |
+| `aligned_hist − full` | the aligned history input | yes | -0.00085 | -0.00222 | -0.00154 | [-0.00263, -0.00051] | 0.0010 | reported as computed |
 
 a mechanism contrast is inferential only in its registered family and slice; every other slice readout is exploratory. No difference is ever inferred from one arm being significant against mlp and another not — that comparison is not computed by this tool and is not reportable
 
@@ -752,7 +760,7 @@ Paired harm `d = LL(candidate) − LL(mlp)` on each gate slice, margin +0.002. A
 
 Every reading below is exploratory: it changes no k, no family and no advancement, and this validation-only run opened no test rows.
 
-**Disclosure — `innings_2` and `chase` are the same rows on this frame.** Both predicates select 57994 rows, the same matches and the same tournament blocks, so the two readouts are one readout written twice. They are **never** independent corroboration of each other, and only `chase` is a three-member family member; the other is exploratory (Astra gate 1 round 3 ruling).
+**Disclosure — `innings_2` and `chase` are the same rows on this frame.** Both predicates select 57994 rows — **identity here is inferred from equal row, match and block counts only**, because this statistics JSON predates the persisted row-mask digest; two different row sets could in principle agree on all three, so treat this as a conservative disclosure rather than proof of identical membership — so the two readouts are one readout written twice. They are **never** independent corroboration of each other, and only `chase` is a three-member family member; the other is exploratory (Astra gate 1 round 3 ruling).
 
 | contrast | slice | mean point | mean 95% interval | blocks | descriptive |
 |---|---|---|---|---|---|
@@ -857,6 +865,8 @@ Every reading below is exploratory: it changes no k, no family and no advancemen
 
 The qualifying primary is **residual_t1 - residual_mlp on the all slice**. residual_t1 - mlp mixes the sequence and the production prior; it is reported and never a qualifying primary `residual_mlp` is a production-prior control, not a sequence gain.
 
+`residual_t1 − residual_mlp` on `all` reads -0.00003 [-0.00060, +0.00044]: the interval straddles zero, so **no incremental benefit of residual T1 over residual MLP was established at this resolution**. That is an unresolved interval, **not** a demonstration that sequence adds nothing over the production prior (Astra gate 2 round 1 MUST-FIX 4).
+
 Base-only validation log loss (the production prior alone, exploratory reference): **1.433437** over 124292 rows, from `models/embeddings/seq_stage2/base_logits/validation.npz` — booster md5 `7ee1e1809917…`, model dir `models/xgb_i7_noweights_production` (role `ball_model_prod`), parquet md5 `326436317310…`, floor 0.0001, renormalised True. Row alignment: verified: the sidecar's recorded parquet md5 equals the live validation parquet's own md5 and its row count equals the frame's, and the logits are stored in parquet row order.
 
 | residual arm − base only | seed-7 point | seed-13 point | mean point | mean 95% interval |
@@ -895,7 +905,7 @@ Every entry below is restated from `experiments/configs/seq_stage2_v1.yaml` or e
 ### Known limitations (config `known_limitations`)
 
 - (`known_limitations[0]`) the global outcome prior in the stats cache is not as-of-date, an inherited limitation of the frame; the direction and size of its effect on any stage-2 contrast are unknown.
-- (`known_limitations[1]`) venue history in the frame is not recency-weighted (TODO.md backlog item); every arm inherits the same feature, so it is a level effect on all of them rather than a per-arm advantage.
+- (`known_limitations[1]`) venue history in the frame is not recency-weighted (TODO.md backlog item); every arm is given the same feature, so no arm has it while another lacks it; whether its effect is the SAME across architectures is unmeasured, and no level effect is claimed.
 - (`known_limitations[2]`) the i7 test split was read by the 2026-08 program, so it is not a clean holdout; stage 2 does not load it (score_test false) and the untouched cohort exists because of this.
 - (`known_limitations[3]`) MPS kernels are not bit-reproducible across runs or machines, so a rerun of any checkpoint may differ in the low decimals; every checkpoint records mps_bit_reproducible false.
 - (`known_limitations[4]`) checkpoint selection uses the same validation split the contrasts are computed on (A15 not adopted), so every number is screening evidence.
@@ -908,7 +918,7 @@ Every entry below is restated from `experiments/configs/seq_stage2_v1.yaml` or e
 - `fixed_round_residual_refits` — each leave-one-block-out refit runs a fixed 25 boosting rounds with no early stopping and no eval set, so no fold re-selects its round count against the validation split.
 - `wiring_plus_key_construction` — `aligned_hist_rf - aligned_hist` measures the relay-free wiring PLUS the key construction. It is not the wiring alone and is never reported as such.
 - `own_outcome_versus_shifted_history_keys` — the relay-free arms read an earlier row as a (state, OWN outcome) pair while the standard-wiring arms read every row as a (state, SHIFTED previous outcome) pair; no arm can read its own label (certified in D7).
-- `ownership_plus_alignment` — `same_entity_k30 - recency_k30` is ownership PLUS alignment beyond recency, because the two arms differ in the history input as well as the mask; ownership is not isolated from alignment anywhere tonight.
+- `ownership_plus_alignment` — `same_entity_k30 - recency_k30` is ownership PLUS alignment beyond recency, because the two arms differ in the history input as well as the mask, so that contrast does not isolate ownership from alignment. The registered `same_entity_unr - aligned_hist_rf` contrast DOES hold the aligned history input, the relay-free wiring and the key construction fixed, so it isolates the attention mask given aligned inputs; no claim of isolated ownership is drawn from the k30 contrast (Astra gate 2 round 1 MUST-FIX 4).
 - `machine_confounded_with_seed_no_machine_term` — seed 7 trained on the laptop and seed 13 on the Mac mini, so MACHINE IS CONFOUNDED WITH SEED. Every registered contrast is within-machine at each seed, so an additive machine effect cancels inside it, but arm-by-machine interaction is inseparable from seed variation and **no machine term is fitted**.
 - `xlstm_simplifications` — every registered xLSTM simplification stands as recorded by `scripts/sequence_track/recurrent_arms.simplifications()`; the arm is plain torch, not the paper's reference implementation.
 - `a15_not_adopted_and_checkpoint_selection_optimism` — A15 is not adopted: early stopping reads the same validation split the contrasts are computed on, so checkpoint-selection optimism is uncorrected and every number here is screening evidence.
@@ -918,16 +928,23 @@ Every entry below is restated from `experiments/configs/seq_stage2_v1.yaml` or e
 - `mps_non_bit_reproducibility` — MPS kernels are not bit-reproducible across runs or machines, so any rerun may differ in the low decimals; every checkpoint records `mps_bit_reproducible false`.
 - `fresh_stage2_runs_not_stage1_replications` — stage 1 checkpoints are not reused: these are fresh stage 2 runs under the stage 2 config, not replications of stage 1 numbers.
 - `global_prior_not_as_of` — the global outcome prior in the stats cache is not as-of-date; the direction and size of its effect on any stage 2 contrast are unknown, so it cannot be used to argue a contrast is unaffected.
-- `venue_history_not_recency_weighted` — venue history in the frame is not recency-weighted; every arm inherits the same feature, so it is a level effect rather than a per-arm advantage.
+- `venue_history_not_recency_weighted` — venue history in the frame is not recency-weighted; every arm is given the same feature, so no arm has it while another lacks it. Whether its effect is the SAME across architectures is unmeasured — a shared feature can have different effects in different functions of it — so it is not asserted to be a level effect rather than a per-arm advantage (Astra gate 2 round 1 MUST-FIX 4).
+- `unresolved_historical_consumption` — whether the 2026-04-17 -> 2026-08-05 cohort window is untouched as an EVALUATION set is NOT settled. `docs/sequence_track/stage2_cohort_consumer_audit.md` establishes clean training frame and cache ancestry only, and clean training ancestry does not prove untouched evaluation status; D10.16(0) keeps Astra gate 1 round 2 MUST-FIX 6 open, so the cohort may not be opened on seed extension alone, however many seeds are added.
 - `prior_test_inspection_and_d4_d5_reads` — the i7 test split was read by the 2026-08 program and is not a clean holdout; D4 scored test base logits and D5 ran a whole-test parity rebuild. Stage 2 does not train or select on test, and the untouched cohort exists because of this exposure.
 - `shared_features_do_not_prove_shared_effects` — a shared feature set does not prove a shared effect across architectures: the arms are different functions of the same inputs.
 - `invalid_historical_rss_unavailable` — the historical per-seed peak RSS recorded as a `RUSAGE_CHILDREN` delta is invalid and is reported as unavailable, never reconstructed.
 
 A shared feature set does not prove a shared effect across architectures. Where a historical measurement is invalid it is labelled unavailable, not reconstructed.
 
+### Corrections applied to config-sourced wording above
+
+`experiments/configs/seq_stage2_v1.yaml` is launch-era training provenance and is not edited. Where it states a conclusion the evidence does not support, the clause is replaced here and the replacement is disclosed, original wording included.
+
+- `known_limitations[1]` — rendered as "every arm is given the same feature, so no arm has it while another lacks it; whether its effect is the SAME across architectures is unmeasured, and no level effect is claimed" in place of the config's "every arm inherits the same feature, so it is a level effect on all of them rather than a per-arm advantage". Reason: Astra gate 2 round 1 MUST-FIX 4: a shared venue feature can have different effects in different architectures, so "a level effect rather than a per-arm advantage" is not established by the fact that every arm reads the feature.
+
 ## 10. In plain language: what was tested, what came out, and why nothing advances
 
-**What was tested.** Sixteen small neural models were each trained on the same 1.88 million historical deliveries and then asked, one ball at a time, to put a probability on each of the six outcomes of the *next* delivery of 124,292 held-out balls. The ball that actually happened is known to the scorer but never to the model. They differ only in what they are allowed to remember about the innings so far: nothing at all (the token MLP control), everything (the full transformer), everything with a fixed decay, everything with a learned forgetting gate, only the same batter's and bowler's own past balls, only the last k balls, or a recurrent memory. Two further arms start from the production ball model's own probability and learn a correction on top of it.
+**What was tested.** Sixteen small neural models were each trained on the same 1.88 million historical deliveries and then asked, one ball at a time, to put a probability on each of the six outcomes of the *next* delivery of 124,292 held-out balls. The ball that actually happened is known to the scorer but never to the model. The change under test is what each is allowed to remember about the innings so far: nothing at all (the token MLP control), everything (the full transformer), everything with a fixed decay, everything with a learned forgetting gate, only the same batter's and bowler's own past balls, only the last k balls, or a recurrent memory. Two further arms start from the production ball model's own probability and learn a correction on top of it. They do **not** differ only in that: capacity and parameter count, architecture, the positional scheme, how keys are built from an earlier ball, and — for the two residual arms — access to the production model's own probabilities differ as well, and every one of those is confounded with the memory change in at least one contrast (Astra gate 2 round 1 MUST-FIX 4; § 9 lists each).
 
 **This is teacher-forced ball prediction.** It is not rollout — nobody simulated a match — and it is not market performance. A better log loss here does not imply a better simulated score distribution, a better win probability, or any betting edge. No market price appears anywhere in this stage.
 
@@ -937,19 +954,31 @@ Some arms are CI-clean favourable against the token MLP on the `all` slice under
 
 **Why no arm advances tonight.** Three reasons, all registered before the results were read. (1) Two seeds are a directional screen: the seed-mean estimand is descriptive, so no interval here is a confirmation. (2) Checkpoint selection used the same validation split the contrasts are computed on, so every number carries selection optimism. (3) The one untouched cohort was ruled **deferred** by the reviewer, so nothing has been confirmed out of sample. `advances: []`.
 
-**Cohort confirmation is pending.** `cohort_status: DEFERRED_UNOPENED`, `cohort_scored: false`: no cohort feature, prediction or base-logit read happened, and the cohort unlocks only after seeds 29, 42 and 101 are added to every retained whole family — candidate, every matched control, and all five k configurations wherever k selection is involved — and the final family, checkpoint and analysis freeze is verified. **There is no market claim. There is no LANDED verdict** — two-seed evidence is provisional and can never be LANDED (invariant 9). **The user's verdict is outstanding.**
+**Cohort confirmation is pending.** `cohort_status: DEFERRED_UNOPENED`, `cohort_scored: false`: no cohort feature, prediction or base-logit read happened. **There is no market claim. There is no LANDED verdict** — two-seed evidence is provisional and can never be LANDED (invariant 9). **The user's verdict is outstanding.**
 
-**The exact next step.** Extend the seed set to 29, 42 and 101 for every retained whole hypothesis family (candidate, matched controls, and all five `same_entity` k arms if any k claim is retained), rerun this identical registered selection and these identical gates on all five seeds reporting the spread and the 4/5 favourable-direction count, then write the final freeze. Only then may the untouched cohort be scored, exactly once, in one frozen batch; tonight's k selection is `SELECTED` and is explicitly provisional. If no candidate qualifies, the cohort is left unopened.
+**The exact next step, and the complete set of conditions that unlock the cohort (D10.16, restated in full — nothing here is abbreviated, and Astra gate 2 round 1 MUST-FIX 2 records that five seeds alone cannot unlock this cohort):**
+
+0. **The historical-consumption question must be settled first.** D10.16(0) keeps Astra gate 1 round 2's MUST-FIX 6 open: whether the 2026-04-17 → 2026-08-05 window is untouched as an *evaluation* set is not established. `docs/sequence_track/stage2_cohort_consumer_audit.md` establishes clean training frame and cache **ancestry** only, and clean training ancestry does not prove untouched evaluation status. Until that is resolved in full, no number of seeds unlocks anything.
+1. Seeds **29, 42 and 101** are added to every retained **whole** hypothesis family — the candidate, `mlp`, every matched control, and **all five** `same_entity` k configurations whenever k selection is involved. Never a single arm.
+2. The seed-extension procedure **and** the final k-selection procedure are **frozen before any new-seed result is inspected**. A procedure chosen after seeing the new seeds is selection on the outcome and voids the extension.
+3. The registered selection and the registered gates are rerun on all five seeds, reporting the seed spread and the **4/5 favourable direction count**; only candidates eligible under those reruns are retained.
+4. The final family, checkpoint and **analysis** freeze is written and verified — an explicitly versioned final freeze, separate from the immutable training provenance (`pin_stage2_analysis.py --verify`).
+5. The cohort's **provenance is re-verified unchanged** against its frozen hashes before it is opened.
+6. The read is **one** frozen scoring batch covering every frozen candidate and control at once, with no interim result-driven change, no added arm, no changed k and no tuning; a start record and all outputs are persisted.
+7. **Partial-exposure recovery rule:** any recovery or rerun reuses the identical frozen specification, **discloses the partial exposure**, and **never claims a fresh untouched read**.
+8. If no candidate qualifies, **the cohort is left unopened**.
+
+So the immediate next step is (0) plus (1)–(3): resolve historical consumption, freeze the extension and selection procedure, then train seeds 29, 42 and 101 across whole families and rerun these identical gates; tonight's k selection is `SELECTED` and is explicitly provisional.
 
 ## 11. Falsification wording (D10.15) and what a result here can and cannot mean
 
 No result tonight licenses "X is the cause".
 
-* `fox − fixed_decay` reads **unresolved** on the seed-mean estimand. A favourable reading would support *learned forgetting as an explanation*, nothing stronger.
+* `fox − fixed_decay` reads **unresolved** on the seed-mean estimand. A favourable reading would support *learned forgetting as an explanation*, nothing stronger. As it reads, FoX establishes **no detected benefit over fixed decay** at this resolution — which is not the same as learned forgetting adding nothing (Astra gate 2 round 1 MUST-FIX 4).
 * `same_entity_k30 − recency_k30` reads **unresolved**. A favourable reading would support *ownership plus alignment beyond recency*, and cannot isolate ownership from alignment.
 * `same_entity_unr − aligned_hist_rf` reads **unresolved**. A favourable reading would support *excluding other participants' history*, with alignment, wiring and key construction held fixed.
 
-An interval that crosses zero means **unresolved evidence**, not proof that the mechanism does not matter.
+An interval that crosses zero means **unresolved evidence**, not proof that the mechanism does not matter. Where a reading above is `NOT_EVALUABLE` because a dependency certificate blocks an endpoint, even that is unavailable: the arm has not been shown to depend only on the rows its mask allows, so its interval supports no mechanism reading at all.
 
 Neither proposed mechanism is supported at this resolution.
 

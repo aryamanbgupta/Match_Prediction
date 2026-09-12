@@ -910,6 +910,70 @@ row inside the new null-wording sentence. Report 958 → 987 lines. Suites:
 `178 passed` on the three analysis test files, `1754 passed, 56 deselected` on
 the full artifact-free suite.
 
+### Gate 2 round 2 — `VERDICT: NO SIGN-OFF`, and the closure of its two blockers
+
+Prompt `docs/sequence_track/astra/gate2_round2_prompt.md`, output
+`<scratchpad>/astra/gate2_round2.md`. Astra **confirmed** closures 1, 2, 3, 4, 5,
+7 and 8 with file:line, independently recomputing the two corrected k
+differences as `0.002469554732499102` and `0.0014855276932430606`, reproducing
+the refusal of the truncated consequence, the missing historical-consumption
+entry and the missing § 9 heading, and recomputing coverage as eight
+authenticated trained certificates with both controls fired. It also ruled:
+**(a) the evidence-root `--dependency-dir` is right**; **(b) substitution with
+disclosure for `known_limitations[1]` is acceptable** — "it transparently
+corrects an unsupported interpretation while preserving immutable training
+provenance… does not hide a registration change or alter a hypothesis,
+threshold or result"; **(c) D12's three-config arrangement is sound in
+principle**, with the by-seed split still valid for paired comparisons; and
+**(d) "the extension does not retroactively invalidate the two-seed screen.
+That report may be committed with a separate five-seed addendum to follow after
+these two gate defects are closed and the acceptance record accurately records
+their closure."** This block is that record.
+
+| Astra item | closure |
+|---|---|
+| **round 2 MUST-FIX 1 — the smoke-only eligibility hole.** "Block missing trained seeds even when **zero** trained certificates remain." The shortfall branch read `elif block["trained_seeds"] and missing_seeds:`, so an arm with **no** trained certificate fell through to `PASS` and kept its eligibility on the one-epoch smoke record | **CLOSED.** The branch is now `elif missing_seeds:`, so any shortfall against the registered seeds yields `TRAINED_SEEDS_INCOMPLETE` and enters `blocked`, whether the arm holds one registered seed or none, and the reason names which seeds are held and says when the only certificate is the smoke record. The PASS-expecting test is **replaced** by one asserting all four masked arms block; a further test asserts propagation into § 4 results (with `NOT_EVALUABLE` on every readout), § 8 gates, § 7 mechanism, § 10 plain language, § 11 falsification and the sequence-gain readout |
+| **round 2 MUST-FIX 2 — the analysis pin did not compare what it records.** `COMPARED_FIELDS` omitted `evidence.config` and `dependency_coverage`, so with checkpoint authentication failing for all four arms `verify()` still returned `True, []`, and changing only the config hash produced no drift | **CLOSED.** Both fields are compared and `dependency_coverage` is removed from `not_compared`; `verify()` rebuilds coverage from the checkpoints on disk. Three mutation tests added: changed config contents, a checkpoint whose `model.pt` bytes changed while the certificate file hashed the same, and a checkpoint gone missing. Both pin copies regenerated and verifying |
+
+Also closed in the same pass, from Astra's separate **extension audit**
+(`docs/sequence_track/astra/ext_audit_prompt.md`,
+`<scratchpad>/astra/ext_audit.md`) — these blocked the five-seed addendum
+rather than this commit:
+
+| audit item | closure |
+|---|---|
+| **five-seed statistics were only partially implemented.** "`READOUTS` remains `seed_7, seed_13, seed_mean_joint`: **Holm tables, gates and screens omit seeds 29/42/101**"; `family_screen` did not enforce the 4/5 count; the CLI defaulted to fifteen families | **CLOSED.** `readouts_for(seeds)` replaces the constant and drives the Holm tables, screens and gate rows, with `contract.readouts` / `seeds` / `n_seeds` recorded and the renderer reading them back. `family_screen` enforces the registered rule: at ≥5 seeds a `SCREEN_PASS` additionally requires ≥4/5 favourable primary directions and a missing count cannot qualify; at 2 seeds it reports "not applicable at 2 seed(s)", changes no status, and sets `five_seed_extension_qualified: false` so a two-seed pass is never misread as the extension qualification. `expected_family_count(config)` derives the count, so seven- and fifteen-family configs both run with no flag |
+| **the five-seed config could not run `ksweep`** because filtering removed the window arms, and extension 2's training config cannot run statistics at all because filtering removed `mlp` (every family's gate reference) and `aligned_hist` | **CLOSED.** `seq_stage2_5seed_v1.yaml` is rebuilt as `seq_stage2_v1.yaml` with **only** `training.seeds` changed — 16 configurations, orders 1..16, 15 families, every other block byte-equal and asserted so by test. Astra: "No fourth config is necessary." Extension 2's *training* config is left as it is, since training and consolidation ignore reference resolution and it is never used for statistics |
+| **night-1 evidence must not be overwritten** by five-seed outputs | **CLOSED** by requiring the path rather than redirecting a default: `require_distinct_out` refuses when the config is anything but `seq_stage2_v1.yaml` while the output still points at the two-seed default, wired into `stats`, `ksweep`, the renderer and the analysis pin, each exiting 2 with a suggested path. No default was silently changed and no path is guessed |
+
+**Four things the implementer found that Astra did not name**, recorded because
+three of them affect what happens next:
+
+1. `docs/sequence_track/stage2_analysis_pin.json` is **gitignored** by the
+   blanket `*.json` rule, so the tracked snapshot needs `git add -f`.
+2. **An ordering constraint the new comparison creates**: because
+   `evidence.config` is now compared, any `pin_stage2.py --write` — which
+   rewrites `provenance.pins_generated_at` — invalidates the analysis pin. So
+   `pin_stage2 --write` must run **before** `pin_stage2_analysis --write`, not
+   after.
+3. **The renderer's prose is still hard-coded "two seeds"** in about a dozen
+   places (the title, the § 3 status block, "screening readout on two seeds",
+   the best-observed line), and § 7's mechanism table has literal `seed-7` /
+   `seed-13` columns. The *numbers* are seed-derived everywhere the Holm
+   tables, gates and screens are concerned, but **a five-seed report would
+   describe itself as two-seed and show only two seeds in § 7**. This is a
+   named blocker for the five-seed addendum, not for this commit.
+4. The five-seed config's `experiment.name`, `runner` and `queue` still
+   inherit the training values, so its analysis-only status lives in a YAML
+   comment and is not covered by `config_body_sha256`. Left as-is to keep the
+   body byte-equal per Astra's instruction; flagged for a decision.
+
+**The two-seed report of record is unchanged in substance**: a numeric-token
+diff over all 987 lines and 4,245 numbers is identical in order, the only
+difference being one added sentence in the dependency-certificates note.
+Suites: `195 passed` on the three analysis files; `1771 passed, 56 deselected`
+on the full artifact-free suite (re-run by the orchestrator).
+
 ---
 
 ## D12. Seed extension to 29, 42 and 101 (registered 2026-09-12, after gate 2 round 1)

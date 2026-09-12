@@ -1,0 +1,932 @@
+{
+  "pin_version": "seq_stage2_analysis_pin_v1",
+  "what_this_is": "the stage 2 ANALYSIS and DECISION manifest (D10.9). It is separate from experiments/configs/seq_stage2_v1.yaml's provenance block, which is immutable training provenance and is not written or verified here.",
+  "written_at_utc": "2026-09-12T05:18:43Z",
+  "git_head_short": "443b2ab",
+  "compared_fields": [
+    "pin_version",
+    "analysis_code",
+    "invocations",
+    "evidence.statistics",
+    "evidence.k_selection",
+    "evidence.report",
+    "evidence.config",
+    "evidence.dependency_dir",
+    "evidence.dependency_certificates",
+    "evidence.summary_yaml_at_statistics",
+    "dependency_coverage",
+    "decisions.k_selection",
+    "decisions.family_map"
+  ],
+  "not_compared": [
+    "written_at_utc",
+    "git_head_short",
+    "live_summary_state",
+    "live_summary_state is informational: a later training night rewrites runs/<config>/summary.yaml, so the evidence of record is the hash the statistics consumed, not the file's live hash"
+  ],
+  "analysis_code": {
+    "scripts/sequence_track/stage2_stats.py": "573e8984da8b488638bdb04f96c8863e7e1a55025805c18bad6acfe38188855e",
+    "scripts/sequence_track/render_stage2_report.py": "fc162e4b59d28f3d9a9e84ce42864e54e48ce9e0ed0c254674cc1c6a3f5580d1",
+    "scripts/sim_eval/eval_statistics.py": "d3fcfe454269d334766a35965dff2e33db9c5e3bbb06ea16a0d7b14bde2ba1ca",
+    "scripts/registered_experiment.py": "ae8f027b9b9b100f377be03413973b35edb5f2c62c632cf1daf7590cceb8595f",
+    "scripts/sequence_track/pin_stage2_analysis.py": "011f55040a84eec3d8bada45b9629165d87b75546b969df37cb5cd14ce5d847e"
+  },
+  "invocations": {
+    "statistics": [
+      "uv",
+      "run",
+      "--no-sync",
+      "python",
+      "scripts/sequence_track/stage2_stats.py",
+      "stats",
+      "--config",
+      "experiments/configs/seq_stage2_v1.yaml",
+      "--runs-root",
+      "models/embeddings/seq_stage2/runs",
+      "--frame-dir",
+      "data/xgb_data_i7",
+      "--block-source-dir",
+      "data/t20s_json",
+      "--base-logits",
+      "models/embeddings/seq_stage2/base_logits/validation.npz",
+      "--out",
+      "eval_out/seq_stage2/stats.json",
+      "--reps",
+      "2000",
+      "--rng-seed",
+      "29",
+      "--seeds",
+      "7,13"
+    ],
+    "ksweep": [
+      "uv",
+      "run",
+      "--no-sync",
+      "python",
+      "scripts/sequence_track/stage2_stats.py",
+      "ksweep",
+      "--config",
+      "experiments/configs/seq_stage2_v1.yaml",
+      "--runs-root",
+      "models/embeddings/seq_stage2/runs",
+      "--out",
+      "eval_out/seq_stage2/k_selection.json",
+      "--seeds",
+      "7,13"
+    ],
+    "renderer": [
+      "uv",
+      "run",
+      "--no-sync",
+      "python",
+      "scripts/sequence_track/render_stage2_report.py",
+      "--stats-json",
+      "eval_out/seq_stage2/stats.json",
+      "--k-selection",
+      "eval_out/seq_stage2/k_selection.json",
+      "--config",
+      "experiments/configs/seq_stage2_v1.yaml",
+      "--dependency-dir",
+      "models/embeddings/seq_stage2/dependency",
+      "--out",
+      "research/reports/embeddings/SEQ_STAGE2_REPORT.md"
+    ]
+  },
+  "evidence": {
+    "statistics": {
+      "path": "eval_out/seq_stage2/stats.json",
+      "present": true,
+      "sha256": "5d0539c841d4ba364bfd525f11a7e2f2642c9c2ebe11b0fb28c21259364bfb9f"
+    },
+    "k_selection": {
+      "path": "eval_out/seq_stage2/k_selection.json",
+      "present": true,
+      "sha256": "423b121f0a9e950b8596d3d1d468a96f3effd278094e59d79f7b0f9d33efc1cd"
+    },
+    "report": {
+      "path": "research/reports/embeddings/SEQ_STAGE2_REPORT.md",
+      "present": true,
+      "sha256": "3144f38a48bbf5726468cd094f789ffc5d09b06feb0d91ac11a8eaea1a417875"
+    },
+    "config": {
+      "path": "experiments/configs/seq_stage2_v1.yaml",
+      "present": true,
+      "sha256": "ff3341a4b0574a45b22986016feea96bc65357a3d371a9015163f943e47d11f0"
+    },
+    "dependency_dir": "models/embeddings/seq_stage2/dependency",
+    "dependency_certificates": [
+      {
+        "path": "models/embeddings/seq_stage2/dependency/aligned_hist.json",
+        "sha256": "dba5589fce4b3c452f361bf1603b0e1b67324d43c4297b1c7c31ae371827db59"
+      },
+      {
+        "path": "models/embeddings/seq_stage2/dependency/full.json",
+        "sha256": "858c517d9c94c5e7c3f023187676a6c939ea3645cdcaa383fb231358f91807a5"
+      },
+      {
+        "path": "models/embeddings/seq_stage2/dependency/recency_k30.json",
+        "sha256": "a078cf8c6e9cc3127d3e313f2fa843e5a34e210bc2a5ae6289c5e9cdfd626f06"
+      },
+      {
+        "path": "models/embeddings/seq_stage2/dependency/recert/recency_k30_seed13.json",
+        "sha256": "ead1033475d5ea27178a522572b4f1d889f8d7196073ecad01d4e7e3b29b6631"
+      },
+      {
+        "path": "models/embeddings/seq_stage2/dependency/recert/recency_k30_seed7.json",
+        "sha256": "0b050f596538ae4241e46dde7c1b9667b78b0b8a0a925fba3c0d6e48730046af"
+      },
+      {
+        "path": "models/embeddings/seq_stage2/dependency/recert/same_entity_k0_seed13.json",
+        "sha256": "542ef04300f3e697f9fa5c10277a93b6facb78506a2fa21a96764e3512951fca"
+      },
+      {
+        "path": "models/embeddings/seq_stage2/dependency/recert/same_entity_k0_seed7.json",
+        "sha256": "c227a94e2324d7b7a0dfcd268ba4d2d06488ee3f18e88bf8b3ac1e6676e5767c"
+      },
+      {
+        "path": "models/embeddings/seq_stage2/dependency/recert/same_entity_k30_seed13.json",
+        "sha256": "63426b94053abbcdb2d5ba7979e8299abc361af083e6f4d33b2d40671435f423"
+      },
+      {
+        "path": "models/embeddings/seq_stage2/dependency/recert/same_entity_k30_seed7.json",
+        "sha256": "96879062b123f51e4cf5c4bd06006605ea755f188fe61bf4bf8bbf34133ea338"
+      },
+      {
+        "path": "models/embeddings/seq_stage2/dependency/recert/same_entity_unr_seed13.json",
+        "sha256": "60c329b4fab68368a64d571904e206acfd0e4fe39994521f9034c9ee5d826e90"
+      },
+      {
+        "path": "models/embeddings/seq_stage2/dependency/recert/same_entity_unr_seed7.json",
+        "sha256": "872d043b0c00bac6b2c133ec7e6ab5d1004c8ac6707f4e4186defba0e0e24dea"
+      },
+      {
+        "path": "models/embeddings/seq_stage2/dependency/same_entity_k0.json",
+        "sha256": "509f214c6a4b5415115ab2c543e5f94e8d8a924dbca61296c3787edfde4c19e1"
+      },
+      {
+        "path": "models/embeddings/seq_stage2/dependency/same_entity_k30.json",
+        "sha256": "834972bb4492ebdeb3221f149a792e4d90607d835d949c1028cea18846c3dfee"
+      },
+      {
+        "path": "models/embeddings/seq_stage2/dependency/same_entity_unr.json",
+        "sha256": "8327a3422b6efc7977efa0bccd456a0978673539e5114ea9186c07c069b93d59"
+      }
+    ],
+    "summary_yaml_at_statistics": {
+      "aligned_hist": {
+        "summary_path": "models/embeddings/seq_stage2/runs/aligned_hist/summary.yaml",
+        "sha256": "feb93480496551345505775a604156834cfb66b54a66f94b48b75e53a026a6f8",
+        "seeds_recorded": [
+          7,
+          13
+        ]
+      },
+      "aligned_hist_rf": {
+        "summary_path": "models/embeddings/seq_stage2/runs/aligned_hist_rf/summary.yaml",
+        "sha256": "1f4413b892fb16c82335c65aeabeabead1b2f678c374f11df9b668587e006a06",
+        "seeds_recorded": [
+          7,
+          13
+        ]
+      },
+      "fixed_decay": {
+        "summary_path": "models/embeddings/seq_stage2/runs/fixed_decay/summary.yaml",
+        "sha256": "e02c95274f0a1c3ebdd09238600e663db6eb699c4ade76b6aed704dbdf96499e",
+        "seeds_recorded": [
+          7,
+          13
+        ]
+      },
+      "fox": {
+        "summary_path": "models/embeddings/seq_stage2/runs/fox/summary.yaml",
+        "sha256": "a474ed14f99cd232a1a609f730a411aa5ee41e365c3d36ce86ad142f8aa9719d",
+        "seeds_recorded": [
+          7,
+          13
+        ]
+      },
+      "full": {
+        "summary_path": "models/embeddings/seq_stage2/runs/full/summary.yaml",
+        "sha256": "1a64ffd84a357bc6427b97766aaf1d5a4d04e88385addd9a800b2592a28297c8",
+        "seeds_recorded": [
+          7,
+          13
+        ]
+      },
+      "lstm": {
+        "summary_path": "models/embeddings/seq_stage2/runs/lstm/summary.yaml",
+        "sha256": "cdd7ce9cc477d820efb7e58e6e9e5141b59437e9fdb6cb9ed8730ed4e42c05f3",
+        "seeds_recorded": [
+          7,
+          13
+        ]
+      },
+      "mlp": {
+        "summary_path": "models/embeddings/seq_stage2/runs/mlp/summary.yaml",
+        "sha256": "d26ff6bf776bdf7d9bce38c12be4400697f97733d15c118f85522482b98a6a3d",
+        "seeds_recorded": [
+          7,
+          13
+        ]
+      },
+      "recency_k30": {
+        "summary_path": "models/embeddings/seq_stage2/runs/recency_k30/summary.yaml",
+        "sha256": "30c8bad07a3728f3644780b5530e1ed9aa69cfecb3f121f2fb51762674b3b25f",
+        "seeds_recorded": [
+          7,
+          13
+        ]
+      },
+      "residual_mlp": {
+        "summary_path": "models/embeddings/seq_stage2/runs/residual_mlp/summary.yaml",
+        "sha256": "ffae79902ca32c6351fd504370765a2dd4a76d6862c2a423615e72aff4331fa6",
+        "seeds_recorded": [
+          7,
+          13
+        ]
+      },
+      "residual_t1": {
+        "summary_path": "models/embeddings/seq_stage2/runs/residual_t1/summary.yaml",
+        "sha256": "d7d8c9fb38f505f1e14d68c4d04831ce132383aeb1ef8d1f588bfc0561fc8e29",
+        "seeds_recorded": [
+          7,
+          13
+        ]
+      },
+      "same_entity_k0": {
+        "summary_path": "models/embeddings/seq_stage2/runs/same_entity_k0/summary.yaml",
+        "sha256": "509c34567e74e8143a7c39219d9016960287567894f515a68578f33573a44df9",
+        "seeds_recorded": [
+          7,
+          13
+        ]
+      },
+      "same_entity_k12": {
+        "summary_path": "models/embeddings/seq_stage2/runs/same_entity_k12/summary.yaml",
+        "sha256": "863b760479cd69220506c4da8fdcda2abf46df95bbdf1b581ddde64299b8850a",
+        "seeds_recorded": [
+          7,
+          13
+        ]
+      },
+      "same_entity_k30": {
+        "summary_path": "models/embeddings/seq_stage2/runs/same_entity_k30/summary.yaml",
+        "sha256": "44f0c30042cf65a0cd0ff7a7cc26694452edda9f1fe3785ac5c10ac130ed3aea",
+        "seeds_recorded": [
+          7,
+          13
+        ]
+      },
+      "same_entity_k6": {
+        "summary_path": "models/embeddings/seq_stage2/runs/same_entity_k6/summary.yaml",
+        "sha256": "1beafa9fccf86f9144eb81828b4e99d0fbce4a39aa6b59482aaa37dec89589eb",
+        "seeds_recorded": [
+          7,
+          13
+        ]
+      },
+      "same_entity_unr": {
+        "summary_path": "models/embeddings/seq_stage2/runs/same_entity_unr/summary.yaml",
+        "sha256": "dfb02fc0bc55be94d6d2f0b41df2f95ef188d3cd58bc243002c6eaf252440182",
+        "seeds_recorded": [
+          7,
+          13
+        ]
+      },
+      "xlstm": {
+        "summary_path": "models/embeddings/seq_stage2/runs/xlstm/summary.yaml",
+        "sha256": "fb73c135784fff74c1a705f9add01f1aefe84354d881597731b0048b6e078ab4",
+        "seeds_recorded": [
+          7,
+          13
+        ]
+      }
+    }
+  },
+  "live_summary_state": {
+    "aligned_hist": {
+      "summary_path": "models/embeddings/seq_stage2/runs/aligned_hist/summary.yaml",
+      "sha256_now": "a85e560c4b548685d8a2b2f76453d91a0d5cbb5364b4582814abc579d4e2d975",
+      "matches_statistics": false
+    },
+    "aligned_hist_rf": {
+      "summary_path": "models/embeddings/seq_stage2/runs/aligned_hist_rf/summary.yaml",
+      "sha256_now": "1f4413b892fb16c82335c65aeabeabead1b2f678c374f11df9b668587e006a06",
+      "matches_statistics": true
+    },
+    "fixed_decay": {
+      "summary_path": "models/embeddings/seq_stage2/runs/fixed_decay/summary.yaml",
+      "sha256_now": "935c682cfb637f4461682b86a7b5ae1c04ab9dfea85a8b66a81951490b4c37fc",
+      "matches_statistics": false
+    },
+    "fox": {
+      "summary_path": "models/embeddings/seq_stage2/runs/fox/summary.yaml",
+      "sha256_now": "6e96ba50d7ac274058acf1bb78279c5e2b0eebda162f527226ee3e2da1c5d317",
+      "matches_statistics": false
+    },
+    "full": {
+      "summary_path": "models/embeddings/seq_stage2/runs/full/summary.yaml",
+      "sha256_now": "46eb76734d3d80ab199e5a0924bce1ef61772548a8bf5659b6ef520e27a44fa4",
+      "matches_statistics": false
+    },
+    "lstm": {
+      "summary_path": "models/embeddings/seq_stage2/runs/lstm/summary.yaml",
+      "sha256_now": "cdd7ce9cc477d820efb7e58e6e9e5141b59437e9fdb6cb9ed8730ed4e42c05f3",
+      "matches_statistics": true
+    },
+    "mlp": {
+      "summary_path": "models/embeddings/seq_stage2/runs/mlp/summary.yaml",
+      "sha256_now": "783a332d77620d5152004b1d31e3a5ccd5ec5fcd8fd79eb51ca94a52cc1373c1",
+      "matches_statistics": false
+    },
+    "recency_k30": {
+      "summary_path": "models/embeddings/seq_stage2/runs/recency_k30/summary.yaml",
+      "sha256_now": "30c8bad07a3728f3644780b5530e1ed9aa69cfecb3f121f2fb51762674b3b25f",
+      "matches_statistics": true
+    },
+    "residual_mlp": {
+      "summary_path": "models/embeddings/seq_stage2/runs/residual_mlp/summary.yaml",
+      "sha256_now": "894b5ceb4cad19ce8db6c4ffdc018bcd6d862b7fa997820b3e5505816c5c3ee0",
+      "matches_statistics": false
+    },
+    "residual_t1": {
+      "summary_path": "models/embeddings/seq_stage2/runs/residual_t1/summary.yaml",
+      "sha256_now": "f672e4f585cc9bd8050dc56728586bb8e3a9f6d32a32c1ca57e608e83e628b7e",
+      "matches_statistics": false
+    },
+    "same_entity_k0": {
+      "summary_path": "models/embeddings/seq_stage2/runs/same_entity_k0/summary.yaml",
+      "sha256_now": "509c34567e74e8143a7c39219d9016960287567894f515a68578f33573a44df9",
+      "matches_statistics": true
+    },
+    "same_entity_k12": {
+      "summary_path": "models/embeddings/seq_stage2/runs/same_entity_k12/summary.yaml",
+      "sha256_now": "863b760479cd69220506c4da8fdcda2abf46df95bbdf1b581ddde64299b8850a",
+      "matches_statistics": true
+    },
+    "same_entity_k30": {
+      "summary_path": "models/embeddings/seq_stage2/runs/same_entity_k30/summary.yaml",
+      "sha256_now": "44f0c30042cf65a0cd0ff7a7cc26694452edda9f1fe3785ac5c10ac130ed3aea",
+      "matches_statistics": true
+    },
+    "same_entity_k6": {
+      "summary_path": "models/embeddings/seq_stage2/runs/same_entity_k6/summary.yaml",
+      "sha256_now": "1beafa9fccf86f9144eb81828b4e99d0fbce4a39aa6b59482aaa37dec89589eb",
+      "matches_statistics": true
+    },
+    "same_entity_unr": {
+      "summary_path": "models/embeddings/seq_stage2/runs/same_entity_unr/summary.yaml",
+      "sha256_now": "dfb02fc0bc55be94d6d2f0b41df2f95ef188d3cd58bc243002c6eaf252440182",
+      "matches_statistics": true
+    },
+    "xlstm": {
+      "summary_path": "models/embeddings/seq_stage2/runs/xlstm/summary.yaml",
+      "sha256_now": "e76c3f49069ea34146afedc7e995bb8a59484f5378bc41ea285954b89d5fa426",
+      "matches_statistics": false
+    }
+  },
+  "dependency_coverage": {
+    "trained_checkpoint_coverage": [
+      "recency_k30",
+      "same_entity_k0",
+      "same_entity_k30",
+      "same_entity_unr"
+    ],
+    "trained_checkpoint_coverage_complete": true,
+    "registered_controls_complete": true,
+    "blocked": []
+  },
+  "decisions": {
+    "k_selection": {
+      "available": true,
+      "selection": "SELECTED",
+      "selected_k": "30",
+      "selected_config_id": "same_entity_k30",
+      "rule": "choose the k with the lowest two-seed arithmetic mean validation log loss, but only when mean_LL(30) - mean_LL(best) > tolerance; otherwise keep 30. Equality at the tolerance keeps 30. Any k may win, unr included.",
+      "tolerance_ll": 0.002,
+      "registered_sweep": [
+        "0",
+        "6",
+        "12",
+        "30",
+        "unr"
+      ],
+      "means": {
+        "0": 1.439104943847542,
+        "6": 1.438120916808286,
+        "12": 1.4371491048036178,
+        "30": 1.436635389115043,
+        "unr": 1.4362081992558764
+      },
+      "best_mean_k": "unr",
+      "margin_vs_k30": 0.0004271898591665657,
+      "provisional": true,
+      "selection_record_sha256": "78581e69a635a30288f5d83326b64fc2354fe226875445d7b71dec9e6c37591f",
+      "rows": [
+        {
+          "k": "0",
+          "config_id": "same_entity_k0",
+          "mean_ll": 1.439104943847542,
+          "per_seed": {
+            "7": 1.4393325357699134,
+            "13": 1.4388773519251707
+          }
+        },
+        {
+          "k": "6",
+          "config_id": "same_entity_k6",
+          "mean_ll": 1.438120916808286,
+          "per_seed": {
+            "7": 1.4379940134012863,
+            "13": 1.4382478202152857
+          }
+        },
+        {
+          "k": "12",
+          "config_id": "same_entity_k12",
+          "mean_ll": 1.4371491048036178,
+          "per_seed": {
+            "7": 1.4373027603447828,
+            "13": 1.4369954492624528
+          }
+        },
+        {
+          "k": "30",
+          "config_id": "same_entity_k30",
+          "mean_ll": 1.436635389115043,
+          "per_seed": {
+            "7": 1.4368647387756528,
+            "13": 1.4364060394544331
+          }
+        },
+        {
+          "k": "unr",
+          "config_id": "same_entity_unr",
+          "mean_ll": 1.4362081992558764,
+          "per_seed": {
+            "7": 1.4361948795949677,
+            "13": 1.4362215189167853
+          }
+        }
+      ]
+    },
+    "family_map": [
+      {
+        "candidate": "full",
+        "holm_group": "family_full",
+        "members": [
+          {
+            "member": "primary",
+            "candidate": "full",
+            "reference": "mlp",
+            "slice": "all",
+            "threshold": 0.0,
+            "kind": "superiority"
+          },
+          {
+            "member": "death_gate",
+            "candidate": "full",
+            "reference": "mlp",
+            "slice": "death",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          },
+          {
+            "member": "chase_gate",
+            "candidate": "full",
+            "reference": "mlp",
+            "slice": "chase",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          }
+        ]
+      },
+      {
+        "candidate": "fixed_decay",
+        "holm_group": "family_fixed_decay",
+        "members": [
+          {
+            "member": "primary",
+            "candidate": "fixed_decay",
+            "reference": "mlp",
+            "slice": "all",
+            "threshold": 0.0,
+            "kind": "superiority"
+          },
+          {
+            "member": "death_gate",
+            "candidate": "fixed_decay",
+            "reference": "mlp",
+            "slice": "death",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          },
+          {
+            "member": "chase_gate",
+            "candidate": "fixed_decay",
+            "reference": "mlp",
+            "slice": "chase",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          }
+        ]
+      },
+      {
+        "candidate": "fox",
+        "holm_group": "family_fox",
+        "members": [
+          {
+            "member": "primary",
+            "candidate": "fox",
+            "reference": "fixed_decay",
+            "slice": "all",
+            "threshold": 0.0,
+            "kind": "superiority"
+          },
+          {
+            "member": "death_gate",
+            "candidate": "fox",
+            "reference": "mlp",
+            "slice": "death",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          },
+          {
+            "member": "chase_gate",
+            "candidate": "fox",
+            "reference": "mlp",
+            "slice": "chase",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          }
+        ]
+      },
+      {
+        "candidate": "aligned_hist",
+        "holm_group": "family_aligned_hist",
+        "members": [
+          {
+            "member": "primary",
+            "candidate": "aligned_hist",
+            "reference": "full",
+            "slice": "all",
+            "threshold": 0.0,
+            "kind": "superiority"
+          },
+          {
+            "member": "death_gate",
+            "candidate": "aligned_hist",
+            "reference": "mlp",
+            "slice": "death",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          },
+          {
+            "member": "chase_gate",
+            "candidate": "aligned_hist",
+            "reference": "mlp",
+            "slice": "chase",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          }
+        ]
+      },
+      {
+        "candidate": "aligned_hist_rf",
+        "holm_group": "family_aligned_hist_rf",
+        "members": [
+          {
+            "member": "primary",
+            "candidate": "aligned_hist_rf",
+            "reference": "aligned_hist",
+            "slice": "all",
+            "threshold": 0.0,
+            "kind": "superiority"
+          },
+          {
+            "member": "death_gate",
+            "candidate": "aligned_hist_rf",
+            "reference": "mlp",
+            "slice": "death",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          },
+          {
+            "member": "chase_gate",
+            "candidate": "aligned_hist_rf",
+            "reference": "mlp",
+            "slice": "chase",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          }
+        ]
+      },
+      {
+        "candidate": "recency_k30",
+        "holm_group": "family_recency_k30",
+        "members": [
+          {
+            "member": "primary",
+            "candidate": "recency_k30",
+            "reference": "mlp",
+            "slice": "all",
+            "threshold": 0.0,
+            "kind": "superiority"
+          },
+          {
+            "member": "death_gate",
+            "candidate": "recency_k30",
+            "reference": "mlp",
+            "slice": "death",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          },
+          {
+            "member": "chase_gate",
+            "candidate": "recency_k30",
+            "reference": "mlp",
+            "slice": "chase",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          }
+        ]
+      },
+      {
+        "candidate": "same_entity_k30",
+        "holm_group": "family_same_entity_k30",
+        "members": [
+          {
+            "member": "primary",
+            "candidate": "same_entity_k30",
+            "reference": "recency_k30",
+            "slice": "all",
+            "threshold": 0.0,
+            "kind": "superiority"
+          },
+          {
+            "member": "death_gate",
+            "candidate": "same_entity_k30",
+            "reference": "mlp",
+            "slice": "death",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          },
+          {
+            "member": "chase_gate",
+            "candidate": "same_entity_k30",
+            "reference": "mlp",
+            "slice": "chase",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          }
+        ]
+      },
+      {
+        "candidate": "same_entity_unr",
+        "holm_group": "family_same_entity_unr",
+        "members": [
+          {
+            "member": "primary",
+            "candidate": "same_entity_unr",
+            "reference": "aligned_hist_rf",
+            "slice": "all",
+            "threshold": 0.0,
+            "kind": "superiority"
+          },
+          {
+            "member": "death_gate",
+            "candidate": "same_entity_unr",
+            "reference": "mlp",
+            "slice": "death",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          },
+          {
+            "member": "chase_gate",
+            "candidate": "same_entity_unr",
+            "reference": "mlp",
+            "slice": "chase",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          }
+        ]
+      },
+      {
+        "candidate": "same_entity_k0",
+        "holm_group": "family_same_entity_k0",
+        "members": [
+          {
+            "member": "primary",
+            "candidate": "same_entity_k0",
+            "reference": "mlp",
+            "slice": "all",
+            "threshold": 0.0,
+            "kind": "superiority"
+          },
+          {
+            "member": "death_gate",
+            "candidate": "same_entity_k0",
+            "reference": "mlp",
+            "slice": "death",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          },
+          {
+            "member": "chase_gate",
+            "candidate": "same_entity_k0",
+            "reference": "mlp",
+            "slice": "chase",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          }
+        ]
+      },
+      {
+        "candidate": "same_entity_k6",
+        "holm_group": "family_same_entity_k6",
+        "members": [
+          {
+            "member": "primary",
+            "candidate": "same_entity_k6",
+            "reference": "mlp",
+            "slice": "all",
+            "threshold": 0.0,
+            "kind": "superiority"
+          },
+          {
+            "member": "death_gate",
+            "candidate": "same_entity_k6",
+            "reference": "mlp",
+            "slice": "death",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          },
+          {
+            "member": "chase_gate",
+            "candidate": "same_entity_k6",
+            "reference": "mlp",
+            "slice": "chase",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          }
+        ]
+      },
+      {
+        "candidate": "same_entity_k12",
+        "holm_group": "family_same_entity_k12",
+        "members": [
+          {
+            "member": "primary",
+            "candidate": "same_entity_k12",
+            "reference": "mlp",
+            "slice": "all",
+            "threshold": 0.0,
+            "kind": "superiority"
+          },
+          {
+            "member": "death_gate",
+            "candidate": "same_entity_k12",
+            "reference": "mlp",
+            "slice": "death",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          },
+          {
+            "member": "chase_gate",
+            "candidate": "same_entity_k12",
+            "reference": "mlp",
+            "slice": "chase",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          }
+        ]
+      },
+      {
+        "candidate": "lstm",
+        "holm_group": "family_lstm",
+        "members": [
+          {
+            "member": "primary",
+            "candidate": "lstm",
+            "reference": "mlp",
+            "slice": "all",
+            "threshold": 0.0,
+            "kind": "superiority"
+          },
+          {
+            "member": "death_gate",
+            "candidate": "lstm",
+            "reference": "mlp",
+            "slice": "death",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          },
+          {
+            "member": "chase_gate",
+            "candidate": "lstm",
+            "reference": "mlp",
+            "slice": "chase",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          }
+        ]
+      },
+      {
+        "candidate": "xlstm",
+        "holm_group": "family_xlstm",
+        "members": [
+          {
+            "member": "primary",
+            "candidate": "xlstm",
+            "reference": "mlp",
+            "slice": "all",
+            "threshold": 0.0,
+            "kind": "superiority"
+          },
+          {
+            "member": "death_gate",
+            "candidate": "xlstm",
+            "reference": "mlp",
+            "slice": "death",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          },
+          {
+            "member": "chase_gate",
+            "candidate": "xlstm",
+            "reference": "mlp",
+            "slice": "chase",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          }
+        ]
+      },
+      {
+        "candidate": "residual_mlp",
+        "holm_group": "family_residual_mlp",
+        "members": [
+          {
+            "member": "primary",
+            "candidate": "residual_mlp",
+            "reference": "mlp",
+            "slice": "all",
+            "threshold": 0.0,
+            "kind": "superiority"
+          },
+          {
+            "member": "death_gate",
+            "candidate": "residual_mlp",
+            "reference": "mlp",
+            "slice": "death",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          },
+          {
+            "member": "chase_gate",
+            "candidate": "residual_mlp",
+            "reference": "mlp",
+            "slice": "chase",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          }
+        ]
+      },
+      {
+        "candidate": "residual_t1",
+        "holm_group": "family_residual_t1",
+        "members": [
+          {
+            "member": "primary",
+            "candidate": "residual_t1",
+            "reference": "residual_mlp",
+            "slice": "all",
+            "threshold": 0.0,
+            "kind": "superiority"
+          },
+          {
+            "member": "death_gate",
+            "candidate": "residual_t1",
+            "reference": "mlp",
+            "slice": "death",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          },
+          {
+            "member": "chase_gate",
+            "candidate": "residual_t1",
+            "reference": "mlp",
+            "slice": "chase",
+            "threshold": 0.002,
+            "kind": "non_inferiority"
+          }
+        ]
+      }
+    ],
+    "seeds": [
+      7,
+      13
+    ],
+    "reps": 2000,
+    "rng_seed": 29
+  }
+}

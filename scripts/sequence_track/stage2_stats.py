@@ -95,6 +95,27 @@ REGISTERED_SEEDS = (7, 13)
 REGISTERED_K_ORDER = ("0", "6", "12", "30", "unr")
 SAME_ENTITY_ARM = "same_entity"
 N_FAMILIES = 15
+
+# D10.16 — the registered five-seed extension qualification. At five seeds a
+# family qualifies only with a 4/5 favourable-direction count on its primary,
+# IN ADDITION to everything the two-seed screen already requires (primary
+# CI-clean under Holm, both non-inferiority gates strictly U95 < 0.002, at
+# least 10 blocks, complete paired seeds). Below five seeds the count cannot
+# reach 4/5, so the requirement does not apply and a two-seed run reports
+# exactly what it reported before (Astra gate 2 round 2).
+FIVE_SEED_MINIMUM = 5
+FIVE_SEED_FAVOURABLE_DIRECTIONS = 4
+FIVE_SEED_ELIGIBILITY_RULE = (
+    f"at {FIVE_SEED_MINIMUM} or more seeds a family qualifies for the "
+    f"extension only with at least {FIVE_SEED_FAVOURABLE_DIRECTIONS} of "
+    f"{FIVE_SEED_MINIMUM} favourable per-seed directions on its registered "
+    "primary, in addition to the primary being CI-clean under Holm, both "
+    f"non-inferiority gates passing with strictly U95 < {MARGIN_LL}, at least "
+    f"{MIN_BLOCKS} blocks and complete paired seeds; below "
+    f"{FIVE_SEED_MINIMUM} seeds the count cannot reach "
+    f"{FIVE_SEED_FAVOURABLE_DIRECTIONS}/{FIVE_SEED_MINIMUM}, so the "
+    "requirement does not apply and no two-seed result is retroactively "
+    "failed by it")
 FAMILY_SIZE = 3
 FAMILY_MEMBER_ORDER = ("primary", "death_gate", "chase_gate")
 
@@ -118,10 +139,32 @@ ALLOWED_STATUSES = (STATUS_PASS, STATUS_NOT_PASS, STATUS_NOT_EVALUABLE)
 
 RANK_LOCAL_NOTE = ("rank-local percentile interval; not simultaneous; "
                    "not the rejection rule")
+SEED_WORDS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five",
+              6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
+
+
+def seed_word(n_seeds: int) -> str:
+    return SEED_WORDS.get(int(n_seeds), str(int(n_seeds)))
+
+
 ESTIMAND_II_LABEL = ("descriptive two-seed robustness screen (joint seed and "
                      "tournament-block resampling); not five-seed evidence "
                      "and not uncertainty for a newly trained single "
                      "checkpoint")
+
+
+def estimand_ii_label(n_seeds: int = len(REGISTERED_SEEDS)) -> str:
+    """The estimand (ii) label, with the seed count it was computed at.
+
+    At two seeds this is the registered constant verbatim, so the two-seed
+    numbers of record keep their exact label; at any other count it names that
+    count, so no five-seed table can carry a two-seed label.
+    """
+    if int(n_seeds) == 2:
+        return ESTIMAND_II_LABEL
+    return (f"descriptive {seed_word(n_seeds)}-seed robustness screen (joint "
+            "seed and tournament-block resampling); not uncertainty for a "
+            "newly trained single checkpoint")
 P_CONVENTION = ("p_raw = min(1, 2 * min[P(d* - t <= 0), P(d* - t >= 0)]) over "
                 "the bootstrap delta draws, with t = 0 for superiority and "
                 "t = +0.002 for non-inferiority")
@@ -1775,18 +1818,40 @@ def load_runs(runs_root: Path, config_ids: Sequence[str], frame: Frame,
 # Contrast machinery (D10.1, D10.3, D10.5, D10.6)
 # ---------------------------------------------------------------------------
 
+def mask_digest(mask: np.ndarray) -> str:
+    """A row-membership digest for one slice mask (Astra gate 2 round 1 SHOULD 7).
+
+    Slice identity must be compared by row membership, not by equal row, match
+    and block counts: two different row sets can agree on all three. The digest
+    is the sha256 of the mask's length and its packed bits, so it is stable
+    across runs and cheap to persist.
+    """
+    packed = np.packbits(np.asarray(mask, dtype=bool))
+    digest = hashlib.sha256()
+    digest.update(str(int(np.asarray(mask).size)).encode())
+    digest.update(b":")
+    digest.update(packed.tobytes())
+    return digest.hexdigest()
+
+
 def slice_stats(frame: Frame, blocks: Blocks, name: str) -> dict:
     mask = frame.masks.get(name)
     if mask is None:
         return {"slice": name, "available": False, "n_rows": 0,
-                "n_matches": 0, "n_blocks": 0, "descriptive": True}
+                "n_matches": 0, "n_blocks": 0, "descriptive": True,
+                "mask_sha256": None}
     n_blocks = count_unique_clusters(blocks.block_id[mask])
     return {"slice": name, "available": True,
             "n_rows": int(mask.sum()),
             "n_matches": int(len(set(frame.match_id[mask].tolist()))),
             "n_blocks": int(n_blocks),
             "descriptive": bool(n_blocks < MIN_BLOCKS),
-            "min_blocks": MIN_BLOCKS}
+            "min_blocks": MIN_BLOCKS,
+            "mask_sha256": mask_digest(mask),
+            "mask_digest_note": ("sha256 of the mask length and its packed "
+                                 "bits; slice identity is compared by this "
+                                 "row-membership digest, never by equal row, "
+                                 "match and block counts")}
 
 
 def _readout(draws: np.ndarray, point: float, threshold: float,
@@ -1874,13 +1939,13 @@ def evaluate_contrast(candidate: str, reference: str, slice_name: str,
     joint = joint_seed_block_draws(per_seed_values, block_ids, reps=reps,
                                   seed=seed)
     if draws_out is not None:
-        draws_out[(key, "seed_mean_joint")] = joint
+        draws_out[(key, JOINT_READOUT)] = joint
     mean_point = float(np.mean([per_seed_points[str(s)] for s in seeds]))
     record["estimand_ii"] = _readout(joint, mean_point, threshold,
                                      descriptive, reps)
     record["estimand_ii"]["estimand"] = (
         "(ii) arithmetic across-seed mean, joint seed-and-block resampling")
-    record["estimand_ii"]["label"] = ESTIMAND_II_LABEL
+    record["estimand_ii"]["label"] = estimand_ii_label(len(seeds))
     record["estimand_ii"]["is_log_loss_of_averaged_probabilities"] = False
 
     points = [per_seed_points[str(s)] for s in seeds]
@@ -1895,13 +1960,30 @@ def evaluate_contrast(candidate: str, reference: str, slice_name: str,
     return record
 
 
-READOUTS = ("seed_7", "seed_13", "seed_mean_joint")
+JOINT_READOUT = "seed_mean_joint"
+
+
+def readouts_for(seeds: Sequence[int] = REGISTERED_SEEDS) -> tuple[str, ...]:
+    """One estimand (i) readout per registered seed, then the joint mean.
+
+    Astra gate 2 round 2: this was the hard-coded tuple
+    `("seed_7", "seed_13", "seed_mean_joint")`, so a five-seed run computed
+    five checkpoint contrasts and then dropped seeds 29, 42 and 101 out of the
+    Holm tables, the gates and the family screens. Every consumer derives its
+    readout list from the seeds it was given, and the statistics JSON records
+    the list it used in `contract.readouts`.
+    """
+    return tuple(f"seed_{int(s)}" for s in seeds) + (JOINT_READOUT,)
+
+
+# The two-seed default, retained so callers that never pass seeds keep working.
+READOUTS = readouts_for(REGISTERED_SEEDS)
 
 
 def readout_of(record: Mapping[str, Any], readout: str) -> dict | None:
     if not record.get("available"):
         return None
-    if readout == "seed_mean_joint":
+    if readout == JOINT_READOUT:
         return record.get("estimand_ii")
     return (record.get("estimand_i") or {}).get(readout)
 
@@ -1910,13 +1992,33 @@ def readout_of(record: Mapping[str, Any], readout: str) -> dict | None:
 # D10.4 / D10.6 — families, Holm, gates
 # ---------------------------------------------------------------------------
 
-def registered_families(config: Mapping[str, Any],
-                        expected: int | None = N_FAMILIES) -> list[dict]:
-    """Assert and return the config's explicit 15 three-member families.
+def expected_family_count(config: Mapping[str, Any]) -> int:
+    """How many families this config must register, derived from the config.
 
-    ``expected`` is the registered family count; only a synthetic fixture ever
-    passes anything else, and the real config is asserted at 15.
+    Every configuration except the shared `mlp` control is a family candidate
+    exactly once (asserted at the end of `registered_families`), so the count
+    is the number of registered configurations minus `mlp`. Astra gate 2 round
+    2: this was the constant 15, so a config registering seven families — or
+    any other legitimate subset — refused unless the caller happened to pass a
+    flag. Deriving it lets a seven-family and a fifteen-family config both run
+    with no flag, and still refuses a config whose family map does not cover
+    its own configurations.
     """
+    ids = {str(entry["id"]) for entry in (config.get("configurations") or [])}
+    return len(ids - {"mlp"})
+
+
+def registered_families(config: Mapping[str, Any],
+                        expected: int | None = None) -> list[dict]:
+    """Assert and return the config's explicit three-member families.
+
+    ``expected`` is the registered family count. When it is None — the default
+    — it is DERIVED from the config by `expected_family_count`, one family per
+    registered configuration other than the shared `mlp` control. A caller may
+    still pass a number to assert a specific count.
+    """
+    if expected is None:
+        expected = expected_family_count(config)
     statistics = config.get("statistics") or {}
     families = (statistics.get("families") or {})
     raw = families.get("map")
@@ -2125,6 +2227,14 @@ def family_screen(family: Mapping[str, Any], tables: Mapping[str, Any],
     and its all-row ``candidate - mlp`` interval is CI-clean favourable.
     That last reading is exploratory wherever it falls outside the family; it
     is a necessary condition here and never a replacement for the primary.
+
+    At five or more seeds the registered extension qualification adds one
+    requirement: at least 4 of 5 favourable per-seed directions on the
+    registered primary (``FIVE_SEED_ELIGIBILITY_RULE``). Astra gate 2 round 2:
+    the count was computed and never enforced, so a reported PASS was not the
+    extension qualification. Below five seeds the count cannot reach 4/5, so
+    the requirement is reported as not applicable and a two-seed run's status
+    is exactly what it was before.
     """
     table = tables[readout]
     by_member = {row["member"]: row for row in table["members"]}
@@ -2136,19 +2246,55 @@ def family_screen(family: Mapping[str, Any], tables: Mapping[str, Any],
     all_row_clean = (None if all_row is None
                      else bool(all_row["ci_clean_favourable"]))
 
+    # The registered five-seed extension qualification, read off the primary
+    # contrast's own per-seed points rather than any one readout.
+    primary_record = contrasts.get(primary["contrast_key"]) or {}
+    n_seeds = int(primary_record.get("n_seeds") or 0)
+    direction_count = primary_record.get("favourable_direction_count")
+    applies = n_seeds >= FIVE_SEED_MINIMUM
+    if not applies:
+        direction_ok: bool | None = None
+    elif direction_count is None:
+        direction_ok = False
+    else:
+        direction_ok = int(direction_count) >= FIVE_SEED_FAVOURABLE_DIRECTIONS
+
     statuses = [primary["status"], *[g["status"] for g in gates]]
     if (STATUS_NOT_EVALUABLE in statuses or all_row is None
             or all_row["descriptive_only"]):
         status = STATUS_NOT_EVALUABLE
     elif (primary["status"] == STATUS_PASS
           and all(g["status"] == STATUS_PASS for g in gates)
-          and all_row_clean):
+          and all_row_clean
+          and (direction_ok is not False)):
         status = STATUS_PASS
     else:
         status = STATUS_NOT_PASS
     return {"readout": readout,
             "candidate": candidate,
             "status": _check_status(status),
+            "n_seeds": n_seeds,
+            "five_seed_eligibility_rule": FIVE_SEED_ELIGIBILITY_RULE,
+            "five_seed_direction_requirement_applies": applies,
+            "required_favourable_directions": (
+                FIVE_SEED_FAVOURABLE_DIRECTIONS if applies else None),
+            "favourable_direction_count": direction_count,
+            "favourable_direction_requirement_met": direction_ok,
+            "five_seed_extension_qualified": (
+                bool(status == STATUS_PASS and applies and direction_ok)),
+            "five_seed_qualification_note": (
+                (f"{direction_count} of {n_seeds} per-seed primary directions "
+                 f"are favourable; "
+                 f"{FIVE_SEED_FAVOURABLE_DIRECTIONS} of "
+                 f"{FIVE_SEED_MINIMUM} are required, so this requirement is "
+                 + ("met" if direction_ok else "NOT met"))
+                if applies else
+                (f"not applicable at {n_seeds} seed(s): the "
+                 f"{FIVE_SEED_FAVOURABLE_DIRECTIONS}/"
+                 f"{FIVE_SEED_MINIMUM} direction count cannot be reached "
+                 "below five seeds, so it is neither required nor able to "
+                 "fail this status. A PASS here is the two-seed directional "
+                 "screen and is NOT the five-seed extension qualification")),
             "primary_status": primary["status"],
             "primary_rejected": primary["rejected"],
             "primary_u95_below_zero": (
@@ -2346,7 +2492,7 @@ def residual_vs_base(arm: str, runs: Mapping[str, Mapping[int, Run]],
     mean_point = float(np.mean(list(points.values())))
     record["estimand_ii"] = _readout(joint, mean_point, 0.0,
                                      stats["descriptive"], reps)
-    record["estimand_ii"]["label"] = ESTIMAND_II_LABEL
+    record["estimand_ii"]["label"] = estimand_ii_label(len(seeds))
     record["per_seed_points"] = points
     record["slice_stats"] = stats
     record["available"] = True
@@ -2678,7 +2824,7 @@ def compute_statistics(config_path: Path, runs_root: Path, frame_dir: Path,
                        reps: int = REPS, seed: int = RNG_SEED,
                        seeds: Sequence[int] = REGISTERED_SEEDS,
                        expect: Mapping[str, int] | None = None,
-                       expected_families: int | None = N_FAMILIES) -> dict:
+                       expected_families: int | None = None) -> dict:
     config = read_yaml(config_path) or {}
     entries = {str(entry["id"]): entry
                for entry in (config.get("configurations") or [])}
@@ -2686,6 +2832,7 @@ def compute_statistics(config_path: Path, runs_root: Path, frame_dir: Path,
     if not config_ids:
         raise RefusalError(f"{rel(config_path)} registers no configurations")
     families = registered_families(config, expected_families)
+    readouts = readouts_for(seeds)
     pin = load_pin(config)
 
     frame = load_frame(frame_dir, config)
@@ -2746,12 +2893,12 @@ def compute_statistics(config_path: Path, runs_root: Path, frame_dir: Path,
     family_out = []
     for family in families:
         tables = {}
-        for readout in READOUTS:
+        for readout in readouts:
             table = holm_family(family, contrasts, readout)
             rank_local_intervals(table, contrasts, draws_cache)
             tables[readout] = table
         screens = {readout: family_screen(family, tables, contrasts, readout)
-                   for readout in READOUTS}
+                   for readout in readouts}
         family_out.append({
             "candidate": family["candidate"],
             "holm_group": family["holm_group"],
@@ -2781,7 +2928,7 @@ def compute_statistics(config_path: Path, runs_root: Path, frame_dir: Path,
                        "seeds"),
                    "slice_stats": record.get("slice_stats"),
                    "readouts": {}}
-            for readout in READOUTS:
+            for readout in readouts:
                 values = readout_of(record, readout)
                 holm_row = next(
                     (r for r in
@@ -2867,7 +3014,18 @@ def compute_statistics(config_path: Path, runs_root: Path, frame_dir: Path,
                            "across the k search"),
             "no_correction_across_families": True,
             "rank_local_note": RANK_LOCAL_NOTE,
-            "estimand_ii_label": ESTIMAND_II_LABEL,
+            "seeds": [int(s) for s in seeds],
+            "n_seeds": len(seeds),
+            "readouts": list(readouts),
+            "readouts_are_seed_derived": (
+                "one estimand (i) readout per registered seed plus the joint "
+                "seed-and-block mean; the Holm tables, the gates and the "
+                "family screens all iterate this list, so no registered seed "
+                "is omitted from any of them"),
+            "five_seed_eligibility_rule": FIVE_SEED_ELIGIBILITY_RULE,
+            "five_seed_direction_requirement_applies": (
+                len(seeds) >= FIVE_SEED_MINIMUM),
+            "estimand_ii_label": estimand_ii_label(len(seeds)),
             "reconstructed_ll_label": RECONSTRUCTED_LL_LABEL,
             "allowed_statuses": list(ALLOWED_STATUSES),
             "stage1_margin_imported": False,
@@ -2951,20 +3109,77 @@ def _summary_lines(payload: Mapping[str, Any]) -> list[str]:
                if not block["complete_paired_seeds"]]
     if missing:
         lines.append("  incomplete   " + ", ".join(sorted(missing)))
+    readouts = list((payload.get("contract") or {}).get("readouts")
+                    or READOUTS)
+    n_seeds = int((payload.get("contract") or {}).get("n_seeds")
+                  or len(REGISTERED_SEEDS))
+    lines.append(f"  readouts     {', '.join(readouts)} "
+                 f"({n_seeds} registered seeds)")
     lines.append(f"  families     {len(payload['families'])} "
                  f"(3 members each)")
     for family in payload["families"]:
         statuses = {readout: family["screen"][readout]["status"]
-                    for readout in READOUTS}
+                    for readout in readouts}
         lines.append(
             f"    {family['candidate']:<18} "
             + "  ".join(f"{readout}={statuses[readout]}"
-                        for readout in READOUTS))
+                        for readout in readouts))
+    # The registered five-seed extension qualification, reported explicitly
+    # whether or not it applies (Astra gate 2 round 2).
+    if n_seeds >= FIVE_SEED_MINIMUM:
+        lines.append(f"  extension    {FIVE_SEED_FAVOURABLE_DIRECTIONS}/"
+                     f"{FIVE_SEED_MINIMUM} favourable-direction count "
+                     "REQUIRED and enforced on every readout")
+        for family in payload["families"]:
+            screen = family["screen"][readouts[-1]]
+            lines.append(
+                f"    {family['candidate']:<18} directions "
+                f"{screen.get('favourable_direction_count')}/"
+                f"{screen.get('n_seeds')} "
+                + ("met" if screen.get(
+                    "favourable_direction_requirement_met") else "NOT met")
+                + ", extension qualified "
+                + ("yes" if screen.get("five_seed_extension_qualified")
+                   else "no"))
+    else:
+        lines.append(f"  extension    the {FIVE_SEED_FAVOURABLE_DIRECTIONS}/"
+                     f"{FIVE_SEED_MINIMUM} favourable-direction count does "
+                     f"NOT apply at {n_seeds} seeds and fails nothing here; "
+                     "no screen status below is the five-seed extension "
+                     "qualification")
     lines.append(f"  not evaluable {len(payload['not_evaluable'])} contrasts")
     lines.append("  cohort       DEFERRED_UNOPENED (not scored, not read)")
     lines.append("  statuses     " + ", ".join(ALLOWED_STATUSES)
                  + " — no advancement status exists")
     return lines
+
+
+def require_distinct_out(config: Path, out: Path, default: Path,
+                         flag: str = "--out") -> Path:
+    """A non-default config may not write to the default output path.
+
+    Astra's operational instruction: the five-seed statistics, k selection,
+    report and analysis pin must go to DISTINCT paths from the two-seed ones,
+    so night 1's evidence can never be overwritten by a five-seed rerun. The
+    choice made here is to REQUIRE the path explicitly rather than to guess a
+    new default: any config other than the registered two-seed
+    `seq_stage2_v1.yaml` refuses unless the caller names its own output path.
+    """
+    config, out, default = Path(config), Path(out), Path(default)
+    try:
+        same_config = config.resolve() == DEFAULT_CONFIG.resolve()
+        same_out = out.resolve() == default.resolve()
+    except OSError:  # pragma: no cover - resolve() does not touch the disk
+        same_config, same_out = config == DEFAULT_CONFIG, out == default
+    if same_config or not same_out:
+        return out
+    suggestion = (default.parent / f"{config.stem}_{default.name}")
+    raise RefusalError(
+        f"{rel(config)} is not the registered two-seed config "
+        f"{rel(DEFAULT_CONFIG)}, and {flag} still points at the two-seed "
+        f"default {rel(default)}. Name a distinct path explicitly — for "
+        f"example {flag} {rel(suggestion)} — so a five-seed run cannot "
+        "overwrite night 1's evidence")
 
 
 def write_json(path: Path, payload: Mapping[str, Any]) -> Path:
@@ -2996,9 +3211,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     stats.add_argument("--expect-blocks", type=int, default=EXPECTED_BLOCKS)
     stats.add_argument("--expect-unmapped", type=int,
                        default=EXPECTED_UNMAPPED)
-    stats.add_argument("--expected-families", type=int, default=N_FAMILIES,
-                       help="the registered family count (15); only a "
-                            "synthetic fixture ever changes it")
+    stats.add_argument("--expected-families", type=int, default=None,
+                       help="assert a specific registered family count; by "
+                            "default it is DERIVED from the config (one "
+                            "family per configuration other than the shared "
+                            "mlp control), so a seven-family and a "
+                            "fifteen-family registration both run with no "
+                            "flag")
 
     sweep = sub.add_parser("ksweep", help="D9 k selection")
     sweep.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
@@ -3012,6 +3231,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         if args.command == "stats":
+            require_distinct_out(args.config, args.out, DEFAULT_STATS_OUT)
             payload = compute_statistics(
                 args.config, args.runs_root, args.frame_dir,
                 args.block_source_dir, args.base_logits,
@@ -3025,6 +3245,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("\n".join(_summary_lines(payload)))
             print(f"wrote {rel(path)}")
             return 0
+        require_distinct_out(args.config, args.out, DEFAULT_KSWEEP_OUT)
         record = k_sweep(args.runs_root, read_yaml(args.config) or {},
                          seeds=seeds)
         path = write_json(args.out, record)
