@@ -177,7 +177,7 @@ configurations:
   reference:
   - mlp
   tests: "exponential gating \u2014 sLSTM block then mLSTM block at 128-d, plain torch; the documented departures from Beck et al. 2024 are listed under deviations."
-  queue_order: 14
+  queue_order: 6
   command:
   - uv run --no-sync python scripts/transformer_t1.py --arm xlstm --seed 7 --data-dir data/xgb_data_i7 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit
     --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/xlstm/seed_7
@@ -198,7 +198,7 @@ configurations:
   reference:
   - mlp
   tests: "control for residual_t1 \u2014 token model over log p_base from the production ball model, zero-initialised head, L2 shrinkage on the residual."
-  queue_order: 15
+  queue_order: 7
   command:
   - uv run --no-sync python scripts/transformer_t1.py --arm residual_mlp --seed 7 --data-dir data/xgb_data_i7 --base-logits-dir models/embeddings/seq_stage2/base_logits --residual-l2 0.001 --dmodel 128
     --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/residual_mlp/seed_7
@@ -220,7 +220,7 @@ configurations:
   - residual_mlp
   reference_note: residual_t1 - residual_mlp is the confirmatory contrast; residual_t1 - mlp is reported but does not qualify (it mixes the sequence and the production prior).
   tests: "sequence over production \u2014 causal attention on top of the production ball model's log probabilities."
-  queue_order: 16
+  queue_order: 8
   command:
   - uv run --no-sync python scripts/transformer_t1.py --arm residual_t1 --seed 7 --data-dir data/xgb_data_i7 --base-logits-dir models/embeddings/seq_stage2/base_logits --residual-l2 0.001 --dmodel 128 --layers
     2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/residual_t1/seed_7
@@ -537,8 +537,8 @@ known_limitations:
 # disk and exits non-zero on any difference. Do not edit by hand.
 # --------------------------------------------------------------------------
 provenance:
-  pins_generated_at: '2026-09-12T03:09:35Z'
-  git_head_short: 92cc3c5
+  pins_generated_at: '2026-09-12T04:59:23Z'
+  git_head_short: d0d533b
   not_verified:
   - provenance.pins_generated_at
   - provenance.git_head_short
@@ -546,7 +546,7 @@ provenance:
     moves the timestamp; the commit that lands this file moves HEAD), so --verify
     records them and does not compare them
   pinned_by: scripts/sequence_track/pin_stage2.py
-  config_body_sha256: d33e0d6d1ec529f1d4b91e716de2d52d3cb6422293e58dacd09950fbcadf6b16
+  config_body_sha256: 8c84381f4041c6508b197bc41c4792097853226d5d034186b1817000a357fbf3
   config_body_sha256_rule: sha256 of yaml.safe_dump(config without 'provenance',
     sort_keys=True); a config cannot carry its own hash, so what is pinned is every
     key the pin does not write
@@ -689,8 +689,8 @@ provenance:
       scripts/sequence_track/retrain_stage2.py: e75e349c1b640ceb36ade7ee818d7c5d52021bf803cccf9be2fc6fec17fc03cc
       scripts/sequence_track/pin_stage2.py: 61b94dab12323564796e8f3cfaac1422d8db0a817c831fdee6487f7ccb3f9c18
       scripts/sequence_track/ownership_dependency_test.py: c25dce69a6930e4842c648538c03089e137918f687e894a9011d4f9d40e2285c
-      scripts/sequence_track/stage2_stats.py: 0701ed9c8d5d0a5e91b5d7c1259079c04c7e1418348f8f7513ec6b45cc7877ac
-      scripts/sequence_track/render_stage2_report.py: 245641e7ac57d7add8716440d50012db55c0b03ec59edc0be2e588b1c9dba076
+      scripts/sequence_track/stage2_stats.py: 2a4eb1596864a744f56d3a4b0d9107ef32b7a49293825f9f39caa707f0d5efc1
+      scripts/sequence_track/render_stage2_report.py: 306bdc609d7439480a9782898f5370ce49b9f3bee9e215a82a00b48417ea2194
       scripts/sim_eval/eval_statistics.py: d3fcfe454269d334766a35965dff2e33db9c5e3bbb06ea16a0d7b14bde2ba1ca
       scripts/embeddings_e1.py: 348dd073d0c859eb42507accc52a6fa5f6534c476a05b6a901671faf588d76ea
       scripts/artifacts.py: da90ce3b77522310e593955d54406b9323d0af5341f7a7f214ed74abf37dc821

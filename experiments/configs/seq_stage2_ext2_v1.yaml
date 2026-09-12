@@ -78,7 +78,7 @@ configurations:
   reference:
   - mlp
   tests: "recency component \u2014 attention restricted to the last 30 delivery rows under relay-free wiring; the matched control for same_entity_k30."
-  queue_order: 6
+  queue_order: 1
   command:
   - uv run --no-sync python scripts/transformer_t1.py --arm recency --seed 7 --data-dir data/xgb_data_i7 --k 30 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device
     mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/recency_k30/seed_7
@@ -100,7 +100,7 @@ configurations:
   - recency_k30
   tests: "ownership at k = 30 \u2014 rows of the same batter or the same bowler within the window, plus the target. Against recency_k30 the contrast is \"ownership plus alignment beyond recency\" (D3.6),\
     \ not the mask alone."
-  queue_order: 7
+  queue_order: 2
   command:
   - uv run --no-sync python scripts/transformer_t1.py --arm same_entity --seed 7 --data-dir data/xgb_data_i7 --k 30 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device
     mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/same_entity_k30/seed_7
@@ -121,7 +121,7 @@ configurations:
   tests: "wiring effect and the matched unrestricted endpoint \u2014 aligned inputs with relay-free wiring. aligned_hist_rf - aligned_hist measures the relay-free wiring PLUS the key construction (the relay-free\
     \ arms read an earlier row as a (state, own outcome) pair, the standard-wiring arms as a (state, shifted previous outcome) pair; see known_asymmetries relay_free_keys_carry_own_outcome), not the wiring\
     \ alone. same_entity_unr - aligned_hist_rf isolates the mask given aligned inputs, because both of its endpoints are relay-free and their key construction is matched."
-  queue_order: 8
+  queue_order: 3
   command:
   - uv run --no-sync python scripts/transformer_t1.py --arm aligned_hist_rf --seed 7 --data-dir data/xgb_data_i7 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device
     mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/aligned_hist_rf/seed_7
@@ -142,7 +142,7 @@ configurations:
   - mlp
   reference_note: no recency control is registered at this k for night 1 (only k = 30 has one), so the matched-control contrast for this cell is the k sweep itself plus mlp.
   tests: "k sweep floor \u2014 the target row alone. It is called \"ownership\" only after the D7 dependency test passes for it."
-  queue_order: 9
+  queue_order: 4
   command:
   - uv run --no-sync python scripts/transformer_t1.py --arm same_entity --seed 7 --data-dir data/xgb_data_i7 --k 0 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device
     mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/same_entity_k0/seed_7
@@ -163,7 +163,7 @@ configurations:
   - mlp
   reference_note: no recency control is registered at this k for night 1.
   tests: "k sweep \u2014 one over of delivery rows."
-  queue_order: 10
+  queue_order: 5
   command:
   - uv run --no-sync python scripts/transformer_t1.py --arm same_entity --seed 7 --data-dir data/xgb_data_i7 --k 6 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device
     mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/same_entity_k6/seed_7
@@ -184,7 +184,7 @@ configurations:
   - mlp
   reference_note: no recency control is registered at this k for night 1.
   tests: "k sweep \u2014 two overs of delivery rows."
-  queue_order: 11
+  queue_order: 6
   command:
   - uv run --no-sync python scripts/transformer_t1.py --arm same_entity --seed 7 --data-dir data/xgb_data_i7 --k 12 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device
     mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/same_entity_k12/seed_7
@@ -205,7 +205,7 @@ configurations:
   - mlp
   - aligned_hist_rf
   tests: "ownership over the whole innings \u2014 the unrestricted endpoint of the k sweep; against aligned_hist_rf it is two relay-free models differing only in the mask."
-  queue_order: 12
+  queue_order: 7
   command:
   - uv run --no-sync python scripts/transformer_t1.py --arm same_entity --seed 7 --data-dir data/xgb_data_i7 --k unr --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device
     mps --no-kit --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/same_entity_unr/seed_7
@@ -224,7 +224,7 @@ configurations:
   reference:
   - mlp
   tests: "classic forget gate \u2014 2-layer LSTM, hidden 128, dropout 0.1, state reset at innings start, full-innings backpropagation."
-  queue_order: 13
+  queue_order: 8
   command:
   - uv run --no-sync python scripts/transformer_t1.py --arm lstm --seed 7 --data-dir data/xgb_data_i7 --dmodel 128 --layers 2 --heads 4 --batch 128 --epochs 30 --lr 0.0003 --patience 3 --device mps --no-kit
     --save-predictions --stats-cache-role stats_cache_i7 --out models/embeddings/seq_stage2/runs/lstm/seed_7
@@ -555,8 +555,8 @@ known_limitations:
 # disk and exits non-zero on any difference. Do not edit by hand.
 # --------------------------------------------------------------------------
 provenance:
-  pins_generated_at: '2026-09-12T04:57:16Z'
-  git_head_short: c598e47
+  pins_generated_at: '2026-09-12T04:59:19Z'
+  git_head_short: d0d533b
   not_verified:
   - provenance.pins_generated_at
   - provenance.git_head_short
@@ -564,7 +564,7 @@ provenance:
     moves the timestamp; the commit that lands this file moves HEAD), so --verify
     records them and does not compare them
   pinned_by: scripts/sequence_track/pin_stage2.py
-  config_body_sha256: ff4ef7253a48c986093ae7b2bc9de2c7dc97d42f1c2c1c97462e990e3768264f
+  config_body_sha256: f139ae0702c9d36274047c6f8d240e85f92155400b795b8bc0937e2dba74d36e
   config_body_sha256_rule: sha256 of yaml.safe_dump(config without 'provenance',
     sort_keys=True); a config cannot carry its own hash, so what is pinned is every
     key the pin does not write
