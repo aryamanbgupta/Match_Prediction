@@ -906,3 +906,13 @@ Launched 2026-09-12 ~08:37 IST (laptop, seeds 29 then 42, from the worktree at
 `92cc3c5`) and ~08:38 (mini, seed 101, same commit). Both pins verify:
 `pin_stage2: OK` on the extension config and on the five-seed merge config.
 Completions and wall times are filled when the queues finish.
+
+**12.5 verified early, on the seeds that had landed (2026-09-12 ~09:00).** The
+training signature is **identical across every landed seed of every one of the
+sixteen configurations, 0 mismatches** — including the five configurations where
+the extension's seed 29 has joined night 1's seeds 7 and 13, i.e. across two
+machines *and* two separate registrations (`seq_stage2_v1.yaml` and
+`seq_stage2_ext_v1.yaml`). Machine provenance still distinguishes the hosts
+(seed 7 and 29 `laptop`, seed 13 `mini`). This confirms the extension config's
+training block is byte-identical to night 1's, which is the precondition for
+reading the two nights as one five-seed table rather than assuming it.
