@@ -1,8 +1,8 @@
 {
   "pin_version": "seq_stage2_analysis_pin_v1",
   "what_this_is": "the stage 2 ANALYSIS and DECISION manifest (D10.9). It is separate from experiments/configs/seq_stage2_v1.yaml's provenance block, which is immutable training provenance and is not written or verified here.",
-  "written_at_utc": "2026-09-12T06:53:20Z",
-  "git_head_short": "f0d96dc",
+  "written_at_utc": "2026-09-12T07:07:33Z",
+  "git_head_short": "d188b8b",
   "compared_fields": [
     "pin_version",
     "analysis_code",
@@ -27,7 +27,7 @@
   ],
   "analysis_code": {
     "scripts/sequence_track/stage2_stats.py": "5f9a61436fe16985c1b43a8fdb1ca2f970bddb223620abb9a262181e346b9fec",
-    "scripts/sequence_track/render_stage2_report.py": "cb50b0618e4dd79d2c16b1e26e8ac0bb438effe5c79837b5144b622a2c1e3f1d",
+    "scripts/sequence_track/render_stage2_report.py": "3654d22d1523fd16cfdcfab321d2902b17459c5e37f999f44f418df0fa3b932a",
     "scripts/sim_eval/eval_statistics.py": "d3fcfe454269d334766a35965dff2e33db9c5e3bbb06ea16a0d7b14bde2ba1ca",
     "scripts/registered_experiment.py": "ae8f027b9b9b100f377be03413973b35edb5f2c62c632cf1daf7590cceb8595f",
     "scripts/sequence_track/pin_stage2_analysis.py": "b85abbbfeb3e93e6cc22cff4d9b96889db0dea3d764eb8b927f4bedce4b4f299"

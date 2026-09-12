@@ -1537,7 +1537,7 @@ Both columns are validation-only screens whose checkpoints were selected on the 
 | `fixed_decay − mlp` | `all` | -0.00349 | [-0.00576, -0.00136] | 2/2 | -0.00405 | [-0.00559, -0.00263] | 5/5 | held — CI-clean favourable at both seed counts |
 | `fox − fixed_decay` | `all` | -0.00005 | [-0.00022, +0.00011] | 1/2 | -0.00011 | [-0.00024, +0.00004] | 4/5 | unresolved at both seed counts: unresolved, not evidence of no benefit |
 | `aligned_hist − full` | `all` | -0.00154 | [-0.00263, -0.00051] | 2/2 | -0.00074 | [-0.00174, +0.00027] | 3/5 | **WITHDRAWN** — CI-clean favourable at the earlier seed count, the interval crosses zero at this one: unresolved, not evidence of no benefit |
-| `aligned_hist_rf − aligned_hist` | `all` | +0.00059 | [-0.00064, +0.00184] | 1/2 | -0.00008 | [-0.00096, +0.00086] | 3/5 | unresolved at both seed counts: unresolved, not evidence of no benefit |
+| `aligned_hist_rf − aligned_hist` | `all` | +0.00059 | [-0.00064, +0.00184] | 1/2 | -0.00008 | [-0.00096, +0.00086] | 3/5 | point estimate reversed; evidence remains unresolved: unresolved, not evidence of no benefit |
 | `recency_k30 − mlp` | `all` | -0.00027 | [-0.00157, +0.00077] | 1/2 | -0.00037 | [-0.00162, +0.00069] | 3/5 | unresolved at both seed counts: unresolved, not evidence of no benefit |
 | `same_entity_k30 − recency_k30` | `all` | -0.00117 | [-0.00226, +0.00021] | 2/2 | -0.00084 | [-0.00177, +0.00020] | 4/5 | unresolved at both seed counts: unresolved, not evidence of no benefit |
 | `same_entity_unr − aligned_hist_rf` | `all` | -0.00051 | [-0.00181, +0.00080] | 1/2 | +0.00004 | [-0.00088, +0.00086] | 1/5 | point estimate reversed; evidence remains unresolved: unresolved, not evidence of no benefit |
@@ -1551,7 +1551,7 @@ Both columns are validation-only screens whose checkpoints were selected on the 
 
 **Withdrawn: `aligned_hist − full`.** At two seeds it read -0.00154 [-0.00263, -0.00051], an interval excluding zero favourably, with 2 of 2 per-seed deltas favourable. At five seeds it reads -0.00074 [-0.00174, +0.00027] with 3 of 5 favourable. **The earlier CI-clean claim for this contrast is withdrawn.** The reading now is *unresolved, not evidence of no benefit*: the extension did not measure the effect away, it failed to resolve it, and the earlier interval is the one that is no longer supported.
 
-**Sign reversals.** `same_entity_unr − aligned_hist_rf` changed the sign of the point estimate: point estimate reversed; evidence remains unresolved. A reversed sign on an interval that straddles zero is not a finding in the other direction and is not evidence of no benefit.
+**Sign reversals.** `aligned_hist_rf − aligned_hist`, `same_entity_unr − aligned_hist_rf` changed the sign of the point estimate: point estimate reversed; evidence remains unresolved. A reversed sign on an interval that straddles zero is not a finding in the other direction and is not evidence of no benefit.
 
 **Adverse readings and what they are not.** `same_entity_k0 − mlp` has Holm-adjusted p 0.0880 on the seed-mean readout in its registered family. An interval excluding zero adversely is a rank-local reading; it is a multiplicity-adjusted finding only where the family's Holm rejection in § 4 also holds, so an adjusted p above the family's rejection level leaves it CI-clean adverse and unadjusted. No such contrast isolates history either: a masked arm still reads aligned previous-outcome inputs and differs from `mlp` in capacity, architecture and key construction as well (§ 9).
 

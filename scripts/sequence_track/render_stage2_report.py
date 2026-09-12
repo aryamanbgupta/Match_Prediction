@@ -2279,8 +2279,13 @@ def _movement(prior_reading: str, current_reading: str,
                 + ("" if prior_reading == "adverse"
                    else ", where the earlier seed count was unresolved"),
                 "adverse")
+    # Astra gate 3 round 2: this caught only favourable-to-adverse flips and
+    # missed adverse-to-favourable ones (e.g. aligned_hist_rf - aligned_hist,
+    # +0.00059 -> -0.00008). A reversal is a reversal in either direction, and
+    # in both cases the reading stays unresolved.
     sign_flipped = (prior_point is not None and current_point is not None
-                    and float(prior_point) < 0.0 <= float(current_point))
+                    and ((float(prior_point) < 0.0 <= float(current_point))
+                         or (float(current_point) < 0.0 <= float(prior_point))))
     if sign_flipped:
         return (f"{REVERSED_PHRASE}: {UNRESOLVED_PHRASE}", "reversed")
     return (f"unresolved at both seed counts: {UNRESOLVED_PHRASE}", "none")

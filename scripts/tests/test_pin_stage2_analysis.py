@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -460,3 +461,66 @@ def test_a_pin_without_a_prior_statistics_argument_still_resolves_the_field(
         analysis["pin"].read_text())["evidence"]["prior_statistics"]
     assert recorded == {"path": None, "present": False, "sha256": None,
                         "compared": False}
+
+
+# ---------------------------------------------------------------------------
+# Astra gate 3 round 2 MUST-FIX: replaying the RECORDED invocation must
+# reproduce the report byte for byte.
+
+
+def _recorded_renderer_argv(pin: dict) -> list[str]:
+    """The renderer argv the pin claims produced the report."""
+    inv = pin["invocations"]["renderer"]
+    return inv.split() if isinstance(inv, str) else list(inv)
+
+
+@pytest.mark.needs_artifacts
+@pytest.mark.parametrize("pin_path", [
+    "eval_out/seq_stage2/analysis_pin.json",
+    "eval_out/seq_stage2_5seed/analysis_pin.json",
+])
+def test_replaying_the_recorded_invocation_reproduces_the_report(pin_path):
+    """A pin that cannot reproduce its own report is not provenance.
+
+    Astra gate 3 round 2 found the five-seed pin recording a renderer
+    invocation WITHOUT `--prior-stats-json`, so replaying it produced 1,526
+    lines against the committed 1,560 — it was missing the whole § 12
+    two-versus-five-seed comparison, including the withdrawal of
+    `aligned_hist - full`. Both pins still verified, because verification
+    hashes the report that exists rather than re-deriving it from the recorded
+    command. This closes that gap for every pin: parse the argv the pin
+    records, render with exactly those arguments, and require byte equality
+    with the report the pin hashes.
+    """
+    import subprocess
+
+    pin_file = REPO / pin_path
+    if not pin_file.is_file():
+        pytest.skip(f"{pin_path} is not present in this checkout")
+    pin = json.loads(pin_file.read_text())
+    argv = _recorded_renderer_argv(pin)
+    report = REPO / pin["evidence"]["report"]["path"]
+    if not report.is_file():
+        pytest.skip("the report the pin names is not present")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        replayed = Path(tmp) / "replayed.md"
+        out = []
+        skip_next = False
+        for token in argv:
+            if skip_next:
+                skip_next = False
+                continue
+            if token == "--out":
+                skip_next = True
+                continue
+            out.append(token)
+        out += ["--out", str(replayed)]
+        run = subprocess.run(out, cwd=str(REPO), capture_output=True,
+                             text=True, timeout=900)
+        assert run.returncode == 0, run.stdout + run.stderr
+        assert replayed.read_text() == report.read_text(), (
+            f"replaying the invocation recorded in {pin_path} does NOT "
+            f"reproduce {report.name}; the pin records a command that did not "
+            "produce the report it hashes"
+        )
