@@ -129,6 +129,7 @@ EXPECTED_EXEMPTIONS = {
     "scripts/run_experiment.py": "generic experiment orchestrator constructs versioned outputs",
     "scripts/run_i9_direct_seeds.py": "isolated I9 experiment",
     "scripts/run_sliced_eval.sh": "generated evaluation output CLI example",
+    "scripts/sequence_track/render_batch2_report.py": "embeddings-ladder experimental artifact namespace",
     "scripts/sequence_track/render_night3_report.py": "embeddings-ladder experimental artifact namespace",
     "scripts/sequence_track/stage3a_freeze_tiers.py": "embeddings-ladder experimental artifact namespace",
     "scripts/sequence_track/stage3c_leakage_audit.py": "embeddings-ladder experimental artifact namespace",

@@ -1,0 +1,56 @@
+{
+ "what_this_is": "Night 3 batch 2 analysis record (4d and C114 families; 4b runs FAILED the driver checkpoint check and are not admitted): hashes of the files of record and the exact invocations.",
+ "written_at_utc": "2026-09-12T22:59:28.947307Z",
+ "git_head_short": "a003d5d",
+ "freeze_commit": "86e049e",
+ "launch_record_commit": "a003d5d",
+ "analysis_code": {
+  "scripts/sequence_track/stage2_stats.py": "73c4f2396e50817156aed41e56e8da9316c23117cb44595f7f54c8e2bbfdc20f",
+  "scripts/sequence_track/render_batch2_report.py": "00bdb539d2e7be47f8c4d0e2e1bb17a481366619ce5bef22c7937ccb29327aa6",
+  "scripts/sim_eval/eval_statistics.py": "d3fcfe454269d334766a35965dff2e33db9c5e3bbb06ea16a0d7b14bde2ba1ca",
+  "scripts/registered_experiment.py": "ae8f027b9b9b100f377be03413973b35edb5f2c62c632cf1daf7590cceb8595f",
+  "scripts/sequence_track/retrain_stage2.py": "b0befcc263f26b9428057990ecfd52503e2564202775fe5820fc247f3a20ac3c",
+  "scripts/transformer_t1.py": "e9482ac919c8151105dda45d9240273a163cc4ad7e78812fb4ac2e7786b39f1b"
+ },
+ "evidence": {
+  "eval_out/seq_stage3_batch2/4d_stats.json": "ea2a4046ca3b17040c161ff9d55aa3f3238fae0d44636d5551dc6bf22864b859",
+  "eval_out/seq_stage3_batch2/c114_stats.json": "26e3b042b256a25e703c24f7ed4203392bff2166f339459f30f0ed72896ee13e",
+  "experiments/configs/seq_stage3_batch2_4d_v1.yaml": "ced2bec382703d19519504765cb64974e21e17fba075fba432785ffcb8103808",
+  "experiments/configs/seq_stage3_batch2_c114_v1.yaml": "fd6ffa790a856cd172781de04a51bde9d25726ff9a7cf688d080c0531f234116",
+  "experiments/configs/seq_stage3_batch2_4b_v1.yaml": "9def95ee3e04e73690143fd820fae761bca8361c86e2fe3f3823c62e30db69c9",
+  "research/reports/embeddings/SEQ_STAGE3_BATCH2_REPORT.md": "e163ac178774f97d88c149857ebb462d66029da3a4f82c43d6f67fda3ae83b9a",
+  "models/embeddings/stage4/refs/references.json": "cb8688335193bd3d679b1bcb18e31578a39fff7c792156c78692eef68e80fa82",
+  "models/embeddings/stage4/exposure/manifest.json": "a1072431d5042a7f726789de96666035e89e8f778933451797ed793860e1e60d"
+ },
+ "summary_yaml": {
+  "mlp_counts": "c4c0ecc75114eaa67935588f12e7c7ec9737870531b582926767f602fa20675b",
+  "mlp_spread_recency": "3e7cb92d87cda24ed4e0c94bb471c9dca65bb12ed099772bf7a84c73b514c1e9",
+  "mlp_114": "2f00be1de1bba45b3e496f8d15f81ac1fc81ca321808cbba7cd2e397d26f82bc",
+  "full_114": "4b09308afbb86f71dc0b8470be52471fc6236559b4fc17d529346848390e474b",
+  "full_50": "49aa7a4ed49016ff88455ac883bd677678987420eec4dfa04a028035ceb97187"
+ },
+ "invocations": {
+  "consolidate": "uv run --no-sync python scripts/sequence_track/retrain_stage2.py --consolidate --config experiments/configs/seq_stage3_batch2_{4d,c114}_v1.yaml --seeds 7,13,29,42,101 --machine laptop",
+  "statistics": "uv run --no-sync python scripts/sequence_track/stage2_stats.py stats --config experiments/configs/seq_stage3_batch2_{4d,c114}_v1.yaml --runs-root models/embeddings/seq_stage3/batch2/runs --frame-dir data/xgb_data_i7 --block-source-dir data/t20s_json --base-logits models/embeddings/seq_stage2/base_logits/validation.npz --out eval_out/seq_stage3_batch2/{4d,c114}_stats.json --reps 2000 --rng-seed 29 --seeds 7,13,29,42,101",
+  "renderer": "uv run --no-sync python scripts/sequence_track/render_batch2_report.py"
+ },
+ "note_4b": "identity_residual_l3/_l2: 10 attempted runs (mini seeds 13/101, laptop 7/29/42), every one refused by retrain_stage2.py's checkpoint verification (feat_proj/head parameters required; the identity-only arm has neither); FAILED markers; no summary.yaml; not admitted; family deferred.",
+ "supporting": {
+  "docs/sequence_track/batch2_acceptance.md": "2ac3156946abff6be86fd8f3ecf5553473be618e9872af60ad63963a3856c8d4",
+  "docs/sequence_track/night3_runbook.md": "cbed21c8fd90d85d505e15b5fff0eff2602a3501b07e4ef6cd6f57f2f0da2bb9",
+  "research/reports/embeddings/SEQ_STAGE1_REPORT.md": "9da7b63d6cad2e62b535f10ce9e8c75df051b8681ac59528ff19453925e58202"
+ },
+ "failure_logs_4b": {
+  "identity_residual_l2/seed_101/run.log": "ee9c3c9f2ef033ca28d139796a17d3d1b2671c80f8e4d8e3547d358502bfe928",
+  "identity_residual_l2/seed_13/run.log": "23acd46cc01de84ca3a93428c33bed6f07a668c287d1ac1245831f1058e23154",
+  "identity_residual_l2/seed_29/run.log": "b877c534ccbabd5d1790a2dd21a10bfe90aade7e3d7cfd0da724dd4ae00a1240",
+  "identity_residual_l2/seed_42/run.log": "526dee52af4ab5b3491bd5e9ec89ef81b3dfa065fea6cc8bc1bf1b6dfb64845a",
+  "identity_residual_l2/seed_7/run.log": "8c4c4ddf68532ef118b2262929656032f8dc6e46010400fb1d441b962dc98edd",
+  "identity_residual_l3/seed_101/run.log": "2f5b2029c0b2a1aad9b6aa0e2238498ce7bbb9b8a9dd7bfcfbd356dd4ce6a383",
+  "identity_residual_l3/seed_13/run.log": "807e9205d0597bec934617628f1b9ad9bd2ee59bfafbccfcb3d5d179723d7eec",
+  "identity_residual_l3/seed_29/run.log": "f0f7505a576c266b796d9d2d6051a690099cb5d69495e3bacb6612a416a6d578",
+  "identity_residual_l3/seed_42/run.log": "5c0d5192d6dbf5fe572d353a0c2e854299961b6c5840bf8fb4b97937e4537d4f",
+  "identity_residual_l3/seed_7/run.log": "b2f3c367b4b54021de72ff0fa048da901cc6f22936003e5eb6d20eb8372e476b"
+ },
+ "astra_results_gate": "round 3 SIGN-OFF"
+}
