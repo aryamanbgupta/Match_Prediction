@@ -55,9 +55,11 @@ re-opens them under `docs/SEQUENCE_TRACK_PLAN.md` (v5, plan of record).
 
 13. [`SEQ_STAGE1_REPORT.md`](SEQ_STAGE1_REPORT.md) — stage 1: four ball
     models through the fixed simulator on 255 fixtures x 1,600 simulations.
-    No arm advances (C-A and B-A inconclusive), but the transformer beats
-    the token MLP CI-clean in rollout (C-B -0.0257) where the teacher-forced
-    ablation had put the pair at -0.0004. Single checkpoint per arm; every
+    The transformer beats the token MLP CI-clean in rollout (C-B -0.0257)
+    and ties production (C-A inconclusive) without the hand-built history
+    features; the teacher-forced ablation had put the pair at -0.0004.
+    Not promoted to production (ledger `SQ1 FAILED` = not promoted, not
+    inferior). Priority follow-up: C114, transformer on all 114 features. Single checkpoint per arm; every
     gate provisional; no market claim.
 14. [`SEQ_STAGE1_ADDENDUM_C_A50.md`](SEQ_STAGE1_ADDENDUM_C_A50.md) —
     post-hoc: the transformer also beats the 50-feature XGBoost

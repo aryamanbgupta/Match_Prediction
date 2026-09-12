@@ -549,9 +549,11 @@ What remains:
 
 ### Sequence track stage 1 follow-ups (added 2026-09-11)
 
-Stage 1 (`research/reports/embeddings/SEQ_STAGE1_REPORT.md`, verdict `SQ1
-FAILED` = advancement not established) ended with no arm advancing, but with
-the transformer beating both other architectures at equal information:
+Stage 1 (`research/reports/embeddings/SEQ_STAGE1_REPORT.md`) found that
+**the transformer beats both other architectures at equal information and
+ties production without the hand-built history features**. Nothing was
+promoted to production (ledger `SQ1 FAILED` means "not promoted", not
+inferior — do not read it as the stage failing). The contrasts:
 C-B -0.0257 [-0.0331, -0.0135] (registered) and C-A50 -0.0286 [-0.0462,
 -0.0101] (post-hoc, `SEQ_STAGE1_ADDENDUM_C_A50.md`). **User decision
 2026-09-11: proceed to stage 2 on that basis; the confirmation work below is
@@ -580,7 +582,8 @@ so none of these findings is confirmed.
   simulation count, no multiplicity adjustment. Needs its own registered
   protocol with a pre-committed family list before it is anything more than a
   curiosity; it could matter for prop markets.
-- [ ] **C114 (full T1 on the production 114 features).** Registered in the
+- [ ] **C114 (full T1 on the production 114 features) — PRIORITY (user,
+  2026-09-12).** Registered in the
   stage 1 config with `status: deferred` and no artifacts. Stage 1 showed the
   64 production-only features are worth about 0.028 to XGBoost (A50-A) while
   the transformer matches production without them; C114 tests whether learned
@@ -1170,3 +1173,16 @@ See [IMPROVEMENTS.md](IMPROVEMENTS.md) for detailed research findings:
   roles. Until that lands, `data/golden/betting_odds_golden_v2.json` remains
   the match-level golden set of record and must not be scored by any
   sequence-track arm.
+
+### Sequence track backlog — end of queue (added 2026-09-12)
+
+- [ ] **Aligned history plus decay (Stage 2 follow-on, deprioritised by the
+  user 2026-09-12).** One new arm `aligned_hist_decay` (participant-aligned
+  history, standard causal wiring, ALiBi bias as `fixed_decay`, no positional
+  embedding) against fresh `fixed_decay`, `aligned_hist`, `mlp`; five-member
+  Holm family with primary `aligned_hist_decay − fixed_decay` on `all`.
+  Full design in `docs/sequence_track/night3_design_draft.md` § Block A
+  (Astra rounds 1–3 closed it). The batter–bowler history line is not a
+  priority; pick up after Stage 3/4.
+- [ ] Same-entity (ownership-masked) + decay: needs relay-free ALiBi on the
+  L×2L path with self-key exclusion before it can be registered.

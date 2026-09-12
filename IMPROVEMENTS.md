@@ -23,10 +23,13 @@ arms share one stats cache. Primary slice >=$50k, 18 tournament blocks,
 | A50 − A (exploratory) | +0.0276 | [+0.0095, +0.0419] | adverse |
 | C − A50 (post-hoc) | −0.0286 | [−0.0462, −0.0101] | favourable |
 
-**No arm advances** under the registered rule (B advances only if B−A is
-favourable, C only if C−A is). Verdict `SQ1 FAILED`, which in this ledger
-means advancement not established, **not** inferiority. Production remains
-the model of record for match-winner prediction.
+**Headline: at equal information the transformer beats both other
+architectures**, CI-clean on both contrasts, and ties production without
+being given the hand-built history features. Nothing was promoted to
+production under the registered promote-only-if-it-beats-production rule
+(ledger word `SQ1 FAILED`, which means "not promoted", **not** inferiority);
+production remains the model of record for match-winner prediction.
+**Priority follow-up: C114, the transformer on the full 114-feature set.**
 
 The finding that matters: **at equal information the transformer beats both
 other architectures**, while the 64 production-only hand-built features are

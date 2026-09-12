@@ -483,7 +483,7 @@ Step-by-step v7 sim equivalent: `build_stats_cache.py` → `materialize_features
 | What are the remediation acceptance checks and landed results? | [docs/remediation/](docs/remediation/) |
 | How does the daily prediction job run, and what does it write? | [scripts/daily/README.md](scripts/daily/README.md) + [docs/DAILY_PREDICTION_PROTOCOL.md](docs/DAILY_PREDICTION_PROTOCOL.md) |
 | Which engine gates passed on the fixed engine? | [research/reports/auto/BR2.md](research/reports/auto/BR2.md) |
-| What is the sequence and embeddings research track doing? | [docs/SEQUENCE_TRACK_PLAN.md](docs/SEQUENCE_TRACK_PLAN.md) + [stage 1 report](research/reports/embeddings/SEQ_STAGE1_REPORT.md) |
+| What is the sequence and embeddings research track doing? | [docs/SEQUENCE_TRACK_PLAN.md](docs/SEQUENCE_TRACK_PLAN.md) + [stage 1 report](research/reports/embeddings/SEQ_STAGE1_REPORT.md) + [stage 2 five-seed report](research/reports/embeddings/SEQ_STAGE2_FIVE_SEED_ADDENDUM.md). Stage 1 headline: the transformer beats the MLP and the 50-feature XGBoost at equal information and ties production without hand-built history features (ledger `SQ1 FAILED` means *not promoted*, not inferior); priority follow-up is C114. Stage 2 headline: forgetting memories (fixed decay, FoX, xLSTM) beat the no-memory MLP by ~0.004 LL on 5/5 seeds; keep-everything attention is hurt in death overs. |
 | How is the sealed forward set built and protected? | [docs/FORWARD_HOLDOUT.md](docs/FORWARD_HOLDOUT.md) |
 | What exactly changed in deterministic same-day state? | [docs/I6_SAME_DAY_ORDERING_AUDIT.md](docs/I6_SAME_DAY_ORDERING_AUDIT.md) |
 | What did the system look like historically? | [docs/archive/](docs/archive/) |

@@ -175,8 +175,12 @@ All of the following are recorded in the stage 1 config with hashes before
 
 ## Stage 1: three ball models through the fixed simulator
 
-**COMPLETE 2026-09-11. Outcome: no arm advances; the transformer wins at
-equal information.** Commits `504c17f` (one i7 cache, B and C retrained),
+**COMPLETE 2026-09-11. Outcome: the transformer wins at equal information
+(beats the token MLP and the 50-feature XGBoost CI-clean in rollout) and
+ties production without the 64 hand-built history features. Priority
+follow-up: C114, the transformer on the full 114-feature production set.**
+(Under the registered promote-to-production rule nothing was promoted;
+that rule is about replacing production, not about whether the finding is real.) Commits `504c17f` (one i7 cache, B and C retrained),
 `4109fc1` (1b/1c/1d, gate, report), `84cc1a8` (verdict). Ledger `SQ1
 FAILED` = advancement not established, not inferiority. Primary slice
 >=$50k, 18 blocks, Holm step-down: C-B -0.0257 [-0.0346, -0.0102]
