@@ -1155,3 +1155,72 @@ retrospectively disqualify it numerically. But it is a production-prior control
 without within-innings sequence access, so confirming it would not confirm the
 sequence hypothesis. **My ruling is to keep the sequence cohort unopened.**"
 
+### Gate 3 round 2 — `VERDICT: NO SIGN-OFF`, one MUST-FIX, now closed
+
+Prompt `docs/sequence_track/astra/gate3r2_prompt.md`, output
+`<scratchpad>/astra/gate3r2.md`. Astra **confirmed all six substantive
+closures** with file:line: dependency coverage (it checked all 20 certificates,
+authenticated every checkpoint md5, and verified that removing the twelve extra
+certificates blocks all four arms *including their qualification rows*); the
+withdrawal and independence wording; the k-rule disclosure (it verified the two
+configs' k-selection blocks are equal); the direction counts (it checked **all
+147 contrast records' counts against their per-seed points and thresholds**);
+the regenerated artifacts; and the executed scope. It also **independently
+supported "no result moved"** on the re-rendered two-seed report: "I
+independently found §§ 1, 3, 4, 6–11 byte-identical to the parent commit. In
+§ 5, all original cells across all 45 rows remain identical after removing the
+two added columns. That is stronger evidence than matching number sequences
+alone."
+
+It answered the three questions put to it: **re-committing the two-seed report
+was the right call** ("the disclosed correction fixes misleading labels in the
+actual report readers use; Git preserves the earlier version"); the
+no-result-moved verification is sufficient; and the byte-reproducibility test
+"is a good drift alarm, but not an immutable archive — directory growth should
+make it fail and require explicit review. Do not weaken the assertion to
+accommodate growth."
+
+**Its one MUST-FIX was a provenance bug, not wording.** The five-seed pin
+recorded a renderer invocation **without `--prior-stats-json`**, and
+`evidence.prior_statistics` recorded `path: null, present: false, compared:
+false`. Astra reproduced the consequence in memory: the recorded invocation
+yields **1,526 lines, missing § 12 entirely** — the whole two-versus-five-seed
+comparison including the withdrawal — while the same invocation plus the flag
+yields **1,560 lines byte-identical** to the committed addendum. Both pins
+verified anyway "because verification hashes the existing report without
+checking that the recorded invocation reproduces it".
+
+**CLOSED at `8754e31`.** The invocation now records the prior statistics
+(`present: true, compared: true`); a new artifact-gated
+`test_replaying_the_recorded_invocation_reproduces_the_report`, parametrised
+over **both** real pins, parses the argv each pin records, substitutes only
+`--out`, runs the renderer as a subprocess and requires **byte equality** with
+the report the pin hashes. Both pass; a manual replay of the five-seed
+invocation gives 1,560 lines byte-identical. Both pins rewritten and verifying,
+both snapshots refreshed.
+
+Its two nonblocking items are also closed: `_movement` now labels sign
+reversals in **either** direction (it had missed `aligned_hist_rf −
+aligned_hist` going +0.00059 → −0.00008), and D12's "two independent five-seed
+measurements" is marked **superseded** in place. And Astra corrected the
+orchestrator's own record: it counts **seven** differing rows in § 5 where the
+orchestrator had written fifteen; the fifteen is the all-slice count of gate
+rows where the two counts disagree, and the record now distinguishes them.
+
+### Gate 3 round 3 — NOT OBTAINED: the reviewer model is at capacity
+
+The round-3 prompt is written and committed at
+`docs/sequence_track/astra/gate3r3_prompt.md`. Two consecutive invocations of
+`gpt-6-astra` failed with `ERROR: Selected model is at capacity. Please try a
+different model.` **No substitute reviewer was used**: the review chain for this
+stage is Astra's throughout, and swapping models for the closing stamp would
+weaken it. The correct action is to re-run the identical prompt when capacity
+returns.
+
+**What this means for the stage's status.** Every MUST-FIX Astra has raised
+across all gates is closed, and round 2 confirmed the six substantive closures
+itself. What is missing is only the closing sign-off on the single provenance
+commit `8754e31` that round 2 named as its own "single next action". So the
+stage is **substantively complete and formally unsigned**. It must not be
+described as gate-signed until that round returns `SIGN-OFF`.
+

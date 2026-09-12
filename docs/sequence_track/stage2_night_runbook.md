@@ -10,45 +10,26 @@ roles are still `docs/sequence_track/stage2_handoff_opus.md`.
 
 ## 0. NEXT ACTION (read this first)
 
-> **State at 2026-09-12 ~12:20 IST. ALL TRAINING IS DONE.**
+> **State at 2026-09-12 ~13:15 IST. SUBSTANTIVELY COMPLETE, FORMALLY UNSIGNED.**
 >
-> **80 runs, 16 configurations × 5 seeds (7, 13, 29, 42, 101), 0 failures, 0
-> timeouts, 0 memory refusals**, across four queues on two machines. Everything
-> is consolidated at 5/5 with no refusals, so the cross-registration signature
-> identity held on real data.
+> 80 runs (16 configurations × 5 seeds), 0 failures. Committed: the two-seed
+> screen result, the five-seed addendum (`d188b8b`), and the analysis-provenance
+> correction (`8754e31`). Suite 1799 passed, 1 skipped. Both analysis pins verify
+> **and replay byte-identically** to the reports they hash. 20 ownership
+> certificates, 4 masked arms × 5 seeds, all exactly 0.
 >
-> **Committed:** the two-seed screen result (`d411174`), the seed-derived report
-> prose (`f0d96dc`), and every gate-2 fix before them. **Five-seed artifacts
-> built and pinned**: `eval_out/seq_stage2_5seed/{stats.json,k_selection.json,analysis_pin.json}`
-> and `research/reports/embeddings/SEQ_STAGE2_FIVE_SEED_ADDENDUM.md` (1,509
-> lines). Night-1 evidence untouched — the tools refuse to overwrite it.
+> **THE ONLY REMAINING STEP: Astra gate 3 round 3.** Every MUST-FIX from every
+> gate is closed; round 2 confirmed the six substantive closures itself and named
+> `8754e31` as its own single next action. The round-3 prompt is written at
+> `docs/sequence_track/astra/gate3r3_prompt.md`. **Two invocations failed with
+> "Selected model is at capacity"** — re-run that exact prompt when capacity
+> returns. **Do not substitute another reviewer model**; the chain is Astra's
+> throughout. Until it returns SIGN-OFF, do not call this stage gate-signed.
 >
-> **THE ONE REMAINING STEP: Astra gate 3 on the addendum, then commit.** The
-> prompt is `docs/sequence_track/astra/gate3_prompt.md`; run it exactly as the
-> earlier gates were run and iterate to SIGN-OFF, recording each round in D11.
-> Then commit the addendum, the acceptance D12 result, both five-seed pins
-> (`docs/sequence_track/stage2_five_seed_analysis_pin.json` needs `git add -f`,
-> it is gitignored) and the gate prompt. **Then the loop is done.**
->
-> **Headline result, five seeds.** The death-over harm is CONFIRMED: `full − mlp`
-> on `death` is **+0.00463 [+0.00177, +0.00733], 0 of 5 seeds favourable**,
-> against the 2026-08 ablation's +0.0053 on 0 of 5 on a different frame.
-> **`aligned_hist − full` DID NOT SURVIVE** — the only CI-clean mechanism result
-> at two seeds is now −0.00074 with the interval crossing zero at 3/5, so its
-> substantive claim is withdrawn. `same_entity_unr − aligned_hist_rf` reversed
-> sign to +0.00004 at 1/5. Held at 5/5 CI-clean: `fixed_decay − mlp` −0.00405,
-> `xlstm − mlp` −0.00400, `residual_mlp − mlp` −0.00553. Newly CI-clean
-> **adverse**: `same_entity_k0 − mlp` +0.00121 at 0/5. **Only `residual_mlp`
-> qualifies the extension** — and it carries no history at all, while
-> `residual_t1 − residual_mlp` stays unresolved at −0.00013.
->
-> **Raised for the gate:** the k-rule text quoted from the config still says
-> "the best (lowest) **two-seed** mean", which is stale at five seeds; the config
-> body is held byte-equal by test so it was not edited.
->
-> **Still NOT done and NOT ours:** `research/log_verdict.py` is not run, and the
-> cohort stays `DEFERRED_UNOPENED`. Five seeds meets only condition (1) of
-> D10.16; the historical-consumption question (condition 0) is still open.
+> **Then:** nothing. `research/log_verdict.py` is NOT run and the cohort stays
+> `DEFERRED_UNOPENED` — both are the user's decision, and Astra ruled the
+> sequence cohort should stay shut regardless, because confirming a
+> production-prior control would not confirm the sequence hypothesis.
 
 ### Autonomy grant (user, 2026-09-12 ~01:15 IST)
 
