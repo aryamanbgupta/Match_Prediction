@@ -34,7 +34,7 @@ appended.
 | `research/sequence_track/queue_mini_night3.yaml` | WRITTEN; dry-run lists 12 jobs, all `decision=run` |
 | frozen inputs under `experiments/stage3a/` | present and pinned (§ 3) |
 | `retrain_stage2.assert_writable` | RESOLVED 2026-09-13 00:26 IST: the driver admits `models/embeddings/seq_stage3` alongside `seq_stage2` (both roots, nothing else); the night-3 dry-run renders every job. |
-| Block B smoke (per configuration, per machine) | laptop DONE 2026-09-13 01:05 (69 s full run); mini pending the push of the frozen commit |
+| Block B smoke (per configuration, per machine) | laptop DONE 2026-09-13 01:05 (69 s full run); mini DONE 2026-09-13 01:55 (20 s for 384 steps at the frozen commit 90acca8) |
 | the single frozen commit on both machines | NOT MADE |
 
 ---
@@ -62,12 +62,12 @@ same margin the night-1 queues used.
 | `mlp_rowmatch_P_tiercond` | laptop | 8 (200-step smoke 2026-09-12) | 69 (full 3,840-step `mlp_pool_tiercond` s7, 2026-09-13 01:05) | 0.15 | 0.30 h (1,080 s) | 0.60 h |
 | `mlp_E_tiercond` | laptop | 8 (200-step smoke 2026-09-12) | 69 (full 3,840-step `mlp_pool_tiercond` s7, 2026-09-13 01:05) | 0.15 | 0.30 h (1,080 s) | 0.60 h |
 | `mlp_rowmatch_E_tiercond` | laptop | 8 (200-step smoke 2026-09-12) | 69 (full 3,840-step `mlp_pool_tiercond` s7, 2026-09-13 01:05) | 0.15 | 0.30 h (1,080 s) | 0.60 h |
-| `mlp_pool` | mini | SMOKE | SMOKE | 0.25 | 0.50 h (1,800 s) | 1.00 h |
-| `mlp_pool_tiercond` | mini | SMOKE | SMOKE | 0.25 | 0.50 h (1,800 s) | 1.00 h |
-| `mlp_P_tiercond` | mini | SMOKE | SMOKE | 0.25 | 0.50 h (1,800 s) | 1.00 h |
-| `mlp_rowmatch_P_tiercond` | mini | SMOKE | SMOKE | 0.25 | 0.50 h (1,800 s) | 1.00 h |
-| `mlp_E_tiercond` | mini | SMOKE | SMOKE | 0.25 | 0.50 h (1,800 s) | 1.00 h |
-| `mlp_rowmatch_E_tiercond` | mini | SMOKE | SMOKE | 0.25 | 0.50 h (1,800 s) | 1.00 h |
+| `mlp_pool` | mini | 20 (384-step smoke `mlp_pool_tiercond` s13, 2026-09-13 01:55 IST) | ~200 (extrapolated from the 384-step smoke: 10× steps) | 0.25 | 0.50 h (1,800 s) | 1.00 h |
+| `mlp_pool_tiercond` | mini | 20 (384-step smoke `mlp_pool_tiercond` s13, 2026-09-13 01:55 IST) | ~200 (extrapolated from the 384-step smoke: 10× steps) | 0.25 | 0.50 h (1,800 s) | 1.00 h |
+| `mlp_P_tiercond` | mini | 20 (384-step smoke `mlp_pool_tiercond` s13, 2026-09-13 01:55 IST) | ~200 (extrapolated from the 384-step smoke: 10× steps) | 0.25 | 0.50 h (1,800 s) | 1.00 h |
+| `mlp_rowmatch_P_tiercond` | mini | 20 (384-step smoke `mlp_pool_tiercond` s13, 2026-09-13 01:55 IST) | ~200 (extrapolated from the 384-step smoke: 10× steps) | 0.25 | 0.50 h (1,800 s) | 1.00 h |
+| `mlp_E_tiercond` | mini | 20 (384-step smoke `mlp_pool_tiercond` s13, 2026-09-13 01:55 IST) | ~200 (extrapolated from the 384-step smoke: 10× steps) | 0.25 | 0.50 h (1,800 s) | 1.00 h |
+| `mlp_rowmatch_E_tiercond` | mini | 20 (384-step smoke `mlp_pool_tiercond` s13, 2026-09-13 01:55 IST) | ~200 (extrapolated from the 384-step smoke: 10× steps) | 0.25 | 0.50 h (1,800 s) | 1.00 h |
 
 `SMOKE` = to be filled from the pre-launch smoke, before the freeze commit.
 
