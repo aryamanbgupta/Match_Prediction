@@ -19,8 +19,9 @@ reports it points to. Then this file again.
   `Co-Authored-By`, no session trailers. Never rebase, squash or force-push.
   The branch is `embeddings-ladder`; `main` is untouched until Stage 6.
 - **Never read** `data/golden/`, `data/forward_holdout/`,
-  `data/xgb_data_i7/test.parquet`, or `models/embeddings/seq_stage2/cohort/`.
-  The untouched cohort is `DEFERRED_UNOPENED` on your own ruling.
+  `data/xgb_data_i7/test.parquet`, or `models/embeddings/seq_stage2/cohort/`
+  until the cohort read is registered (§ 6). The cohort is `DEFERRED_UNOPENED`
+  and no longer blocked on any audit.
 - Every experiment is registered in a frozen YAML **before** any result is
   read; consumed configs are never edited, they are superseded (`predecessor:`).
 - Statistics: `tournament_time_block_v1`; teacher-forced screens use 2,000
@@ -81,7 +82,7 @@ reports it points to. Then this file again.
 | 4b | v2 run and scored 2026-09-13 (§ 5) | identity residual over the frozen EB-linear reference adds nothing: −0.00002 [−0.00011, +0.00006] (λ 0.001) and −0.00003 [−0.00011, +0.00004] (λ 0.01) on all rows, both families SCREEN_NOT_PASS (primary unresolved, gates pass); SQ6 still to log |
 | 4a | audit only | `STAGE4_PAIR_GRAPH_AUDIT.md`: one component, 41% of validation pairs seen, 13% with an unseen player |
 | 4c, 4e | not started | |
-| cohort | DEFERRED_UNOPENED | condition 0 (§ 6) still open |
+| cohort | DEFERRED_UNOPENED | condition 0 closed by user attestation 2026-09-13; opens for the first candidate that clears a rollout contrast (§ 6) |
 
 ## 4. Your first job: the standing rollout ledger
 
@@ -184,16 +185,15 @@ a `run.log` as a result.
 
 The "untouched cohort" is 471 men's T20 matches from 2026-04-17 to
 2026-08-05, set aside as a final exam that no sequence-track model has been
-trained on or judged against. Before it can be opened, two things must be
-true and written down: (a) no training data came from that window — proven
-(`stage2_cohort_consumer_audit.md`); (b) no *evaluation* in this repo ever
-scored those matches at ball level — **not yet proven**. The match-level
-golden set (124 matches) and the sealed forward set (137) fall inside that
-window and were scored by the match model; they are excluded from the cohort,
-but the proof that nothing else in the window was ever used as a test set has
-not been written. Until (b) is written, the exam cannot be trusted as unseen.
-The cohort is opened once, for every frozen candidate at once, and only for
-a candidate that has cleared a rollout contrast. Do not spend it on a screen.
+trained on or judged against. Training ancestry is proven clean
+(`stage2_cohort_consumer_audit.md`). **Condition 0 (whether the window was
+ever used as an evaluation set) is CLOSED by the user's attestation on
+2026-09-13** — recorded in the same file; do not re-audit it and do not raise
+it again. What remains before it is opened: a candidate that has cleared its
+rollout contrast under the protocol, the final family/checkpoint/analysis
+freeze, provenance re-verification against the frozen hashes, and then one
+frozen scoring batch covering every frozen candidate and control at once. It
+is opened once. Do not spend it on a screen.
 
 ## 7. Stage 4 in full — what remains and how it was designed
 

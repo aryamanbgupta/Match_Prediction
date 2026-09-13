@@ -82,3 +82,17 @@ newer than its removal:
 D5.3's Result is amended to cite this file rather than the grep alone. The
 grep result stands as far as it goes; the provenance argument above is what
 actually supports the eligibility claim.
+
+## Condition 0 closed — user attestation, 2026-09-13
+
+The historical-consumption question (D10.16 condition 0: whether the
+2026-04-17 → 2026-08-05 window was ever used as an *evaluation* set at ball
+level) is **closed by the user's decision on 2026-09-13**: the user attests
+that no evaluation in this repo has ever scored those matches beyond the
+excluded golden (124) and forward (137) fixtures, and directs that this be
+recorded rather than audited further. Consequence: the cohort's remaining
+unlock conditions are (4) the final family, checkpoint and analysis freeze,
+(5) provenance re-verification against the frozen hashes, and (6) one frozen
+scoring batch, triggered only for a candidate that has cleared its rollout
+contrast (`docs/sequence_track/rollout_protocol.md` § 2.7). The cohort stays
+`DEFERRED_UNOPENED` until then, but it is no longer blocked on condition 0.

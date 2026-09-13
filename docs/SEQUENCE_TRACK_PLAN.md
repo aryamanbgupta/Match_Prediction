@@ -311,7 +311,7 @@ realism close on all arms; no arm advances.
 **CLOSED 2026-09-12 (Astra sign-off `f4c92b5`); ledger row SQ2 DESCRIPTIVE
 2026-09-13.** Finding: forgetting helps (fixed decay, xLSTM,
 production-residual control CI-clean on 5/5 seeds); death-over harm
-reproduced; no mechanism isolated; cohort unopened. Reports:
+reproduced; no mechanism isolated; cohort unopened (condition 0 closed by user attestation 2026-09-13, see `docs/sequence_track/stage2_cohort_consumer_audit.md`; it opens for the first candidate that clears a rollout contrast). Reports:
 `research/reports/embeddings/SEQ_STAGE2_REPORT.md`,
 `SEQ_STAGE2_FIVE_SEED_ADDENDUM.md`. Kickoff brief:
 `docs/sequence_track/stage2_kickoff_brief.md`.
