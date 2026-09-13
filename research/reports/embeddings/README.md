@@ -65,6 +65,33 @@ re-opens them under `docs/SEQUENCE_TRACK_PLAN.md` (v5, plan of record).
     post-hoc: the transformer also beats the 50-feature XGBoost
     (-0.0286 [-0.0462, -0.0101]). Outside the registered family, advances
     nothing, recorded because the equal-information reading rests on it.
+15. `SEQ_STAGE2_REPORT.md` + `SEQ_STAGE2_FIVE_SEED_ADDENDUM.md` — stage 2:
+    sixteen sequence variants, five seeds, teacher-forced validation only.
+    Finding: forgetting helps — fixed decay (−0.0040), xLSTM (−0.0040) and
+    the production-residual control (−0.0055) beat the memory-less token
+    MLP CI-clean on 5/5 seeds; the death-over harm of keep-everything
+    attention reproduces (+0.0046, 0/5); no mechanism is isolated and the
+    two-seed aligned-history claim was withdrawn at five seeds. Ledger row
+    SQ2 DESCRIPTIVE (validation-only). Cohort unopened.
+16. `SEQ_STAGE3A_NIGHT3_REPORT.md` — stage 3a negative-transfer screen, two
+    targets, five seeds. Finding: pooling all tiers does not hurt the
+    premium or elite tiers; target-only arms are worse on their own rows
+    (premium +0.0044 on 6 blocks, descriptive; elite +0.0019, unresolved);
+    tier conditioning is null. Equal-epoch replication is backlog. Ledger
+    row SQ3.
+17. `STAGE3C_LEAKAGE_AUDIT.md` — stage 3c masked pretraining is CLOSED on
+    the 50-feature contract: the masked outcome is recovered exactly from
+    scoreboard and EB-tracker differences. Recorded under SQ3.
+18. `SEQ_STAGE3_BATCH2_REPORT.md` — stage 4 rung 4d and block C114, five
+    seeds. Finding: on the production 114-feature contract the token MLP
+    (1.4277) is the best teacher-forced ball model of the track and the
+    transformer (1.4306) is CI-clean worse (+0.0029, 0/5); the 64
+    hand-built history features are worth 0.0068 to the transformer;
+    exposure/spread/recency features add nothing; rung 4b produced no
+    admissible runs (driver defect, re-registered as
+    `seq_stage3_batch2_4b_v2`). Teacher-forced, not rollout; the
+    rollout-vs-teacher-forcing gap goes to
+    `docs/sequence_track/rollout_protocol.md`. Ledger row SQ4 DESCRIPTIVE.
 
 ## Estimator conventions
 

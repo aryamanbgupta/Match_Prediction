@@ -308,7 +308,12 @@ realism close on all arms; no arm advances.
 
 ## Stage 2: sequence variants with forgetting and ownership
 
-**NEXT, authorized 2026-09-11.** Kickoff brief:
+**CLOSED 2026-09-12 (Astra sign-off `f4c92b5`); ledger row SQ2 DESCRIPTIVE
+2026-09-13.** Finding: forgetting helps (fixed decay, xLSTM,
+production-residual control CI-clean on 5/5 seeds); death-over harm
+reproduced; no mechanism isolated; cohort unopened. Reports:
+`research/reports/embeddings/SEQ_STAGE2_REPORT.md`,
+`SEQ_STAGE2_FIVE_SEED_ADDENDUM.md`. Kickoff brief:
 `docs/sequence_track/stage2_kickoff_brief.md`.
 
 Question: does the death-over harm come from stale history, from history
@@ -407,6 +412,12 @@ existing T1 code and ablation arms.
 
 ## Stage 3: Delphyne-style ideas
 
+**Status 2026-09-13:** 3a run and closed (negative transfer not detected,
+`SEQ_STAGE3A_NIGHT3_REPORT.md`; equal-epoch replication backlog); 3b not
+started (TODO backlog, contract in
+`docs/sequence_track/delphyne_mapping.md`); 3c CLOSED by
+`STAGE3C_LEAKAGE_AUDIT.md`. Ledger row SQ3.
+
 Source: Ding, Mittal, Gopal, "DELPHYNE: A Pre-Trained Model for General and
 Financial Time Series", NeurIPS 2025, arXiv 2506.06288. It is a numeric
 time-series model; our data is discrete events with per-event context, so
@@ -433,6 +444,13 @@ paper and write a one-page mapping before code. Order and design [A19, A20]:
   an equal-compute from-scratch baseline are written down.
 
 ## Stage 4: embeddings that are not "learn a player ID"
+
+**Status 2026-09-13:** references built; 4d run (null); 4b re-registered
+as `seq_stage3_batch2_4b_v2` after the v1 driver refusal; 4a audit only
+(`STAGE4_PAIR_GRAPH_AUDIT.md`); 4c and 4e not started. C114 (stage 1
+follow-up) run teacher-forced: token MLP beats the transformer on 114
+features (`SEQ_STAGE3_BATCH2_REPORT.md`). Ledger row SQ4. Rollouts now go
+through `docs/sequence_track/rollout_protocol.md`.
 
 Order by expected value under current data and cost [A21]: 4d, 4b, 4a,
 4c, 4e. All five are tried; the order sets what runs first. Each is a

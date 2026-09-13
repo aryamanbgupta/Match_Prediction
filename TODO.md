@@ -1176,6 +1176,20 @@ See [IMPROVEMENTS.md](IMPROVEMENTS.md) for detailed research findings:
 
 ### Sequence track backlog — end of queue (added 2026-09-12)
 
+- [ ] **Stage 3b over-level patching (added 2026-09-13, user decision).**
+  Completed overs only as patch tokens, strictly causal decoder over
+  patches plus a within-over causal decoder for the current over; a
+  partial over is never patched; FLOP-matched ball-level control. Contract
+  shape in `docs/sequence_track/delphyne_mapping.md` § 2-4; needs a
+  registered config before any run.
+- [ ] **Stage 3a equal-epoch replication.** Re-run the six night-3 arms
+  under equal epochs / early stopping so the negative-transfer question is
+  separated from the equal-step budget and all-row checkpoint selection
+  (`SEQ_STAGE3A_NIGHT3_REPORT.md` § 9).
+- [x] **Stage 3c masked pretraining — CLOSED 2026-09-13** on the
+  50-feature contract by `STAGE3C_LEAKAGE_AUDIT.md`; reopen only with a
+  frame change that freezes per-ball state at the start of the masked
+  span.
 - [ ] **Aligned history plus decay (Stage 2 follow-on, deprioritised by the
   user 2026-09-12).** One new arm `aligned_hist_decay` (participant-aligned
   history, standard causal wiring, ALiBi bias as `fixed_decay`, no positional

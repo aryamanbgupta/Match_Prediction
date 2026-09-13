@@ -2873,3 +2873,53 @@ favourable (interval excludes zero, point < −0.007 after Holm), C only if
 C−A is; anything else is no advancement. Provisional by construction (one
 checkpoint per neural arm), so LANDED is impossible here.
 **Result:** FAILED 2026-09-11 — meaning "advancement not established", not "inferiority established". Primary slice ≥$50k (167 paired, 18 blocks), Holm step-down: C−B −0.0257 [−0.0346, −0.0102] favourable (Holm p 0.0018); B−A +0.0247 [−0.0027, +0.0554] inconclusive; C−A −0.0009 [−0.0277, +0.0288] inconclusive; A50−A +0.0276 [+0.0095, +0.0419] adverse (exploratory). No arm advances. Every gate provisional (single checkpoint). Evidence: `full/gate/C-A_50000.json` (this row's gate), supporting `B-A_50000.json`, `holm_50000.json`. Report `research/reports/embeddings/SEQ_STAGE1_REPORT.md`; Astra SIGN-OFF recorded in acceptance D12.9. C−B goes to stage 2 as evidence about the full-T1 vs token-MLP pair; five-seed, two-batch confirmation required before any claim.
+
+## SQ2 [P1] [DESCRIPTIVE] Sequence track stage 2: sixteen sequence variants with forgetting and ownership, five seeds, teacher-forced validation screen
+**Hypothesis:** the death-over harm of the full transformer comes from stale
+history, from history that belongs to other players, or from neither; some
+registered sequence mechanism beats the memory-less token MLP on
+teacher-forced ball log loss (`docs/SEQUENCE_TRACK_PLAN.md` § Stage 2).
+**Method:** `experiments/configs/seq_stage2_v1.yaml` (two seeds) then
+`seq_stage2_5seed_v1.yaml` (seeds 7, 13, 29, 42, 101); sixteen arms trained
+fresh on `data/xgb_data_i7` via `retrain_stage2.py`; statistics
+`stage2_stats.py` with `tournament_time_block_v1`, Holm within each of the
+15 registered families, 4/5 favourable-direction rule; ownership certified
+by the dependency test; acceptance `docs/sequence_track/stage2_acceptance.md`.
+**Gate:** validation-only, checkpoint-selected on the scored split, the
+untouched cohort `DEFERRED_UNOPENED`; therefore DESCRIPTIVE by construction
+(program.md: not decision-grade evidence). No arm advances from this stage
+without a rollout and a cohort read.
+**Result:** DESCRIPTIVE 2026-09-13 — forgetting helps: fixed decay −0.00405 [−0.00559, −0.00263], xLSTM −0.00400 [−0.00534, −0.00280] and the production-residual control −0.00553 [−0.00674, −0.00427] beat the memory-less token MLP CI-clean on 5/5 seeds (teacher-forced validation LL, 545 matches, 47 blocks). The death-over harm of keep-everything attention reproduces: full − mlp on death +0.00463 [+0.00177, +0.00733], 0/5 seeds favourable. Neither mechanism is isolated: fox − fixed_decay −0.00011 [−0.00024, +0.00004] and same_entity_k30 − recency_k30 −0.00084 [−0.00177, +0.00020] are unresolved; the two-seed aligned_hist − full claim is WITHDRAWN at five seeds (−0.00074 [−0.00174, +0.00027], 3/5). same_entity_k0 − mlp is CI-clean adverse (+0.00121, 0/5). Only residual_mlp passes its registered screen on all five seeds. DESCRIPTIVE because validation-only and checkpoint-selected on the scored split; cohort DEFERRED_UNOPENED; no rollout. Evidence `eval_out/seq_stage2_5seed/stats.json`, report `research/reports/embeddings/SEQ_STAGE2_FIVE_SEED_ADDENDUM.md`, Astra sign-off recorded in acceptance D12. Next: rollout under `docs/sequence_track/rollout_protocol.md`.
+
+## SQ3 [P1] [DESCRIPTIVE] Sequence track stage 3: negative-transfer screen (3a, two targets) and masked-pretraining leakage audit (3c)
+**Hypothesis:** (3a) pooling every tier of T20 into one training set hurts
+prediction on the premium leagues (P) and on P plus full-member
+internationals (E); a target-only tier-conditioned MLP beats the pooled
+model on the target's own rows. (3c) a masked-outcome pretraining objective
+is viable on the 50-feature contract.
+**Method:** (3a) `experiments/configs/seq_stage3_night3_v1.yaml`, six
+token-MLP arms (pooled, pooled tier-conditioned, P-only, E-only, two
+row-matched pooled controls) at five seeds under an equal 3,840-step budget;
+three Holm families; acceptance `docs/sequence_track/night3_acceptance.md`.
+(3c) `scripts/sequence_track/stage3c_leakage_audit.py` on the validation
+split: can a depth-4 tree recover the masked outcome from neighbouring
+feature vectors.
+**Gate:** 3a is validation-only screening, DESCRIPTIVE by construction; the
+P family additionally sits on 6 tournament blocks. 3c is an audit with a
+pre-stated viability question, not a model claim.
+**Result:** DESCRIPTIVE 2026-09-13 — (3a) negative transfer NOT detected: training only on the target tier is worse on the target's own rows than the pooled model, premium-only − pooled-conditioned +0.0044 [+0.0015, +0.0074] (6 blocks, NOT_EVALUABLE), elite-only − pooled-conditioned +0.0019 [−0.0004, +0.0055] (13 blocks, SCREEN_NOT_PASS), row-matched controls agree; tier conditioning on the pooled model +0.0003 [−0.0003, +0.0009] (unresolved). Caveat registered: target-only arms saw 2.3–3.2× the target tokens under the equal-step budget and checkpoints were selected on all rows, so overfitting is a possible cause of the adverse direction; equal-epoch replication is the follow-up. (3c) CLOSED for this feature set: the masked outcome is recovered exactly (1.0000) from scoreboard and EB-tracker differences; no leak-free informative subset of the 50 features exists. 3b (over-level patching) not run; contract still to be written. Evidence `eval_out/seq_stage3_night3/stats.json`, `research/reports/embeddings/{SEQ_STAGE3A_NIGHT3_REPORT,STAGE3C_LEAKAGE_AUDIT}.md`; Astra sign-off in night3 acceptance.
+
+## SQ4 [P1] [DESCRIPTIVE] Sequence track stage 4 batch 2: exposure features (4d) and the transformer on the production 114-feature contract (C114); 4b identity residual attempted
+**Hypothesis:** (4d) telling the token MLP how much evidence its EB rates
+rest on, how spread the posterior is and how recent the evidence is, helps.
+(C114) sequence access helps on the production 114-column contract, and the
+114 contract beats the 50-feature contract at fixed wiring. (4b) a small
+identity residual improves on a frozen EB-linear reference it cannot move.
+**Method:** `experiments/configs/seq_stage3_batch2_{4d,c114,4b}_v1.yaml`,
+five seeds, stage 2 epoch loop with early stopping, `stage2_stats.py`,
+Holm within family; frozen references `models/embeddings/stage4/refs/`;
+acceptance `docs/sequence_track/batch2_acceptance.md`.
+**Gate:** validation-only screening, DESCRIPTIVE by construction. 4b runs
+were refused by the driver's checkpoint check and are excluded from
+evidence; its family is registered afresh in `seq_stage3_batch2_4b_v2.yaml`.
+**Result:** DESCRIPTIVE 2026-09-13 — (C114) on the production 114-feature contract the token MLP is the best teacher-forced ball model of the track (val LL 1.4277) and the transformer is CI-clean worse: full_114 − mlp_114 +0.00285 [+0.00185, +0.00376], 0/5 seeds, adverse on death and chase too; the 64 hand-built history features are worth −0.00676 [−0.00772, −0.00584] to the transformer (5/5). This is teacher-forced, not rollout, and does not overturn Stage 1's rollout C−B; the rollout-vs-teacher-forcing gap is the open question and goes to the rollout ledger. (4d) exposure counts + spread + recency add nothing: −0.00000 [−0.00068, +0.00078]; frozen linear references eb_ctx 1.4500, raw 1.4534, lin_50 1.4433. (4b) no admissible runs: driver refused every checkpoint (feat_proj/head expected); fixed and re-registered as seq_stage3_batch2_4b_v2. Evidence `eval_out/seq_stage3_batch2/{4d,c114}_stats.json`, `research/reports/embeddings/SEQ_STAGE3_BATCH2_REPORT.md`; Astra sign-off in batch2 acceptance.
