@@ -1,9 +1,14 @@
 # Standing rollout protocol for ball models (draft v1, revision 3, 2026-09-13)
 
-Status: DRAFT, revised after Astra rounds 1–3
-(`docs/sequence_track/astra/rollout_review_round{1,2,3}.md`, all AGREE WITH
-CHANGES; every item is folded in below and marked `[R1-…]` / `[R2-…]` / `[R3-…]`). Nothing is registered until the protocol file in § 3 exists, is
-hashed, and is committed, and until the sign-off round is recorded.
+Status: **Astra SIGN-OFF, round 4** (`docs/sequence_track/astra/
+rollout_review_round{1,2,3,4}.md`; rounds 1–3 AGREE WITH CHANGES, every item
+folded in below and tagged `[R1-…]` / `[R2-…]` / `[R3-…]`). Ready for
+registration: the protocol file in § 2.4 is generated, hashed and committed
+by the implementation steps in `astra_handoff_2026-09-13.md` § 4. One
+non-blocking item stays open from round 4: the mini's qualification bound
+(§ 2.8) must name the exact `convergence_1b.json` field, contrast and
+absolute bound before that machine runs a ledger rollout; laptop
+registration does not wait on it.
 
 ## 1. The problem this solves
 

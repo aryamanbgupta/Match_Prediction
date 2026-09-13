@@ -78,7 +78,7 @@ reports it points to. Then this file again.
 | 4 refs | built | `models/embeddings/stage4/refs/` eb_ctx 1.4500, raw 1.4534, lin_50 1.4433 |
 | 4d | closed, SQ4 | exposure + spread + recency null (−0.0000 [−0.0007, +0.0008]) |
 | C114 | closed, SQ4 | on 114 features the token MLP (1.4277) beats the transformer (1.4306) CI-clean 0/5, teacher-forced; the 64 hand-built features are worth 0.0068 |
-| 4b | re-registered | v1 runs refused by the driver; v2 config, driver fix and queues ready (§ 5) |
+| 4b | v2 run and scored 2026-09-13 (§ 5) | identity residual over the frozen EB-linear reference adds nothing: −0.00002 [−0.00011, +0.00006] (λ 0.001) and −0.00003 [−0.00011, +0.00004] (λ 0.01) on all rows, both families SCREEN_NOT_PASS (primary unresolved, gates pass); SQ6 still to log |
 | 4a | audit only | `STAGE4_PAIR_GRAPH_AUDIT.md`: one component, 41% of validation pairs seen, 13% with an unseen player |
 | 4c, 4e | not started | |
 | cohort | DEFERRED_UNOPENED | condition 0 (§ 6) still open |
@@ -140,20 +140,45 @@ Build it in this order (your own dependency order from round 2):
    other members as supporting gates; one-seed readings are PROMISING at
    most.
 
-## 5. Rung 4b: launch tonight alongside the ledger build
+## 5. Rung 4b v2: launched 2026-09-13, finish the readout
 
-Ready on disk (uncommitted at handoff unless the commit log says otherwise):
-the driver fix in `scripts/sequence_track/retrain_stage2.py` (checkpoint
-verification derives the expected parameter set from the arm), fixed-reference
-support in `stage2_stats.py` (`statistics.fixed_references`), the frozen
-config `experiments/configs/seq_stage3_batch2_4b_v2.yaml` registering
-`family_4b_l3` and `family_4b_l2` against `ref_eb_ctx` **before** any v2 run,
-output root `models/embeddings/seq_stage3/batch2_4b_v2/runs/`, and queues
-`research/sequence_track/queue_{laptop,mini}_batch2_4b_v2.yaml`. Steps: run
-the tests, smoke one epoch on each machine into a scratch dir, launch both
-queues, rsync the mini's seeds home in the morning, consolidate, run
-`stage2_stats.py` under the v2 config, render, write the acceptance, log SQ6.
-The v1 runs stay excluded from evidence.
+Committed at `49dcf94`: the driver fix (checkpoint verification derives the
+expected parameter set from the arm's wiring), fixed-reference support in
+`stage2_stats.py` (`statistics.fixed_references`), the frozen config
+`experiments/configs/seq_stage3_batch2_4b_v2.yaml` registering `family_4b_l3`
+and `family_4b_l2` against `ref_eb_ctx` **before** any v2 run (two
+three-member families, not one six-member family: a family is keyed on one
+candidate; recorded as a deviation), output root
+`models/embeddings/seq_stage3/batch2_4b_v2/runs/`, and the queues
+`research/sequence_track/queue_{laptop,mini}_batch2_4b_v2.yaml`.
+
+**Launch record.** Laptop queue launched 14:48 IST from the training
+worktree `/Users/aryamangupta/CricML/MP_train_s7` at `ceda302` (outputs
+land in the main checkout's output root because the queue paths are
+absolute; log `/tmp/batch2_4b_v2_laptop_<stamp>.log`); mini queue launched
+14:49 IST from `~/CricML/Match_Prediction` at `ceda302` (log
+`/tmp/batch2_4b_v2_mini_<stamp>.log` on the mini). Runs take seconds to
+minutes each. **Done by the launching session (15:00 IST):** all 10 runs COMPLETE (5/5 per
+config, wall 8–13 s each), mini seeds rsynced home per directory (the
+`***` include form silently copies nothing on macOS openrsync), consolidate
+verified 5/5 for both configs, and `stage2_stats.py stats --config
+experiments/configs/seq_stage3_batch2_4b_v2.yaml --runs-root
+models/embeddings/seq_stage3/batch2_4b_v2/runs --seeds 7,13,29,42,101 --out
+models/embeddings/seq_stage3/batch2_4b_v2/stats/batch2_4b_v2_stats.json`
+written. **Readout (seed-mean joint, candidate − ref_eb_ctx, all rows):**
+`identity_residual_l3` −0.00002 [−0.00011, +0.00006], Holm p 0.478;
+`identity_residual_l2` −0.00003 [−0.00011, +0.00004], Holm p 0.313; death
+and chase non-inferiority gates pass in both families; both families
+`SCREEN_NOT_PASS`; 5/5 per-seed directions favourable but the intervals
+straddle zero. Plain words: a learned player-identity residual on top of a
+base it cannot move adds nothing measurable, consistent with the E1–E4
+ladder. **Yours:** render the report
+(the batch 2 renderer treats 4b as deferred and needs a 4b section),
+write `docs/sequence_track/batch2_4b_v2_acceptance.md`, and log **SQ6**
+(DESCRIPTIVE, teacher-forced validation) through a manual gate that hashes
+the v2 stats file, the report and the committed stats tool. The v1 runs
+stay excluded from evidence. Never quote a rounded per-epoch log loss from
+a `run.log` as a result.
 
 ## 6. The cohort, in plain words
 
