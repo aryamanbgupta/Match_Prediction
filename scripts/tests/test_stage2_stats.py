@@ -3605,3 +3605,209 @@ def test_a_legacy_family_keeps_the_two_seed_screen():
     # The legacy gates carry no contrast record at all, which would have been
     # "zero seeds" under the general rule and must not fail this family.
     assert "required_member_n_seeds" not in screen
+
+
+# ---------------------------------------------------------------------------
+# Rung 4b: a family member's reference may be a deterministic fixed npz
+# ---------------------------------------------------------------------------
+#
+# `statistics.fixed_references` registers {npz, sha256, log_loss, source}. The
+# artifact is one fit, no seeds, so it is presented as the identical `Run` at
+# every registered seed: estimand (i) resamples blocks alone, estimand (ii)
+# resamples seed x block on the CANDIDATE side only. The npz carries no
+# `innings_id` (the stage 4 builder writes it row-aligned to the validation
+# parquet's own row order), so the row keys come from the pinned frame in that
+# order and the alignment is ASSERTED row-by-row against the npz's own `y`.
+
+def _fixed_reference_npz(path: Path, frame_dir: Path, *, bias: float = 0.3,
+                         permute: bool = False) -> Path:
+    """A deterministic reference file, row-aligned to the pinned frame."""
+    frame = pd.read_parquet(frame_dir / "cricket_data_i7_validation.parquet")
+    y = frame["ball_outcome"].map(st.CLASS_MAPPING).to_numpy(np.int64)
+    rng = np.random.default_rng(11)
+    logits = rng.normal(scale=0.5, size=(len(frame), 6))
+    logits[np.arange(len(y)), y] += bias
+    probs = np.exp(logits)
+    probs = (probs / probs.sum(axis=1, keepdims=True)).astype(np.float32)
+    if permute:
+        order = np.roll(np.arange(len(y)), 3)
+        probs, y = probs[order], y[order]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(path, probs=probs, y=y.astype(np.int8))
+    return path
+
+
+def _fixed_frame(frame_dir: Path):
+    """The pinned frame, read with the synthetic config's own provenance."""
+    return st.load_frame(frame_dir, _config_payload(frame_dir=frame_dir))
+
+
+def _fixed_spec(path: Path, **overrides) -> dict:
+    spec = {"npz": str(path), "sha256": st.sha256_file(path),
+            "source": "models/embeddings/stage4/refs/references.json"}
+    spec.update(overrides)
+    return spec
+
+
+def _fixed_reference_config(frame_dir: Path, npz: Path, log_loss: float,
+                            **spec_overrides) -> dict:
+    """The synthetic config with `full`'s primary taken against the npz."""
+    payload = _config_payload(frame_dir=frame_dir)
+    statistics = payload["statistics"]
+    statistics["fixed_references"] = {
+        "ref_eb_ctx": _fixed_spec(npz, log_loss=log_loss, **spec_overrides)}
+    statistics["families"]["map"][0] = {
+        "candidate": "full",
+        "holm_group": "family_full",
+        "all_row_condition": "member",
+        "members": [
+            {"name": "primary", "primary": True, "kind": "superiority",
+             "threshold": 0.0, "slice": "all",
+             "contrast": {"candidate": "full", "reference": "ref_eb_ctx"},
+             "label": "full - ref_eb_ctx on all"},
+            {"name": "death_gate", "kind": "non_inferiority",
+             "threshold": 0.002, "slice": "death",
+             "contrast": {"candidate": "full", "reference": "ref_eb_ctx"},
+             "label": "full - ref_eb_ctx on death"},
+        ],
+        "screen": {"require": ["primary", "death_gate"]},
+    }
+    return payload
+
+
+def test_fixed_references_default_to_empty_and_change_nothing(config_path):
+    """Every config written before rung 4b registers none."""
+    config = st.read_yaml(config_path)
+    assert st.fixed_reference_specs(config) == {}
+    assert st.fixed_reference_specs({}) == {}
+    families = st.registered_families(config, 3)
+    assert [f["candidate"] for f in families] == ["full", "fixed_decay", "fox"]
+
+
+def test_a_fixed_reference_loads_hash_verified_and_seed_independent(
+        tmp_path, frame_dir):
+    npz = _fixed_reference_npz(tmp_path / "refs" / "eb_ctx.npz", frame_dir)
+    frame = _fixed_frame(frame_dir)
+    spec = dict(_fixed_spec(npz), name="ref_eb_ctx", log_loss=None,
+                label="ref_eb_ctx")
+    runs, report = st.load_fixed_reference(spec, frame, SEEDS)
+    assert report["available"] is True
+    assert report["measured_sha256"] == report["registered_sha256"]
+    assert report["deterministic"] is True
+    assert report["paired_on_the_candidate_side_only"] is True
+    assert report["n_rows"] == frame.n_rows
+    assert sorted(runs) == sorted(SEEDS)
+    first = runs[SEEDS[0]].row_ll
+    for seed in SEEDS:
+        assert runs[seed].admitted is True
+        # Deterministic: the SAME per-row vector at every seed, which is what
+        # makes the joint estimand resample the candidate side only.
+        assert np.array_equal(runs[seed].row_ll, first)
+    assert report["reconstructed_log_loss"] == pytest.approx(
+        float(first.mean()))
+
+
+def test_a_fixed_reference_whose_bytes_moved_is_refused(tmp_path, frame_dir):
+    npz = _fixed_reference_npz(tmp_path / "refs" / "eb_ctx.npz", frame_dir)
+    frame = _fixed_frame(frame_dir)
+    spec = dict(_fixed_spec(npz), name="ref_eb_ctx", log_loss=None,
+                sha256="0" * 64, label="ref_eb_ctx")
+    with pytest.raises(st.RefusalError) as error:
+        st.load_fixed_reference(spec, frame, SEEDS)
+    assert "hashes to" in str(error.value)
+
+
+def test_a_reordered_fixed_reference_is_refused_not_joined(tmp_path,
+                                                           frame_dir):
+    """Row identity is ASSERTED against the frame, never assumed."""
+    npz = _fixed_reference_npz(tmp_path / "refs" / "eb_ctx.npz", frame_dir,
+                               permute=True)
+    frame = _fixed_frame(frame_dir)
+    spec = dict(_fixed_spec(npz), name="ref_eb_ctx", log_loss=None,
+                label="ref_eb_ctx")
+    with pytest.raises(st.RefusalError) as error:
+        st.load_fixed_reference(spec, frame, SEEDS)
+    assert "label vector disagrees with the pinned frame" in str(error.value)
+
+
+def test_a_fixed_reference_log_loss_that_disagrees_is_refused(tmp_path,
+                                                              frame_dir):
+    npz = _fixed_reference_npz(tmp_path / "refs" / "eb_ctx.npz", frame_dir)
+    frame = _fixed_frame(frame_dir)
+    spec = dict(_fixed_spec(npz), name="ref_eb_ctx", log_loss=0.5,
+                label="ref_eb_ctx")
+    with pytest.raises(st.RefusalError) as error:
+        st.load_fixed_reference(spec, frame, SEEDS)
+    assert "registers log loss" in str(error.value)
+
+
+def test_a_fixed_reference_may_not_shadow_a_configuration_id(tmp_path,
+                                                             frame_dir):
+    npz = _fixed_reference_npz(tmp_path / "refs" / "eb_ctx.npz", frame_dir)
+    payload = _config_payload(frame_dir=frame_dir)
+    payload["statistics"]["fixed_references"] = {"mlp": _fixed_spec(npz)}
+    with pytest.raises(st.RefusalError) as error:
+        st.fixed_reference_specs(payload)
+    assert "also a registered configuration id" in str(error.value)
+
+
+def test_a_fixed_reference_needs_a_path_and_a_hex_digest(tmp_path, frame_dir):
+    npz = _fixed_reference_npz(tmp_path / "refs" / "eb_ctx.npz", frame_dir)
+    payload = _config_payload(frame_dir=frame_dir)
+    payload["statistics"]["fixed_references"] = {
+        "ref_eb_ctx": {"npz": str(npz)}}
+    with pytest.raises(st.RefusalError):
+        st.fixed_reference_specs(payload)
+    payload["statistics"]["fixed_references"] = {
+        "ref_eb_ctx": {"npz": str(npz), "sha256": "nothex"}}
+    with pytest.raises(st.RefusalError) as error:
+        st.fixed_reference_specs(payload)
+    assert "64-character hex digest" in str(error.value)
+
+
+def test_an_unregistered_reference_is_still_refused(tmp_path, frame_dir):
+    npz = _fixed_reference_npz(tmp_path / "refs" / "eb_ctx.npz", frame_dir)
+    frame = _fixed_frame(frame_dir)
+    spec = dict(_fixed_spec(npz), name="ref_eb_ctx", log_loss=None,
+                label="ref_eb_ctx")
+    runs, _ = st.load_fixed_reference(spec, frame, SEEDS)
+    payload = _fixed_reference_config(
+        frame_dir, npz, float(runs[SEEDS[0]].row_ll.mean()))
+    member = payload["statistics"]["families"]["map"][0]["members"][0]
+    member["contrast"]["reference"] = "ref_not_registered"
+    with pytest.raises(st.RefusalError) as error:
+        st.registered_families(payload, 3)
+    assert "no registered fixed reference" in str(error.value)
+
+
+def test_a_family_member_may_take_a_fixed_reference_end_to_end(
+        tmp_path, frame_dir, runs_root, block_source):
+    npz = _fixed_reference_npz(tmp_path / "refs" / "eb_ctx.npz", frame_dir)
+    frame = _fixed_frame(frame_dir)
+    spec = dict(_fixed_spec(npz), name="ref_eb_ctx", log_loss=None,
+                label="ref_eb_ctx")
+    reference_runs, _ = st.load_fixed_reference(spec, frame, SEEDS)
+    reference_ll = float(reference_runs[SEEDS[0]].row_ll.mean())
+    payload = _fixed_reference_config(frame_dir, npz, reference_ll)
+    config_path = tmp_path / "fixed_reference.yaml"
+    config_path.write_text(yaml.safe_dump(payload, sort_keys=False))
+
+    stats = _run_stats(config_path, runs_root, frame_dir, block_source,
+                       tmp_path)
+    report = stats["fixed_references"]["ref_eb_ctx"]
+    assert report["available"] is True
+    assert report["reconstructed_log_loss"] == pytest.approx(reference_ll)
+    record = stats["contrasts"]["full-ref_eb_ctx@all"]
+    assert record["available"] is True
+    assert record["reference"] == "ref_eb_ctx"
+    assert record["role"] == "family_primary"
+    # `full` carries the largest bias in the runs fixture, so it beats the
+    # reference: the sign convention is candidate minus reference.
+    assert record["estimand_ii"]["point"] < 0
+    # The reference is the same at every seed, so each per-seed point is the
+    # candidate's own row mean minus one fixed number.
+    for seed in SEEDS:
+        assert record["estimand_i"][f"seed_{seed}"]["point"] == pytest.approx(
+            record["per_seed_points"][str(seed)])
+    family = next(f for f in stats["families"] if f["candidate"] == "full")
+    assert [m["reference"] for m in family["members"]] == ["ref_eb_ctx"] * 2

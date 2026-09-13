@@ -2073,6 +2073,184 @@ def load_run(runs_root: Path, config_id: str, seed: int, frame: Frame,
     return run
 
 
+# ---------------------------------------------------------------------------
+# Fixed references (rung 4b) — a deterministic npz as a family member's
+# reference
+# ---------------------------------------------------------------------------
+#
+# A family member's `contrast.reference` may name a registered CONFIGURATION,
+# whose per-seed run directories carry `predictions_validation.npz`, or an
+# entry of `statistics.fixed_references`:
+#
+#   statistics:
+#     fixed_references:
+#       ref_eb_ctx:
+#         npz: models/embeddings/stage4/refs/eb_ctx_validation_probs.npz
+#         sha256: <hex>
+#         log_loss: 1.4500
+#         source: models/embeddings/stage4/refs/references.json
+#
+# The artifact is DETERMINISTIC: one fit, no seeds. Its per-row probabilities
+# are therefore the same at every seed, and it is loaded once and presented to
+# `evaluate_contrast` as the identical `Run` at each registered seed. That is
+# exactly the registered pairing: estimand (i) resamples blocks alone (the
+# reference term is constant within a seed) and estimand (ii) resamples
+# seed x block on the CANDIDATE side only, because the reference contributes
+# the same row vector at every seed.
+#
+# ROW IDENTITY. The npz carries `probs` and `y` and no `innings_id`, because
+# `scripts/sequence_track/stage4_references.py` writes it row-aligned to the
+# validation parquet's own row order (`pd.read_parquet(split_path(...))`, no
+# sort, no join) — the same order `load_frame` reads. The row keys are
+# therefore DERIVED from the pinned frame, and the alignment is then ASSERTED,
+# not assumed: `assert_alignment` compares the npz's own `y` vector against the
+# frame's label vector row by row and refuses on the first disagreement, on top
+# of the row count, the six-class shape and the row sums. A file written in any
+# other order fails that comparison. The sha256 is verified at load, so the
+# bytes are the registered artifact's.
+
+FIXED_REFERENCE_ROW_KEY_RULE = (
+    "the fixed reference npz carries no innings_id: it is written row-aligned "
+    "to the validation parquet's row order by "
+    "scripts/sequence_track/stage4_references.py, so the row keys are taken "
+    "from the pinned frame in that order and the alignment is asserted "
+    "row-by-row against the npz's own y vector (assert_alignment), never "
+    "assumed")
+
+
+def fixed_reference_specs(config: Mapping[str, Any]) -> dict[str, dict]:
+    """The config's `statistics.fixed_references`, validated.
+
+    Absent -> `{}`, so every config that registers none behaves exactly as
+    before and no code path below it changes.
+    """
+    raw = ((config.get("statistics") or {}).get("fixed_references") or {})
+    if not isinstance(raw, Mapping):
+        raise RefusalError(
+            "statistics.fixed_references is not a mapping of "
+            "{name: {npz, sha256, log_loss, source}}")
+    config_ids = {str(entry["id"])
+                  for entry in (config.get("configurations") or [])}
+    out: dict[str, dict] = {}
+    for name, spec in raw.items():
+        name = str(name)
+        if not isinstance(spec, Mapping):
+            raise RefusalError(
+                f"fixed reference {name!r} is not a mapping")
+        if name in config_ids:
+            raise RefusalError(
+                f"fixed reference {name!r} is also a registered configuration "
+                "id; a reference is one or the other, never both")
+        missing = [key for key in ("npz", "sha256") if not spec.get(key)]
+        if missing:
+            raise RefusalError(
+                f"fixed reference {name!r} registers no {missing}; a fixed "
+                "reference is a path plus the sha256 its bytes must have")
+        digest = str(spec["sha256"]).lower()
+        if len(digest) != 64 or any(c not in "0123456789abcdef"
+                                    for c in digest):
+            raise RefusalError(
+                f"fixed reference {name!r} registers sha256 "
+                f"{spec['sha256']!r}, which is not a 64-character hex digest")
+        out[name] = {
+            "name": name,
+            "npz": str(spec["npz"]),
+            "sha256": digest,
+            "log_loss": (None if spec.get("log_loss") is None
+                         else float(spec["log_loss"])),
+            "source": (None if spec.get("source") is None
+                       else str(spec["source"])),
+            "label": str(spec.get("label") or name),
+        }
+    return out
+
+
+def load_fixed_reference(spec: Mapping[str, Any], frame: Frame,
+                         seeds: Sequence[int] = REGISTERED_SEEDS
+                         ) -> tuple[dict[int, Run], dict]:
+    """Load one deterministic reference as the same `Run` at every seed."""
+    name = str(spec["name"])
+    path = guard_path(Path(spec["npz"]))
+    report: dict[str, Any] = {
+        "name": name,
+        "npz": rel(path),
+        "registered_sha256": spec["sha256"],
+        "registered_log_loss": spec.get("log_loss"),
+        "source": spec.get("source"),
+        "deterministic": True,
+        "seed_independent": True,
+        "row_key_rule": FIXED_REFERENCE_ROW_KEY_RULE,
+        "paired_on_the_candidate_side_only": True,
+        "available": False,
+        "reason": None,
+    }
+    if not path.exists():
+        report["reason"] = f"{rel(path)} is absent"
+        raise RefusalError(
+            f"fixed reference {name!r}: {rel(path)} is absent, so no member "
+            "taking it as a reference can be computed")
+    measured = sha256_file(path)
+    report["measured_sha256"] = measured
+    if measured != spec["sha256"]:
+        report["reason"] = (f"sha256 {measured} != the registered "
+                            f"{spec['sha256']}")
+        raise RefusalError(
+            f"fixed reference {name!r}: {rel(path)} hashes to {measured}, the "
+            f"config registers {spec['sha256']}; the bytes are not the "
+            "registered artifact's and nothing may be differenced against "
+            "them")
+    payload = np.load(path, allow_pickle=False)
+    for field in ("probs", "y"):
+        if field not in payload.files:
+            raise RefusalError(
+                f"fixed reference {name!r}: {rel(path)} carries no {field!r}")
+    probs = np.asarray(payload["probs"], dtype=np.float64)
+    y = np.asarray(payload["y"]).astype(np.int64)
+    # The row keys the tool pairs on come from the pinned frame, in the
+    # parquet's own row order, and the alignment is then ASSERTED: the npz's
+    # own label vector must equal the frame's, row for row.
+    assert_alignment(f"fixed reference {name}", probs, y, frame.innings_id,
+                     frame)
+    row_ll = row_log_loss(probs, frame.y)
+    report["n_rows"] = int(frame.n_rows)
+    report["reconstructed_log_loss"] = float(row_ll.mean())
+    report["reconstructed_log_loss_label"] = RECONSTRUCTED_LL_LABEL
+    if spec.get("log_loss") is not None:
+        report["registered_minus_reconstructed"] = (
+            float(spec["log_loss"]) - float(row_ll.mean()))
+        if abs(report["registered_minus_reconstructed"]) > 1e-4 + 5e-5:
+            raise RefusalError(
+                f"fixed reference {name!r}: the config registers log loss "
+                f"{spec['log_loss']}, the file reconstructs to "
+                f"{row_ll.mean():.6f}; the registration and the artifact "
+                "disagree")
+    report["available"] = True
+    runs = {}
+    for seed in seeds:
+        run = Run(config_id=name, seed=int(seed), directory=path,
+                  admitted=True)
+        run.row_ll = row_ll
+        run.reconstructed_ll = float(row_ll.mean())
+        run.summary_ll = spec.get("log_loss")
+        run.arm_params = {"fixed_reference": True}
+        run.provenance = {"kind": "fixed reference",
+                          "deterministic": True,
+                          "sha256": measured}
+        runs[int(seed)] = run
+    return runs, report
+
+
+def load_fixed_references(config: Mapping[str, Any], frame: Frame,
+                          seeds: Sequence[int] = REGISTERED_SEEDS
+                          ) -> tuple[dict[str, dict[int, Run]], dict]:
+    """Every registered fixed reference, loaded and hash-verified."""
+    runs: dict[str, dict[int, Run]] = {}
+    report: dict[str, Any] = {}
+    for name, spec in sorted(fixed_reference_specs(config).items()):
+        runs[name], report[name] = load_fixed_reference(spec, frame, seeds)
+    return runs, report
+
+
 def load_runs(runs_root: Path, config_ids: Sequence[str], frame: Frame,
               seeds: Sequence[int] = REGISTERED_SEEDS,
               entries: Mapping[str, Mapping[str, Any]] | None = None,
@@ -2436,14 +2614,22 @@ def _legacy_members(entry: Mapping[str, Any], candidate: str,
 
 
 def _general_members(entry: Mapping[str, Any], candidate: str,
-                     ids: set[str]) -> list[dict]:
+                     ids: set[str],
+                     reference_ids: set[str] | None = None) -> list[dict]:
     """Read the general `members:` list — 2 to 6 members, each self-describing.
 
     Each member carries its own name, contrast (candidate and reference), slice,
     threshold and kind. Exactly one member is flagged `primary: true`; that is
     the member the 4/5 favourable-direction rule reads. Registered member order
     is the Holm tie order, unchanged.
+
+    A member's CANDIDATE is always a registered configuration. Its REFERENCE
+    may be a registered configuration or, since rung 4b, a registered
+    `statistics.fixed_references` entry; `reference_ids` is the allowed
+    reference set and defaults to `ids`, so a config registering no fixed
+    reference is validated exactly as before.
     """
+    reference_ids = set(ids if reference_ids is None else reference_ids)
     raw = entry.get("members")
     if not isinstance(raw, list):
         raise RefusalError(
@@ -2471,12 +2657,18 @@ def _general_members(entry: Mapping[str, Any], candidate: str,
                 "`contrast: {candidate, reference}`")
         member_candidate = str(contrast.get("candidate") or candidate)
         reference = str(contrast.get("reference") or "")
-        for who, cid in (("candidate", member_candidate),
-                         ("reference", reference)):
-            if cid not in ids:
-                raise RefusalError(
-                    f"family {candidate!r} member {name!r} names {who} "
-                    f"{cid!r}, which is not a registered configuration")
+        if member_candidate not in ids:
+            raise RefusalError(
+                f"family {candidate!r} member {name!r} names candidate "
+                f"{member_candidate!r}, which is not a registered "
+                "configuration")
+        if reference not in reference_ids:
+            extra = ("" if reference_ids == ids else
+                     " and no registered fixed reference")
+            raise RefusalError(
+                f"family {candidate!r} member {name!r} names reference "
+                f"{reference!r}, which is not a registered configuration"
+                + extra)
         kind = str(member.get("kind") or "superiority")
         if kind not in MEMBER_KINDS:
             raise RefusalError(
@@ -2622,6 +2814,10 @@ def registered_families(config: Mapping[str, Any],
         raise RefusalError(
             f"the config registers {len(raw)} families, not {expected}")
     ids = {str(entry["id"]) for entry in (config.get("configurations") or [])}
+    # Rung 4b: a member's reference may be a deterministic npz registered in
+    # `statistics.fixed_references`. Empty for every config that registers
+    # none, which is every config written before this.
+    fixed_names = set(fixed_reference_specs(config))
     expected_slices = {"primary": str(families.get("primary_slice") or "all"),
                        "death_gate": str(families.get("death_gate_slice")
                                          or "death"),
@@ -2642,7 +2838,8 @@ def registered_families(config: Mapping[str, Any],
         if legacy:
             members = _legacy_members(entry, candidate, ids, expected_slices)
         else:
-            members = _general_members(entry, candidate, ids)
+            members = _general_members(entry, candidate, ids,
+                                       ids | fixed_names)
         known = {"candidate", "holm_group", "note"}
         known |= (set(FAMILY_MEMBER_ORDER) if legacy
                   else {"members", "screen", "all_row_condition"})
@@ -3633,6 +3830,13 @@ def compute_statistics(config_path: Path, runs_root: Path, frame_dir: Path,
         expect_unmapped=int(expect.get("unmapped", EXPECTED_UNMAPPED)))
     runs, runs_report, comparability = load_runs(runs_root, config_ids, frame,
                                                  seeds, entries, config, pin)
+    # Rung 4b: the deterministic references a family member may take as its
+    # reference. They are NOT runs — they never enter `runs_report` or the
+    # comparability anchoring, which are about training provenance — and they
+    # present the same row vector at every seed, so estimand (ii) resamples
+    # seed x block on the candidate side only.
+    fixed_runs, fixed_report = load_fixed_references(config, frame, seeds)
+    runs.update(fixed_runs)
 
     slice_names = ([p.name for p in SLICE_PREDICATES] + [THIN_PAIR_NAME]
                    + [r["name"] for r in optional_slice_specs(config)])
@@ -3881,6 +4085,7 @@ def compute_statistics(config_path: Path, runs_root: Path, frame_dir: Path,
                                         "validation-only run opens no test "
                                         "rows")},
         "runs": runs_report,
+        **({"fixed_references": fixed_report} if fixed_report else {}),
         "families": family_out,
         "gates": gates,
         "mechanism_contrasts": mechanism,

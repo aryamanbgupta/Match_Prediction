@@ -1752,6 +1752,81 @@ def test_a_checkpoint_from_another_arm_is_refused(config, tmp_path):
     assert driver.artifact_problems(out_dir) == []
 
 
+# ---------------------------------------------------------------------------
+# Rung 4b: the parameter expectation is DERIVED from the arm's wiring
+# ---------------------------------------------------------------------------
+#
+# Batch 2 rung 4b trained ten `identity_residual` checkpoints and the driver
+# refused all ten, because the check hard-coded ("feat_proj", "head") and that
+# arm builds neither. The expectation now comes from
+# `WIRING_PARAMETER_PREFIXES`, keyed by `transformer_t1.ARM_WIRING[arm]`, and
+# the table is locked below against the real `T1Model.state_dict()`.
+
+def _run_dir_with_checkpoint(tmp_path: Path, state: dict) -> Path:
+    """A minimal four-artefact run directory carrying `state` as model.pt."""
+    import torch
+
+    out_dir = tmp_path
+    out_dir.mkdir(parents=True, exist_ok=True)
+    torch.save(state, out_dir / "model.pt")
+    (out_dir / "metrics.json").write_text(json.dumps({"validation_ll": 1.0}))
+    (out_dir / "run_record.json").write_text(json.dumps({"config_id": "x"}))
+    np.savez_compressed(out_dir / f"predictions_{driver.SELECTION_SPLIT}.npz",
+                        probs=np.zeros((5, 6), dtype=np.float32))
+    return out_dir
+
+
+def _identity_residual_state() -> dict:
+    """A tiny but REAL identity-residual state dict, from the model itself."""
+    return t1.T1Model(n_feats=0, dmodel=8, layers=1, heads=1,
+                      arm="identity_residual", n_batters=3,
+                      n_bowlers=2).state_dict()
+
+
+def test_the_wiring_parameter_table_matches_the_real_models():
+    """The table is what the arm's own wiring produces, not a guess."""
+    identity = {key.split(".")[0] for key in _identity_residual_state()}
+    assert identity == set(
+        driver.WIRING_PARAMETER_PREFIXES["identity_residual"]["required"])
+    mlp = {key.split(".")[0] for key in
+           t1.T1Model(n_feats=4, dmodel=8, layers=1, heads=1,
+                      arm="mlp").state_dict()}
+    assert mlp >= set(
+        driver.WIRING_PARAMETER_PREFIXES["token_mlp"]["required"])
+    for arm, wiring in t1.ARM_WIRING.items():
+        assert wiring in driver.WIRING_PARAMETER_PREFIXES, arm
+        assert driver.expected_parameter_prefixes(arm) is (
+            driver.WIRING_PARAMETER_PREFIXES[wiring])
+
+
+def test_an_identity_residual_checkpoint_verifies(tmp_path):
+    out_dir = _run_dir_with_checkpoint(tmp_path / "ir",
+                                       _identity_residual_state())
+    assert driver.artifact_problems(out_dir, "identity_residual") == []
+    assert driver.is_complete(out_dir, "identity_residual") is True
+
+
+def test_a_token_mlp_checkpoint_missing_head_still_fails(tmp_path):
+    state = {key: value for key, value in _state_dict("mlp").items()
+             if not key.startswith("head.")}
+    out_dir = _run_dir_with_checkpoint(tmp_path / "mlp", state)
+    problems = driver.artifact_problems(out_dir, "mlp")
+    assert problems and "['head']" in problems[0]
+    assert driver.is_complete(out_dir, "mlp") is False
+
+
+def test_the_identity_residual_arm_still_refuses_a_foreign_checkpoint(
+        tmp_path):
+    """An `mlp` checkpoint in the identity arm's directory, and back."""
+    out_dir = _run_dir_with_checkpoint(tmp_path / "a", _state_dict("mlp"))
+    problems = driver.artifact_problems(out_dir, "identity_residual")
+    assert problems and "outside" in problems[0]
+    out_dir = _run_dir_with_checkpoint(tmp_path / "b",
+                                       _identity_residual_state())
+    problems = driver.artifact_problems(out_dir, "mlp")
+    assert problems and "bat_id_emb." in problems[0]
+
+
 def test_reuse_enforces_the_recorded_artifact_manifest(config, tmp_path):
     """A silently replaced artefact must not be reusable after transfer."""
     entry = configurations(config)["mlp"]

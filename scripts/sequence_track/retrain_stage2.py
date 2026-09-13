@@ -1844,6 +1844,42 @@ def _readable_npz(path: Path) -> str | None:
     return None
 
 
+# The top-level parameter prefixes each WIRING produces, keyed by
+# `transformer_t1.ARM_WIRING[arm]` rather than by arm name, so the expected
+# parameter set of a checkpoint is DERIVED from the arm's own wiring instead of
+# assumed. `required` names the prefixes that must be present; `exclusive`
+# means every key must live under one of them (the recurrent and
+# identity-residual arms own their whole token pathway and build nothing else).
+#
+# Rung 4b: the `identity_residual` wiring builds no `feat_proj` and no `head`
+# at all — it is two identity embedding tables and one readout
+# (transformer_t1.T1Model, the `self.identity_residual` branch) — so the old
+# hard-coded ("feat_proj", "head") requirement refused every checkpoint the arm
+# can produce. The table is locked against the real `T1Model.state_dict()` by
+# `scripts/tests/test_retrain_stage2.py`.
+WIRING_PARAMETER_PREFIXES = {
+    "recurrent": {"required": ("recurrent",), "exclusive": True},
+    "identity_residual": {
+        "required": ("bat_id_emb", "bowl_id_emb", "residual_readout"),
+        "exclusive": True},
+    "token_mlp": {"required": ("feat_proj", "head"), "exclusive": False},
+    "standard": {"required": ("feat_proj", "head"), "exclusive": False},
+    "relay_free": {"required": ("feat_proj", "head"), "exclusive": False},
+}
+
+
+def expected_parameter_prefixes(arm: str) -> dict:
+    """The parameter-prefix expectation of `arm`, from its registered wiring."""
+    wiring = t1.ARM_WIRING[arm]
+    try:
+        return WIRING_PARAMETER_PREFIXES[wiring]
+    except KeyError:  # a new wiring must register its parameter set
+        raise RetrainError(
+            f"arm {arm!r} has wiring {wiring!r}, which registers no entry in "
+            "retrain_stage2.WIRING_PARAMETER_PREFIXES, so its checkpoint's "
+            "parameter set cannot be verified") from None
+
+
 def _readable_checkpoint(path: Path, arm: str | None = None) -> str | None:
     """None when `model.pt` really is this arm's state dict.
 
@@ -1851,9 +1887,12 @@ def _readable_checkpoint(path: Path, arm: str | None = None) -> str | None:
     or mismatched checkpoint could be admitted after a transfer. The file is
     LOADED (`weights_only=True`, on the CPU — no model is instantiated, which
     keeps this structural and fast) and its top-level parameter names are
-    checked against what the arm's own wiring produces: a recurrent arm's
-    parameters all live under `recurrent.`, and every other arm has
-    `feat_proj` and `head` and no `recurrent.` key at all.
+    checked against what the arm's own wiring produces, read from
+    `WIRING_PARAMETER_PREFIXES` — a recurrent arm's parameters all live under
+    `recurrent.`, an identity-residual arm's under its two embedding tables and
+    its readout, and every other arm has `feat_proj` and `head`. An arm is
+    still refused a checkpoint carrying another wiring's exclusive prefixes,
+    so the cross-arm check is unchanged for every arm that had one.
     """
     import torch  # noqa: PLC0415 - already imported by the trainer module
 
@@ -1869,17 +1908,33 @@ def _readable_checkpoint(path: Path, arm: str | None = None) -> str | None:
         return f"{path.name} is an empty state dict"
     if arm is None:
         return None
-    recurrent = [key for key in keys if key.startswith("recurrent.")]
-    if t1.ARM_WIRING[arm] == "recurrent":
-        if len(recurrent) != len(keys):
-            return (f"{path.name} carries "
-                    f"{len(keys) - len(recurrent)} parameter(s) outside "
-                    f"'recurrent.', so it is not arm {arm!r}'s checkpoint")
-        return None
-    if recurrent:
-        return (f"{path.name} carries 'recurrent.' parameters, so it is not "
-                f"arm {arm!r}'s checkpoint")
-    missing = [prefix for prefix in ("feat_proj", "head")
+    spec = expected_parameter_prefixes(arm)
+    required = tuple(spec["required"])
+
+    def under(prefixes) -> list[str]:
+        return [key for key in keys
+                if any(key.startswith(f"{prefix}.") for prefix in prefixes)]
+
+    dotted = [f"{prefix}." for prefix in required]
+    if spec["exclusive"]:
+        inside = set(under(required))
+        outside = [key for key in keys if key not in inside]
+        if outside:
+            return (f"{path.name} carries {len(outside)} parameter(s) outside "
+                    f"{dotted}, so it is not arm {arm!r}'s checkpoint")
+    else:
+        # Another wiring's EXCLUSIVE prefixes can never appear in a
+        # non-exclusive arm's checkpoint: that is the cross-arm refusal.
+        foreign = sorted({
+            f"{prefix}."
+            for wiring, other in WIRING_PARAMETER_PREFIXES.items()
+            if other["exclusive"] and wiring != t1.ARM_WIRING[arm]
+            for prefix in other["required"]
+            if any(key.startswith(f"{prefix}.") for key in keys)})
+        if foreign:
+            return (f"{path.name} carries {foreign} parameters, so it is not "
+                    f"arm {arm!r}'s checkpoint")
+    missing = [f"{prefix}" for prefix in required
                if not any(key.startswith(f"{prefix}.") for key in keys)]
     if missing:
         return (f"{path.name} carries no {missing} parameter(s), so it is not "
